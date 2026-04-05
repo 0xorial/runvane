@@ -1,0 +1,11 @@
+{
+  "provider_id": "openai",
+  "model_name": "gpt-4o-mini",
+  "supports_image_input": true,
+  "supports_file_input": true,
+  "max_context_tokens": 128000,
+  "max_output_tokens": 16384,
+  "input_cost_per_1m": 0.15,
+  "output_cost_per_1m": 0.6,
+  "currency": "USD"
+}

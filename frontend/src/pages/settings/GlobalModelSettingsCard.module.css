@@ -1,0 +1,47 @@
+.settingsGlobalModelsCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: 14px;
+}
+
+.settingsGlobalModelsTitle {
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.settingsGlobalModelsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.settingsGlobalModelsGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.settingsLabelWithTip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settingsInfoTip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--slate-300);
+  color: var(--slate-500);
+  font-size: 11px;
+  line-height: 1;
+  cursor: help;
+}

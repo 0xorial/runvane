@@ -1,0 +1,66 @@
+.msg {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px var(--space-3);
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  background: rgba(109, 40, 217, 0.1);
+}
+
+.assistant {
+  background: var(--panel);
+}
+
+.thinking,
+.toolRow {
+  border: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+.msgAnswer {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.attachments {
+  margin-top: var(--space-2);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.attachment {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.attachmentImage {
+  max-width: 240px;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.attachmentName {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.attachmentMeta {
+  font-size: 12px;
+  opacity: 0.75;
+  word-break: break-word;
+}

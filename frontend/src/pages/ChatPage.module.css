@@ -1,0 +1,190 @@
+.chatPage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agentSetupBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated, var(--bg));
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.agentSetupBtn {
+  padding: 6px var(--space-3);
+  font-weight: 600;
+}
+
+.chatLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+}
+
+.messages {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+}
+
+.messagesScroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  scrollbar-color: var(--slate-500) var(--slate-200);
+}
+
+.messagesScroll::-webkit-scrollbar {
+  width: 14px;
+}
+
+.messagesScroll::-webkit-scrollbar-track {
+  background: var(--slate-200);
+  border-radius: var(--radius-md);
+}
+
+.messagesScroll::-webkit-scrollbar-thumb {
+  background: var(--slate-500);
+  border-radius: var(--radius-md);
+  border: 3px solid var(--slate-200);
+}
+
+.messagesScroll::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-600);
+}
+
+.liveRunStatus {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated, var(--bg));
+}
+
+.composer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.filePreviews {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filePreview {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.filePreviewImage {
+  width: 100%;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.filePreviewPdf {
+  width: 100%;
+  height: 76px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.filePreviewGeneric {
+  width: 100%;
+  height: 76px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.filePreviewName {
+  font-size: 12px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.filePreviewRemove {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.attachButton {
+  min-width: 84px;
+  padding: var(--space-2-5) var(--space-3);
+}
+
+.runProgress {
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 0 0;
+  min-height: 1.25em;
+}
+
+.composer :global(input) {
+  flex: 1;
+  min-width: 120px;
+  padding: var(--space-2-5);
+}
+
+.sendButton {
+  min-width: 84px;
+  padding: var(--space-2-5) var(--space-3);
+  font-weight: 600;
+}
+
+.sendButton:hover {
+  background: var(--primary-hover-weak);
+}

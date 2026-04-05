@@ -1,0 +1,50 @@
+---
+description: Global strict error policy (no swallowing, recoverable diagnostics)
+alwaysApply: true
+---
+
+# Global Error Policy
+
+Enforce this in all code:
+
+- Never swallow exceptions (`catch {}`, empty handlers, silent defaults like `{}`, `[]`, `null` on parse/runtime failures).
+- Catch only when handling is real: map to domain/HTTP error, add actionable context, or rethrow with `cause`.
+- Every error path must be visible to user-facing layer:
+  - API/UI responses include explicit error detail/message.
+  - Background/internal failures are persisted/logged with enough context to diagnose.
+- All generated error information must be recoverable:
+  - preserve original cause/stack where available;
+  - include operation/entity identifiers in logs/errors.
+- No no-benefit code:
+  - ban pointless wrappers, passthrough catches, redundant aliases, dead checks.
+  - if code adds no behavior/safety/readability, delete it.
+
+## Quick check
+
+- Good: throw typed/explicit errors with context and preserve cause.
+- Bad: catch-and-return fallback data for malformed input.
+
+## Examples
+
+```ts
+// Bad
+try {
+  const payload = JSON.parse(raw);
+} catch {
+  return {};
+}
+```
+
+```ts
+// Good
+const payload = JSON.parse(raw); // let SyntaxError propagate
+```
+
+```ts
+// Good
+try {
+  await runTask();
+} catch (e) {
+  throw new Error("task failed", { cause: e });
+}
+```

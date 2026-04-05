@@ -1,0 +1,64 @@
+html {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#root {
+  height: 100%;
+}
+
+.btn {
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.btn:hover {
+  border-color: var(--primary-border);
+}
+
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.input {
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.control {
+  min-height: var(--control-height);
+  box-sizing: border-box;
+}
+
+.input.control {
+  padding: 0 var(--space-3);
+}
+
+.card {
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+}
+
+.small {
+  font-size: var(--space-3);
+  opacity: 0.9;
+}

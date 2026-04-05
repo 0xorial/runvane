@@ -1,0 +1,131 @@
+.errorInbox {
+  position: relative;
+}
+
+.btn {
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-md);
+  width: 32px;
+  height: 32px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 0;
+}
+
+.hasErrors {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger-800);
+}
+
+.icon {
+  line-height: 1;
+}
+
+.count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--danger-600);
+  color: var(--white);
+  border: 1px solid var(--white);
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 800;
+  text-align: center;
+  padding: 0 3px;
+  box-sizing: border-box;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+  z-index: 1200;
+  padding: var(--space-2-5);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2-5);
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 2px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.item {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: var(--danger-50);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+  color: var(--danger-800);
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.ghostBtn {
+  border: 1px solid var(--slate-300);
+  background: var(--surface-soft);
+  color: var(--slate-700);
+  border-radius: 9px;
+  padding: 7px var(--space-3);
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.dismiss {
+  border: 1px solid var(--border-2);
+  background: var(--white);
+  color: var(--slate-500);
+  border-radius: var(--radius-sm);
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.dismiss:hover {
+  border-color: var(--slate-400);
+  color: var(--slate-700);
+}
+

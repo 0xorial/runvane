@@ -1,0 +1,56 @@
+.invalidJson {
+  color: var(--warning-700);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.agentToolsPermissions {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.agentToolsPermissionsTitle {
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.agentToolsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.agentToolsTable th,
+.agentToolsTable td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.agentToolsTable th {
+  background: var(--panel-2);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.agentToolsSelectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  margin: 0;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.agentToolsDesc {
+  color: var(--muted);
+  max-width: 360px;
+}

@@ -1,0 +1,32 @@
+.invalidJson {
+  color: var(--warning-700);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.agentLlmSettings {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 20px;
+  overflow: visible;
+}
+
+.agentLlmSettingsWarn {
+  font-size: 13px;
+  color: var(--warning, #c9a227);
+  margin: 0 0 12px;
+}
+
+.agentsNameField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.agentLlmModelCell {
+  margin-left: 6px;
+  min-width: 260px;
+  flex: 1 1 auto;
+}

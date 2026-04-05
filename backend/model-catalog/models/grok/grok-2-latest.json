@@ -1,0 +1,11 @@
+{
+  "provider_id": "grok",
+  "model_name": "grok-2-latest",
+  "supports_image_input": true,
+  "supports_file_input": false,
+  "max_context_tokens": null,
+  "max_output_tokens": null,
+  "input_cost_per_1m": null,
+  "output_cost_per_1m": null,
+  "currency": "USD"
+}

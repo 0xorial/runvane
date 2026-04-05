@@ -1,0 +1,32 @@
+---
+description: USER_INVARIANT (RV) registry — mandatory tags + USER_INVARIANTS.md; no silent UX/API regressions
+alwaysApply: true
+---
+
+# USER_INVARIANT (RV) — hard requirement
+
+The user’s **non‑negotiable** product/API decisions are recorded as **`USER_INVARIANT[RV-XXX]`** in code and in **`runvane/USER_INVARIANTS.md`**.  
+**The rule text is not enough.** If you ship a mandate without a tag + registry row, that is an **incomplete task**.
+
+## When this applies
+
+- User says: must / never / only / don’t / always / quick / etc. about **behavior**, **strings**, **load order**, **chat UX**, **DB shape**, **API contracts**.
+- You **touch** files that already have a `USER_INVARIANT` (grep first).
+- You **re-fix** something they asked for before (regression) — **backfill** RV if missing.
+
+## Completion checklist (before you stop)
+
+1. `rg 'USER_INVARIANT\[' runvane` — any related id?
+2. Does this change **contradict** a row in `USER_INVARIANTS.md`? If yes → stop and ask, or update with user approval.
+3. Did the user state a **new** mandate? → New **RV** row + **comment in code** at the real enforcement site(s).
+4. **Hot paths** (often regressed): `main.py` (dotenv, `POST /api/conversations`, `POST .../messages`), `App.tsx` (`ChatPageShell`), `chatLive/`, `useChatSession.ts` (RV-006 messages-only on switch), `db.py` / `db_runtime.py` (LLM settings, `allowed`), `agent_runner.py`.
+
+## Do not
+
+- Remove or “clean up” `USER_INVARIANT` comments without explicit user approval.
+- Replace user-chosen literals (underscores vs spaces, keys) for aesthetics.
+- Reintroduce **`POST /api/chat`** or eager conv create on mount — **RV-004** (use `POST /api/conversations` + `POST .../messages`).
+
+## Reference
+
+Full table: `runvane/USER_INVARIANTS.md`

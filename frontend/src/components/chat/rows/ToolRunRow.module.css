@@ -1,0 +1,122 @@
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
+}
+
+.toolBody {
+  margin-top: 8px;
+}
+
+.toolActions {
+  margin-top: 6px;
+}
+
+.approveBtn {
+  border: 1px solid rgba(52, 211, 153, 0.5);
+  background: rgba(52, 211, 153, 0.12);
+  color: rgba(22, 163, 74, 0.95);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.approveBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.toolSummary {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.chevron {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.runToolRun {
+  border-radius: var(--radius-lg);
+  padding: var(--space-2-5) var(--space-3);
+  border: 0;
+  border-left: 4px solid rgba(56, 189, 248, 0.9);
+  background: transparent;
+}
+
+.runToolRunError {
+  border-left-color: rgba(248, 113, 113, 0.9);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.headButton {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.headButton:hover {
+  opacity: 0.9;
+}
+
+.usedLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.toolNamePill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-2);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.pill {
+  font-size: 11px;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.pillOk {
+  border-color: rgba(52, 211, 153, 0.5);
+  color: rgba(22, 163, 74, 0.95);
+}
+
+.pillNeutral {
+  color: var(--muted);
+}
+
+.pre {
+  margin: 6px 0 0;
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.preOut {
+  max-height: 240px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 0;
+}

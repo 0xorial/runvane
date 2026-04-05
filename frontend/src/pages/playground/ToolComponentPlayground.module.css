@@ -1,0 +1,16 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scenario {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scenarioLabel {
+  color: var(--muted);
+  font-size: 12px;
+}
