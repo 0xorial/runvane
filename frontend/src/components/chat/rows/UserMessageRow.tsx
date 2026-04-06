@@ -13,17 +13,17 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
   return (
     <div className={chatUserBubble}>
       {entry.text ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
+        <pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm leading-snug text-foreground">
           {entry.text}
         </pre>
       ) : null}
       {attachments.length > 0 ? (
-        <div className="mt-2 grid gap-2">
+        <div className="mt-1 grid gap-1.5">
           {attachments.map((file) => (
             <a
               key={file.id}
               className={cn(
-                "grid gap-1 rounded-md border border-border bg-card/50 p-2 text-inherit no-underline",
+                "grid gap-0.5 rounded-md border border-border bg-card/50 p-1.5 text-inherit no-underline",
               )}
               href={file.url}
               target="_blank"
@@ -31,7 +31,7 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
             >
               {file.mimeType.startsWith("image/") ? (
                 <img
-                  className="max-h-40 max-w-[240px] rounded-sm object-cover"
+                  className="max-h-28 max-w-[200px] rounded-sm object-cover"
                   src={file.url}
                   alt={file.name}
                 />

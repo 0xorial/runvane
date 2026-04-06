@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 
 export const chatUserBubble = cn(
-  "flex w-full flex-col gap-2 rounded-[10px] border border-border bg-primary/10 px-3 py-2.5",
+  "flex w-full flex-col gap-1 rounded-lg border border-border bg-primary/10 px-2 py-1.5",
 );
 
 export const chatAssistantBubble = cn(
-  "rounded-[10px] border border-border bg-card px-3 py-2.5",
+  "rounded-lg border border-border bg-card px-2 py-1.5",
 );
 
 /** Tool / planner rows — no outer bordered card */

@@ -62,7 +62,7 @@ export function StickToBottomScrollArea({
     <div ref={scrollRef} className={className} onScroll={handleScroll}>
       <div
         ref={contentRef}
-        className="flex min-h-full flex-col gap-3 pb-1"
+        className="flex min-h-full flex-col gap-1.5 pb-0.5"
       >
         {children}
       </div>

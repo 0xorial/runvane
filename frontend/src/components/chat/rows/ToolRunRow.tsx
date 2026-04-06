@@ -39,13 +39,13 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
     <div className={chatToolOuter}>
       <div
         className={cn(
-          "rounded-lg border-0 border-l-4 border-l-sky-400 bg-transparent py-2.5 pl-3 pr-3",
+          "rounded-md border-0 border-l-[3px] border-l-sky-400 bg-transparent py-1.5 pl-2 pr-2",
           entry.state === "error" && "border-l-red-400 bg-red-500/[0.06]",
         )}
       >
         <button
           type="button"
-          className="mb-1.5 flex w-full cursor-pointer flex-wrap items-center gap-2 border-0 bg-transparent p-0 text-left font-inherit text-inherit hover:opacity-90"
+          className="mb-1 flex w-full cursor-pointer flex-wrap items-center gap-1.5 border-0 bg-transparent p-0 text-left font-inherit text-inherit hover:opacity-90"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
           aria-label={expanded ? "Collapse tool details" : "Expand tool details"}
@@ -70,12 +70,12 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
         </button>
 
         {expanded ? (
-          <div className="mt-2">
+          <div className="mt-1">
             {summary ? (
-              <div className="text-[13px] leading-snug text-muted-foreground">{summary}</div>
+              <div className="text-xs leading-snug text-muted-foreground">{summary}</div>
             ) : null}
             {entry.state === "requested" ? (
-              <div className="mt-1.5">
+              <div className="mt-1">
                 <button
                   type="button"
                   className="cursor-pointer rounded-sm border border-emerald-500/50 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-800 disabled:cursor-default disabled:opacity-60 dark:text-emerald-300"
@@ -89,7 +89,7 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
             <pre
               className={cn(
                 mono,
-                "mt-1.5 max-h-[200px] overflow-auto whitespace-pre-wrap break-words text-[11px] first:mt-0",
+                "mt-1 max-h-[160px] overflow-auto whitespace-pre-wrap break-words text-[10px] leading-snug first:mt-0",
               )}
             >
               {stringifyMaybe(entry.parameters)}
@@ -97,7 +97,7 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
             <pre
               className={cn(
                 mono,
-                "mt-1.5 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-sm border-0 bg-transparent p-2 text-[11px]",
+                "mt-1 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-sm border-0 bg-transparent p-1.5 text-[10px] leading-snug",
               )}
             >
               {stringifyMaybe(entry.result)}

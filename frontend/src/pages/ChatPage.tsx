@@ -7,7 +7,7 @@ import {
   ChatAgentToolbar,
   type ChatAgentSelection,
 } from "../components/chat/ChatAgentToolbar";
-import { ChatComposer } from "../components/chat/ChatComposer";
+import { MessageComposer } from "../components/chat/MessageComposer";
 import {
   ChatMessageRow,
   messageRowKey,
@@ -97,7 +97,7 @@ export function ChatPage({ conversationId }: ChatPageProps) {
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <StickToBottomScrollArea
             className={cn(
-              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-3 py-3",
+              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-2 py-2",
             )}
           >
             {chatEntries.map((entry$) => (
@@ -106,7 +106,7 @@ export function ChatPage({ conversationId }: ChatPageProps) {
           </StickToBottomScrollArea>
         </main>
       </div>
-      <ChatComposer
+      <MessageComposer
         textareaRef={composerTextareaRef}
         sendButtonRef={sendButtonRef}
         value={input}

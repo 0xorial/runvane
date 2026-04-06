@@ -83,7 +83,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
     <div className={cn("flex flex-col", done && "opacity-[0.98]")}>
       <div
         className={cn(
-          "relative box-border flex w-full min-h-0 flex-col items-start overflow-hidden border-0 bg-transparent p-0 text-sm text-muted-foreground shadow-none",
+          "relative box-border flex w-full min-h-0 flex-col items-start overflow-hidden border-0 bg-transparent p-0 text-xs text-muted-foreground shadow-none",
           !done &&
             "bg-gradient-to-b from-white/[0.07] to-white/[0.03] after:pointer-events-none after:absolute after:left-[-75%] after:top-0 after:h-full after:w-[52%] after:animate-thinking-sweep after:bg-[linear-gradient(105deg,transparent_0%,rgba(255,255,255,0.16)_32%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.16)_68%,transparent_100%)] motion-reduce:after:animate-none motion-reduce:after:opacity-0",
         )}
@@ -107,13 +107,13 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
           <div className={titleClass}>{title}</div>
         )}
         {failed ? (
-          <div className="mt-1 text-[11px] leading-snug text-rose-300">
+          <div className="mt-0.5 text-[10px] leading-snug text-rose-300">
             Request failed. See details below.
           </div>
         ) : null}
         {expanded && hasDetails ? (
           <div
-            className="relative mt-2 flex max-h-[300px] flex-col gap-3 overflow-y-auto overflow-x-hidden"
+            className="relative mt-1 flex max-h-[240px] flex-col gap-2 overflow-y-auto overflow-x-hidden"
             ref={detailsWrapRef}
           >
             <button
@@ -139,7 +139,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
                   <div className="inline-flex items-center gap-2 text-[11px] font-normal leading-snug text-slate-400/80">
                     Request
                   </div>
-                  <pre className="m-0 mt-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-slate-400/90 opacity-70 first:mt-0">
+                  <pre className="m-0 mt-1 whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-slate-400/90 opacity-70 first:mt-0">
                     {requestText}
                   </pre>
                 </>
@@ -149,7 +149,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
                   <div className="inline-flex items-center gap-2 text-[11px] font-normal leading-snug text-slate-400/80">
                     {failed ? "Error" : "Response"}
                   </div>
-                  <pre className="m-0 mt-2 max-h-none overflow-visible whitespace-pre-wrap break-words font-mono text-[11px] leading-normal text-amber-950/80 opacity-85 dark:text-amber-100/70">
+                  <pre className="m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-amber-950/80 opacity-85 dark:text-amber-100/70">
                     {responseText}
                   </pre>
                 </>
