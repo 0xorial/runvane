@@ -1,6 +1,7 @@
 import type { UserMessageEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
-import { chatUserBubble } from "../chatMessageLayout";
+import { ChatMessageShell } from "../ChatMessageShell";
+import { LlmMetaBadge } from "../LlmMetaBadge";
 
 function formatBytes(sizeBytes: number): string {
   if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${Math.max(0, Math.floor(sizeBytes || 0))} B`;
@@ -10,20 +11,24 @@ function formatBytes(sizeBytes: number): string {
 
 export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
   const attachments = Array.isArray(entry.attachments) ? entry.attachments : [];
+  const model = String(entry.llmModel ?? "").trim();
   return (
-    <div className={chatUserBubble}>
+    <ChatMessageShell
+      role="user"
+      badge={model ? <LlmMetaBadge model={model} /> : undefined}
+    >
       {entry.text ? (
-        <pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm leading-snug text-foreground">
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
           {entry.text}
-        </pre>
+        </div>
       ) : null}
       {attachments.length > 0 ? (
-        <div className="mt-1 grid gap-1.5">
+        <div className="grid gap-2">
           {attachments.map((file) => (
             <a
               key={file.id}
               className={cn(
-                "grid gap-0.5 rounded-md border border-border bg-card/50 p-1.5 text-inherit no-underline",
+                "grid gap-1 rounded-md border border-border bg-card/50 p-2 text-inherit no-underline",
               )}
               href={file.url}
               target="_blank"
@@ -31,7 +36,7 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
             >
               {file.mimeType.startsWith("image/") ? (
                 <img
-                  className="max-h-28 max-w-[200px] rounded-sm object-cover"
+                  className="max-h-40 max-w-[240px] rounded-sm object-cover"
                   src={file.url}
                   alt={file.name}
                 />
@@ -44,6 +49,6 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
           ))}
         </div>
       ) : null}
-    </div>
+    </ChatMessageShell>
   );
 }

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { formatDuration, parseDbTimestampMs } from "../../../utils/formatDuration";
 import type { PlannerLlmStreamEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
+import { ChatThreadIndent } from "../ChatMessageShell";
 
 type ThinkingRowProps = {
   entry: PlannerLlmStreamEntry;
@@ -80,12 +82,13 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   );
 
   return (
-    <div className={cn("flex flex-col", done && "opacity-[0.98]")}>
+    <ChatThreadIndent>
       <div
         className={cn(
           "relative box-border flex w-full min-h-0 flex-col items-start overflow-hidden border-0 bg-transparent p-0 text-xs text-muted-foreground shadow-none",
+          done && "opacity-[0.98]",
           !done &&
-            "bg-gradient-to-b from-white/[0.07] to-white/[0.03] after:pointer-events-none after:absolute after:left-[-75%] after:top-0 after:h-full after:w-[52%] after:animate-thinking-sweep after:bg-[linear-gradient(105deg,transparent_0%,rgba(255,255,255,0.16)_32%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.16)_68%,transparent_100%)] motion-reduce:after:animate-none motion-reduce:after:opacity-0",
+            "bg-gradient-to-b from-white/[0.07] to-white/[0.03] after:pointer-events-none after:absolute after:left-[-75%] after:top-0 after:h-[1.125rem] after:w-[52%] after:animate-thinking-sweep after:bg-[linear-gradient(105deg,transparent_0%,rgba(255,255,255,0.16)_32%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.16)_68%,transparent_100%)] motion-reduce:after:animate-none motion-reduce:after:opacity-0",
         )}
       >
         {hasDetails ? (
@@ -93,18 +96,20 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
             type="button"
             className={cn(
               titleClass,
-              "w-fit cursor-pointer appearance-none border-0 bg-transparent px-0 py-px text-left",
+              "cursor-pointer appearance-none border-0 bg-transparent px-0 py-0 text-left",
             )}
             onClick={() => setExpanded((v) => !v)}
             aria-label={expanded ? "Hide thought details" : "Show thought details"}
           >
             <span>{title}</span>
-            <span className="-ml-0.5 text-[11px] leading-none text-slate-400/75" aria-hidden="true">
-              {expanded ? "▾" : "▸"}
-            </span>
+            {expanded ? (
+              <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+            ) : (
+              <ChevronRight className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+            )}
           </button>
         ) : (
-          <div className={titleClass}>{title}</div>
+          <div className={cn(titleClass, "leading-tight")}>{title}</div>
         )}
         {failed ? (
           <div className="mt-0.5 text-[10px] leading-snug text-rose-300">
@@ -158,6 +163,6 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
           </div>
         ) : null}
       </div>
-    </div>
+    </ChatThreadIndent>
   );
 }

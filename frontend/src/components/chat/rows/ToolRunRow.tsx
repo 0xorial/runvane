@@ -1,26 +1,67 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  ShieldCheck,
+  ShieldQuestion,
+  Wrench,
+  XCircle,
+} from "lucide-react";
 import { approveToolInvocation } from "../../../api/client";
 import type { ToolInvocationEntry } from "../../../protocol/chatEntry";
 import { notifyError } from "../../../utils/toast";
 import { cn } from "@/lib/utils";
-import { chatToolOuter } from "../chatMessageLayout";
+import { ChatThreadIndent } from "../ChatMessageShell";
 
 type ToolRunRowProps = {
   entry: ToolInvocationEntry;
 };
 
-const mono = "font-mono";
-
+/** Mirrors frontend2/src/components/chat/ToolCallBlock.tsx */
 export function ToolRunRow({ entry }: ToolRunRowProps) {
   const { conversationId: rawConversationId } = useParams();
   const conversationId =
     rawConversationId && rawConversationId !== "new" ? rawConversationId : "";
-  const status = stateLabel(entry.state);
   const toolName = entry.toolId || "tool";
-  const summary = useMemo(() => summarizeToolOutput(entry), [entry]);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(entry.state === "requested");
   const [approving, setApproving] = useState(false);
+
+  const isAwaiting = entry.state === "requested";
+  const isRunning = entry.state === "running";
+  const isDone = entry.state === "done";
+  const isError = entry.state === "error";
+
+  const { StatusIcon, statusLabel, statusClass } = useMemo(() => {
+    if (isAwaiting) {
+      return {
+        StatusIcon: ShieldQuestion,
+        statusLabel: "Needs approval",
+        statusClass: "text-warning",
+      } as const;
+    }
+    if (isRunning) {
+      return {
+        StatusIcon: Loader2,
+        statusLabel: "Running",
+        statusClass: "text-primary animate-spin",
+      } as const;
+    }
+    if (isError) {
+      return {
+        StatusIcon: XCircle,
+        statusLabel: "Failed",
+        statusClass: "text-destructive",
+      } as const;
+    }
+    return {
+      StatusIcon: CheckCircle2,
+      statusLabel: "",
+      statusClass: "text-success",
+    } as const;
+  }, [isAwaiting, isRunning, isError]);
 
   async function onApproveClick() {
     if (!conversationId || approving) return;
@@ -36,90 +77,82 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
   }
 
   return (
-    <div className={chatToolOuter}>
+    <ChatThreadIndent>
       <div
         className={cn(
-          "rounded-md border-0 border-l-[3px] border-l-sky-400 bg-transparent py-1.5 pl-2 pr-2",
-          entry.state === "error" && "border-l-red-400 bg-red-500/[0.06]",
+          "overflow-hidden rounded-md border",
+          isAwaiting ? "border-warning/40 bg-warning/5" : "bg-secondary/50",
         )}
       >
         <button
           type="button"
-          className="mb-1 flex w-full cursor-pointer flex-wrap items-center gap-1.5 border-0 bg-transparent p-0 text-left font-inherit text-inherit hover:opacity-90"
           onClick={() => setExpanded((v) => !v)}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-secondary"
           aria-expanded={expanded}
-          aria-label={expanded ? "Collapse tool details" : "Expand tool details"}
         >
-          <span className="text-[11px] font-bold text-muted-foreground">Used</span>
-          <span className="rounded-md border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
-            {toolName}
-          </span>
+          {expanded ? (
+            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+          )}
+          <Wrench className="h-3 w-3 shrink-0 text-primary" />
+          <span className="font-mono font-medium text-foreground">{toolName}</span>
+          <StatusIcon className={cn("ml-auto h-3 w-3 shrink-0", statusClass)} />
           <span
             className={cn(
-              "rounded-full border px-2 py-0.5 text-[11px]",
-              entry.state === "done"
-                ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-400"
-                : "border-border text-muted-foreground",
+              "text-[10px] font-medium",
+              isAwaiting ? "text-warning" : "text-muted-foreground",
             )}
           >
-            {status}
-          </span>
-          <span className="ml-0.5 text-[10px] opacity-70" aria-hidden="true">
-            {expanded ? "▾" : "▸"}
+            {isAwaiting || isRunning || isError
+              ? statusLabel
+              : isDone
+                ? "Done"
+                : ""}
           </span>
         </button>
 
         {expanded ? (
-          <div className="mt-1">
-            {summary ? (
-              <div className="text-xs leading-snug text-muted-foreground">{summary}</div>
+          <div className="animate-slide-in space-y-2 border-t px-3 py-2">
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Arguments
+              </span>
+              <pre className="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">
+                {stringifyMaybe(entry.parameters)}
+              </pre>
+            </div>
+            {entry.result !== undefined && entry.result !== null && stringifyMaybe(entry.result).length > 0 ? (
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Result
+                </span>
+                <pre className="scrollbar-thin mt-1 max-h-40 overflow-y-auto overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">
+                  {stringifyMaybe(entry.result)}
+                </pre>
+              </div>
             ) : null}
-            {entry.state === "requested" ? (
-              <div className="mt-1">
+            {isAwaiting ? (
+              <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"
-                  className="cursor-pointer rounded-sm border border-emerald-500/50 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-800 disabled:cursor-default disabled:opacity-60 dark:text-emerald-300"
-                  onClick={() => void onApproveClick()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onApproveClick();
+                  }}
                   disabled={!conversationId || approving}
+                  className="flex items-center gap-1.5 rounded-md bg-success/15 px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/25"
                 >
-                  {approving ? "Allowing..." : "Allow tool"}
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  {approving ? "Approving…" : "Approve"}
                 </button>
               </div>
             ) : null}
-            <pre
-              className={cn(
-                mono,
-                "mt-1 max-h-[160px] overflow-auto whitespace-pre-wrap break-words text-[10px] leading-snug first:mt-0",
-              )}
-            >
-              {stringifyMaybe(entry.parameters)}
-            </pre>
-            <pre
-              className={cn(
-                mono,
-                "mt-1 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-sm border-0 bg-transparent p-1.5 text-[10px] leading-snug",
-              )}
-            >
-              {stringifyMaybe(entry.result)}
-            </pre>
           </div>
         ) : null}
       </div>
-    </div>
+    </ChatThreadIndent>
   );
-}
-
-function summarizeToolOutput(entry: ToolInvocationEntry): string | null {
-  if (entry.state === "requested") return "Tool requested.";
-  if (entry.state === "running") return "Tool running...";
-  if (entry.state === "error") return "Tool failed.";
-  if (typeof entry.result === "string" && entry.result.trim().length > 0) return entry.result;
-  return "Tool completed.";
-}
-
-function stateLabel(state: ToolInvocationEntry["state"]): string {
-  if (state === "done") return "completed";
-  return state;
 }
 
 function stringifyMaybe(value: unknown): string {

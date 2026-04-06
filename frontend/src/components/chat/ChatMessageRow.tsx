@@ -1,7 +1,6 @@
 import type { ChatEntry } from "../../protocol/chatEntry";
 import type { ObservableItem } from "../../utils/observableCollection";
 import { useObservableValue } from "../../hooks/useObservable";
-import { chatToolOuter } from "./chatMessageLayout";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
 import { ThinkingRow } from "./rows/ThinkingRow";
 import { ToolRunRow } from "./rows/ToolRunRow";
@@ -22,11 +21,7 @@ export function ChatMessageRow({ entry$ }: ChatMessageRowProps) {
     return <UserMessageRow entry={entry} />;
   }
   if (entry.type === "planner_llm_stream") {
-    return (
-      <div className={chatToolOuter}>
-        <ThinkingRow entry={entry} />
-      </div>
-    );
+    return <ThinkingRow entry={entry} />;
   }
   if (entry.type === "tool-invocation") {
     return <ToolRunRow entry={entry} />;
