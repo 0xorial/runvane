@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PlannerLlmStreamEntry } from "../../protocol/chatEntry";
 import { ThinkingRow } from "../../components/chat/rows/ThinkingRow";
-import styles from "./ThinkingComponentPlayground.module.css";
+import { Button } from "@/components/ui/button";
 
 const STREAM_CHUNKS = [
   "Scanning provider contract and runtime boundaries across request validation, model resolution, provider registry lookup, and stream emission paths.\n",
@@ -92,11 +92,11 @@ export function ThinkingComponentPlayground() {
   }, [chunkIndex, paused]);
 
   return (
-    <section className={styles.root}>
-      <div className={styles.controls}>
-        <button type="button" onClick={() => setPaused((v) => !v)}>
+    <section className="flex flex-col gap-3">
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => setPaused((v) => !v)}>
           {paused ? "Continue" : "Pause"}
-        </button>
+        </Button>
       </div>
       <ThinkingRow entry={entry} />
     </section>

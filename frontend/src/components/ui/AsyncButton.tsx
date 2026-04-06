@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
-import { Spinner } from "./Spinner";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { notifyError } from "../../utils/toast";
-import { cx } from "../../utils/cx";
-import styles from "./AsyncButton.module.css";
+import { Spinner } from "./Spinner";
 
 export type AsyncResult =
   | boolean
@@ -32,7 +32,7 @@ export type AsyncButtonHandle = {
 export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(function AsyncButton({
   onClickAsync,
   disabled = false,
-  className = "",
+  className,
   type = "button",
   children,
   spinnerSize = 12,
@@ -43,7 +43,7 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
   onError,
 }, ref) {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">(
-    "idle"
+    "idle",
   );
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -104,19 +104,42 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
     <button
       ref={buttonRef}
       type={type}
-      className={cx(styles.asyncButton, className)}
+      className={cn(
+        buttonVariants({ variant: "default", size: "default" }),
+        "relative inline-flex min-h-10 items-center justify-center gap-2",
+        className,
+      )}
       data-state={state}
       disabled={disabled || isLoading}
       onClick={handleClick}
     >
-      <span className={styles.spacer} aria-hidden="true" />
-      <span className={styles.label}>{children}</span>
-      <span className={styles.indicator} aria-hidden="true">
-        <span className={cx(styles.spinner, isLoading && styles.show)}>
+      <span className="pointer-events-none inline-block h-4 w-4 shrink-0 opacity-0" aria-hidden />
+      <span className="transition-[opacity,transform] duration-150">{children}</span>
+      <span className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center opacity-0 scale-90 transition-[opacity,transform] duration-200",
+            isLoading && "opacity-100 scale-100",
+          )}
+        >
           <Spinner size={spinnerSize} />
         </span>
-        <span className={cx(styles.check, isSuccess && styles.show)}>✓</span>
-        <span className={cx(styles.error, isError && styles.show)}>×</span>
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center text-sm font-extrabold text-emerald-600 opacity-0 scale-90 transition-[opacity,transform] duration-200",
+            isSuccess && "opacity-100 scale-100",
+          )}
+        >
+          ✓
+        </span>
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center text-sm font-extrabold text-destructive opacity-0 scale-90 transition-[opacity,transform] duration-200",
+            isError && "opacity-100 scale-100",
+          )}
+        >
+          ×
+        </span>
       </span>
     </button>
   );

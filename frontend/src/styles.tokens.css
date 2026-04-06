@@ -1,55 +1,63 @@
+/* Legacy Runvane tokens (prefixed --rv-* so shadcn/Tailwind :root tokens stay canonical). */
 :root {
   color-scheme: light;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
     Helvetica, Arial, sans-serif;
 
-  --bg: #f6f7fb;
-  --panel: #ffffff;
-  --panel-2: #f1f3f7;
-  --border: #dbe3ee;
-  --border-2: #cfd8e6;
-  --text: #0f172a;
-  --muted: rgba(15, 23, 42, 0.65);
-  --primary: #6d28d9;
-  --primary-2: rgba(109, 40, 217, 0.18);
-  --primary-hover-weak: rgba(109, 40, 217, 0.08);
-  --primary-hover: rgba(109, 40, 217, 0.12);
-  --primary-border: rgba(109, 40, 217, 0.45);
-  --primary-border-strong: rgba(109, 40, 217, 0.55);
-  --primary-border-active: rgba(109, 40, 217, 0.7);
-  --ok: #22c55e;
-  --ok-2: rgba(34, 197, 94, 0.18);
-  --err: #ef4444;
-  --err-2: rgba(239, 68, 68, 0.18);
-  --white: #fff;
-  --slate-200: #e2e8f0;
-  --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
-  --slate-600: #475569;
-  --slate-700: #334155;
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
-  --danger-50: #fff4f4;
-  --danger-600: #dc2626;
-  --danger-700: #b91c1c;
-  --danger-800: #991b1b;
-  --warning-700: #b45309;
-  --surface-soft: #f3f5f8;
-  --surface-soft-hover: #eef1f5;
-  --border-soft-strong: #b5becb;
-  --surface-subtle: #f8fafc;
+  --rv-bg: #f6f7fb;
+  --rv-panel: #ffffff;
+  --rv-panel-2: #f1f3f7;
+  --rv-border: #dbe3ee;
+  --rv-border-2: #cfd8e6;
+  --rv-text: #0f172a;
+  --rv-text-muted: rgba(15, 23, 42, 0.5);
+  --rv-muted: rgba(15, 23, 42, 0.65);
+  --rv-primary: #6d28d9;
+  --rv-primary-2: rgba(109, 40, 217, 0.18);
+  --rv-primary-hover-weak: rgba(109, 40, 217, 0.08);
+  --rv-primary-hover: rgba(109, 40, 217, 0.12);
+  --rv-primary-border: rgba(109, 40, 217, 0.45);
+  --rv-primary-border-strong: rgba(109, 40, 217, 0.55);
+  --rv-primary-border-active: rgba(109, 40, 217, 0.7);
+  --rv-ok: #22c55e;
+  --rv-ok-2: rgba(34, 197, 94, 0.18);
+  --rv-err: #ef4444;
+  --rv-err-2: rgba(239, 68, 68, 0.18);
+  --rv-white: #fff;
+  --rv-slate-200: #e2e8f0;
+  --rv-slate-300: #cbd5e1;
+  --rv-slate-400: #94a3b8;
+  --rv-slate-500: #64748b;
+  --rv-slate-600: #475569;
+  --rv-slate-700: #334155;
+  --rv-blue-600: #2563eb;
+  --rv-blue-700: #1d4ed8;
+  --rv-danger-50: #fff4f4;
+  --rv-danger-600: #dc2626;
+  --rv-danger-700: #b91c1c;
+  --rv-danger-800: #991b1b;
+  --rv-warning-700: #b45309;
+  --rv-warning: #c9a227;
+  --rv-surface-soft: #f3f5f8;
+  --rv-surface-soft-hover: #eef1f5;
+  --rv-border-soft-strong: #b5becb;
+  --rv-surface-subtle: #f8fafc;
+  --rv-surface-elevated: #ffffff;
 
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-2-5: 10px;
-  --space-3: 12px;
-  --space-3-5: 14px;
-  --space-4: 16px;
+  --rv-space-1: 4px;
+  --rv-space-1-5: 6px;
+  --rv-space-2: 8px;
+  --rv-space-2-5: 10px;
+  --rv-space-3: 12px;
+  --rv-space-3-5: 14px;
+  --rv-space-4: 16px;
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --rv-radius-sm: 6px;
+  --rv-radius-md: 8px;
+  --rv-radius-lg: 12px;
 
-  --control-height: 30px;
+  --rv-control-height: 30px;
+
+  --rv-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    Liberation Mono, monospace;
 }

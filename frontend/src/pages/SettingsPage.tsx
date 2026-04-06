@@ -21,6 +21,7 @@ import {
 } from "../api/client";
 import { AsyncButton } from "../components/ui/AsyncButton";
 import { Spinner } from "../components/ui/Spinner";
+import { cn } from "@/lib/utils";
 import { AgentsEditor } from "./settings/AgentsEditor";
 import { GlobalModelSettingsCard } from "./settings/GlobalModelSettingsCard";
 import { ModelPresetsEditor } from "./settings/ModelPresetsEditor";
@@ -33,14 +34,13 @@ import type { LlmSettings } from "../types/llmSettings";
 import { ProviderCard } from "./settings/ProviderCard";
 import { SettingsHeader } from "./settings/SettingsHeader";
 import { SettingsSidebar } from "./settings/SettingsSidebar";
+import { ghostBtn, settingsPlaceholderBox } from "./settings/settingsClasses";
 import { notifyToast } from "../utils/toast";
-import styles from "./SettingsPage.module.css";
 
 function ToolsSettingsPlaceholder() {
   return (
-    <div className={styles.settingsPlaceholder}>
-      Per-agent tool enablement and approval policy: open{" "}
-      <strong>Agents</strong> → pick an agent →{" "}
+    <div className={settingsPlaceholderBox}>
+      Per-agent tool enablement and approval policy: open <strong>Agents</strong> → pick an agent →{" "}
       <strong>Tools &amp; permissions</strong>.
     </div>
   );
@@ -312,8 +312,8 @@ export function SettingsPage() {
 
   if (loadingSettings) {
     return (
-      <section className={styles.loading}>
-        <div className={styles.loadingRow}>
+      <section className="flex flex-col gap-3 p-4">
+        <div className="inline-flex items-center gap-2 text-muted-foreground">
           <Spinner size={16} />
           <span>Loading settings...</span>
         </div>
@@ -322,24 +322,22 @@ export function SettingsPage() {
   }
 
   if (!settings) {
-    return (
-      <section className={styles.loading}>Failed to load settings.</section>
-    );
+    return <section className="p-4">Failed to load settings.</section>;
   }
 
   const providerCards = filterProviders(settings.providers || [], search);
   const modelGroups = buildModelGroups(settings.providers || []);
 
   return (
-    <section className={styles.settingsPage}>
-      <div className={styles.settingsPageLayout}>
+    <section className="min-h-0 w-full flex-1 overflow-auto">
+      <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[280px_minmax(0,1fr)]">
         <SettingsSidebar
           activeSection={activeSection}
           navigate={navigate}
           settingsSearch={location.search}
         />
 
-        <main className={styles.settingsContent}>
+        <main className="flex min-w-0 flex-col gap-3.5">
           {activeSection === "model_provider" ||
           activeSection === "model_presets" ||
           activeSection === "agents" ? null : (
@@ -351,7 +349,7 @@ export function SettingsPage() {
           )}
 
           {activeSection === "model_provider" ? (
-            <div className={styles.settingsProviderGrid}>
+            <div className="flex flex-col gap-3">
               <GlobalModelSettingsCard
                 settings={settings}
                 setSettings={setSettings}
@@ -404,17 +402,12 @@ export function SettingsPage() {
           ) : activeSection === "tools" ? (
             <ToolsSettingsPlaceholder />
           ) : (
-            <div className={styles.settingsPlaceholder}>
-              Skills UI placeholder.
-            </div>
+            <div className={settingsPlaceholderBox}>Skills UI placeholder.</div>
           )}
 
           {activeSection === "model_provider" ? (
-            <div className={styles.settingsFooterActions}>
-              <AsyncButton
-                onClickAsync={save}
-                className={`btn ${styles.footerButton}`}
-              >
+            <div className="flex items-center gap-2.5">
+              <AsyncButton onClickAsync={save} className={cn(ghostBtn, "border-slate-300")}>
                 Save
               </AsyncButton>
             </div>

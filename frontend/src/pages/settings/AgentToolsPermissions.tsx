@@ -8,7 +8,6 @@ import {
   tryParseAgentJson,
 } from "./agentToolsPolicy";
 import type { MutableAgent } from "./agentToolsPolicy";
-import styles from "./AgentToolsPermissions.module.css";
 
 type ToolCatalogRow = { name?: unknown; description?: unknown };
 
@@ -19,6 +18,9 @@ type AgentToolsPermissionsProps = {
   agentJson: string;
   setAgentJson: (s: string) => void;
 };
+
+const tableBase =
+  "w-full border-collapse overflow-hidden rounded-[10px] border border-border text-[13px] [&_td]:border-b [&_td]:border-border [&_td]:px-2.5 [&_td]:py-2 [&_td]:align-top [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:font-bold [&_th]:text-muted-foreground";
 
 export function AgentToolsPermissions({
   agentEditId,
@@ -55,7 +57,7 @@ export function AgentToolsPermissions({
 
   if (!agent) {
     return (
-      <div className={styles.invalidJson}>
+      <div className="mb-3 text-[13px] text-amber-800 dark:text-amber-400">
         Invalid agent JSON — fix syntax to edit tools and permissions here.
       </div>
     );
@@ -90,17 +92,15 @@ export function AgentToolsPermissions({
   }
 
   return (
-    <div className={styles.agentToolsPermissions}>
-      <div className={styles.agentToolsPermissionsTitle}>
-        Tools &amp; permissions
-      </div>
-      <table className={styles.agentToolsTable}>
+    <div className="relative z-[1] mb-4 text-foreground">
+      <div className="mb-1.5 text-sm font-extrabold">Tools &amp; permissions</div>
+      <table className={tableBase}>
         <thead>
           <tr>
             <th>Tool</th>
             <th>Description</th>
             <th>
-              <label className={styles.agentToolsSelectAll}>
+              <label className="m-0 inline-flex cursor-pointer items-center gap-2 font-inherit text-inherit">
                 <input
                   ref={headerEnabledRef}
                   type="checkbox"
@@ -129,7 +129,7 @@ export function AgentToolsPermissions({
                 <td>
                   <code>{name}</code>
                 </td>
-                <td className={styles.agentToolsDesc}>
+                <td className="max-w-[360px] text-muted-foreground">
                   {t.description != null ? String(t.description) : "—"}
                 </td>
                 <td>

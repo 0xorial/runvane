@@ -1,6 +1,5 @@
 import { ToolRunRow } from "../../components/chat/rows/ToolRunRow";
 import type { ToolInvocationEntry } from "../../protocol/chatEntry";
-import styles from "./ToolComponentPlayground.module.css";
 
 export function ToolComponentPlayground() {
   const scenarios: Array<{ label: string; entry: ToolInvocationEntry }> = [
@@ -59,12 +58,14 @@ export function ToolComponentPlayground() {
   ];
 
   return (
-    <section className={styles.root}>
+    <section className="flex flex-col gap-4">
       {scenarios.map((row) => (
-        <div key={row.entry.id} className={styles.scenario}>
-          <div className={styles.scenarioLabel}>{row.label}</div>
+        <div key={row.entry.id} className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {row.label}
+          </div>
           <ToolRunRow entry={row.entry} />
-      </div>
+        </div>
       ))}
     </section>
   );

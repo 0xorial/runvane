@@ -1,12 +1,11 @@
 import type { ChatEntry } from "../../protocol/chatEntry";
 import type { ObservableItem } from "../../utils/observableCollection";
 import { useObservableValue } from "../../hooks/useObservable";
-import { cx } from "../../utils/cx";
+import { chatToolOuter } from "./chatMessageLayout";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
 import { ThinkingRow } from "./rows/ThinkingRow";
 import { ToolRunRow } from "./rows/ToolRunRow";
 import { UserMessageRow } from "./rows/UserMessageRow";
-import styles from "./ChatMessageRow.module.css";
 
 type ChatMessageRowProps = {
   entry$: ObservableItem<ChatEntry>;
@@ -24,7 +23,7 @@ export function ChatMessageRow({ entry$ }: ChatMessageRowProps) {
   }
   if (entry.type === "planner_llm_stream") {
     return (
-      <div className={cx(styles.msg, styles.assistant, styles.thinking)}>
+      <div className={chatToolOuter}>
         <ThinkingRow entry={entry} />
       </div>
     );

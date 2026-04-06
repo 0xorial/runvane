@@ -2,8 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
-import { cx } from "../../utils/cx";
-import styles from "./ModelPresetsEditor.module.css";
+import { cn } from "@/lib/utils";
+import {
+  chipActive,
+  chipBase,
+  ghostBtn,
+  ghostDanger,
+  loadError as loadErrorBanner,
+  loadHint,
+} from "./settingsClasses";
 
 type ModelPresetsEditorProps = {
   presets: ModelPresetResponse[];
@@ -57,6 +64,9 @@ function rowsToSettings(rows: SettingRow[]): Record<string, unknown> {
   }
   return out;
 }
+
+const inputBase =
+  "box-border min-h-[30px] w-full rounded-md border border-input bg-background px-3 text-sm";
 
 export function ModelPresetsEditor({
   presets,
@@ -147,18 +157,18 @@ export function ModelPresetsEditor({
   }
 
   return (
-    <div className={styles.layout}>
-      <div className={styles.topRow}>
-        <button type="button" className={styles.ghostBtn} onClick={() => void handleAdd()}>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-start gap-2.5">
+        <button type="button" className={ghostBtn} onClick={() => void handleAdd()}>
           Add preset
         </button>
-        <div className={styles.chips} role="list" aria-label="Model presets">
+        <div className="flex flex-wrap gap-2" role="list" aria-label="Model presets">
           {presets.map((p) => (
             <button
               key={p.id}
               type="button"
               role="listitem"
-              className={cx(styles.chip, p.id === presetEditId && styles.chipActive)}
+              className={cn(chipBase, "max-w-none", p.id === presetEditId && chipActive)}
               onClick={() => setPresetEditId(p.id)}
               title={p.name}
             >
@@ -168,20 +178,20 @@ export function ModelPresetsEditor({
         </div>
       </div>
 
-      <div className={styles.card}>
-        {loading ? <div className={styles.hint}>Loading preset…</div> : null}
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+        {loading ? <div className={loadHint}>Loading preset…</div> : null}
         {loadError ? (
-          <div className={styles.error} role="alert">
+          <div className={loadErrorBanner} role="alert">
             Failed to load preset: {loadError}
           </div>
         ) : null}
         {currentPreset ? (
           <>
-            <div className={styles.formGrid}>
-              <label>
+            <div className="grid grid-cols-1 gap-3">
+              <label className="text-sm text-muted-foreground">
                 Name
                 <input
-                  className={`input control ${styles.modelNameInput}`}
+                  className={cn(inputBase, "mt-1.5 w-full min-w-0")}
                   value={currentPreset.name}
                   disabled={!canEdit}
                   onChange={(e) => setCurrentPreset({ ...currentPreset, name: e.target.value })}
@@ -189,30 +199,33 @@ export function ModelPresetsEditor({
               </label>
             </div>
 
-            <div className={styles.settingsLabel}>
-              <div className={styles.settingsHeader}>
-                <span>Parameters</span>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">Parameters</span>
                 <button
                   type="button"
-                  className={styles.ghostBtn}
+                  className={ghostBtn}
                   disabled={!canEdit}
                   onClick={() => addSettingRow()}
                 >
                   Add parameter
                 </button>
               </div>
-              <div className={styles.settingsRows}>
+              <div className="mt-2 flex flex-col gap-2.5">
                 {settingRows.map((row) => (
-                  <div key={row.id} className={styles.settingsRow}>
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_auto]"
+                  >
                     <input
-                      className={`input ${styles.paramKeyInput}`}
+                      className={inputBase}
                       placeholder="key"
                       value={row.key}
                       disabled={!canEdit}
                       onChange={(e) => updateSettingRow(row.id, "key", e.target.value)}
                     />
                     <input
-                      className={`input ${styles.paramValueInput}`}
+                      className={inputBase}
                       placeholder="value"
                       value={row.value}
                       disabled={!canEdit}
@@ -220,7 +233,7 @@ export function ModelPresetsEditor({
                     />
                     <button
                       type="button"
-                      className={cx(styles.ghostBtn, styles.danger, styles.removeParamBtn)}
+                      className={cn(ghostBtn, ghostDanger, "whitespace-nowrap")}
                       disabled={!canEdit}
                       onClick={() => removeSettingRow(row.id)}
                     >
@@ -231,15 +244,15 @@ export function ModelPresetsEditor({
               </div>
             </div>
 
-            <div className={styles.actions}>
+            <div className="flex justify-end gap-2.5">
               <button
                 type="button"
-                className={cx(styles.ghostBtn, styles.danger)}
+                className={cn(ghostBtn, ghostDanger)}
                 onClick={() => void handleDelete()}
               >
                 Delete
               </button>
-              <AsyncButton className={styles.ghostBtn} disabled={!canEdit} onClickAsync={savePreset}>
+              <AsyncButton className={ghostBtn} disabled={!canEdit} onClickAsync={savePreset}>
                 Save
               </AsyncButton>
             </div>

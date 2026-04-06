@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
-import styles from "./StickToBottomScrollArea.module.css";
 
 /** Pin state resets on remount — pass a React `key` when the scrolled “document” is replaced. */
 export type StickToBottomScrollAreaProps = {
@@ -61,7 +60,10 @@ export function StickToBottomScrollArea({
 
   return (
     <div ref={scrollRef} className={className} onScroll={handleScroll}>
-      <div ref={contentRef} className={styles.content}>
+      <div
+        ref={contentRef}
+        className="flex min-h-full flex-col gap-3 pb-1"
+      >
         {children}
       </div>
     </div>

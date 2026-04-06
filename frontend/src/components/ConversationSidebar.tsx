@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { MoreVertical } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import {
   createConversation,
   getConversations,
@@ -9,8 +18,6 @@ import {
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
 import { notifyError } from "../utils/toast";
-import { cx } from "../utils/cx";
-import styles from "./ConversationSidebar.module.css";
 
 export type ConversationRow = {
   id: string;
@@ -37,7 +44,6 @@ export function ConversationSidebar({
   const [searchParams] = useSearchParams();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [probeBusy, setProbeBusy] = useState(false);
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const loadConversations = useCallback(async () => {
     const data = (await getConversations()) as ConversationRow[];
@@ -112,95 +118,85 @@ export function ConversationSidebar({
   async function onRenameConversation(conversation: ConversationRow) {
     const current = String(conversation.title || "").trim();
     const next = window.prompt("Rename chat", current);
-    if (next == null) {
-      setMenuOpenId(null);
-      return;
-    }
+    if (next == null) return;
     const title = next.trim();
-    if (!title || title === current) {
-      setMenuOpenId(null);
-      return;
-    }
+    if (!title || title === current) return;
     try {
       const updated = await renameConversation(conversation.id, { title });
       setConversations((prev) =>
-        prev.map((item) => (item.id === updated.id ? { id: updated.id, title: updated.title } : item)),
+        prev.map((item) =>
+          item.id === updated.id ? { id: updated.id, title: updated.title } : item,
+        ),
       );
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setMenuOpenId(null);
     }
   }
 
   return (
-    <aside className={styles.sidebar}>
-      <button
+    <aside className="flex min-h-0 w-full min-w-0 flex-col gap-2 border-r border-sidebar-border bg-sidebar p-3">
+      <Button
         type="button"
-        className={cx("btn", styles.newChatBtn)}
+        variant="outline"
+        className="w-full border-primary/25 bg-primary/10 font-semibold text-primary hover:bg-primary/20"
         onClick={onNewChat}
       >
         + New chat
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        className={cx("btn", styles.probeChatBtn)}
+        variant="outline"
+        size="sm"
+        className="w-full text-xs"
         onClick={() => void onProbeTime()}
         disabled={probeBusy}
       >
         Probe: time (tmp)
-      </button>
-      <div className={styles.convList}>
-        {conversations.map((c) => (
-          <div
-            key={c.id}
-            className={cx(
-              styles.convItem,
-              activeConversationId === c.id && styles.convItemActive
-            )}
-            onClick={() => onSelect(c.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelect(c.id);
-              }
-            }}
-            role="button"
-            tabIndex={0}
-          >
-            <div className={styles.convItemInner}>
-              <span className={styles.convTitle}>{c.title}</span>
-              <div className={styles.convMenuWrap}>
-                <button
-                  type="button"
-                  className={styles.convMenuBtn}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setMenuOpenId((prev) => (prev === c.id ? null : c.id));
-                  }}
-                  aria-label="Chat menu"
-                  title="Chat menu"
-                >
-                  &#8942;
-                </button>
-                {menuOpenId === c.id ? (
-                  <div
-                    className={styles.convMenu}
-                    onClick={(event) => event.stopPropagation()}
+      </Button>
+      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-0.5">
+        {conversations.map((c) => {
+          const active = activeConversationId === c.id;
+          return (
+            <div
+              key={c.id}
+              className={cn(
+                "flex items-center rounded-md border border-transparent transition-colors",
+                active
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "hover:bg-sidebar-accent/60",
+              )}
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-sm font-medium"
+                onClick={() => onSelect(c.id)}
+              >
+                {c.title || "Untitled"}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground"
+                    aria-label="Chat menu"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <button
-                      type="button"
-                      className={styles.convMenuItem}
-                      onClick={() => void onRenameConversation(c)}
-                    >
-                      Rename
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem
+                    onSelect={() => void onRenameConversation(c)}
+                  >
+                    Rename
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </aside>
   );

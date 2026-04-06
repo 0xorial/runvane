@@ -2,8 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DropdownItem, ModelGroup } from "../../pages/settings/helpers";
 import { TextInput } from "./TextInput";
-import { cx } from "../../utils/cx";
-import styles from "./ModelDropdown.module.css";
+import { cn } from "@/lib/utils";
 
 function normalizeToken(value: unknown): string {
   return String(value || "")
@@ -111,13 +110,10 @@ export function ModelDropdown({
   }, [groups, value]);
 
   return (
-    <div
-      className={cx(styles.root, disabled && styles.disabled)}
-      ref={rootRef}
-    >
+    <div className={cn("relative w-full", disabled && "[&_button]:cursor-not-allowed [&_button]:opacity-55")} ref={rootRef}>
       <button
         type="button"
-        className={styles.trigger}
+        className="flex min-h-[30px] w-full cursor-pointer items-center justify-between gap-2.5 rounded-md border border-input bg-muted/40 px-3 text-left text-foreground"
         disabled={disabled}
         onClick={() => {
           if (disabled) return;
@@ -125,36 +121,48 @@ export function ModelDropdown({
         }}
       >
         <span
-          className={cx(styles.value, !selectedLabel && styles.placeholder)}
+          className={cn(
+            "min-w-0 flex-1 truncate whitespace-nowrap",
+            !selectedLabel && "text-muted-foreground",
+          )}
         >
           {selectedLabel || placeholder}
         </span>
-        <span className={cx(styles.caret, open && styles.caretOpen)}>⌄</span>
+        <span
+          className={cn(
+            "text-muted-foreground transition-transform duration-150",
+            open && "rotate-180",
+          )}
+        >
+          ⌄
+        </span>
       </button>
 
       {open ? (
-        <div className={styles.menu}>
-          <div className={styles.search}>
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[1400] overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
+          <div className="border-b border-border p-2.5">
             <TextInput
               value={query}
               onChange={setQuery}
               placeholder={searchPlaceholder}
-              className={styles.searchInput}
+              className="box-border w-full rounded-md border border-input bg-muted/40 py-1.5 pl-2 pr-8 text-sm"
               showClearButton
-              wrapperClassName={styles.searchWrap}
-              clearButtonClassName={styles.searchClear}
+              wrapperClassName="relative block"
+              clearButtonClassName="absolute right-1.5 top-1/2 flex h-[18px] w-[18px] -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background p-0 leading-none text-muted-foreground"
               clearAriaLabel="Clear search"
             />
           </div>
 
-          <div className={styles.list}>
+          <div className="max-h-[300px] overflow-auto px-2 pb-2 pt-1.5">
             {filteredGroups.length === 0 ? (
-              <div className={styles.empty}>No results</div>
+              <div className="px-1.5 py-2 text-[13px] text-muted-foreground">No results</div>
             ) : null}
             {filteredGroups.map((g) => (
-              <div key={g.id} className={styles.group}>
+              <div key={g.id} className="mt-1.5 first:mt-0">
                 {g.label ? (
-                  <div className={styles.groupTitle}>{g.label}</div>
+                  <div className="px-1.5 py-1 text-xs font-bold text-muted-foreground">
+                    {g.label}
+                  </div>
                 ) : null}
                 {g.models.map((m) => {
                   const v = itemValue(m);
@@ -163,9 +171,9 @@ export function ModelDropdown({
                     <button
                       key={`${g.id}:${v}`}
                       type="button"
-                      className={cx(
-                        styles.item,
-                        v === value && styles.itemActive,
+                      className={cn(
+                        "w-full cursor-pointer rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10",
+                        v === value && "bg-primary/15",
                       )}
                       onClick={() => {
                         onChange(v, g.id);
@@ -180,7 +188,11 @@ export function ModelDropdown({
             ))}
           </div>
 
-          {footer ? <div className={styles.footer}>{footer}</div> : null}
+          {footer ? (
+            <div className="border-t border-border px-3 py-2 text-[13px] [&_a]:cursor-pointer [&_a]:font-semibold [&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline [&_button]:cursor-pointer [&_button]:border-0 [&_button]:bg-transparent [&_button]:p-0 [&_button]:font-semibold [&_button]:text-primary">
+              {footer}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -6,8 +6,17 @@ import { notifyError } from "../../utils/toast";
 import { AgentLlmSettings } from "./AgentLlmSettings";
 import { sortAgents } from "./helpers";
 import type { ModelGroup } from "./helpers";
-import { cx } from "../../utils/cx";
-import styles from "./AgentsEditor.module.css";
+import { cn } from "@/lib/utils";
+import {
+  chipActive,
+  chipBase,
+  chipText,
+  ghostBtn,
+  ghostDanger,
+  loadError,
+  loadHint,
+  settingsPlaceholderBox,
+} from "./settingsClasses";
 
 type AgentsEditorProps = {
   agents: AgentListItemResponse[];
@@ -25,6 +34,21 @@ type AgentsEditorProps = {
   modelGroups: ModelGroup[];
   toolCatalog: Record<string, unknown>[];
 };
+
+const nameInput =
+  "ml-1.5 min-w-[140px] max-w-[420px] flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-[13px]";
+
+const systemPromptInput =
+  "min-h-[110px] w-full resize-y rounded-[10px] border border-input bg-background px-2.5 py-2 text-[13px] leading-snug";
+
+const toolsTableClass =
+  "w-full border-collapse overflow-hidden rounded-[10px] border border-border text-xs [&_td]:border-b [&_td]:border-border [&_td]:px-2.5 [&_td]:py-2 [&_td]:align-top [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:font-bold [&_th]:text-muted-foreground";
+
+const toolsAgentsTableClass =
+  "w-full border-collapse border border-border text-xs [&_td]:border-b [&_td]:border-border [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top [&_th]:border-b [&_th]:border-border [&_th]:bg-background [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-bold [&_th]:text-muted-foreground";
+
+const toolsConfigInput =
+  "min-h-[120px] w-full resize-y rounded-lg border border-input bg-background p-2 font-mono text-xs leading-snug";
 
 export function AgentsEditor({
   agents,
@@ -227,54 +251,45 @@ export function AgentsEditor({
   }
 
   return (
-    <div className={styles.agentsLayout}>
-      <div className={styles.agentsAddRow}>
-        <button
-          type="button"
-          className={styles.ghostBtn}
-          onClick={() => void handleAddAgent()}
-        >
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-start gap-2.5">
+        <button type="button" className={ghostBtn} onClick={() => void handleAddAgent()}>
           Add agent
         </button>
-        <div className={styles.agentsChips} role="list" aria-label="Agents">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2" role="list" aria-label="Agents">
           {sortAgents(agents).map((a) => (
             <button
               key={a.id}
               type="button"
               role="listitem"
-              className={cx(
-                styles.agentsChip,
-                a.id === agentEditId && styles.agentsChipActive,
-              )}
+              className={cn(chipBase, a.id === agentEditId && chipActive)}
               title={a.name}
               onClick={() => setAgentEditId(a.id)}
             >
-              <span className={styles.agentsChipText}>
-                {a.name || "Unnamed"}
-              </span>
+              <span className={chipText}>{a.name || "Unnamed"}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className={cx(styles.settingsPlaceholder, styles.agentsEditor)}>
+      <div className={cn(settingsPlaceholderBox, "border-solid")}>
         {agentLoading ? (
-          <div className={styles.agentsLoadHint}>Loading agent…</div>
+          <div className={loadHint}>Loading agent…</div>
         ) : (
           <>
             {agentLoadError && (
-              <div className={styles.agentsLoadError} role="alert">
+              <div className={loadError} role="alert">
                 Failed to load agent: {agentLoadError}
               </div>
             )}
             {currentAgent && (
               <>
-                <div className={styles.agentsToolbar}>
-                  <label className={styles.agentsNameField}>
+                <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                  <label className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground">
                     Name
                     <input
                       type="text"
-                      className={styles.agentsNameInput}
+                      className={nameInput}
                       value={currentAgent.name}
                       disabled={!canEdit}
                       onChange={(e) =>
@@ -288,23 +303,23 @@ export function AgentsEditor({
                       placeholder="Display name"
                     />
                   </label>
-                  <div className={styles.agentsToolbarRight}>
+                  <div className="ml-auto inline-flex flex-wrap items-center gap-2.5">
                     <button
                       type="button"
-                      className={cx(styles.ghostBtn, styles.danger)}
+                      className={cn(ghostBtn, ghostDanger)}
                       onClick={() => void handleDeleteAgent()}
                     >
                       Delete
                     </button>
                     <AsyncButton
-                      className={styles.ghostBtn}
+                      className={ghostBtn}
                       disabled={!canEdit}
                       onClickAsync={saveAgent}
                     >
                       Save
                     </AsyncButton>
                     <AsyncButton
-                      className={cx(styles.ghostBtn, styles.primary)}
+                      className={ghostBtn}
                       disabled={!canEdit}
                       onClickAsync={() => saveAgentAndOpenChat(agentEditId)}
                     >
@@ -312,10 +327,10 @@ export function AgentsEditor({
                     </AsyncButton>
                   </div>
                 </div>
-                <label className={styles.systemPromptField}>
+                <label className="mb-3 flex flex-col gap-2 text-[13px] text-muted-foreground">
                   System prompt
                   <textarea
-                    className={styles.systemPromptInput}
+                    className={systemPromptInput}
                     value={currentAgent.system_prompt}
                     disabled={!canEdit}
                     onChange={(e) =>
@@ -336,9 +351,9 @@ export function AgentsEditor({
                   modelGroups={modelGroups}
                   presets={presets}
                 />
-                <div className={styles.toolsSection}>
-                  <div className={styles.toolsTitle}>Tools</div>
-                  <table className={styles.toolsTable}>
+                <div className="mt-3.5">
+                  <div className="mb-2 text-[13px] font-bold text-foreground">Tools</div>
+                  <table className={toolsTableClass}>
                     <thead>
                       <tr>
                         <th>Tool</th>
@@ -356,11 +371,11 @@ export function AgentsEditor({
                         return [
                           <tr key={`${name}-row`}>
                             <td>
-                              <div className={styles.toolNameCell}>
+                              <div className="inline-flex items-center gap-1.5">
                                 {cfg.enabled ? (
                                   <button
                                     type="button"
-                                    className={styles.toolsArrowBtn}
+                                    className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0 text-[11px] text-muted-foreground hover:text-foreground"
                                     disabled={!canEdit}
                                     onClick={() => toggleToolExpanded(name)}
                                     aria-label={expanded ? "Hide config" : "Show config"}
@@ -369,14 +384,14 @@ export function AgentsEditor({
                                     {expanded ? "▾" : "▸"}
                                   </button>
                                 ) : (
-                                  <span className={styles.toolsArrowSpacer} aria-hidden="true">
+                                  <span className="inline-flex h-4 w-4 items-center justify-center text-[11px] text-transparent" aria-hidden="true">
                                     ▸
                                   </span>
                                 )}
                                 <code>{name}</code>
                               </div>
                             </td>
-                            <td className={styles.toolsDesc}>
+                            <td className="max-w-[360px] text-muted-foreground">
                               {row.description != null ? String(row.description) : "—"}
                             </td>
                             <td>
@@ -403,54 +418,56 @@ export function AgentsEditor({
                           </tr>,
                           expanded ? (
                             <tr key={`${name}-config`}>
-                              <td colSpan={3} className={styles.toolsConfigCell}>
-                                <div className={styles.toolsConfigTitle}>
-                                  <code>{name}</code> config (JSON)
-                                </div>
-                                <textarea
-                                  className={styles.toolsConfigInput}
-                                  value={getToolConfigDraft(name)}
-                                  disabled={!canEdit}
-                                  onChange={(e) => onToolConfigDraftChange(name, e.target.value)}
-                                  spellCheck={false}
-                                  rows={8}
-                                />
-                                {toolConfigErrors[name] ? (
-                                  <div className={styles.toolsConfigError} role="alert">
-                                    {toolConfigErrors[name]}
+                              <td colSpan={3} className="bg-muted/50">
+                                <div className="p-2">
+                                  <div className="mb-2 text-xs font-semibold text-foreground">
+                                    <code>{name}</code> config (JSON)
                                   </div>
-                                ) : null}
-                                <div className={styles.toolsAgentsTableWrap}>
-                                  <div className={styles.toolsAgentsTableTitle}>Agent permissions</div>
-                                  <table className={styles.toolsAgentsTable}>
-                                    <thead>
-                                      <tr>
-                                        <th>Agent ID</th>
-                                        <th>Agent name</th>
-                                        <th>Enabled</th>
-                                        <th>Permissions config</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {sortAgents(agents).map((agentRow) => {
-                                        const agentCfg = getToolConfigFromAgent(agentRow, name);
-                                        return (
-                                          <tr key={`${name}-${agentRow.id}`}>
-                                            <td>
-                                              <code>{agentRow.id}</code>
-                                            </td>
-                                            <td>{agentRow.name || "Unnamed"}</td>
-                                            <td>{agentCfg.enabled ? "true" : "false"}</td>
-                                            <td>
-                                              <code>
-                                                {JSON.stringify(agentCfg.config)}
-                                              </code>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                                  <textarea
+                                    className={toolsConfigInput}
+                                    value={getToolConfigDraft(name)}
+                                    disabled={!canEdit}
+                                    onChange={(e) => onToolConfigDraftChange(name, e.target.value)}
+                                    spellCheck={false}
+                                    rows={8}
+                                  />
+                                  {toolConfigErrors[name] ? (
+                                    <div className="mt-2 text-xs text-destructive" role="alert">
+                                      {toolConfigErrors[name]}
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-2.5">
+                                    <div className="mb-1.5 text-xs font-semibold text-foreground">
+                                      Agent permissions
+                                    </div>
+                                    <table className={toolsAgentsTableClass}>
+                                      <thead>
+                                        <tr>
+                                          <th>Agent ID</th>
+                                          <th>Agent name</th>
+                                          <th>Enabled</th>
+                                          <th>Permissions config</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {sortAgents(agents).map((agentRow) => {
+                                          const agentCfg = getToolConfigFromAgent(agentRow, name);
+                                          return (
+                                            <tr key={`${name}-${agentRow.id}`}>
+                                              <td>
+                                                <code>{agentRow.id}</code>
+                                              </td>
+                                              <td>{agentRow.name || "Unnamed"}</td>
+                                              <td>{agentCfg.enabled ? "true" : "false"}</td>
+                                              <td>
+                                                <code>{JSON.stringify(agentCfg.config)}</code>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </td>
                             </tr>

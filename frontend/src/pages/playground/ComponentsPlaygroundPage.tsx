@@ -1,17 +1,16 @@
 import { ThinkingComponentPlayground } from "./ThinkingComponentPlayground";
 import { ToolComponentPlayground } from "./ToolComponentPlayground";
-import styles from "./ComponentsPlaygroundPage.module.css";
 
 export function ComponentsPlaygroundPage() {
   return (
-    <div className={styles.page}>
-      <h1 className={styles.title}>Components Playground</h1>
-      <section className={styles.card}>
-        <h2 className={styles.cardTitle}>Thinking Component</h2>
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+      <h1 className="text-xl font-bold tracking-tight">Components Playground</h1>
+      <section className="rounded-lg border border-border bg-card p-4">
+        <h2 className="mb-3 text-base font-semibold">Thinking Component</h2>
         <ThinkingComponentPlayground />
       </section>
-      <section className={styles.card}>
-        <h2 className={styles.cardTitle}>Tool Invocation Row</h2>
+      <section className="rounded-lg border border-border bg-card p-4">
+        <h2 className="mb-3 text-base font-semibold">Tool Invocation Row</h2>
         <ToolComponentPlayground />
       </section>
     </div>

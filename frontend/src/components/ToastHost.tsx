@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ignoreToast, subscribeToastStore } from "../utils/toast";
 import type { ToastItem } from "../utils/toast";
-import { cx } from "../utils/cx";
-import styles from "./ToastHost.module.css";
 
 type RenderedToast = ToastItem & { progress: number };
 
@@ -41,29 +41,40 @@ export function ToastHost() {
   }, [toasts, tick]);
 
   return (
-    <div className={styles.toastHost} aria-live="polite" aria-atomic="true">
+    <div
+      className="pointer-events-none fixed right-3 top-3 z-[100] flex w-[min(420px,calc(100vw-1.5rem))] flex-col gap-2"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       {rendered.map((t) => (
         <div
           key={t.id}
-          className={cx(
-            styles.toast,
-            t.type === "success" ? styles.toastSuccess : styles.toastError,
+          className={cn(
+            "pointer-events-auto rounded-md border border-border bg-card p-3 text-card-foreground shadow-lg",
+            t.type === "success"
+              ? "border-emerald-500/40"
+              : "border-destructive/40",
           )}
         >
-          <div className={styles.toastRow}>
-            <div className={styles.toastMessage}>{t.message}</div>
-            <button
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1 text-sm">{t.message}</div>
+            <Button
               type="button"
-              className={styles.toastDismiss}
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
               onClick={() => ignoreToast(t.id)}
               aria-label="Ignore notification"
             >
               ×
-            </button>
+            </Button>
           </div>
-          <div className={styles.toastProgress}>
+          <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
             <div
-              className={styles.toastProgressBar}
+              className={cn(
+                "h-full rounded-full transition-[width] duration-100 ease-linear",
+                t.type === "success" ? "bg-emerald-500" : "bg-destructive",
+              )}
               style={{ width: `${t.progress}%` }}
             />
           </div>

@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
 import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { getAgents, getLlmSettings, getModelPresets } from "../../api/client";
 import { ModelDropdown } from "../ui/ModelDropdown";
 import { ModelSelector } from "../ui/ModelSelector";
 import { getAgentLlm } from "../../pages/settings/agentLlm";
 import { buildModelGroups, sortAgents } from "../../pages/settings/helpers";
 import type { ModelGroup } from "../../pages/settings/helpers";
-import { cx } from "../../utils/cx";
-import styles from "./ChatAgentToolbar.module.css";
 
 export function agentIdFromSearchParams(searchParams: URLSearchParams): string {
   return searchParams.get("agent")?.trim() || "";
@@ -33,6 +33,9 @@ export type ChatAgentSelection = {
 type ChatAgentToolbarProps = {
   onSelectionChange: (selection: ChatAgentSelection) => void;
 };
+
+const toolbarLabelClass =
+  "flex min-w-0 w-full flex-nowrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground";
 
 export function ChatAgentToolbar({
   onSelectionChange,
@@ -180,7 +183,7 @@ export function ChatAgentToolbar({
   );
   useEffect(() => {
     setSelectedLlm(agentDefaultLlm);
-  }, [selectedAgentId]);
+  }, [selectedAgentId, agentDefaultLlm]);
   const effectiveLlm = selectedLlm ?? agentDefaultLlm;
   const presetGroups: ModelGroup[] = useMemo(
     () => [
@@ -213,36 +216,46 @@ export function ChatAgentToolbar({
 
   if (allAgents != null && allAgents.length === 0) {
     return (
-      <div className={styles.agentSetupBar}>
-        <span>No agents configured.</span>
-        <Link
-          to="/settings/agents"
-          className={cx("btn", styles.agentSetupBtn, styles.agentSetupLink)}
-        >
-          Configure agents
-        </Link>
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-sm">
+        <span className="text-muted-foreground">No agents configured.</span>
+        <Button variant="outline" size="sm" className="ml-auto" asChild>
+          <Link to="/settings/agents">Configure agents</Link>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className={styles.toolbar}>
-      <label className={styles.toolbarLabel}>
+    <div
+      className={cn(
+        "grid shrink-0 gap-3 border-b border-border bg-card/40 px-4 py-2",
+        "grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]",
+        "items-end text-sm backdrop-blur-sm",
+      )}
+    >
+      <label className={toolbarLabelClass}>
         Agent
-        <div className={styles.toolbarAgentDropdown}>
+        <div className="min-w-0 flex-1">
           <ModelDropdown
             value={selectedAgentId}
             onChange={(id) => setAgentIdAndUrl(id)}
             groups={agentGroups}
             placeholder="Select agent"
             searchPlaceholder="Search agent"
-            footer={<Link to="/settings/agents">Configure agents ↗</Link>}
+            footer={
+              <Link
+                to="/settings/agents"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                Configure agents ↗
+              </Link>
+            }
           />
         </div>
       </label>
-      <label className={cx(styles.toolbarLabel, styles.toolbarLabelModel)}>
+      <label className={cn(toolbarLabelClass, "min-w-0")}>
         Model
-        <div className={styles.toolbarModelDropdown}>
+        <div className="min-w-0 flex-1">
           <ModelSelector
             value={effectiveLlm.model || ""}
             onChange={(m, providerId) => {
@@ -263,16 +276,23 @@ export function ChatAgentToolbar({
           />
         </div>
       </label>
-      <label className={styles.toolbarLabel}>
+      <label className={toolbarLabelClass}>
         Preset
-        <div className={styles.toolbarPresetDropdown}>
+        <div className="min-w-0 flex-1">
           <ModelDropdown
             value={selectedPresetId != null ? String(selectedPresetId) : ""}
             onChange={(id) => setPresetIdAndUrl(id)}
             groups={presetGroups}
             placeholder="No preset"
             searchPlaceholder="Search preset"
-            footer={<Link to="/settings/model-presets">Configure presets ↗</Link>}
+            footer={
+              <Link
+                to="/settings/model-presets"
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                Configure presets ↗
+              </Link>
+            }
           />
         </div>
       </label>

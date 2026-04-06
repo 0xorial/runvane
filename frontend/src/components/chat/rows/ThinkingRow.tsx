@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDuration, parseDbTimestampMs } from "../../../utils/formatDuration";
 import type { PlannerLlmStreamEntry } from "../../../protocol/chatEntry";
-import { cx } from "../../../utils/cx";
-import styles from "./ThinkingRow.module.css";
+import { cn } from "@/lib/utils";
 
 type ThinkingRowProps = {
   entry: PlannerLlmStreamEntry;
@@ -75,59 +74,82 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
       : `Thought for ${formatDuration(durationMs)}`
     : `Thinking… ${formatDuration(elapsedMs)}`;
 
+  const titleClass = cn(
+    "inline-flex min-h-[18px] items-center gap-2 text-xs font-semibold leading-tight text-slate-400",
+    failed && "text-red-300",
+  );
+
   return (
-    <div className={cx(styles.root, done && styles.done, !done && styles.live)}>
-      <div className={styles.thoughtBox}>
+    <div className={cn("flex flex-col", done && "opacity-[0.98]")}>
+      <div
+        className={cn(
+          "relative box-border flex w-full min-h-0 flex-col items-start overflow-hidden border-0 bg-transparent p-0 text-sm text-muted-foreground shadow-none",
+          !done &&
+            "bg-gradient-to-b from-white/[0.07] to-white/[0.03] after:pointer-events-none after:absolute after:left-[-75%] after:top-0 after:h-full after:w-[52%] after:animate-thinking-sweep after:bg-[linear-gradient(105deg,transparent_0%,rgba(255,255,255,0.16)_32%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.16)_68%,transparent_100%)] motion-reduce:after:animate-none motion-reduce:after:opacity-0",
+        )}
+      >
         {hasDetails ? (
           <button
             type="button"
-            className={cx(styles.title, styles.titleClickable, failed && styles.titleError)}
+            className={cn(
+              titleClass,
+              "w-fit cursor-pointer appearance-none border-0 bg-transparent px-0 py-px text-left",
+            )}
             onClick={() => setExpanded((v) => !v)}
             aria-label={expanded ? "Hide thought details" : "Show thought details"}
           >
             <span>{title}</span>
-            <span className={cx(styles.toggle, styles.toggleInline)} aria-hidden="true">
+            <span className="-ml-0.5 text-[11px] leading-none text-slate-400/75" aria-hidden="true">
               {expanded ? "▾" : "▸"}
             </span>
           </button>
         ) : (
-          <div className={cx(styles.title, failed && styles.titleError)}>{title}</div>
+          <div className={titleClass}>{title}</div>
         )}
         {failed ? (
-          <div className={styles.errorHint}>
+          <div className="mt-1 text-[11px] leading-snug text-rose-300">
             Request failed. See details below.
           </div>
         ) : null}
         {expanded && hasDetails ? (
-          <div className={styles.detailsWrap} ref={detailsWrapRef}>
+          <div
+            className="relative mt-2 flex max-h-[300px] flex-col gap-3 overflow-y-auto overflow-x-hidden"
+            ref={detailsWrapRef}
+          >
             <button
               type="button"
-              className={cx(styles.autoscrollBtn, autoscrollEnabled && styles.autoscrollBtnActive)}
+              className={cn(
+                "sticky top-1.5 z-[1] ml-auto mr-1.5 inline-flex h-[22px] w-5 flex-col items-center justify-center gap-0 rounded-sm border border-border bg-muted px-0 pb-0 pt-px text-[10px] leading-none text-muted-foreground hover:text-foreground",
+                autoscrollEnabled &&
+                  "border-primary/70 bg-primary/15 text-foreground",
+              )}
               onClick={onAutoscrollToggle}
               aria-label="Toggle autoscroll"
               title={autoscrollEnabled ? "Autoscroll on" : "Autoscroll off"}
               aria-pressed={autoscrollEnabled}
             >
-              <span className={styles.autoscrollIcon} aria-hidden="true">
-                ↓
-              </span>
-              <span className={styles.autoscrollDash} aria-hidden="true">
+              <span aria-hidden="true">↓</span>
+              <span className="-mt-px opacity-90" aria-hidden="true">
                 -
               </span>
             </button>
-            <div className={styles.streamBlock}>
+            <div className="flex flex-col gap-0.5">
               {requestText ? (
                 <>
-                  <div className={styles.sectionLabel}>Request</div>
-                  <pre className={cx(styles.details, styles.mono, styles.streamContent)}>
+                  <div className="inline-flex items-center gap-2 text-[11px] font-normal leading-snug text-slate-400/80">
+                    Request
+                  </div>
+                  <pre className="m-0 mt-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-slate-400/90 opacity-70 first:mt-0">
                     {requestText}
                   </pre>
                 </>
               ) : null}
               {responseText ? (
                 <>
-                  <div className={styles.sectionLabel}>{failed ? "Error" : "Response"}</div>
-                  <pre className={cx(styles.details, styles.mono, styles.streamContent)}>
+                  <div className="inline-flex items-center gap-2 text-[11px] font-normal leading-snug text-slate-400/80">
+                    {failed ? "Error" : "Response"}
+                  </div>
+                  <pre className="m-0 mt-2 max-h-none overflow-visible whitespace-pre-wrap break-words font-mono text-[11px] leading-normal text-amber-950/80 opacity-85 dark:text-amber-100/70">
                     {responseText}
                   </pre>
                 </>

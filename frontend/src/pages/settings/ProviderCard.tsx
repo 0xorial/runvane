@@ -3,8 +3,8 @@ import { AsyncButton } from "../../components/ui/AsyncButton";
 import { TextInput } from "../../components/ui/TextInput";
 import { normalizeSearchToken } from "./helpers";
 import type { LlmSettings, ProviderRow } from "../../types/llmSettings";
-import { cx } from "../../utils/cx";
-import styles from "./ProviderCard.module.css";
+import { cn } from "@/lib/utils";
+import { providerGhostBtn } from "./settingsClasses";
 
 type Provider = ProviderRow & Record<string, unknown>;
 
@@ -28,6 +28,9 @@ type ProviderCardProps = {
   collapsedModels: Record<string, boolean>;
   setCollapsedModels: Dispatch<SetStateAction<Record<string, boolean>>>;
 };
+
+const advancedInput =
+  "input control rounded-[10px] border-input bg-muted/50";
 
 export function ProviderCard({
   provider,
@@ -77,17 +80,15 @@ export function ProviderCard({
     : [];
 
   return (
-    <div className={styles.difyProviderCard} key={String(provider.id)}>
-      <div className={styles.difyProviderTop}>
+    <div className="rounded-lg border border-border bg-card p-3.5" key={String(provider.id)}>
+      <div className="flex justify-between gap-3">
         <div>
-          <div className={styles.difyProviderName}>
-            {String(provider.label ?? "")}
-          </div>
-          <div className={styles.difyProviderId}>{String(provider.id)}</div>
+          <div className="text-base font-black">{String(provider.label ?? "")}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{String(provider.id)}</div>
         </div>
         <div>
           <AsyncButton
-            className={styles.difyGhostBtn}
+            className={providerGhostBtn}
             onClickAsync={() => testConnection(provider)}
           >
             Test connection
@@ -95,13 +96,13 @@ export function ProviderCard({
         </div>
       </div>
 
-      <div className={styles.difyModels}>
-        <div className={styles.difyAdvanced}>
-          <div className={styles.difyAdvancedGrid}>
+      <div className="mt-5 border-t border-border pt-4">
+        <div className="mt-3.5">
+          <div className="mt-2.5 grid grid-cols-1 gap-2.5 md:grid-cols-2 [&_label]:flex [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-[13px] [&_label]:font-bold [&_label]:text-muted-foreground">
             <label>
               Provider id
               <input
-                className={`input control ${styles.difyAdvancedInput}`}
+                className={`input control ${advancedInput}`}
                 value={String(provider.id ?? "")}
                 onChange={(e) => {
                   mutProviders((arr, i) => {
@@ -113,7 +114,7 @@ export function ProviderCard({
             <label>
               Label
               <input
-                className={`input control ${styles.difyAdvancedInput}`}
+                className={`input control ${advancedInput}`}
                 value={String(provider.label ?? "")}
                 onChange={(e) => {
                   mutProviders((arr, i) => {
@@ -134,7 +135,7 @@ export function ProviderCard({
                   {label}
                   <input
                     type="text"
-                    className={`input control ${styles.difyAdvancedInput}`}
+                    className={`input control ${advancedInput}`}
                     value={value}
                     onChange={(e) => {
                       mutProviders((arr, i) => {
@@ -149,10 +150,10 @@ export function ProviderCard({
           </div>
         </div>
 
-        <div className={styles.difyModelsHeader}>
+        <div className="mb-3 mt-2.5 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
-            className={styles.difyModelsLabel}
+            className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-black text-muted-foreground"
             onClick={() =>
               setCollapsedModels((prev) => ({
                 ...prev,
@@ -162,16 +163,16 @@ export function ProviderCard({
           >
             {allModels.length} Models
             <span
-              className={cx(
-                styles.difyModelsChevron,
-                isCollapsed && styles.difyModelsChevronCollapsed,
+              className={cn(
+                "inline-block transition-transform duration-150",
+                isCollapsed && "-rotate-90",
               )}
             >
               ⌄
             </span>
           </button>
           <TextInput
-            className={`input control ${styles.difyModelFilter}`}
+            className={`input control min-w-[180px] rounded-md border-0 bg-muted/40 pl-2 pr-8`}
             placeholder="Filter models"
             value={modelFilters[providerKey] || ""}
             onChange={(value) => {
@@ -187,27 +188,28 @@ export function ProviderCard({
               }
             }}
             showClearButton
-            wrapperClassName={styles.difyModelFilterWrap}
-            clearButtonClassName={styles.difyModelFilterClear}
+            wrapperClassName="relative inline-flex items-center"
+            clearButtonClassName="absolute right-1.5 top-1/2 flex h-[18px] w-[18px] -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background p-0 leading-none text-muted-foreground"
             clearAriaLabel="Clear model filter"
           />
         </div>
 
         {isCollapsed ? null : (
-          <div className={styles.difyModelList}>
+          <div className="flex flex-col gap-0.5">
             {visibleModels.map((m) => {
               const enabled = enabledSet.has(m);
               return (
                 <label
                   key={String(m)}
-                  className={cx(
-                    styles.difyModelItem,
-                    !enabled && styles.difyModelItemDisabled,
+                  className={cn(
+                    "flex cursor-pointer select-none items-center gap-3 border-0 border-b border-border bg-transparent py-2 pl-0.5 last:border-b-0",
+                    !enabled && "opacity-55",
                   )}
                 >
-                  <span className={styles.difyModelName}>{m}</span>
+                  <span className="font-mono text-[13px]">{m}</span>
                   <input
                     type="checkbox"
+                    className="ml-auto size-4 accent-primary"
                     checked={enabled}
                     onChange={(e) => {
                       mutProviders((arr, i) => {

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { createConversation, postConversationMessage, uploadFile } from "../api/client";
 import {
   agentIdFromSearchParams,
   ChatAgentToolbar,
@@ -9,7 +13,6 @@ import {
   ChatMessageRow,
   messageRowKey,
 } from "../components/chat/ChatMessageRow";
-import { createConversation, postConversationMessage, uploadFile } from "../api/client";
 import {
   AsyncButton,
   type AsyncButtonHandle,
@@ -19,7 +22,6 @@ import { StickToBottomScrollArea } from "../components/ui/StickToBottomScrollAre
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import type { ChatAttachment } from "../protocol/chatEntry";
-import styles from "./ChatPage.module.css";
 
 async function sendMessageToConversation(
   conversationId: string,
@@ -61,14 +63,14 @@ export function ChatPage({ conversationId }: ChatPageProps) {
       llmProviderId: "",
       llmModel: "",
       modelPresetId: null,
-    })
+    }),
   );
 
   const onAgentSelectionChange = useCallback(
     (selection: ChatAgentSelection) => {
       setAgentSelection(selection);
     },
-    []
+    [],
   );
 
   const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
@@ -94,24 +96,25 @@ export function ChatPage({ conversationId }: ChatPageProps) {
   }, [selectedFiles]);
 
   return (
-    <div className={styles.chatPage}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} />
-      <div className={styles.chatLayout}>
-        <main className={styles.messages}>
-          <StickToBottomScrollArea className={styles.messagesScroll}>
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-1">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <StickToBottomScrollArea
+            className={cn(
+              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-4 py-4",
+            )}
+          >
             {chatEntries.map((entry$) => (
-              <ChatMessageRow
-                key={messageRowKey(entry$)}
-                entry$={entry$}
-              />
+              <ChatMessageRow key={messageRowKey(entry$)} entry$={entry$} />
             ))}
           </StickToBottomScrollArea>
         </main>
       </div>
-      <footer className={styles.composer}>
+      <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-background px-4 pb-4 pt-3">
         <input
           ref={fileInputRef}
-          className={styles.hiddenFileInput}
+          className="hidden"
           type="file"
           multiple
           onChange={(e) => {
@@ -122,12 +125,12 @@ export function ChatPage({ conversationId }: ChatPageProps) {
           }}
         />
         {selectedFiles.length > 0 ? (
-          <div className={styles.filePreviews}>
+          <div className="flex w-full flex-wrap gap-1.5">
             {selectedFiles.map((file, idx) => (
               <button
                 key={`${file.name}-${file.size}-${idx}`}
                 type="button"
-                className={styles.filePreview}
+                className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
                 onClick={() =>
                   setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))
                 }
@@ -136,36 +139,40 @@ export function ChatPage({ conversationId }: ChatPageProps) {
                 {previewUrls[idx] ? (
                   file.type === "application/pdf" ? (
                     <iframe
-                      className={styles.filePreviewPdf}
+                      className="h-[76px] w-full rounded-md border-0 bg-muted"
                       src={previewUrls[idx]}
                       title={file.name}
                     />
                   ) : (
                     <img
-                      className={styles.filePreviewImage}
+                      className="h-[76px] w-full rounded-md object-cover"
                       src={previewUrls[idx]}
                       alt={file.name}
                     />
                   )
                 ) : (
-                  <div className={styles.filePreviewGeneric}>FILE</div>
+                  <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
+                    FILE
+                  </div>
                 )}
-                <div className={styles.filePreviewName}>{file.name}</div>
-                <div className={styles.filePreviewRemove}>Remove</div>
+                <div className="break-words text-xs leading-tight">{file.name}</div>
+                <div className="text-[11px] text-muted-foreground">Remove</div>
               </button>
             ))}
           </div>
         ) : null}
-        <button
+        <Button
           type="button"
-          className={`btn ${styles.attachButton}`}
+          variant="outline"
+          size="sm"
+          className="min-w-[84px] shrink-0"
           onClick={() => fileInputRef.current?.click()}
         >
           + File
-        </button>
-        <input
-          className="input"
+        </Button>
+        <Input
           ref={composerInputRef}
+          className="min-w-[120px] flex-1"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onPaste={(e) => {
@@ -190,7 +197,7 @@ export function ChatPage({ conversationId }: ChatPageProps) {
         />
         <AsyncButton
           ref={sendButtonRef}
-          className={`btn ${styles.sendButton}`}
+          className="min-w-[84px] shrink-0 font-semibold"
           disabled={!canSend}
           onClickAsync={() => {
             return (async () => {
