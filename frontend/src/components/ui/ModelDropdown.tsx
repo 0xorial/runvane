@@ -113,7 +113,7 @@ export function ModelDropdown({
     <div className={cn("relative w-full", disabled && "[&_button]:cursor-not-allowed [&_button]:opacity-55")} ref={rootRef}>
       <button
         type="button"
-        className="flex min-h-[30px] w-full cursor-pointer items-center justify-between gap-2.5 rounded-md border border-input bg-muted/40 px-3 text-left text-foreground"
+        className="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground"
         disabled={disabled}
         onClick={() => {
           if (disabled) return;

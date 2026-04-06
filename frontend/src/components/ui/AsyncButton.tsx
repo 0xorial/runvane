@@ -17,6 +17,10 @@ export type AsyncButtonProps = {
   className?: string;
   type?: "button" | "submit" | "reset";
   children?: ReactNode;
+  /** Circular icon send (toolbar layout); overlays spinner / ✓ / × on the glyph */
+  iconOnly?: boolean;
+  /** When children are non-text (e.g. icon-only), set for a11y */
+  ariaLabel?: string;
   spinnerSize?: number;
   successDurationMs?: number;
   errorDurationMs?: number;
@@ -35,6 +39,8 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
   className,
   type = "button",
   children,
+  iconOnly = false,
+  ariaLabel,
   spinnerSize = 12,
   successDurationMs = 5000,
   errorDurationMs = 5000,
@@ -100,18 +106,75 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
   const isSuccess = state === "success";
   const isError = state === "error";
 
+  if (iconOnly) {
+    return (
+      <button
+        ref={buttonRef}
+        type={type}
+        className={cn(
+          buttonVariants({ variant: "default", size: "icon" }),
+          "relative !h-8 !w-8 !min-h-0 shrink-0 rounded-full shadow-sm",
+          className,
+        )}
+        data-state={state}
+        disabled={disabled || isLoading}
+        onClick={handleClick}
+        aria-label={ariaLabel}
+      >
+        <span className="relative flex h-full w-full items-center justify-center">
+          <span
+            className={cn(
+              "flex items-center justify-center transition-opacity duration-150",
+              (isLoading || isSuccess || isError) && "opacity-0",
+            )}
+          >
+            {children}
+          </span>
+          <span
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-[opacity,transform] duration-200",
+              isLoading && "opacity-100",
+            )}
+            aria-hidden
+          >
+            <Spinner size={spinnerSize} />
+          </span>
+          <span
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-extrabold text-emerald-600 opacity-0 scale-90 transition-[opacity,transform] duration-200",
+              isSuccess && "opacity-100 scale-100",
+            )}
+            aria-hidden
+          >
+            ✓
+          </span>
+          <span
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-extrabold text-destructive opacity-0 scale-90 transition-[opacity,transform] duration-200",
+              isError && "opacity-100 scale-100",
+            )}
+            aria-hidden
+          >
+            ×
+          </span>
+        </span>
+      </button>
+    );
+  }
+
   return (
     <button
       ref={buttonRef}
       type={type}
       className={cn(
         buttonVariants({ variant: "default", size: "default" }),
-        "relative inline-flex min-h-10 items-center justify-center gap-2",
+        "relative inline-flex min-h-9 items-center justify-center gap-2",
         className,
       )}
       data-state={state}
       disabled={disabled || isLoading}
       onClick={handleClick}
+      aria-label={ariaLabel}
     >
       <span className="pointer-events-none inline-block h-4 w-4 shrink-0 opacity-0" aria-hidden />
       <span className="transition-[opacity,transform] duration-150">{children}</span>

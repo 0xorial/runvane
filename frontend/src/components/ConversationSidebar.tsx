@@ -137,8 +137,8 @@ export function ConversationSidebar({
   return (
     <aside className="flex min-h-0 w-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar">
       {/* Matches frontend2/src/pages/Index.tsx sidebar header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-sidebar-border p-3">
-        <Bot className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5 py-2">
+        <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden />
         <span className="text-sm font-semibold tracking-tight text-foreground">
           Runvane
         </span>
@@ -146,13 +146,13 @@ export function ConversationSidebar({
 
       {/* Matches frontend2/src/components/sidebar/ConversationList.tsx structure */}
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="space-y-2 border-b border-sidebar-border p-3">
+        <div className="space-y-1.5 border-b border-sidebar-border px-2.5 py-2">
           <button
             type="button"
             onClick={onNewChat}
-            className="flex w-full items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+            className="flex w-full items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
           >
-            <Plus className="h-4 w-4 shrink-0" aria-hidden />
+            <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
             New Chat
           </button>
           <button
@@ -165,7 +165,7 @@ export function ConversationSidebar({
           </button>
         </div>
 
-        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto p-2">
+        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto px-1.5 py-1.5">
           {conversations.map((c) => {
             const active = activeConversationId === c.id;
             const stamp = formatRelativeChatTime(c.updated_at || c.created_at);
@@ -173,7 +173,7 @@ export function ConversationSidebar({
               <div
                 key={c.id}
                 className={cn(
-                  "group/row flex w-full items-stretch overflow-hidden rounded-md text-sm transition-colors",
+                  "group/row flex w-full items-stretch overflow-hidden rounded-md text-xs transition-colors",
                   active
                     ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
@@ -181,14 +181,11 @@ export function ConversationSidebar({
               >
                 <button
                   type="button"
-                  className="min-w-0 flex-1 px-3 py-2.5 text-left"
+                  className="min-w-0 flex-1 px-2.5 py-2 text-left"
                   onClick={() => onSelect(c.id)}
                 >
                   <div className="flex items-center gap-2">
-                    <MessageSquare
-                      className="h-3.5 w-3.5 shrink-0"
-                      aria-hidden
-                    />
+                    <MessageSquare className="h-3 w-3 shrink-0" aria-hidden />
                     <span className="truncate font-medium">
                       {c.title || "Untitled"}
                     </span>
@@ -206,7 +203,7 @@ export function ConversationSidebar({
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        "h-auto w-8 shrink-0 rounded-none shadow-none",
+                        "h-auto w-7 shrink-0 rounded-none shadow-none",
                         "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
                         "opacity-60 group-hover/row:opacity-100",
                         active && "text-foreground opacity-100",
@@ -214,7 +211,7 @@ export function ConversationSidebar({
                       aria-label="Chat menu"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <MoreVertical className="h-4 w-4" />
+                      <MoreVertical className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">

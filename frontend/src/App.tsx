@@ -62,8 +62,8 @@ export function App() {
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full max-h-full min-h-0 flex-col overflow-hidden bg-background">
         <ToastHost />
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card/50 px-4 py-2.5 backdrop-blur-sm">
-          <div className="flex flex-wrap items-center gap-3 md:gap-4">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/50 px-3 py-2 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <span className="text-sm font-semibold tracking-tight text-foreground">
               Runvane
             </span>

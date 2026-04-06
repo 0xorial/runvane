@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { createConversation, postConversationMessage, uploadFile } from "../api/client";
 import {
@@ -9,15 +7,12 @@ import {
   ChatAgentToolbar,
   type ChatAgentSelection,
 } from "../components/chat/ChatAgentToolbar";
+import { ChatComposer } from "../components/chat/ChatComposer";
 import {
   ChatMessageRow,
   messageRowKey,
 } from "../components/chat/ChatMessageRow";
-import {
-  AsyncButton,
-  type AsyncButtonHandle,
-  type AsyncResult,
-} from "../components/ui/AsyncButton";
+import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { StickToBottomScrollArea } from "../components/ui/StickToBottomScrollArea";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
@@ -48,7 +43,7 @@ type ChatPageProps = {
 };
 
 export function ChatPage({ conversationId }: ChatPageProps) {
-  const composerInputRef = useFocusOnFirstFrame<HTMLInputElement>();
+  const composerTextareaRef = useFocusOnFirstFrame<HTMLTextAreaElement>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sendButtonRef = useRef<AsyncButtonHandle>(null);
@@ -77,9 +72,9 @@ export function ChatPage({ conversationId }: ChatPageProps) {
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
-    const id = requestAnimationFrame(() => composerInputRef.current?.focus());
+    const id = requestAnimationFrame(() => composerTextareaRef.current?.focus());
     return () => cancelAnimationFrame(id);
-  }, [conversationId, composerInputRef]);
+  }, [conversationId, composerTextareaRef]);
 
   useEffect(() => {
     const urls = selectedFiles.map((file) =>
@@ -102,7 +97,7 @@ export function ChatPage({ conversationId }: ChatPageProps) {
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <StickToBottomScrollArea
             className={cn(
-              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-4 py-4",
+              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-3 py-3",
             )}
           >
             {chatEntries.map((entry$) => (
@@ -111,153 +106,127 @@ export function ChatPage({ conversationId }: ChatPageProps) {
           </StickToBottomScrollArea>
         </main>
       </div>
-      <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-background px-4 pb-4 pt-3">
-        <input
-          ref={fileInputRef}
-          className="hidden"
-          type="file"
-          multiple
-          onChange={(e) => {
-            const files = Array.from(e.currentTarget.files ?? []);
-            if (files.length === 0) return;
-            setSelectedFiles((prev) => [...prev, ...files]);
-            e.currentTarget.value = "";
-          }}
-        />
-        {selectedFiles.length > 0 ? (
-          <div className="flex w-full flex-wrap gap-1.5">
-            {selectedFiles.map((file, idx) => (
-              <button
-                key={`${file.name}-${file.size}-${idx}`}
-                type="button"
-                className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
-                onClick={() =>
-                  setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))
-                }
-                title="Remove file"
-              >
-                {previewUrls[idx] ? (
-                  file.type === "application/pdf" ? (
-                    <iframe
-                      className="h-[76px] w-full rounded-md border-0 bg-muted"
-                      src={previewUrls[idx]}
-                      title={file.name}
-                    />
+      <ChatComposer
+        textareaRef={composerTextareaRef}
+        sendButtonRef={sendButtonRef}
+        value={input}
+        onValueChange={setInput}
+        onPaste={(e) => {
+          const items = Array.from(e.clipboardData?.items ?? []);
+          const images: File[] = [];
+          for (const item of items) {
+            if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+            const file = item.getAsFile();
+            if (file) images.push(file);
+          }
+          if (images.length > 0) {
+            setSelectedFiles((prev) => [...prev, ...images]);
+          }
+        }}
+        fileInputRef={fileInputRef}
+        onFileInputChange={(e) => {
+          const files = Array.from(e.currentTarget.files ?? []);
+          if (files.length === 0) return;
+          setSelectedFiles((prev) => [...prev, ...files]);
+          e.currentTarget.value = "";
+        }}
+        onPickFiles={() => fileInputRef.current?.click()}
+        canSend={canSend}
+        placeholder="Send a message…"
+        attachmentsSlot={
+          selectedFiles.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedFiles.map((file, idx) => (
+                <button
+                  key={`${file.name}-${file.size}-${idx}`}
+                  type="button"
+                  className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
+                  onClick={() =>
+                    setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))
+                  }
+                  title="Remove file"
+                >
+                  {previewUrls[idx] ? (
+                    file.type === "application/pdf" ? (
+                      <iframe
+                        className="h-[76px] w-full rounded-md border-0 bg-muted"
+                        src={previewUrls[idx]}
+                        title={file.name}
+                      />
+                    ) : (
+                      <img
+                        className="h-[76px] w-full rounded-md object-cover"
+                        src={previewUrls[idx]}
+                        alt={file.name}
+                      />
+                    )
                   ) : (
-                    <img
-                      className="h-[76px] w-full rounded-md object-cover"
-                      src={previewUrls[idx]}
-                      alt={file.name}
-                    />
-                  )
-                ) : (
-                  <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
-                    FILE
-                  </div>
-                )}
-                <div className="break-words text-xs leading-tight">{file.name}</div>
-                <div className="text-[11px] text-muted-foreground">Remove</div>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="min-w-[84px] shrink-0"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          + File
-        </Button>
-        <Input
-          ref={composerInputRef}
-          className="min-w-[120px] flex-1"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onPaste={(e) => {
-            const items = Array.from(e.clipboardData?.items ?? []);
-            const images: File[] = [];
-            for (const item of items) {
-              if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-              const file = item.getAsFile();
-              if (file) images.push(file);
+                    <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
+                      FILE
+                    </div>
+                  )}
+                  <div className="break-words text-xs leading-tight">{file.name}</div>
+                  <div className="text-[11px] text-muted-foreground">Remove</div>
+                </button>
+              ))}
+            </div>
+          ) : undefined
+        }
+        onSendAsync={() => {
+          return (async () => {
+            const text = input.trim();
+            if (!text && selectedFiles.length === 0) return { ok: false };
+            const uploadedAttachments: ChatAttachment[] = [];
+            for (const file of selectedFiles) {
+              const uploaded = await uploadFile(file);
+              uploadedAttachments.push(uploaded.attachment);
             }
-            if (images.length > 0) {
-              setSelectedFiles((prev) => [...prev, ...images]);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              sendButtonRef.current?.trigger();
-            }
-          }}
-          placeholder="Message the agent…"
-        />
-        <AsyncButton
-          ref={sendButtonRef}
-          className="min-w-[84px] shrink-0 font-semibold"
-          disabled={!canSend}
-          onClickAsync={() => {
-            return (async () => {
-              const text = input.trim();
-              if (!text && selectedFiles.length === 0) return { ok: false };
-              const uploadedAttachments: ChatAttachment[] = [];
-              for (const file of selectedFiles) {
-                const uploaded = await uploadFile(file);
-                uploadedAttachments.push(uploaded.attachment);
-              }
-              let cid = conversationId;
-              if (!cid) {
-                const created = await createConversation();
-                cid = created.id;
-                appendOptimisticUserMessage({
-                  conversationId: cid,
-                  text,
-                  agentId: agentSelection.agentId,
-                  llmProviderId: agentSelection.llmProviderId,
-                  llmModel: agentSelection.llmModel,
-                  modelPresetId: agentSelection.modelPresetId,
-                  attachments: uploadedAttachments,
-                });
-                const q = searchParams.toString();
-                navigate(
-                  {
-                    pathname: `/chat/${encodeURIComponent(cid)}`,
-                    search: q ? `?${q}` : "",
-                  },
-                  { replace: true },
-                );
-              } else {
-                appendOptimisticUserMessage({
-                  conversationId: cid,
-                  text,
-                  agentId: agentSelection.agentId,
-                  llmProviderId: agentSelection.llmProviderId,
-                  llmModel: agentSelection.llmModel,
-                  modelPresetId: agentSelection.modelPresetId,
-                  attachments: uploadedAttachments,
-                });
-              }
-              setInput("");
-              setSelectedFiles([]);
-              return sendMessageToConversation(
-                cid,
+            let cid = conversationId;
+            if (!cid) {
+              const created = await createConversation();
+              cid = created.id;
+              appendOptimisticUserMessage({
+                conversationId: cid,
                 text,
-                agentSelection.agentId,
-                agentSelection.llmProviderId,
-                agentSelection.llmModel,
-                agentSelection.modelPresetId,
-                uploadedAttachments.map((x) => x.id),
+                agentId: agentSelection.agentId,
+                llmProviderId: agentSelection.llmProviderId,
+                llmModel: agentSelection.llmModel,
+                modelPresetId: agentSelection.modelPresetId,
+                attachments: uploadedAttachments,
+              });
+              const q = searchParams.toString();
+              navigate(
+                {
+                  pathname: `/chat/${encodeURIComponent(cid)}`,
+                  search: q ? `?${q}` : "",
+                },
+                { replace: true },
               );
-            })();
-          }}
-          spinnerSize={14}
-        >
-          Send
-        </AsyncButton>
-      </footer>
+            } else {
+              appendOptimisticUserMessage({
+                conversationId: cid,
+                text,
+                agentId: agentSelection.agentId,
+                llmProviderId: agentSelection.llmProviderId,
+                llmModel: agentSelection.llmModel,
+                modelPresetId: agentSelection.modelPresetId,
+                attachments: uploadedAttachments,
+              });
+            }
+            setInput("");
+            setSelectedFiles([]);
+            return sendMessageToConversation(
+              cid,
+              text,
+              agentSelection.agentId,
+              agentSelection.llmProviderId,
+              agentSelection.llmModel,
+              agentSelection.modelPresetId,
+              uploadedAttachments.map((x) => x.id),
+            );
+          })();
+        }}
+      />
     </div>
   );
 }
