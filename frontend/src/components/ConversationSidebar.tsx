@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { MoreVertical } from "lucide-react";
+import { Bot, MessageSquare, MoreVertical, Plus } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../api/client";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
+import { formatRelativeChatTime } from "../utils/formatRelativeChatTime";
 import { notifyError } from "../utils/toast";
 
 export type ConversationRow = {
@@ -134,69 +135,100 @@ export function ConversationSidebar({
   }
 
   return (
-    <aside className="flex min-h-0 w-full min-w-0 flex-col gap-2 border-r border-sidebar-border bg-sidebar p-3">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full border-primary/25 bg-primary/10 font-semibold text-primary hover:bg-primary/20"
-        onClick={onNewChat}
-      >
-        + New chat
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-full text-xs"
-        onClick={() => void onProbeTime()}
-        disabled={probeBusy}
-      >
-        Probe: time (tmp)
-      </Button>
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-0.5">
-        {conversations.map((c) => {
-          const active = activeConversationId === c.id;
-          return (
-            <div
-              key={c.id}
-              className={cn(
-                "flex items-center rounded-md border border-transparent transition-colors",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "hover:bg-sidebar-accent/60",
-              )}
-            >
-              <button
-                type="button"
-                className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-sm font-medium"
-                onClick={() => onSelect(c.id)}
+    <aside className="flex min-h-0 w-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar">
+      {/* Matches frontend2/src/pages/Index.tsx sidebar header */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-sidebar-border p-3">
+        <Bot className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+        <span className="text-sm font-semibold tracking-tight text-foreground">
+          Runvane
+        </span>
+      </div>
+
+      {/* Matches frontend2/src/components/sidebar/ConversationList.tsx structure */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="space-y-2 border-b border-sidebar-border p-3">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="flex w-full items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            <Plus className="h-4 w-4 shrink-0" aria-hidden />
+            New Chat
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            onClick={() => void onProbeTime()}
+            disabled={probeBusy}
+          >
+            Probe: time (tmp)
+          </button>
+        </div>
+
+        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto p-2">
+          {conversations.map((c) => {
+            const active = activeConversationId === c.id;
+            const stamp = formatRelativeChatTime(c.updated_at || c.created_at);
+            return (
+              <div
+                key={c.id}
+                className={cn(
+                  "group/row flex w-full items-stretch overflow-hidden rounded-md text-sm transition-colors",
+                  active
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                )}
               >
-                {c.title || "Untitled"}
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-muted-foreground"
-                    aria-label="Chat menu"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem
-                    onSelect={() => void onRenameConversation(c)}
-                  >
-                    Rename
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          );
-        })}
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 px-3 py-2.5 text-left"
+                  onClick={() => onSelect(c.id)}
+                >
+                  <div className="flex items-center gap-2">
+                    <MessageSquare
+                      className="h-3.5 w-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    <span className="truncate font-medium">
+                      {c.title || "Untitled"}
+                    </span>
+                  </div>
+                  {stamp ? (
+                    <span className="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground">
+                      {stamp}
+                    </span>
+                  ) : null}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-auto w-8 shrink-0 rounded-none shadow-none",
+                        "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
+                        "opacity-60 group-hover/row:opacity-100",
+                        active && "text-foreground opacity-100",
+                      )}
+                      aria-label="Chat menu"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem
+                      onSelect={() => void onRenameConversation(c)}
+                    >
+                      Rename
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </aside>
   );

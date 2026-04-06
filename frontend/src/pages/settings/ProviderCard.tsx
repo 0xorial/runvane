@@ -83,7 +83,7 @@ export function ProviderCard({
     <div className="rounded-lg border border-border bg-card p-3.5" key={String(provider.id)}>
       <div className="flex justify-between gap-3">
         <div>
-          <div className="text-base font-black">{String(provider.label ?? "")}</div>
+          <div className="text-sm font-black">{String(provider.label ?? "")}</div>
           <div className="mt-0.5 text-xs text-muted-foreground">{String(provider.id)}</div>
         </div>
         <div>

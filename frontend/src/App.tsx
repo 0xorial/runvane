@@ -116,7 +116,7 @@ export function App() {
           className={cn(
             "grid min-h-0 flex-1 overflow-hidden",
             showConversationSidebar
-              ? "grid-cols-[260px_minmax(0,1fr)]"
+              ? "grid-cols-[16rem_minmax(0,1fr)]"
               : "grid-cols-1",
           )}
         >

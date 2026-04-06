@@ -109,8 +109,9 @@
     @apply border-border;
   }
 
+  /* frontend2 chat/composer use text-sm; avoid 16px default inheritance everywhere */
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground text-sm antialiased;
   }
 
   .font-mono {

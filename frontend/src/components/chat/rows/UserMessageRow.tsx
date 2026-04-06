@@ -13,7 +13,9 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
   return (
     <div className={chatUserBubble}>
       {entry.text ? (
-        <pre className="m-0 whitespace-pre-wrap break-words">{entry.text}</pre>
+        <pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
+          {entry.text}
+        </pre>
       ) : null}
       {attachments.length > 0 ? (
         <div className="mt-2 grid gap-2">
