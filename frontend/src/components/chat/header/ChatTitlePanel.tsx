@@ -6,6 +6,7 @@ import { SseType } from "../../../protocol/sseTypes";
 import { notifyError } from "../../../utils/toast";
 import { Button } from "../../ui/button";
 import { ThemeToggle } from "../../ThemeToggle";
+import { LlmMetaBadge } from "../LlmMetaBadge";
 import { EditableConversationTitle } from "./EditableConversationTitle";
 
 type ChatTitlePanelProps = {
@@ -25,11 +26,13 @@ export function ChatTitlePanel({
 }: ChatTitlePanelProps) {
   const [title, setTitle] = useState("New chat");
   const [streamRawTitle, setStreamRawTitle] = useState("");
+  const [tokenTotals, setTokenTotals] = useState({ prompt: 0, completion: 0 });
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
 
   function refreshTitle() {
     if (!conversationId) {
       setTitle("New chat");
+      setTokenTotals({ prompt: 0, completion: 0 });
       return () => {};
     }
     let cancelled = false;
@@ -39,6 +42,18 @@ export function ChatTitlePanel({
         if (cancelled) return;
         const row = rows.find((x) => x.id === conversationId);
         setTitle(String(row?.title || "Untitled"));
+        setTokenTotals({
+          prompt:
+            typeof row?.prompt_tokens_total === "number" &&
+            Number.isFinite(row.prompt_tokens_total)
+              ? row.prompt_tokens_total
+              : 0,
+          completion:
+            typeof row?.completion_tokens_total === "number" &&
+            Number.isFinite(row.completion_tokens_total)
+              ? row.completion_tokens_total
+              : 0,
+        });
       } catch (e) {
         if (cancelled) return;
         const detail = e instanceof Error ? e.message : String(e);
@@ -72,6 +87,38 @@ export function ChatTitlePanel({
         if (ev.type === SseType.CONVERSATION_UPDATED) {
           setStreamRawTitle("");
           setTitle(String(ev.conversation.title || "Untitled"));
+          setTokenTotals({
+            prompt:
+              typeof ev.conversation.prompt_tokens_total === "number" &&
+              Number.isFinite(ev.conversation.prompt_tokens_total)
+                ? ev.conversation.prompt_tokens_total
+                : 0,
+            completion:
+              typeof ev.conversation.completion_tokens_total === "number" &&
+              Number.isFinite(ev.conversation.completion_tokens_total)
+                ? ev.conversation.completion_tokens_total
+                : 0,
+          });
+          return;
+        }
+        if (
+          ev.type === SseType.PLANNER_RESPONSE ||
+          ev.type === SseType.TITLE_RESPONSE
+        ) {
+          const promptDelta =
+            typeof ev.prompt_tokens === "number" && Number.isFinite(ev.prompt_tokens)
+              ? ev.prompt_tokens
+              : 0;
+          const completionDelta =
+            typeof ev.completion_tokens === "number" &&
+            Number.isFinite(ev.completion_tokens)
+              ? ev.completion_tokens
+              : 0;
+          if (promptDelta === 0 && completionDelta === 0) return;
+          setTokenTotals((prev) => ({
+            prompt: prev.prompt + promptDelta,
+            completion: prev.completion + completionDelta,
+          }));
         }
       },
       pollTick: async () => false,
@@ -110,11 +157,18 @@ export function ChatTitlePanel({
         )}
       </Button>
       <div className="min-w-0 flex-1">
-        <EditableConversationTitle
-          title={streamRawTitle || title}
-          disabled={!conversationId}
-          onCommit={onCommit}
-        />
+        <div className="flex min-w-0 items-center gap-2">
+          <EditableConversationTitle
+            title={streamRawTitle || title}
+            disabled={!conversationId}
+            onCommit={onCommit}
+          />
+          <LlmMetaBadge
+            promptTokens={tokenTotals.prompt}
+            completionTokens={tokenTotals.completion}
+            showTokenBreakdown
+          />
+        </div>
       </div>
       <div className="flex items-center gap-0.5">
         <ThemeToggle />

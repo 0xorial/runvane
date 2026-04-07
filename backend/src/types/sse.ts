@@ -36,12 +36,16 @@ export type ConversationSseRow = {
   title: string;
   created_at: string;
   updated_at: string;
+  prompt_tokens_total: number;
+  completion_tokens_total: number;
 };
 export const ConversationSseRowSchema = z.object({
   id: z.string(),
   title: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+  prompt_tokens_total: z.number().finite(),
+  completion_tokens_total: z.number().finite(),
 });
 
 export type ConversationCreatedSsePayload = {

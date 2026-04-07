@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /** frontend2/src/components/chat/LLMRequestBadge.tsx — only renders when there is something to show */
 export type LlmMetaBadgeProps = {
@@ -8,6 +8,7 @@ export type LlmMetaBadgeProps = {
   completionTokens?: number;
   durationMs?: number;
   showTokenBreakdown?: boolean;
+  className?: string;
 };
 
 export function LlmMetaBadge({
@@ -16,6 +17,7 @@ export function LlmMetaBadge({
   completionTokens = 0,
   durationMs,
   showTokenBreakdown = false,
+  className,
 }: LlmMetaBadgeProps) {
   const m = String(model ?? "").trim();
   const modelShort = m.includes("/") ? m.split("/").pop() ?? m : m;
@@ -44,8 +46,12 @@ export function LlmMetaBadge({
   if (segments.length === 0) return null;
 
   return (
-    <div className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-      <Zap className="h-2.5 w-2.5 shrink-0 text-primary" />
+    <div
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground",
+        className,
+      )}
+    >
       {segments.map((seg, i) => (
         <Fragment key={i}>
           {i > 0 ? <span className="text-border">•</span> : null}

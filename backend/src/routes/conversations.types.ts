@@ -8,6 +8,8 @@ export type ConversationRow = {
   title: string;
   created_at: string;
   updated_at: string;
+  prompt_tokens_total: number;
+  completion_tokens_total: number;
 };
 export type CreateConversationRequest = {
   title?: string;
@@ -30,6 +32,8 @@ const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   title: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+  prompt_tokens_total: z.number().finite(),
+  completion_tokens_total: z.number().finite(),
 });
 
 const CreateConversationRequestSchema: z.ZodType<CreateConversationRequest> = z.object({
