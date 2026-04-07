@@ -7,6 +7,7 @@ export type LlmMetaBadgeProps = {
   promptTokens?: number;
   completionTokens?: number;
   durationMs?: number;
+  showTokenBreakdown?: boolean;
 };
 
 export function LlmMetaBadge({
@@ -14,6 +15,7 @@ export function LlmMetaBadge({
   promptTokens = 0,
   completionTokens = 0,
   durationMs,
+  showTokenBreakdown = false,
 }: LlmMetaBadgeProps) {
   const m = String(model ?? "").trim();
   const modelShort = m.includes("/") ? m.split("/").pop() ?? m : m;
@@ -26,7 +28,17 @@ export function LlmMetaBadge({
 
   const segments: ReactNode[] = [];
   if (modelShort) segments.push(<span key="model">{modelShort}</span>);
-  if (hasTokens) segments.push(<span key="tok">{totalTokens.toLocaleString()} tok</span>);
+  if (hasTokens) {
+    segments.push(
+      showTokenBreakdown ? (
+        <span key="tok">
+          in {promptTokens.toLocaleString()} / out {completionTokens.toLocaleString()} tok
+        </span>
+      ) : (
+        <span key="tok">{totalTokens.toLocaleString()} tok</span>
+      ),
+    );
+  }
   if (hasDuration) segments.push(<span key="s">{(durationMs / 1000).toFixed(1)}s</span>);
 
   if (segments.length === 0) return null;

@@ -4,6 +4,8 @@ import type {
   LlmProviderSettingSpec,
   ProviderSettingsDict,
   StreamTextCompletionInput,
+  StreamTextCompletionResult,
+  StreamTextCompletionUsage,
 } from "../provider.js";
 import { logger } from "../../infra/logger.js";
 
@@ -14,6 +16,26 @@ function normalizeBaseUrl(settings: ProviderSettingsDict): string {
 
 function apiKey(settings: ProviderSettingsDict): string {
   return String(settings.api_key ?? "").trim();
+}
+
+function usageFromOpenAiPayload(usage: unknown): StreamTextCompletionUsage | undefined {
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return undefined;
+  const rec = usage as Record<string, unknown>;
+  const pt = rec.prompt_tokens;
+  const ct = rec.completion_tokens;
+  if (typeof pt === "number" && Number.isFinite(pt) && typeof ct === "number" && Number.isFinite(ct)) {
+    return { promptTokens: pt, completionTokens: ct };
+  }
+  const total = rec.total_tokens;
+  if (
+    typeof total === "number" &&
+    Number.isFinite(total) &&
+    typeof pt === "number" &&
+    Number.isFinite(pt)
+  ) {
+    return { promptTokens: pt, completionTokens: Math.max(0, total - pt) };
+  }
+  return undefined;
 }
 
 const DEFAULT_SPEC: LlmProviderSettingSpec[] = [
@@ -133,7 +155,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     settingsIn: ProviderSettingsDict,
     input: StreamTextCompletionInput,
     onDelta: (delta: string) => void,
-  ): Promise<string> {
+  ): Promise<StreamTextCompletionResult> {
     const settings = this.mergedSettings(settingsIn);
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
@@ -165,6 +187,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       body: JSON.stringify({
         model: input.model,
         stream: true,
+        stream_options: { include_usage: true },
         messages: [{ role: "user", content: contentParts }],
       }),
     });
@@ -186,17 +209,20 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     if (!res.body) {
       const data = (await res.json()) as {
         choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: unknown;
       };
       const content = data.choices?.[0]?.message?.content;
       const text = typeof content === "string" ? content : "";
       if (!text) throw new Error("llm returned empty response");
       onDelta(text);
-      return text;
+      const usage = usageFromOpenAiPayload(data.usage);
+      return usage !== undefined ? { text, usage } : { text };
     }
 
     const decoder = new TextDecoder();
     let buffer = "";
     let full = "";
+    let streamUsage: StreamTextCompletionUsage | undefined;
 
     const handleDataLine = (line: string) => {
       if (!line.startsWith("data:")) return;
@@ -207,7 +233,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           delta?: { content?: unknown };
           message?: { content?: unknown };
         }>;
+        usage?: unknown;
       };
+      const u = usageFromOpenAiPayload(parsed.usage);
+      if (u) streamUsage = u;
       const choice = parsed.choices?.[0];
       const part = choice?.delta?.content ?? choice?.message?.content;
       const delta = typeof part === "string" ? part : "";
@@ -230,6 +259,6 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
     if (buffer) handleDataLine(buffer.replace(/\r$/, ""));
     if (!full) throw new Error("llm returned empty streamed response");
-    return full;
+    return streamUsage !== undefined ? { text: full, usage: streamUsage } : { text: full };
   }
 }

@@ -246,9 +246,12 @@ export class ChatEntriesRepo {
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
       failed?: boolean;
+      llmModel?: string;
     },
   ): PlannerLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
+    const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
+    const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const entry: PlannerLlmStreamEntry = {
       type: "planner_llm_stream",
       id: input.id,
@@ -259,7 +262,16 @@ export class ChatEntriesRepo {
       thoughtMs: input.thoughtMs ?? null,
       decision: input.decision ?? null,
       failed: input.failed === true,
+      ...(llmModel !== undefined ? { llmModel } : {}),
     };
+    const payload: Record<string, unknown> = {
+      llmRequest: entry.llmRequest,
+      llmResponse: entry.llmResponse ?? "",
+      thoughtMs: entry.thoughtMs ?? null,
+      decision: entry.decision ?? null,
+      failed: entry.failed === true,
+    };
+    if (llmModel !== undefined) payload.llmModel = llmModel;
     this.db
       .prepare(
         `INSERT INTO chat_entries (
@@ -272,13 +284,7 @@ export class ChatEntriesRepo {
         id: entry.id,
         conversation_id: conversationId,
         conversation_index: entry.conversationIndex,
-        payload_json: JSON.stringify({
-          llmRequest: entry.llmRequest,
-          llmResponse: entry.llmResponse ?? "",
-          thoughtMs: entry.thoughtMs ?? null,
-          decision: entry.decision ?? null,
-          failed: entry.failed === true,
-        }),
+        payload_json: JSON.stringify(payload),
         created_at: entry.createdAt,
       });
     return entry;
@@ -293,8 +299,27 @@ export class ChatEntriesRepo {
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
       failed?: boolean;
+      llmModel?: string;
+      promptTokens?: number;
+      completionTokens?: number;
     },
   ): void {
+    const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
+    const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const payload: Record<string, unknown> = {
+      llmRequest: input.llmRequest,
+      llmResponse: input.llmResponse ?? "",
+      thoughtMs: input.thoughtMs ?? null,
+      decision: input.decision ?? null,
+      failed: input.failed === true,
+    };
+    if (llmModel !== undefined) payload.llmModel = llmModel;
+    if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
+      payload.promptTokens = input.promptTokens;
+    }
+    if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
+      payload.completionTokens = input.completionTokens;
+    }
     const result = this.db
       .prepare(
         `UPDATE chat_entries
@@ -306,13 +331,7 @@ export class ChatEntriesRepo {
       .run({
         id: input.id,
         conversation_id: conversationId,
-        payload_json: JSON.stringify({
-          llmRequest: input.llmRequest,
-          llmResponse: input.llmResponse ?? "",
-          thoughtMs: input.thoughtMs ?? null,
-          decision: input.decision ?? null,
-          failed: input.failed === true,
-        }),
+        payload_json: JSON.stringify(payload),
       });
     if (Number(result.changes ?? 0) !== 1) {
       throw new Error(
@@ -381,6 +400,19 @@ export class ChatEntriesRepo {
         } satisfies AssistantMessageEntry;
       }
       if (row.type === "planner_llm_stream") {
+        const llmModel =
+          typeof payload.llmModel === "string" && payload.llmModel.trim() !== ""
+            ? payload.llmModel.trim()
+            : undefined;
+        const promptTokens =
+          typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
+            ? payload.promptTokens
+            : undefined;
+        const completionTokens =
+          typeof payload.completionTokens === "number" &&
+          Number.isFinite(payload.completionTokens)
+            ? payload.completionTokens
+            : undefined;
         return {
           type: "planner_llm_stream",
           id: row.id,
@@ -397,6 +429,9 @@ export class ChatEntriesRepo {
               ? (payload.decision as LlmDecision)
               : null,
           failed: payload.failed === true,
+          ...(llmModel !== undefined ? { llmModel } : {}),
+          ...(promptTokens !== undefined ? { promptTokens } : {}),
+          ...(completionTokens !== undefined ? { completionTokens } : {}),
         } satisfies PlannerLlmStreamEntry;
       }
       return {

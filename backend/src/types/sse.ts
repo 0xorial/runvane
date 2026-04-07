@@ -65,6 +65,7 @@ export type PlannerStartingSsePayload = {
   conversationIndex: number;
   createdAt: string;
   request_text: string;
+  llm_model?: string;
 };
 export const PlannerStartingSsePayloadSchema = z.object({
   type: z.literal(SseType.PLANNER_STARTING),
@@ -72,6 +73,7 @@ export const PlannerStartingSsePayloadSchema = z.object({
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
   request_text: z.string(),
+  llm_model: z.string().optional(),
 });
 
 export type PlannerLlmStreamSsePayload = {
@@ -103,6 +105,9 @@ export type PlannerResponseSsePayload = {
   finished: boolean;
   action?: string;
   tool_name?: string;
+  llm_model?: string;
+  prompt_tokens?: number;
+  completion_tokens?: number;
 };
 export const PlannerResponseSsePayloadSchema = z.object({
   type: z.literal(SseType.PLANNER_RESPONSE),
@@ -111,6 +116,9 @@ export const PlannerResponseSsePayloadSchema = z.object({
   finished: z.boolean(),
   action: z.string().optional(),
   tool_name: z.string().optional(),
+  llm_model: z.string().optional(),
+  prompt_tokens: z.number().finite().optional(),
+  completion_tokens: z.number().finite().optional(),
 });
 
 export type ToolInvocationStartSsePayload = {
@@ -201,6 +209,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
     request_text: z.string(),
+    llm_model: z.string().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.PLANNER_LLM_STREAM),
@@ -219,6 +228,9 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     finished: z.boolean(),
     action: z.string().optional(),
     tool_name: z.string().optional(),
+    llm_model: z.string().optional(),
+    prompt_tokens: z.number().finite().optional(),
+    completion_tokens: z.number().finite().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.TOOL_INVOCATION_START),

@@ -89,7 +89,7 @@ export function createRuntime(opts: {
       "Return plain text only, no quotes, no punctuation at the end.\n\n" +
       `First message: ${firstMessage}`;
     try {
-      const out = await provider.streamTextCompletion(
+      const { text: out } = await provider.streamTextCompletion(
         providerSettings,
         { model, prompt },
         () => {},

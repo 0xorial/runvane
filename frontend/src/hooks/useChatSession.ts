@@ -120,6 +120,10 @@ export function useChatSession(conversationId: string | null | undefined) {
         } else if (ev.type === SseType.PLANNER_STARTING) {
           const store = storeRef.current;
           if (!store.getById(ev.chat_entry_id)) {
+            const llmModel =
+              typeof ev.llm_model === "string" && ev.llm_model.trim() !== ""
+                ? ev.llm_model.trim()
+                : undefined;
             store.append({
               type: "planner_llm_stream",
               id: ev.chat_entry_id,
@@ -127,6 +131,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               createdAt: ev.createdAt,
               llmRequest: ev.request_text,
               failed: false,
+              ...(llmModel !== undefined ? { llmModel } : {}),
             });
           }
           return;
@@ -209,8 +214,25 @@ export function useChatSession(conversationId: string | null | undefined) {
               } else if (ev.finished) {
                 next.failed = false;
               }
+              const modelWire =
+                typeof ev.llm_model === "string" ? ev.llm_model.trim() : "";
+              if (modelWire) next.llmModel = modelWire;
+              if (
+                typeof ev.prompt_tokens === "number" &&
+                Number.isFinite(ev.prompt_tokens)
+              ) {
+                next.promptTokens = ev.prompt_tokens;
+              }
+              if (
+                typeof ev.completion_tokens === "number" &&
+                Number.isFinite(ev.completion_tokens)
+              ) {
+                next.completionTokens = ev.completion_tokens;
+              }
             });
           } else {
+            const modelWire =
+              typeof ev.llm_model === "string" ? ev.llm_model.trim() : "";
             store.append({
               type: "planner_llm_stream",
               id: ev.chat_entry_id,
@@ -232,6 +254,15 @@ export function useChatSession(conversationId: string | null | undefined) {
                       text: ev.summary.trim(),
                     }
                   : null,
+              ...(modelWire ? { llmModel: modelWire } : {}),
+              ...(typeof ev.prompt_tokens === "number" &&
+              Number.isFinite(ev.prompt_tokens)
+                ? { promptTokens: ev.prompt_tokens }
+                : {}),
+              ...(typeof ev.completion_tokens === "number" &&
+              Number.isFinite(ev.completion_tokens)
+                ? { completionTokens: ev.completion_tokens }
+                : {}),
             });
           }
           return;

@@ -166,6 +166,9 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   thoughtMs?: number | null;
   decision?: LlmDecision | null;
   failed?: boolean;
+  llmModel?: string;
+  promptTokens?: number;
+  completionTokens?: number;
 };
 export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     type: z.literal("planner_llm_stream"),
@@ -174,6 +177,9 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     thoughtMs: z.number().finite().nullable().optional(),
     decision: LlmDecisionSchema.nullable().optional(),
     failed: z.boolean().optional(),
+    llmModel: z.string().optional(),
+    promptTokens: z.number().finite().optional(),
+    completionTokens: z.number().finite().optional(),
   });
 
 export type ToolInvocationEntry = ChatEntryBase & {

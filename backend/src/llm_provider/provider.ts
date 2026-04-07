@@ -23,6 +23,17 @@ export type StreamTextCompletionInput = {
   }>;
 };
 
+/** Token usage when the provider includes it (e.g. OpenAI `stream_options.include_usage`). */
+export type StreamTextCompletionUsage = {
+  promptTokens: number;
+  completionTokens: number;
+};
+
+export type StreamTextCompletionResult = {
+  text: string;
+  usage?: StreamTextCompletionUsage;
+};
+
 export interface LlmProvider {
   readonly id: string;
   readonly label: string;
@@ -34,5 +45,5 @@ export interface LlmProvider {
     settings: ProviderSettingsDict,
     input: StreamTextCompletionInput,
     onDelta: (delta: string) => void,
-  ): Promise<string>;
+  ): Promise<StreamTextCompletionResult>;
 }

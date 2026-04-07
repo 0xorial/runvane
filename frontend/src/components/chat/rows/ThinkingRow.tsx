@@ -4,6 +4,7 @@ import { formatDuration, parseDbTimestampMs } from "../../../utils/formatDuratio
 import type { PlannerLlmStreamEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
 import { ChatThreadIndent } from "../ChatMessageShell";
+import { LlmMetaBadge } from "../LlmMetaBadge";
 
 type ThinkingRowProps = {
   entry: PlannerLlmStreamEntry;
@@ -31,6 +32,13 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   const requestText = String(entry.llmRequest || "").trim();
   const responseText = String(entry.llmResponse || "").trim();
   const hasDetails = requestText.length > 0 || responseText.length > 0;
+  const modelLabel = String(entry.llmModel ?? "").trim();
+  const pt = entry.promptTokens;
+  const ct = entry.completionTokens;
+  const promptTokens =
+    typeof pt === "number" && Number.isFinite(pt) ? pt : 0;
+  const completionTokens =
+    typeof ct === "number" && Number.isFinite(ct) ? ct : 0;
 
   useEffect(() => {
     if (done) return undefined;
@@ -91,26 +99,34 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
             "bg-gradient-to-b from-white/[0.07] to-white/[0.03] after:pointer-events-none after:absolute after:left-[-75%] after:top-0 after:h-[1.125rem] after:w-[52%] after:animate-thinking-sweep after:bg-[linear-gradient(105deg,transparent_0%,rgba(255,255,255,0.16)_32%,rgba(255,255,255,0.5)_50%,rgba(255,255,255,0.16)_68%,transparent_100%)] motion-reduce:after:animate-none motion-reduce:after:opacity-0",
         )}
       >
-        {hasDetails ? (
-          <button
-            type="button"
-            className={cn(
-              titleClass,
-              "cursor-pointer appearance-none border-0 bg-transparent px-0 py-0 text-left",
-            )}
-            onClick={() => setExpanded((v) => !v)}
-            aria-label={expanded ? "Hide thought details" : "Show thought details"}
-          >
-            <span>{title}</span>
-            {expanded ? (
-              <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
-            ) : (
-              <ChevronRight className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
-            )}
-          </button>
-        ) : (
-          <div className={cn(titleClass, "leading-tight")}>{title}</div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {hasDetails ? (
+            <button
+              type="button"
+              className={cn(
+                titleClass,
+                "cursor-pointer appearance-none border-0 bg-transparent px-0 py-0 text-left",
+              )}
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Hide thought details" : "Show thought details"}
+            >
+              <span>{title}</span>
+              {expanded ? (
+                <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+              ) : (
+                <ChevronRight className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+              )}
+            </button>
+          ) : (
+            <div className={cn(titleClass, "leading-tight")}>{title}</div>
+          )}
+          <LlmMetaBadge
+            model={modelLabel || undefined}
+            promptTokens={promptTokens}
+            completionTokens={completionTokens}
+            showTokenBreakdown
+          />
+        </div>
         {failed ? (
           <div className="mt-0.5 text-[10px] leading-snug text-rose-300">
             Request failed. See details below.

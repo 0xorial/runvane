@@ -13,6 +13,7 @@ import type {
   LlmDecisionUserResponse,
   UserMessageEntry,
 } from "../types/chatEntry.js";
+import type { StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
 
 export class ContinueConversationTaskProcessor {
@@ -210,6 +211,13 @@ export class ContinueConversationTaskProcessor {
     };
   }
 
+  private resolvePlannerModel(overrides: { llmModel?: string }): string {
+    const doc = this.llmProviderSettings.getDocument();
+    return String(
+      overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini"
+    );
+  }
+
   private async callLlmStreaming(
     prompt: string,
     overrides: { llmProviderId?: string; llmModel?: string },
@@ -219,14 +227,12 @@ export class ContinueConversationTaskProcessor {
       base64Data: string;
     }>,
     onDelta: (delta: string) => void
-  ): Promise<string> {
+  ): Promise<StreamTextCompletionResult> {
     const doc = this.llmProviderSettings.getDocument();
     const providerId = String(
       overrides.llmProviderId || doc.llm_configuration.provider_id || "openai"
     );
-    const model = String(
-      overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini"
-    );
+    const model = this.resolvePlannerModel(overrides);
     const provider = this.llmProviderSettings.getProvider(providerId);
     if (!provider) throw new Error(`unknown provider: ${providerId}`);
     const providerSettings =
@@ -246,7 +252,7 @@ export class ContinueConversationTaskProcessor {
     const requestSentAtMs = Date.now();
     let firstTokenLogged = false;
 
-    const text = await provider.streamTextCompletion(
+    const result = await provider.streamTextCompletion(
       providerSettings,
       {
         model,
@@ -272,11 +278,12 @@ export class ContinueConversationTaskProcessor {
       {
         providerId,
         model,
-        responseChars: text.length,
+        responseChars: result.text.length,
+        usage: result.usage ?? null,
       },
       "[llm] completion finished"
     );
-    return text;
+    return result;
   }
 
   async process(task: ContinueConversationTask): Promise<void> {
@@ -317,6 +324,7 @@ export class ContinueConversationTaskProcessor {
       toolDescriptions,
     });
     const llmOverrides = this.resolveLlmOverrides(lastUserMessage);
+    const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
     logger.info(
       {
         conversationId,
@@ -340,6 +348,7 @@ export class ContinueConversationTaskProcessor {
         thoughtMs: null,
         decision: null,
         failed: false,
+        llmModel: plannerLlmModel,
       }
     );
 
@@ -349,6 +358,7 @@ export class ContinueConversationTaskProcessor {
       conversationIndex: plannerEntry.conversationIndex,
       createdAt: plannerEntry.createdAt,
       request_text: requestText,
+      llm_model: plannerLlmModel,
     });
 
     let reply = "";
@@ -368,8 +378,9 @@ export class ContinueConversationTaskProcessor {
         base64Data: content.data.toString("base64"),
       };
     });
+    let plannerTokenUsage: StreamTextCompletionResult["usage"];
     try {
-      reply = await this.callLlmStreaming(
+      const completion = await this.callLlmStreaming(
         requestText,
         llmOverrides,
         inputFiles,
@@ -415,7 +426,8 @@ export class ContinueConversationTaskProcessor {
           streamedAnswer = tagged.answer;
         }
       );
-      reply = reconstructedReply || "";
+      plannerTokenUsage = completion.usage;
+      reply = reconstructedReply || completion.text || "";
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       logger.error(
@@ -429,6 +441,7 @@ export class ContinueConversationTaskProcessor {
         thoughtMs: Math.max(0, Date.now() - startedAtMs),
         decision: null,
         failed: true,
+        llmModel: plannerLlmModel,
       });
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_RESPONSE,
@@ -436,6 +449,7 @@ export class ContinueConversationTaskProcessor {
         summary: detail,
         finished: true,
         action: "failed",
+        llm_model: plannerLlmModel,
       });
       throw e;
     }
@@ -456,6 +470,13 @@ export class ContinueConversationTaskProcessor {
       thoughtMs: Math.max(0, Date.now() - startedAtMs),
       decision,
       failed: false,
+      llmModel: plannerLlmModel,
+      ...(plannerTokenUsage !== undefined
+        ? {
+            promptTokens: plannerTokenUsage.promptTokens,
+            completionTokens: plannerTokenUsage.completionTokens,
+          }
+        : {}),
     });
     if (decision.type === "tool-invocation") {
       const toolCfg = this.agentToolConfigFor(
@@ -500,6 +521,13 @@ export class ContinueConversationTaskProcessor {
         decision.type === "tool-invocation" ? "tool_call" : "final_answer",
       ...(decision.type === "tool-invocation"
         ? { tool_name: decision.toolId }
+        : {}),
+      llm_model: plannerLlmModel,
+      ...(plannerTokenUsage !== undefined
+        ? {
+            prompt_tokens: plannerTokenUsage.promptTokens,
+            completion_tokens: plannerTokenUsage.completionTokens,
+          }
         : {}),
     });
     logger.info(
