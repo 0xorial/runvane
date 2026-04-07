@@ -182,6 +182,29 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     completionTokens: z.number().finite().optional(),
   });
 
+export type TitleLlmStreamEntry = ChatEntryBase & {
+  type: "title_llm_stream";
+  llmRequest: string;
+  llmResponse?: string;
+  thoughtMs?: number | null;
+  decision?: LlmDecision | null;
+  failed?: boolean;
+  llmModel?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+};
+export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
+    type: z.literal("title_llm_stream"),
+    llmRequest: z.string(),
+    llmResponse: z.string().optional(),
+    thoughtMs: z.number().finite().nullable().optional(),
+    decision: LlmDecisionSchema.nullable().optional(),
+    failed: z.boolean().optional(),
+    llmModel: z.string().optional(),
+    promptTokens: z.number().finite().optional(),
+    completionTokens: z.number().finite().optional(),
+  });
+
 export type ToolInvocationEntry = ChatEntryBase & {
   type: "tool-invocation";
   toolId: string;
@@ -209,11 +232,13 @@ export const AssistantMessageEntrySchema = ChatEntryBaseSchema.extend({
 export type ChatEntry =
   | UserMessageEntry
   | PlannerLlmStreamEntry
+  | TitleLlmStreamEntry
   | ToolInvocationEntry
   | AssistantMessageEntry;
 export const ChatEntrySchema = z.discriminatedUnion("type", [
   UserMessageEntrySchema,
   PlannerLlmStreamEntrySchema,
+  TitleLlmStreamEntrySchema,
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,
 ]);

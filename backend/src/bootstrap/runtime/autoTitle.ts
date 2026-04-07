@@ -87,7 +87,7 @@ export async function maybeAutoTitleConversation({
   const startedAtMs = Date.now();
   const titlePrompt = buildTitlePrompt(firstMessage);
   const plannerEntryId = crypto.randomUUID();
-  const plannerEntry = chatEntries.appendPlannerLlmStreamEntry(conversationId, {
+  const plannerEntry = chatEntries.appendTitleLlmStreamEntry(conversationId, {
     id: plannerEntryId,
     createdAt: new Date().toISOString(),
     llmRequest: titlePrompt,
@@ -97,7 +97,7 @@ export async function maybeAutoTitleConversation({
     failed: false,
   });
   hub.publish(conversationId, {
-    type: SseType.PLANNER_STARTING,
+    type: SseType.TITLE_STARTING,
     chat_entry_id: plannerEntry.id,
     conversationIndex: plannerEntry.conversationIndex,
     createdAt: plannerEntry.createdAt,
@@ -111,7 +111,7 @@ export async function maybeAutoTitleConversation({
       (delta) => {
         streamedResponse += delta;
         hub.publish(conversationId, {
-          type: SseType.PLANNER_LLM_STREAM,
+          type: SseType.TITLE_LLM_STREAM,
           chat_entry_id: plannerEntry.id,
           delta,
         });
@@ -126,7 +126,7 @@ export async function maybeAutoTitleConversation({
   }
 
   if (generated) {
-    chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+    chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
       llmResponse: generated.fullResponse,
@@ -142,7 +142,7 @@ export async function maybeAutoTitleConversation({
         : {}),
     });
     hub.publish(conversationId, {
-      type: SseType.PLANNER_RESPONSE,
+      type: SseType.TITLE_RESPONSE,
       chat_entry_id: plannerEntry.id,
       summary:
         generated.cleanTitle != null
@@ -161,7 +161,7 @@ export async function maybeAutoTitleConversation({
   } else if (!generationError) {
     // No provider/model configured for title generation; close the thought row explicitly.
     const detail = "Title generation skipped, fallback used";
-    chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+    chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
       llmResponse: detail,
@@ -170,7 +170,7 @@ export async function maybeAutoTitleConversation({
       failed: true,
     });
     hub.publish(conversationId, {
-      type: SseType.PLANNER_RESPONSE,
+      type: SseType.TITLE_RESPONSE,
       chat_entry_id: plannerEntry.id,
       summary: detail,
       finished: true,
@@ -192,7 +192,7 @@ export async function maybeAutoTitleConversation({
   if (generationError) {
     const detail =
       generationError instanceof Error ? generationError.message : String(generationError);
-    chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+    chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
       llmResponse: streamedResponse ? `${streamedResponse}\n${detail}` : detail,
@@ -202,13 +202,13 @@ export async function maybeAutoTitleConversation({
     });
     if (detail) {
       hub.publish(conversationId, {
-        type: SseType.PLANNER_LLM_STREAM,
+        type: SseType.TITLE_LLM_STREAM,
         chat_entry_id: plannerEntry.id,
         delta: detail,
       });
     }
     hub.publish(conversationId, {
-      type: SseType.PLANNER_RESPONSE,
+      type: SseType.TITLE_RESPONSE,
       chat_entry_id: plannerEntry.id,
       summary: "Title generation failed, fallback used",
       finished: true,

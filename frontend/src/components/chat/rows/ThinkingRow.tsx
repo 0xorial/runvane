@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { formatDuration, parseDbTimestampMs } from "../../../utils/formatDuration";
-import type { PlannerLlmStreamEntry } from "../../../protocol/chatEntry";
+import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
 import { ChatThreadIndent } from "../ChatMessageShell";
 import { LlmMetaBadge } from "../LlmMetaBadge";
 
 type ThinkingRowProps = {
-  entry: PlannerLlmStreamEntry;
+  entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
 };
 
 function startTimestampMs(messageCreatedAt: string): number {
@@ -16,7 +16,7 @@ function startTimestampMs(messageCreatedAt: string): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
-function isDone(entry: PlannerLlmStreamEntry): boolean {
+function isDone(entry: PlannerLlmStreamEntry | TitleLlmStreamEntry): boolean {
   return typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs);
 }
 

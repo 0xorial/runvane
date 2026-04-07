@@ -59,6 +59,10 @@ export class ContinueConversationTaskProcessor {
       const response = entry.llmResponse ?? "";
       return `THINKING: ${response}`;
     }
+    if (entry.type === "title_llm_stream") {
+      const response = entry.llmResponse ?? "";
+      return `TITLE_THINKING: ${response}`;
+    }
     const parameters = this.stringify(entry.parameters);
     const result = this.stringify(entry.result);
     return `TOOL: id=${entry.toolId} state=${entry.state} parameters=${parameters} result=${result}`;

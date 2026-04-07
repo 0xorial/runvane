@@ -153,7 +153,7 @@ export function App() {
           {showConversationSidebar ? (
             <div
               className={cn(
-                "h-full min-w-0 overflow-hidden transition-opacity duration-200",
+                "h-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-200",
                 chatSidebarVisible ? "opacity-100" : "pointer-events-none opacity-0",
               )}
             >

@@ -6,6 +6,7 @@ export type {
   LlmDecisionTool,
   LlmDecisionUserResponse,
   PlannerLlmStreamEntry,
+  TitleLlmStreamEntry,
   ToolInvocationEntry,
   UserMessageEntry,
 } from "../../../backend/src/types/chatEntry";

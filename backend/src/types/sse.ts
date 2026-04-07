@@ -8,8 +8,11 @@ export const SseType = {
   CONVERSATION_UPDATED: "conversation_updated",
   PLANNER_STARTING: "planner_starting",
   PLANNER_LLM_STREAM: "planner_llm_stream",
+  TITLE_STARTING: "title_starting",
+  TITLE_LLM_STREAM: "title_llm_stream",
   ASSISTANT_STREAM: "assistant_stream",
   PLANNER_RESPONSE: "planner_response",
+  TITLE_RESPONSE: "title_response",
   TOOL_INVOCATION_START: "tool_invocation_start",
   TOOL_INVOCATION_END: "tool_invocation_end",
 } as const;
@@ -87,6 +90,34 @@ export const PlannerLlmStreamSsePayloadSchema = z.object({
   delta: z.string(),
 });
 
+export type TitleStartingSsePayload = {
+  type: typeof SseType.TITLE_STARTING;
+  chat_entry_id: string;
+  conversationIndex: number;
+  createdAt: string;
+  request_text: string;
+  llm_model?: string;
+};
+export const TitleStartingSsePayloadSchema = z.object({
+  type: z.literal(SseType.TITLE_STARTING),
+  chat_entry_id: z.string(),
+  conversationIndex: z.number().finite(),
+  createdAt: z.string(),
+  request_text: z.string(),
+  llm_model: z.string().optional(),
+});
+
+export type TitleLlmStreamSsePayload = {
+  type: typeof SseType.TITLE_LLM_STREAM;
+  chat_entry_id: string;
+  delta: string;
+};
+export const TitleLlmStreamSsePayloadSchema = z.object({
+  type: z.literal(SseType.TITLE_LLM_STREAM),
+  chat_entry_id: z.string(),
+  delta: z.string(),
+});
+
 export type AssistantStreamSsePayload = {
   type: typeof SseType.ASSISTANT_STREAM;
   chat_entry_id: string;
@@ -116,6 +147,27 @@ export const PlannerResponseSsePayloadSchema = z.object({
   finished: z.boolean(),
   action: z.string().optional(),
   tool_name: z.string().optional(),
+  llm_model: z.string().optional(),
+  prompt_tokens: z.number().finite().optional(),
+  completion_tokens: z.number().finite().optional(),
+});
+
+export type TitleResponseSsePayload = {
+  type: typeof SseType.TITLE_RESPONSE;
+  chat_entry_id: string;
+  summary: string;
+  finished: boolean;
+  action?: string;
+  llm_model?: string;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+};
+export const TitleResponseSsePayloadSchema = z.object({
+  type: z.literal(SseType.TITLE_RESPONSE),
+  chat_entry_id: z.string(),
+  summary: z.string(),
+  finished: z.boolean(),
+  action: z.string().optional(),
   llm_model: z.string().optional(),
   prompt_tokens: z.number().finite().optional(),
   completion_tokens: z.number().finite().optional(),
@@ -163,8 +215,11 @@ export type SsePayload =
   | ConversationUpdatedSsePayload
   | PlannerStartingSsePayload
   | PlannerLlmStreamSsePayload
+  | TitleStartingSsePayload
+  | TitleLlmStreamSsePayload
   | AssistantStreamSsePayload
   | PlannerResponseSsePayload
+  | TitleResponseSsePayload
   | ToolInvocationStartSsePayload
   | ToolInvocationEndSsePayload;
 export const SsePayloadSchema = z.discriminatedUnion("type", [
@@ -173,8 +228,11 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   ConversationUpdatedSsePayloadSchema,
   PlannerStartingSsePayloadSchema,
   PlannerLlmStreamSsePayloadSchema,
+  TitleStartingSsePayloadSchema,
+  TitleLlmStreamSsePayloadSchema,
   AssistantStreamSsePayloadSchema,
   PlannerResponseSsePayloadSchema,
+  TitleResponseSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
 ]);
@@ -217,6 +275,19 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     delta: z.string(),
   }),
   SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.TITLE_STARTING),
+    chat_entry_id: z.string(),
+    conversationIndex: z.number().finite(),
+    createdAt: z.string(),
+    request_text: z.string(),
+    llm_model: z.string().optional(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.TITLE_LLM_STREAM),
+    chat_entry_id: z.string(),
+    delta: z.string(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.ASSISTANT_STREAM),
     chat_entry_id: z.string(),
     delta: z.string(),
@@ -228,6 +299,16 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     finished: z.boolean(),
     action: z.string().optional(),
     tool_name: z.string().optional(),
+    llm_model: z.string().optional(),
+    prompt_tokens: z.number().finite().optional(),
+    completion_tokens: z.number().finite().optional(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.TITLE_RESPONSE),
+    chat_entry_id: z.string(),
+    summary: z.string(),
+    finished: z.boolean(),
+    action: z.string().optional(),
     llm_model: z.string().optional(),
     prompt_tokens: z.number().finite().optional(),
     completion_tokens: z.number().finite().optional(),

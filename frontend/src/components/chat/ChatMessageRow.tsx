@@ -20,7 +20,7 @@ export function ChatMessageRow({ entry$ }: ChatMessageRowProps) {
   if (entry.type === "user-message") {
     return <UserMessageRow entry={entry} />;
   }
-  if (entry.type === "planner_llm_stream") {
+  if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
     return <ThinkingRow entry={entry} />;
   }
   if (entry.type === "tool-invocation") {

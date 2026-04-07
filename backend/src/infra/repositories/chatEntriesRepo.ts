@@ -2,6 +2,7 @@ import type {
   ChatAttachment,
   ChatEntry,
   PlannerLlmStreamEntry,
+  TitleLlmStreamEntry,
   ToolInvocationEntry,
   AssistantMessageEntry,
   LlmDecision,
@@ -290,6 +291,60 @@ export class ChatEntriesRepo {
     return entry;
   }
 
+  appendTitleLlmStreamEntry(
+    conversationId: string,
+    input: {
+      id: string;
+      createdAt: string;
+      llmRequest: string;
+      llmResponse?: string;
+      thoughtMs?: number | null;
+      decision?: LlmDecision | null;
+      failed?: boolean;
+      llmModel?: string;
+    },
+  ): TitleLlmStreamEntry {
+    const conversationIndex = this.nextConversationIndex(conversationId);
+    const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
+    const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const entry: TitleLlmStreamEntry = {
+      type: "title_llm_stream",
+      id: input.id,
+      conversationIndex,
+      createdAt: input.createdAt,
+      llmRequest: input.llmRequest,
+      llmResponse: input.llmResponse ?? "",
+      thoughtMs: input.thoughtMs ?? null,
+      decision: input.decision ?? null,
+      failed: input.failed === true,
+      ...(llmModel !== undefined ? { llmModel } : {}),
+    };
+    const payload: Record<string, unknown> = {
+      llmRequest: entry.llmRequest,
+      llmResponse: entry.llmResponse ?? "",
+      thoughtMs: entry.thoughtMs ?? null,
+      decision: entry.decision ?? null,
+      failed: entry.failed === true,
+    };
+    if (llmModel !== undefined) payload.llmModel = llmModel;
+    this.db
+      .prepare(
+        `INSERT INTO chat_entries (
+           id, conversation_id, conversation_index, type, payload_json, created_at
+         ) VALUES (
+           @id, @conversation_id, @conversation_index, 'title_llm_stream', @payload_json, @created_at
+         )`,
+      )
+      .run({
+        id: entry.id,
+        conversation_id: conversationId,
+        conversation_index: entry.conversationIndex,
+        payload_json: JSON.stringify(payload),
+        created_at: entry.createdAt,
+      });
+    return entry;
+  }
+
   updatePlannerLlmStreamEntry(
     conversationId: string,
     input: {
@@ -336,6 +391,56 @@ export class ChatEntriesRepo {
     if (Number(result.changes ?? 0) !== 1) {
       throw new Error(
         `planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`,
+      );
+    }
+  }
+
+  updateTitleLlmStreamEntry(
+    conversationId: string,
+    input: {
+      id: string;
+      llmRequest: string;
+      llmResponse?: string;
+      thoughtMs?: number | null;
+      decision?: LlmDecision | null;
+      failed?: boolean;
+      llmModel?: string;
+      promptTokens?: number;
+      completionTokens?: number;
+    },
+  ): void {
+    const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
+    const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const payload: Record<string, unknown> = {
+      llmRequest: input.llmRequest,
+      llmResponse: input.llmResponse ?? "",
+      thoughtMs: input.thoughtMs ?? null,
+      decision: input.decision ?? null,
+      failed: input.failed === true,
+    };
+    if (llmModel !== undefined) payload.llmModel = llmModel;
+    if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
+      payload.promptTokens = input.promptTokens;
+    }
+    if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
+      payload.completionTokens = input.completionTokens;
+    }
+    const result = this.db
+      .prepare(
+        `UPDATE chat_entries
+         SET payload_json = @payload_json
+         WHERE id = @id
+           AND conversation_id = @conversation_id
+           AND type = 'title_llm_stream'`,
+      )
+      .run({
+        id: input.id,
+        conversation_id: conversationId,
+        payload_json: JSON.stringify(payload),
+      });
+    if (Number(result.changes ?? 0) !== 1) {
+      throw new Error(
+        `title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`,
       );
     }
   }
@@ -433,6 +538,41 @@ export class ChatEntriesRepo {
           ...(promptTokens !== undefined ? { promptTokens } : {}),
           ...(completionTokens !== undefined ? { completionTokens } : {}),
         } satisfies PlannerLlmStreamEntry;
+      }
+      if (row.type === "title_llm_stream") {
+        const llmModel =
+          typeof payload.llmModel === "string" && payload.llmModel.trim() !== ""
+            ? payload.llmModel.trim()
+            : undefined;
+        const promptTokens =
+          typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
+            ? payload.promptTokens
+            : undefined;
+        const completionTokens =
+          typeof payload.completionTokens === "number" &&
+          Number.isFinite(payload.completionTokens)
+            ? payload.completionTokens
+            : undefined;
+        return {
+          type: "title_llm_stream",
+          id: row.id,
+          conversationIndex: row.conversation_index,
+          createdAt: row.created_at,
+          llmRequest: String(payload.llmRequest ?? ""),
+          llmResponse:
+            typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
+          thoughtMs: Number.isFinite(payload.thoughtMs as number)
+            ? (payload.thoughtMs as number)
+            : null,
+          decision:
+            payload.decision && typeof payload.decision === "object"
+              ? (payload.decision as LlmDecision)
+              : null,
+          failed: payload.failed === true,
+          ...(llmModel !== undefined ? { llmModel } : {}),
+          ...(promptTokens !== undefined ? { promptTokens } : {}),
+          ...(completionTokens !== undefined ? { completionTokens } : {}),
+        } satisfies TitleLlmStreamEntry;
       }
       return {
         type: "tool-invocation",

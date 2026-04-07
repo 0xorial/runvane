@@ -44,6 +44,7 @@ export function ConversationSidebar({
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [streamedTitles, setStreamedTitles] = useState<Record<string, string>>({});
   const [probeBusy, setProbeBusy] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -66,6 +67,12 @@ export function ConversationSidebar({
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
+          setStreamedTitles((prev) => {
+            if (!(ev.conversation.id in prev)) return prev;
+            const next = { ...prev };
+            delete next[ev.conversation.id];
+            return next;
+          });
           setConversations((prev) =>
             prev.map((item) =>
               item.id === ev.conversation.id
@@ -77,6 +84,17 @@ export function ConversationSidebar({
                 : item,
             ),
           );
+          return;
+        }
+        if (ev.type === SseType.TITLE_STARTING) {
+          setStreamedTitles((prev) => ({ ...prev, [ev.conversation_id]: "" }));
+          return;
+        }
+        if (ev.type === SseType.TITLE_LLM_STREAM) {
+          setStreamedTitles((prev) => ({
+            ...prev,
+            [ev.conversation_id]: `${prev[ev.conversation_id] ?? ""}${ev.delta}`,
+          }));
         }
       },
       pollTick: async () => false,
@@ -135,7 +153,7 @@ export function ConversationSidebar({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
       {/* Matches frontend2/src/pages/Index.tsx sidebar header */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5 py-2">
         <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden />
@@ -145,7 +163,7 @@ export function ConversationSidebar({
       </div>
 
       {/* Matches frontend2/src/components/sidebar/ConversationList.tsx structure */}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="space-y-1.5 border-b border-sidebar-border px-2.5 py-2">
           <button
             type="button"
@@ -165,15 +183,16 @@ export function ConversationSidebar({
           </button>
         </div>
 
-        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto px-1.5 py-1.5">
+        <div className="scrollbar-thin flex h-full min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 py-1.5">
           {conversations.map((c) => {
             const active = activeConversationId === c.id;
             const stamp = formatRelativeChatTime(c.updated_at || c.created_at);
+            const liveTitle = streamedTitles[c.id] ?? "";
             return (
               <div
                 key={c.id}
                 className={cn(
-                  "group/row flex w-full items-stretch overflow-hidden rounded-md text-xs transition-colors",
+                  "group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs transition-colors",
                   active
                     ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
@@ -187,7 +206,7 @@ export function ConversationSidebar({
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-3 w-3 shrink-0" aria-hidden />
                     <span className="truncate font-medium">
-                      {c.title || "Untitled"}
+                      {liveTitle || c.title || "Untitled"}
                     </span>
                   </div>
                   {stamp ? (

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { getConversations, renameConversation } from "../../../api/client";
+import { subscribeGlobalLive } from "../../../protocol/runLiveClient";
+import { SseType } from "../../../protocol/sseTypes";
 import { notifyError } from "../../../utils/toast";
 import { Button } from "../../ui/button";
 import { ThemeToggle } from "../../ThemeToggle";
@@ -22,6 +24,7 @@ export function ChatTitlePanel({
   settingsPressed = false,
 }: ChatTitlePanelProps) {
   const [title, setTitle] = useState("New chat");
+  const [streamRawTitle, setStreamRawTitle] = useState("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
 
   function refreshTitle() {
@@ -48,13 +51,39 @@ export function ChatTitlePanel({
   }
 
   useEffect(() => {
+    setStreamRawTitle("");
     return refreshTitle();
+  }, [conversationId]);
+
+  useEffect(() => {
+    const cid = conversationId;
+    if (!cid) return () => {};
+    const dispose = subscribeGlobalLive({
+      onSseEvent: (ev) => {
+        if (ev.conversation_id !== cid) return;
+        if (ev.type === SseType.TITLE_STARTING) {
+          setStreamRawTitle("");
+          return;
+        }
+        if (ev.type === SseType.TITLE_LLM_STREAM) {
+          setStreamRawTitle((prev) => `${prev}${ev.delta}`);
+          return;
+        }
+        if (ev.type === SseType.CONVERSATION_UPDATED) {
+          setStreamRawTitle("");
+          setTitle(String(ev.conversation.title || "Untitled"));
+        }
+      },
+      pollTick: async () => false,
+    });
+    return () => dispose();
   }, [conversationId]);
 
   async function onCommit(nextTitle: string) {
     if (!conversationId) return;
     try {
       const updated = await renameConversation(conversationId, { title: nextTitle });
+      setStreamRawTitle("");
       setTitle(String(updated.title || nextTitle));
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
@@ -82,7 +111,7 @@ export function ChatTitlePanel({
       </Button>
       <div className="min-w-0 flex-1">
         <EditableConversationTitle
-          title={title}
+          title={streamRawTitle || title}
           disabled={!conversationId}
           onCommit={onCommit}
         />

@@ -117,15 +117,22 @@ export function useChatSession(conversationId: string | null | undefined) {
           if (reconcileIncomingUserMessage(cid, ev.entry)) return;
           store.append(ev.entry);
           return;
-        } else if (ev.type === SseType.PLANNER_STARTING) {
+        } else if (
+          ev.type === SseType.PLANNER_STARTING ||
+          ev.type === SseType.TITLE_STARTING
+        ) {
           const store = storeRef.current;
+          const thinkingType =
+            ev.type === SseType.TITLE_STARTING
+              ? "title_llm_stream"
+              : "planner_llm_stream";
           if (!store.getById(ev.chat_entry_id)) {
             const llmModel =
               typeof ev.llm_model === "string" && ev.llm_model.trim() !== ""
                 ? ev.llm_model.trim()
                 : undefined;
             store.append({
-              type: "planner_llm_stream",
+              type: thinkingType,
               id: ev.chat_entry_id,
               conversationIndex: ev.conversationIndex,
               createdAt: ev.createdAt,
@@ -135,14 +142,21 @@ export function useChatSession(conversationId: string | null | undefined) {
             });
           }
           return;
-        } else if (ev.type === SseType.PLANNER_LLM_STREAM) {
+        } else if (
+          ev.type === SseType.PLANNER_LLM_STREAM ||
+          ev.type === SseType.TITLE_LLM_STREAM
+        ) {
           const store = storeRef.current;
           const row$ = store.getById(ev.chat_entry_id);
+          const thinkingType =
+            ev.type === SseType.TITLE_LLM_STREAM
+              ? "title_llm_stream"
+              : "planner_llm_stream";
           if (!row$) {
             console.warn("Planner entry not found for id:", ev.chat_entry_id);
             console.warn(" Creating a new one...");
             store.append({
-              type: "planner_llm_stream",
+              type: thinkingType,
               id: ev.chat_entry_id,
               conversationIndex: store.getRows().length,
               createdAt: new Date().toISOString(),
@@ -153,7 +167,10 @@ export function useChatSession(conversationId: string | null | undefined) {
             return;
           }
           row$.mutate((next) => {
-            if (next.type !== "planner_llm_stream") {
+            if (
+              next.type !== "planner_llm_stream" &&
+              next.type !== "title_llm_stream"
+            ) {
               console.warn("Expected planner_llm_stream row, got:", next.type);
               return;
             }
@@ -178,13 +195,23 @@ export function useChatSession(conversationId: string | null | undefined) {
             next.text = `${next.text}${ev.delta}`;
           });
           return;
-        } else if (ev.type === SseType.PLANNER_RESPONSE) {
+        } else if (
+          ev.type === SseType.PLANNER_RESPONSE ||
+          ev.type === SseType.TITLE_RESPONSE
+        ) {
           const store = storeRef.current;
           const row$ = store.getById(ev.chat_entry_id);
+          const thinkingType =
+            ev.type === SseType.TITLE_RESPONSE
+              ? "title_llm_stream"
+              : "planner_llm_stream";
 
           if (row$) {
             row$.mutate((next) => {
-              if (next.type !== "planner_llm_stream") {
+              if (
+                next.type !== "planner_llm_stream" &&
+                next.type !== "title_llm_stream"
+              ) {
                 console.warn(
                   "Expected planner_llm_stream row, got:",
                   next.type
@@ -192,7 +219,9 @@ export function useChatSession(conversationId: string | null | undefined) {
                 return;
               }
               next.decision =
-                ev.action === "tool_call" && ev.tool_name
+                ev.type === SseType.PLANNER_RESPONSE &&
+                ev.action === "tool_call" &&
+                ev.tool_name
                   ? {
                       type: "tool-invocation",
                       toolId: ev.tool_name,
@@ -234,7 +263,7 @@ export function useChatSession(conversationId: string | null | undefined) {
             const modelWire =
               typeof ev.llm_model === "string" ? ev.llm_model.trim() : "";
             store.append({
-              type: "planner_llm_stream",
+              type: thinkingType,
               id: ev.chat_entry_id,
               conversationIndex: store.getRows().length,
               createdAt: new Date().toISOString(),
@@ -242,7 +271,9 @@ export function useChatSession(conversationId: string | null | undefined) {
               thoughtMs: null,
               failed: ev.action === "failed",
               decision:
-                ev.action === "tool_call" && ev.tool_name
+                ev.type === SseType.PLANNER_RESPONSE &&
+                ev.action === "tool_call" &&
+                ev.tool_name
                   ? {
                       type: "tool-invocation",
                       toolId: ev.tool_name,
