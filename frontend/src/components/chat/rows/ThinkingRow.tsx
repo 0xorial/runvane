@@ -141,20 +141,27 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
             <div className="flex flex-col gap-0.5">
               {requestText ? (
                 <>
-                  <div className="inline-flex items-center gap-2 text-[11px] font-normal leading-snug text-slate-400/80">
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     Request
                   </div>
-                  <pre className="m-0 mt-1 whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-slate-400/90 opacity-70 first:mt-0">
+                  <pre className="m-0 mt-1 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/40 p-2 font-mono text-xs leading-snug text-foreground first:mt-0">
                     {requestText}
                   </pre>
                 </>
               ) : null}
               {responseText ? (
                 <>
-                  <div className="inline-flex items-center gap-2 text-[11px] font-normal leading-snug text-slate-400/80">
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     {failed ? "Error" : "Response"}
                   </div>
-                  <pre className="m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-amber-950/80 opacity-85 dark:text-amber-100/70">
+                  <pre
+                    className={cn(
+                      "m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words rounded-md border p-2 font-mono text-xs leading-snug first:mt-0",
+                      failed
+                        ? "border-destructive/30 bg-destructive/10 text-destructive"
+                        : "border-border/60 bg-muted/40 text-foreground",
+                    )}
+                  >
                     {responseText}
                   </pre>
                 </>

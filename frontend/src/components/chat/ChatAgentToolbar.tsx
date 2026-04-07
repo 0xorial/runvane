@@ -216,7 +216,7 @@ export function ChatAgentToolbar({
 
   if (allAgents != null && allAgents.length === 0) {
     return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5 text-sm">
+      <div className="relative z-10 flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5 text-sm">
         <span className="text-muted-foreground">No agents configured.</span>
         <Button variant="outline" size="sm" className="ml-auto" asChild>
           <Link to="/settings/agents">Configure agents</Link>
@@ -228,7 +228,9 @@ export function ChatAgentToolbar({
   return (
     <div
       className={cn(
-        "grid shrink-0 gap-2 border-b border-border bg-card/40 px-3 py-1.5",
+        // Stack above the message list so absolute ModelDropdown panels are not covered by
+        // later siblings (scroll area paints after this row in DOM order).
+        "relative z-10 grid shrink-0 gap-2 border-b border-border bg-card/40 px-3 py-1.5",
         "grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]",
         "items-end text-sm backdrop-blur-sm",
       )}
