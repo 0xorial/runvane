@@ -14,8 +14,54 @@ import {
 export function createConversationsRouter(runtime: Runtime) {
   const r = new Hono();
 
+  function conversationCostsUsdById(): Map<string, number> {
+    const usageRows = runtime.chatEntries.listConversationTokenUsageByModel();
+    const capabilities = runtime.modelCapabilities.listEffective();
+    const pricingByModel = new Map<string, { inCost: number; outCost: number }>();
+    for (const cap of capabilities) {
+      const model = String(cap.model_name || "").trim();
+      if (!model || pricingByModel.has(model)) continue;
+      const inCost =
+        typeof cap.usd_per_1m_tokens_in === "number" &&
+        Number.isFinite(cap.usd_per_1m_tokens_in)
+          ? cap.usd_per_1m_tokens_in
+          : typeof cap.input_cost_per_1m === "number" &&
+              Number.isFinite(cap.input_cost_per_1m)
+            ? cap.input_cost_per_1m
+            : null;
+      const outCost =
+        typeof cap.usd_per_1m_tokens_out === "number" &&
+        Number.isFinite(cap.usd_per_1m_tokens_out)
+          ? cap.usd_per_1m_tokens_out
+          : typeof cap.output_cost_per_1m === "number" &&
+              Number.isFinite(cap.output_cost_per_1m)
+            ? cap.output_cost_per_1m
+            : null;
+      if (inCost == null || outCost == null) continue;
+      pricingByModel.set(model, { inCost, outCost });
+    }
+
+    const out = new Map<string, number>();
+    for (const row of usageRows) {
+      const prices = pricingByModel.get(row.model_name);
+      if (!prices) continue;
+      const estimate =
+        (row.prompt_tokens / 1_000_000) * prices.inCost +
+        (row.completion_tokens / 1_000_000) * prices.outCost;
+      out.set(row.conversation_id, (out.get(row.conversation_id) ?? 0) + estimate);
+    }
+    return out;
+  }
+
   r.get("/", (c) => {
-    return c.json(runtime.conversations.list());
+    const rows = runtime.conversations.list();
+    const costsById = conversationCostsUsdById();
+    return c.json(
+      rows.map((row) => ({
+        ...row,
+        estimated_cost_usd: Number((costsById.get(row.id) ?? 0).toFixed(8)),
+      })),
+    );
   });
 
   r.post("/", async (c) => {

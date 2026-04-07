@@ -72,6 +72,8 @@ export class ModelCapabilitiesRepo {
         supports_file_input: row.supports_file_input,
         max_context_tokens: row.max_context_tokens,
         max_output_tokens: row.max_output_tokens,
+        usd_per_1m_tokens_in: row.usd_per_1m_tokens_in,
+        usd_per_1m_tokens_out: row.usd_per_1m_tokens_out,
         input_cost_per_1m: row.input_cost_per_1m,
         output_cost_per_1m: row.output_cost_per_1m,
         currency: row.currency || "USD",
@@ -129,6 +131,14 @@ export class ModelCapabilitiesRepo {
           ov.max_output_tokens != null
             ? ov.max_output_tokens
             : (base?.max_output_tokens ?? null),
+        usd_per_1m_tokens_in:
+          ov.input_cost_per_1m != null
+            ? ov.input_cost_per_1m
+            : (base?.usd_per_1m_tokens_in ?? null),
+        usd_per_1m_tokens_out:
+          ov.output_cost_per_1m != null
+            ? ov.output_cost_per_1m
+            : (base?.usd_per_1m_tokens_out ?? null),
         input_cost_per_1m:
           ov.input_cost_per_1m != null
             ? ov.input_cost_per_1m
@@ -205,13 +215,17 @@ export class ModelCapabilitiesRepo {
           ? input.max_output_tokens
           : (existing?.max_output_tokens ?? null),
       input_cost_per_1m:
-        input.input_cost_per_1m !== undefined
-          ? input.input_cost_per_1m
-          : (existing?.input_cost_per_1m ?? null),
+        input.usd_per_1m_tokens_in !== undefined
+          ? input.usd_per_1m_tokens_in
+          : input.input_cost_per_1m !== undefined
+            ? input.input_cost_per_1m
+            : (existing?.input_cost_per_1m ?? null),
       output_cost_per_1m:
-        input.output_cost_per_1m !== undefined
-          ? input.output_cost_per_1m
-          : (existing?.output_cost_per_1m ?? null),
+        input.usd_per_1m_tokens_out !== undefined
+          ? input.usd_per_1m_tokens_out
+          : input.output_cost_per_1m !== undefined
+            ? input.output_cost_per_1m
+            : (existing?.output_cost_per_1m ?? null),
       currency:
         input.currency !== undefined ? input.currency : (existing?.currency ?? null),
       notes: input.notes !== undefined ? input.notes : (existing?.notes ?? null),

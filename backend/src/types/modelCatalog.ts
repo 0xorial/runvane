@@ -7,6 +7,8 @@ export type ModelCapabilityRow = {
   supports_file_input: boolean;
   max_context_tokens: number | null;
   max_output_tokens: number | null;
+  usd_per_1m_tokens_in: number | null;
+  usd_per_1m_tokens_out: number | null;
   input_cost_per_1m: number | null;
   output_cost_per_1m: number | null;
   currency: string;
@@ -21,6 +23,8 @@ export type SeedModelCapability = {
   supports_file_input: boolean;
   max_context_tokens: number | null;
   max_output_tokens: number | null;
+  usd_per_1m_tokens_in: number | null;
+  usd_per_1m_tokens_out: number | null;
   input_cost_per_1m: number | null;
   output_cost_per_1m: number | null;
   currency: string;
@@ -33,6 +37,8 @@ export type ModelCapabilityOverrideUpsert = {
   supports_file_input?: boolean | null;
   max_context_tokens?: number | null;
   max_output_tokens?: number | null;
+  usd_per_1m_tokens_in?: number | null;
+  usd_per_1m_tokens_out?: number | null;
   input_cost_per_1m?: number | null;
   output_cost_per_1m?: number | null;
   currency?: string | null;
@@ -49,20 +55,34 @@ const OptionalNullableString = z
   .nullable()
   .optional();
 
-export const SeedModelCapabilitySchema: z.ZodType<SeedModelCapability> = z.object({
-  provider_id: NonEmptyString,
-  model_name: NonEmptyString,
-  supports_image_input: NullableBoolean.default(false).transform((v) => v ?? false),
-  supports_file_input: NullableBoolean.default(false).transform((v) => v ?? false),
-  max_context_tokens: NullableFiniteNumber,
-  max_output_tokens: NullableFiniteNumber,
-  input_cost_per_1m: NullableFiniteNumber,
-  output_cost_per_1m: NullableFiniteNumber,
-  currency: z
-    .string()
-    .transform((v) => (v.length > 0 ? v : "USD"))
-    .default("USD"),
-});
+export const SeedModelCapabilitySchema: z.ZodType<SeedModelCapability> = z
+  .object({
+    provider_id: NonEmptyString,
+    model_name: NonEmptyString,
+    supports_image_input: NullableBoolean.default(false).transform((v) => v ?? false),
+    supports_file_input: NullableBoolean.default(false).transform((v) => v ?? false),
+    max_context_tokens: NullableFiniteNumber,
+    max_output_tokens: NullableFiniteNumber,
+    usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
+    usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
+    input_cost_per_1m: NullableFiniteNumber.optional(),
+    output_cost_per_1m: NullableFiniteNumber.optional(),
+    currency: z
+      .string()
+      .transform((v) => (v.length > 0 ? v : "USD"))
+      .default("USD"),
+  })
+  .transform((row) => {
+    const inCost = row.usd_per_1m_tokens_in ?? row.input_cost_per_1m ?? null;
+    const outCost = row.usd_per_1m_tokens_out ?? row.output_cost_per_1m ?? null;
+    return {
+      ...row,
+      usd_per_1m_tokens_in: inCost,
+      usd_per_1m_tokens_out: outCost,
+      input_cost_per_1m: inCost,
+      output_cost_per_1m: outCost,
+    };
+  });
 
 export const ModelCapabilityOverrideUpsertSchema: z.ZodType<ModelCapabilityOverrideUpsert> =
   z.object({
@@ -72,6 +92,8 @@ export const ModelCapabilityOverrideUpsertSchema: z.ZodType<ModelCapabilityOverr
     supports_file_input: NullableBoolean.optional(),
     max_context_tokens: NullableFiniteNumber.optional(),
     max_output_tokens: NullableFiniteNumber.optional(),
+    usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
+    usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
     input_cost_per_1m: NullableFiniteNumber.optional(),
     output_cost_per_1m: NullableFiniteNumber.optional(),
     currency: OptionalNullableString,

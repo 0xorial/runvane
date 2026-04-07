@@ -28,6 +28,7 @@ export type ConversationRow = {
   updated_at?: string;
   prompt_tokens_total?: number;
   completion_tokens_total?: number;
+  estimated_cost_usd?: number;
 };
 
 type ConversationSidebarProps = {
@@ -85,6 +86,11 @@ export function ConversationSidebar({
                     updated_at: ev.conversation.updated_at,
                     prompt_tokens_total: ev.conversation.prompt_tokens_total,
                     completion_tokens_total: ev.conversation.completion_tokens_total,
+                    estimated_cost_usd:
+                      typeof ev.conversation.estimated_cost_usd === "number" &&
+                      Number.isFinite(ev.conversation.estimated_cost_usd)
+                        ? ev.conversation.estimated_cost_usd
+                        : item.estimated_cost_usd,
                   }
                 : item,
             ),
@@ -106,35 +112,15 @@ export function ConversationSidebar({
           ev.type === SseType.PLANNER_RESPONSE ||
           ev.type === SseType.TITLE_RESPONSE
         ) {
-          const promptDelta =
-            typeof ev.prompt_tokens === "number" && Number.isFinite(ev.prompt_tokens)
-              ? ev.prompt_tokens
-              : 0;
-          const completionDelta =
-            typeof ev.completion_tokens === "number" &&
-            Number.isFinite(ev.completion_tokens)
-              ? ev.completion_tokens
-              : 0;
-          if (promptDelta === 0 && completionDelta === 0) return;
-          setConversations((prev) =>
-            prev.map((item) =>
-              item.id === ev.conversation_id
-                ? {
-                    ...item,
-                    prompt_tokens_total:
-                      Number(item.prompt_tokens_total ?? 0) + promptDelta,
-                    completion_tokens_total:
-                      Number(item.completion_tokens_total ?? 0) + completionDelta,
-                  }
-                : item,
-            ),
-          );
+          void loadConversations().catch((e: unknown) => {
+            notifyError(e instanceof Error ? e.message : String(e));
+          });
         }
       },
       pollTick: async () => false,
     });
     return () => dispose();
-  }, []);
+  }, [loadConversations]);
 
   async function onProbeTime() {
     if (probeBusy) return;
@@ -224,6 +210,7 @@ export function ConversationSidebar({
             const liveTitle = streamedTitles[c.id] ?? "";
             const promptTokens = Number(c.prompt_tokens_total ?? 0);
             const completionTokens = Number(c.completion_tokens_total ?? 0);
+            const estimatedCostUsd = Number(c.estimated_cost_usd ?? 0);
             return (
               <div
                 key={c.id}
@@ -254,6 +241,7 @@ export function ConversationSidebar({
                     promptTokens={promptTokens}
                     completionTokens={completionTokens}
                     showTokenBreakdown
+                    estimatedCostUsd={estimatedCostUsd}
                     className="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
                   />
                 </button>

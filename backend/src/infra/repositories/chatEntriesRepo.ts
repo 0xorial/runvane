@@ -26,6 +26,13 @@ type ChatEntryDbRow = {
   created_at: string;
 };
 
+export type ConversationModelTokenUsageRow = {
+  conversation_id: string;
+  model_name: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+};
+
 export class ChatEntriesRepo {
   constructor(private readonly db: SqliteDb) {}
 
@@ -49,6 +56,41 @@ export class ChatEntriesRepo {
       )
       .get(conversationId) as { cnt?: number } | undefined;
     return Number(row?.cnt ?? 0);
+  }
+
+  listConversationTokenUsageByModel(): ConversationModelTokenUsageRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT
+           e.conversation_id AS conversation_id,
+           TRIM(CAST(json_extract(e.payload_json, '$.llmModel') AS TEXT)) AS model_name,
+           SUM(COALESCE(CAST(json_extract(e.payload_json, '$.promptTokens') AS INTEGER), 0)) AS prompt_tokens,
+           SUM(COALESCE(CAST(json_extract(e.payload_json, '$.completionTokens') AS INTEGER), 0)) AS completion_tokens
+         FROM chat_entries e
+         WHERE e.type IN ('planner_llm_stream', 'title_llm_stream')
+         GROUP BY e.conversation_id, model_name`,
+      )
+      .all() as Array<{
+      conversation_id: string;
+      model_name: string | null;
+      prompt_tokens: number | null;
+      completion_tokens: number | null;
+    }>;
+    return rows
+      .map((row) => ({
+        conversation_id: row.conversation_id,
+        model_name: String(row.model_name || "").trim(),
+        prompt_tokens:
+          typeof row.prompt_tokens === "number" && Number.isFinite(row.prompt_tokens)
+            ? row.prompt_tokens
+            : 0,
+        completion_tokens:
+          typeof row.completion_tokens === "number" &&
+          Number.isFinite(row.completion_tokens)
+            ? row.completion_tokens
+            : 0,
+      }))
+      .filter((row) => row.model_name.length > 0);
   }
 
   appendUserMessage(

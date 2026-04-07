@@ -27,12 +27,27 @@ export function ChatTitlePanel({
   const [title, setTitle] = useState("New chat");
   const [streamRawTitle, setStreamRawTitle] = useState("");
   const [tokenTotals, setTokenTotals] = useState({ prompt: 0, completion: 0 });
+  const [estimatedCostUsd, setEstimatedCostUsd] = useState(0);
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
+
+  async function refreshConversationMetrics(targetConversationId: string) {
+    const rows = await getConversations();
+    const row = rows.find((x) => x.id === targetConversationId);
+    if (!row) return;
+    setTokenTotals({
+      prompt: row.prompt_tokens_total,
+      completion: row.completion_tokens_total,
+    });
+    setEstimatedCostUsd(
+      row.estimated_cost_usd ?? 0,
+    );
+  }
 
   function refreshTitle() {
     if (!conversationId) {
       setTitle("New chat");
       setTokenTotals({ prompt: 0, completion: 0 });
+      setEstimatedCostUsd(0);
       return () => {};
     }
     let cancelled = false;
@@ -43,17 +58,10 @@ export function ChatTitlePanel({
         const row = rows.find((x) => x.id === conversationId);
         setTitle(String(row?.title || "Untitled"));
         setTokenTotals({
-          prompt:
-            typeof row?.prompt_tokens_total === "number" &&
-            Number.isFinite(row.prompt_tokens_total)
-              ? row.prompt_tokens_total
-              : 0,
-          completion:
-            typeof row?.completion_tokens_total === "number" &&
-            Number.isFinite(row.completion_tokens_total)
-              ? row.completion_tokens_total
-              : 0,
+          prompt: row?.prompt_tokens_total ?? 0,
+          completion: row?.completion_tokens_total ?? 0,
         });
+        setEstimatedCostUsd(row?.estimated_cost_usd ?? 0);
       } catch (e) {
         if (cancelled) return;
         const detail = e instanceof Error ? e.message : String(e);
@@ -66,6 +74,8 @@ export function ChatTitlePanel({
   }
 
   useEffect(() => {
+    setTokenTotals({ prompt: 0, completion: 0 });
+    setEstimatedCostUsd(0);
     setStreamRawTitle("");
     return refreshTitle();
   }, [conversationId]);
@@ -88,37 +98,20 @@ export function ChatTitlePanel({
           setStreamRawTitle("");
           setTitle(String(ev.conversation.title || "Untitled"));
           setTokenTotals({
-            prompt:
-              typeof ev.conversation.prompt_tokens_total === "number" &&
-              Number.isFinite(ev.conversation.prompt_tokens_total)
-                ? ev.conversation.prompt_tokens_total
-                : 0,
-            completion:
-              typeof ev.conversation.completion_tokens_total === "number" &&
-              Number.isFinite(ev.conversation.completion_tokens_total)
-                ? ev.conversation.completion_tokens_total
-                : 0,
+            prompt: ev.conversation.prompt_tokens_total,
+            completion: ev.conversation.completion_tokens_total,
           });
+          setEstimatedCostUsd(ev.conversation.estimated_cost_usd ?? 0);
           return;
         }
         if (
           ev.type === SseType.PLANNER_RESPONSE ||
           ev.type === SseType.TITLE_RESPONSE
         ) {
-          const promptDelta =
-            typeof ev.prompt_tokens === "number" && Number.isFinite(ev.prompt_tokens)
-              ? ev.prompt_tokens
-              : 0;
-          const completionDelta =
-            typeof ev.completion_tokens === "number" &&
-            Number.isFinite(ev.completion_tokens)
-              ? ev.completion_tokens
-              : 0;
-          if (promptDelta === 0 && completionDelta === 0) return;
-          setTokenTotals((prev) => ({
-            prompt: prev.prompt + promptDelta,
-            completion: prev.completion + completionDelta,
-          }));
+          void refreshConversationMetrics(cid).catch((e) => {
+            const detail = e instanceof Error ? e.message : String(e);
+            notifyError(`Failed to refresh chat metrics: ${detail}`);
+          });
         }
       },
       pollTick: async () => false,
@@ -167,6 +160,7 @@ export function ChatTitlePanel({
             promptTokens={tokenTotals.prompt}
             completionTokens={tokenTotals.completion}
             showTokenBreakdown
+            estimatedCostUsd={estimatedCostUsd}
           />
         </div>
       </div>

@@ -38,6 +38,7 @@ export type ConversationSseRow = {
   updated_at: string;
   prompt_tokens_total: number;
   completion_tokens_total: number;
+  estimated_cost_usd?: number;
 };
 export const ConversationSseRowSchema = z.object({
   id: z.string(),
@@ -46,6 +47,7 @@ export const ConversationSseRowSchema = z.object({
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),
   completion_tokens_total: z.number().finite(),
+  estimated_cost_usd: z.number().finite().optional(),
 });
 
 export type ConversationCreatedSsePayload = {

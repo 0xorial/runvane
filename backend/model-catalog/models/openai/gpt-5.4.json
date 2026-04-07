@@ -5,7 +5,9 @@
   "supports_file_input": true,
   "max_context_tokens": null,
   "max_output_tokens": null,
-  "input_cost_per_1m": null,
-  "output_cost_per_1m": null,
+  "usd_per_1m_tokens_in": 2.5,
+  "usd_per_1m_tokens_out": 15,
+  "input_cost_per_1m": 2.5,
+  "output_cost_per_1m": 15,
   "currency": "USD"
 }

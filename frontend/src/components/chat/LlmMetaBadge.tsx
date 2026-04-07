@@ -8,8 +8,15 @@ export type LlmMetaBadgeProps = {
   completionTokens?: number;
   durationMs?: number;
   showTokenBreakdown?: boolean;
+  estimatedCostUsd?: number;
   className?: string;
 };
+
+function formatUsd(value: number): string {
+  if (value > 0 && value < 0.01) return "<0.01";
+  if (value < 0 && value > -0.01) return ">-0.01";
+  return value.toFixed(2);
+}
 
 export function LlmMetaBadge({
   model,
@@ -17,14 +24,14 @@ export function LlmMetaBadge({
   completionTokens = 0,
   durationMs,
   showTokenBreakdown = false,
+  estimatedCostUsd,
   className,
 }: LlmMetaBadgeProps) {
   const m = String(model ?? "").trim();
   const modelShort = m.includes("/") ? m.split("/").pop() ?? m : m;
   const hasTokens =
     Number.isFinite(promptTokens) &&
-    Number.isFinite(completionTokens) &&
-    (promptTokens > 0 || completionTokens > 0);
+    Number.isFinite(completionTokens);
   const totalTokens = hasTokens ? promptTokens + completionTokens : 0;
   const hasDuration = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0;
 
@@ -42,6 +49,9 @@ export function LlmMetaBadge({
     );
   }
   if (hasDuration) segments.push(<span key="s">{(durationMs / 1000).toFixed(1)}s</span>);
+  if (estimatedCostUsd != null) {
+    segments.push(<span key="usd">${formatUsd(estimatedCostUsd)}</span>);
+  }
 
   if (segments.length === 0) return null;
 
