@@ -7,6 +7,7 @@ import {
   ChatAgentToolbar,
   type ChatAgentSelection,
 } from "../components/chat/ChatAgentToolbar";
+import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
 import {
   ChatMessageRow,
@@ -40,9 +41,19 @@ async function sendMessageToConversation(
 
 type ChatPageProps = {
   conversationId: string | null;
+  sidebarVisible: boolean;
+  onToggleSidebar: () => void;
+  onOpenSettings: () => void;
+  settingsPressed?: boolean;
 };
 
-export function ChatPage({ conversationId }: ChatPageProps) {
+export function ChatPage({
+  conversationId,
+  sidebarVisible,
+  onToggleSidebar,
+  onOpenSettings,
+  settingsPressed = false,
+}: ChatPageProps) {
   const composerTextareaRef = useFocusOnFirstFrame<HTMLTextAreaElement>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,6 +103,13 @@ export function ChatPage({ conversationId }: ChatPageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ChatTitlePanel
+        conversationId={conversationId}
+        sidebarVisible={sidebarVisible}
+        onToggleSidebar={onToggleSidebar}
+        onOpenSettings={onOpenSettings}
+        settingsPressed={settingsPressed}
+      />
       <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} />
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
