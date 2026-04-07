@@ -1,11 +1,15 @@
 import { z } from "zod";
 
+import {
+  AgentDefaultLlmConfigurationSchema,
+  type AgentDefaultLlmConfiguration,
+} from "../domain/agentLlmConfig.js";
 import type { AgentRow } from "../infra/repositories/agentsRepo.js";
 
 export type AgentUpsertInput = {
   name: string;
   system_prompt: string;
-  default_llm_configuration: Record<string, unknown> | null;
+  default_llm_configuration: AgentDefaultLlmConfiguration | null;
   default_model_preset_id: number | null;
   model_reference: { provider_id?: string; model_name?: string } | null;
 };
@@ -13,7 +17,7 @@ export type AgentUpsertInput = {
 export type AgentInputFallback = {
   name: string;
   system_prompt: string;
-  default_llm_configuration: Record<string, unknown> | null;
+  default_llm_configuration: AgentDefaultLlmConfiguration | null;
   default_model_preset_id: number | null;
   model_reference: { provider_id: string; model_name: string } | null;
 };
@@ -25,7 +29,7 @@ export type AgentListItemResponse = AgentRouteResponse;
 export type AgentUpsertRequest = {
   name?: string;
   system_prompt?: string;
-  default_llm_configuration?: Record<string, unknown> | null;
+  default_llm_configuration?: AgentDefaultLlmConfiguration | null;
   default_model_preset_id?: number | null;
   model_reference?: { provider_id?: string; model_name?: string } | null;
 };
@@ -33,7 +37,6 @@ export type DeleteAgentResponse = { ok: boolean };
 
 const NonEmptyString = z.string().min(1);
 const OptionalFiniteNumber = z.coerce.number().finite();
-const AgentConfigSchema = z.record(z.string(), z.unknown());
 const AgentModelReferenceSchema = z.object({
   provider_id: z.string().optional(),
   model_name: z.string().optional(),
@@ -41,7 +44,8 @@ const AgentModelReferenceSchema = z.object({
 const AgentInputPatchSchema = z.object({
   name: NonEmptyString.optional(),
   system_prompt: z.string().optional(),
-  default_llm_configuration: AgentConfigSchema.nullable().optional(),
+  default_llm_configuration:
+    AgentDefaultLlmConfigurationSchema.nullable().optional(),
   default_model_preset_id: z.union([z.null(), OptionalFiniteNumber]).optional(),
   model_reference: AgentModelReferenceSchema.nullable().optional(),
 });
@@ -49,7 +53,8 @@ const PostAgentInputSchema = z
   .object({
     name: NonEmptyString.default("New agent"),
     system_prompt: z.string().default(""),
-    default_llm_configuration: AgentConfigSchema.nullable().default(null),
+    default_llm_configuration:
+      AgentDefaultLlmConfigurationSchema.nullable().default(null),
     default_model_preset_id: z.union([z.null(), OptionalFiniteNumber]).default(null),
     model_reference: AgentModelReferenceSchema.nullable().default(null),
   })
@@ -76,39 +81,30 @@ function parseOptionalModelReference(
   };
 }
 
-export function parseAgentInputPatch(
-  body: Record<string, unknown>
-): AgentInputPatch | null {
-  const parsed = AgentInputPatchSchema.safeParse(body);
-  return parsed.success ? parsed.data : null;
-}
-
 export function parsePostAgentInput(
   body: Record<string, unknown>
 ): PostAgentInput {
   const parsed = PostAgentInputSchema.safeParse(body);
-  return parsed.success
-    ? parsed.data
-    : {
-        name: "New agent",
-        system_prompt: "",
-        default_llm_configuration: null,
-        default_model_preset_id: null,
-        model_reference: null,
-      };
+  if (!parsed.success) {
+    throw formatZodError("POST /api/agents request", parsed.error);
+  }
+  return parsed.data;
 }
 
 export function parsePutAgentInput(
   body: Record<string, unknown>
-): PutAgentInput | null {
-  return parseAgentInputPatch(body);
+): PutAgentInput {
+  const parsed = AgentInputPatchSchema.safeParse(body);
+  if (!parsed.success) {
+    throw formatZodError("PUT /api/agents/:id request", parsed.error);
+  }
+  return parsed.data;
 }
 
 export function applyAgentInputPatch(
   fallback: AgentInputFallback,
-  patch: AgentInputPatch | null
+  patch: AgentInputPatch
 ): AgentUpsertInput {
-  if (!patch) return fallback;
   return {
     name: patch.name ?? fallback.name,
     system_prompt: patch.system_prompt ?? fallback.system_prompt,
@@ -123,7 +119,7 @@ export function applyAgentInputPatch(
 }
 
 export function llmsFromAgent(
-  cfg: Record<string, unknown> | null,
+  cfg: AgentDefaultLlmConfiguration | null,
   modelRef: { provider_id: string; model_name: string } | null
 ): Array<Record<string, unknown>> {
   const provider_id = String(cfg?.provider_id ?? modelRef?.provider_id ?? "");
@@ -145,7 +141,7 @@ const AgentListItemResponseSchema: z.ZodType<AgentListItemResponse> = z.object({
   id: z.string(),
   name: z.string(),
   system_prompt: z.string(),
-  default_llm_configuration: z.record(z.string(), z.unknown()).nullable(),
+  default_llm_configuration: AgentDefaultLlmConfigurationSchema.nullable(),
   default_model_preset_id: z.number().finite().nullable(),
   model_reference: z
     .object({ provider_id: z.string(), model_name: z.string() })

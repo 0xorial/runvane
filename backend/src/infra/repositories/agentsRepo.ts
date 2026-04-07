@@ -1,11 +1,12 @@
 import type { SqliteDb } from "../db/client.js";
-import { parseJsonObject } from "./json.js";
+import type { AgentDefaultLlmConfiguration } from "../../domain/agentLlmConfig.js";
+import { parseAgentDefaultLlmConfigurationStrict } from "../../domain/agentLlmConfig.js";
 
 export type AgentRow = {
   id: string;
   name: string;
   system_prompt: string;
-  default_llm_configuration: Record<string, unknown> | null;
+  default_llm_configuration: AgentDefaultLlmConfiguration | null;
   default_model_preset_id: number | null;
   model_reference: { provider_id: string; model_name: string } | null;
   created_at: string;
@@ -24,6 +25,14 @@ type AgentDbRow = {
   updated_at: string;
 };
 
+function parseAgentConfigJson(raw: string, rowId: string): unknown {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`agents:${rowId} invalid default_llm_configuration: expected object`);
+  }
+  return parsed;
+}
+
 function toRow(row: AgentDbRow): AgentRow {
   const providerId = String(row.model_provider_id ?? "").trim();
   const modelName = String(row.model_name ?? "").trim();
@@ -33,7 +42,10 @@ function toRow(row: AgentDbRow): AgentRow {
     system_prompt: String(row.system_prompt ?? ""),
     default_llm_configuration:
       row.default_llm_configuration_json != null
-        ? parseJsonObject(row.default_llm_configuration_json)
+        ? parseAgentDefaultLlmConfigurationStrict(
+            parseAgentConfigJson(row.default_llm_configuration_json, row.id),
+            `agents:${row.id}`,
+          )
         : null,
     default_model_preset_id:
       typeof row.default_model_preset_id === "number"
@@ -94,17 +106,15 @@ export class AgentsRepo {
   create(input: {
     name: string;
     system_prompt?: string;
-    default_llm_configuration?: Record<string, unknown> | null;
+    default_llm_configuration?: AgentDefaultLlmConfiguration | null;
     default_model_preset_id?: number | null;
     model_reference?: { provider_id?: string; model_name?: string } | null;
   }): AgentRow {
     const now = new Date().toISOString();
-    const cfg =
-      input.default_llm_configuration &&
-      typeof input.default_llm_configuration === "object" &&
-      !Array.isArray(input.default_llm_configuration)
-        ? input.default_llm_configuration
-        : null;
+    const cfg = parseAgentDefaultLlmConfigurationStrict(
+      input.default_llm_configuration,
+      "agents.create",
+    );
     const modelRefProviderId = String(input.model_reference?.provider_id ?? "").trim();
     const modelRefModelName = String(input.model_reference?.model_name ?? "").trim();
     const row: AgentRow = {
@@ -169,7 +179,7 @@ export class AgentsRepo {
     input: {
       name: string;
       system_prompt?: string;
-      default_llm_configuration?: Record<string, unknown> | null;
+      default_llm_configuration?: AgentDefaultLlmConfiguration | null;
       default_model_preset_id?: number | null;
       model_reference?: { provider_id?: string; model_name?: string } | null;
     },
@@ -179,12 +189,10 @@ export class AgentsRepo {
       .prepare("SELECT id FROM agents WHERE id = ?")
       .get(id) as { id?: string } | undefined;
     if (!exists?.id) return null;
-    const cfg =
-      input.default_llm_configuration &&
-      typeof input.default_llm_configuration === "object" &&
-      !Array.isArray(input.default_llm_configuration)
-        ? input.default_llm_configuration
-        : null;
+    const cfg = parseAgentDefaultLlmConfigurationStrict(
+      input.default_llm_configuration,
+      `agents.update:${id}`,
+    );
     const modelRefProviderId = String(input.model_reference?.provider_id ?? "").trim();
     const modelRefModelName = String(input.model_reference?.model_name ?? "").trim();
     const defaultModelPresetId =

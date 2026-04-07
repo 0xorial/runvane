@@ -101,25 +101,10 @@ export class ContinueConversationTaskProcessor {
     rules?: Record<string, unknown>;
   } {
     const agent = agentId ? this.agents.get(agentId) : null;
-    const cfg = agent?.default_llm_configuration ?? {};
-    const toolsCfg =
-      cfg.tools && typeof cfg.tools === "object" && !Array.isArray(cfg.tools)
-        ? (cfg.tools as Record<string, unknown>)
-        : {};
-    const toolCfgRaw = toolsCfg[toolName];
-    const toolCfg =
-      toolCfgRaw && typeof toolCfgRaw === "object" && !Array.isArray(toolCfgRaw)
-        ? (toolCfgRaw as Record<string, unknown>)
-        : {};
+    const toolCfg = agent?.default_llm_configuration?.tools?.[toolName];
     const enabled =
-      toolCfg.enabled === undefined ? true : toolCfg.enabled === true;
-    const policyRaw = String(toolCfg.policy ?? "allow");
-    const policy: ToolPermission =
-      policyRaw === "forbid" ||
-      policyRaw === "ask_user" ||
-      policyRaw === "allow"
-        ? policyRaw
-        : "allow";
+      toolCfg?.enabled === undefined ? true : toolCfg.enabled === true;
+    const policy: ToolPermission = toolCfg?.policy ?? "allow";
     const tool = this.tools.get(toolName);
     const defaultRules =
       tool &&
@@ -127,11 +112,7 @@ export class ContinueConversationTaskProcessor {
       tool.getDefaultRules() != null
         ? (tool.getDefaultRules() as unknown as Record<string, unknown>)
         : {};
-    const rulesRaw = toolCfg.rules;
-    const rules =
-      rulesRaw && typeof rulesRaw === "object" && !Array.isArray(rulesRaw)
-        ? (rulesRaw as Record<string, unknown>)
-        : defaultRules;
+    const rules = toolCfg?.rules ?? defaultRules;
     return { enabled, policy, ...(rules ? { rules } : {}) };
   }
 
@@ -141,11 +122,9 @@ export class ContinueConversationTaskProcessor {
   } {
     const agentId = lastUserMessage.agentId;
     const agent = agentId ? this.agents.get(agentId) : null;
-    const cfg = agent?.default_llm_configuration ?? {};
-    const cfgProviderId =
-      typeof cfg.provider_id === "string" ? cfg.provider_id : undefined;
-    const cfgModelName =
-      typeof cfg.model_name === "string" ? cfg.model_name : undefined;
+    const cfg = agent?.default_llm_configuration;
+    const cfgProviderId = cfg?.provider_id;
+    const cfgModelName = cfg?.model_name ?? cfg?.model;
 
     const llmProviderId =
       lastUserMessage.llmProviderId ??

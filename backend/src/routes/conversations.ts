@@ -36,14 +36,22 @@ export function createConversationsRouter(runtime: Runtime) {
     const parsed = await parseJsonObjectOr400(c);
     if (!parsed.ok) return parsed.response;
     const title = parseRenameConversationTitle(parsed.value);
-    const result = runtime.renameConversation(conversationId, title);
-    if (result.kind === "conversation_not_found") {
+    if (!runtime.conversations.exists(conversationId)) {
       return c.json({ detail: "conversation not found" }, 404);
     }
-    if (result.kind === "invalid_title") {
+    const next = String(title || "").trim();
+    if (!next) {
       return c.json({ detail: "title is required" }, 400);
     }
-    return c.json(result.conversation);
+    const updated = runtime.conversations.updateTitle(conversationId, next);
+    if (!updated) {
+      return c.json({ detail: "conversation not found" }, 404);
+    }
+    runtime.hub.publish(conversationId, {
+      type: SseType.CONVERSATION_UPDATED,
+      conversation: updated,
+    });
+    return c.json(updated);
   });
 
   r.get("/:conversationId/messages", (c) => {

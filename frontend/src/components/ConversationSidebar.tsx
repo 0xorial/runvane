@@ -135,7 +135,7 @@ export function ConversationSidebar({
   }
 
   return (
-    <aside className="flex min-h-0 w-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar">
       {/* Matches frontend2/src/pages/Index.tsx sidebar header */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5 py-2">
         <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden />

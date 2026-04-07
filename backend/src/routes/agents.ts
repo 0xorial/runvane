@@ -21,7 +21,13 @@ export function createAgentsRouter(runtime: Runtime) {
     const parsed = await parseJsonObjectOr400(c);
     if (!parsed.ok) return parsed.response;
 
-    const input = parsePostAgentInput(parsed.value);
+    let input;
+    try {
+      input = parsePostAgentInput(parsed.value);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "invalid request body";
+      return c.json({ detail }, 400);
+    }
     const created = runtime.agents.create(input);
     return c.json(toAgentResponse(created));
   });
@@ -41,7 +47,13 @@ export function createAgentsRouter(runtime: Runtime) {
     const parsed = await parseJsonObjectOr400(c);
     if (!parsed.ok) return parsed.response;
 
-    const putInput = parsePutAgentInput(parsed.value);
+    let putInput;
+    try {
+      putInput = parsePutAgentInput(parsed.value);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "invalid request body";
+      return c.json({ detail }, 400);
+    }
     const existingFallback: AgentInputFallback = {
       name: existing.name,
       system_prompt: existing.system_prompt,
