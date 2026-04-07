@@ -17,7 +17,7 @@ function startTimestampMs(messageCreatedAt: string): number {
 }
 
 function isDone(entry: PlannerLlmStreamEntry): boolean {
-  return Number.isFinite(Number(entry.thoughtMs));
+  return typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs);
 }
 
 export function ThinkingRow({ entry }: ThinkingRowProps) {
@@ -75,8 +75,8 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
 
   void tick;
   const elapsedMs = Math.max(0, Date.now() - startedAt);
-  const durationMs = Number.isFinite(Number(entry.thoughtMs))
-    ? Number(entry.thoughtMs)
+  const durationMs = typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs)
+    ? entry.thoughtMs
     : elapsedMs;
   const title = done
     ? failed

@@ -19,7 +19,7 @@ import { GetCurrentTimeTool } from "../tools/builtins/getCurrentTime/tool.js";
 import { CurlTool } from "../tools/builtins/curl/tool.js";
 import type { UserMessageEntry } from "../types/chatEntry.js";
 import { SseType } from "../types/sse.js";
-import { createAutoTitleHandler } from "./runtime/autoTitle.js";
+import { maybeAutoTitleConversation } from "./runtime/autoTitle.js";
 import {
   createTaskEnqueueHelpers,
   registerTaskQueueHandler,
@@ -96,12 +96,6 @@ export function createRuntime(opts: {
     continueConversationTaskProcessor,
     runToolTaskProcessor,
   });
-  const maybeAutoTitleConversation = createAutoTitleHandler({
-    conversations,
-    chatEntries,
-    llmProviderSettings,
-    hub,
-  });
 
   function enqueueUserMessage(
     conversationId: string,
@@ -109,9 +103,6 @@ export function createRuntime(opts: {
   ): EnqueueUserMessageResult {
     const entriesBefore = chatEntries.countEntries(conversationId);
     const text = String(body.message ?? "").trim();
-    if (entriesBefore === 0) {
-      maybeAutoTitleConversation(conversationId, text);
-    }
     const attachmentIds = Array.isArray(body.attachment_ids)
       ? body.attachment_ids.map((x) => String(x || "").trim()).filter(Boolean)
       : [];
@@ -199,6 +190,16 @@ export function createRuntime(opts: {
       { conversationId, taskId: task.id },
       "[chat] continue_conversation task enqueued"
     );
+    if (entriesBefore === 0) {
+      void maybeAutoTitleConversation({
+        conversations,
+        chatEntries,
+        llmProviderSettings,
+        hub,
+        conversationId,
+        firstMessage: text,
+      });
+    }
     return { kind: "ok", taskId: task.id };
   }
 
