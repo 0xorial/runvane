@@ -30,6 +30,11 @@ export type ChatAgentSelection = {
   modelPresetId: number | null;
 };
 
+type LlmSelection = {
+  provider_id: string;
+  model: string;
+};
+
 type ChatAgentToolbarProps = {
   onSelectionChange: (selection: ChatAgentSelection) => void;
 };
@@ -44,10 +49,7 @@ export function ChatAgentToolbar({
   const [allAgents, setAllAgents] = useState<AgentListItemResponse[] | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [allLlms, setAllLlms] = useState<ModelGroup[]>([]);
-  const [selectedLlm, setSelectedLlm] = useState<{
-    provider_id: string;
-    model: string;
-  } | null>(null);
+  const [selectedLlm, setSelectedLlm] = useState<LlmSelection | null>(null);
   const [allPresets, setAllPresets] = useState<ModelPresetResponse[] | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(() =>
     presetIdFromSearchParams(urlParams),
@@ -181,10 +183,47 @@ export function ChatAgentToolbar({
     () => getAgentLlm(currentAgent),
     [currentAgent],
   );
+  const firstAvailableLlm = useMemo<LlmSelection | null>(() => {
+    for (const group of allLlms) {
+      const first = group.models[0];
+      if (first == null) continue;
+      if (typeof first === "string") {
+        const model = first.trim();
+        if (!model) continue;
+        return { provider_id: String(group.id || "").trim(), model };
+      }
+      const model = String(first.value || "").trim();
+      if (!model) continue;
+      return { provider_id: String(group.id || "").trim(), model };
+    }
+    return null;
+  }, [allLlms]);
+
+  const normalizedAgentDefault = useMemo<LlmSelection | null>(() => {
+    const provider_id = String(agentDefaultLlm.provider_id || "").trim();
+    const model = String(agentDefaultLlm.model || "").trim();
+    if (provider_id && model) return { provider_id, model };
+    return null;
+  }, [agentDefaultLlm]);
+
   useEffect(() => {
-    setSelectedLlm(agentDefaultLlm);
-  }, [selectedAgentId, agentDefaultLlm]);
-  const effectiveLlm = selectedLlm ?? agentDefaultLlm;
+    setSelectedLlm(normalizedAgentDefault ?? firstAvailableLlm);
+  }, [selectedAgentId, normalizedAgentDefault, firstAvailableLlm]);
+
+  useEffect(() => {
+    if (selectedLlm && selectedLlm.provider_id && selectedLlm.model) return;
+    if (normalizedAgentDefault) {
+      setSelectedLlm(normalizedAgentDefault);
+      return;
+    }
+    if (firstAvailableLlm) {
+      setSelectedLlm(firstAvailableLlm);
+    }
+  }, [selectedLlm, normalizedAgentDefault, firstAvailableLlm]);
+
+  const effectiveLlm: LlmSelection = selectedLlm ??
+    normalizedAgentDefault ??
+    firstAvailableLlm ?? { provider_id: "", model: "" };
   const presetGroups: ModelGroup[] = useMemo(
     () => [
       {
@@ -266,7 +305,8 @@ export function ChatAgentToolbar({
                   ? String(providerId)
                   : String(
                       effectiveLlm.provider_id ||
-                        agentDefaultLlm.provider_id ||
+                        normalizedAgentDefault?.provider_id ||
+                        firstAvailableLlm?.provider_id ||
                         "",
                     ).trim(),
                 model: m,
