@@ -1,7 +1,6 @@
 import type { UserMessageEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
 import { ChatMessageShell } from "../ChatMessageShell";
-import { LlmMetaBadge } from "../LlmMetaBadge";
 
 function formatBytes(sizeBytes: number): string {
   if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${Math.max(0, Math.floor(sizeBytes || 0))} B`;
@@ -11,12 +10,8 @@ function formatBytes(sizeBytes: number): string {
 
 export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
   const attachments = Array.isArray(entry.attachments) ? entry.attachments : [];
-  const model = String(entry.llmModel ?? "").trim();
   return (
-    <ChatMessageShell
-      role="user"
-      badge={model ? <LlmMetaBadge model={model} /> : undefined}
-    >
+    <ChatMessageShell role="user">
       {entry.text ? (
         <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
           {entry.text}

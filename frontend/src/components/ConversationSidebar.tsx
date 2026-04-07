@@ -17,7 +17,10 @@ import {
 } from "../api/client";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
-import { formatRelativeChatTime } from "../utils/formatRelativeChatTime";
+import {
+  formatExactChatTime,
+  formatRelativeChatTime,
+} from "../utils/formatRelativeChatTime";
 import { notifyError } from "../utils/toast";
 import { LlmMetaBadge } from "./chat/LlmMetaBadge";
 
@@ -206,7 +209,9 @@ export function ConversationSidebar({
         <div className="scrollbar-thin flex h-full min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 py-1.5">
           {conversations.map((c) => {
             const active = activeConversationId === c.id;
-            const stamp = formatRelativeChatTime(c.updated_at || c.created_at);
+            const timestampIso = c.updated_at || c.created_at;
+            const stamp = formatRelativeChatTime(timestampIso);
+            const stampExact = formatExactChatTime(timestampIso);
             const liveTitle = streamedTitles[c.id] ?? "";
             const promptTokens = Number(c.prompt_tokens_total ?? 0);
             const completionTokens = Number(c.completion_tokens_total ?? 0);
@@ -233,7 +238,10 @@ export function ConversationSidebar({
                     </span>
                   </div>
                   {stamp ? (
-                    <span className="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground">
+                    <span
+                      className="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground"
+                      title={stampExact}
+                    >
                       {stamp}
                     </span>
                   ) : null}

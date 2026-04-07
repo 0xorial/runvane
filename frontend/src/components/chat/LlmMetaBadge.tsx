@@ -12,6 +12,21 @@ export type LlmMetaBadgeProps = {
   className?: string;
 };
 
+function formatCompactNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}b`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return value.toLocaleString();
+}
+
+function formatExactUsd(value: number): string {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 8,
+  });
+}
+
 function formatUsd(value: number): string {
   if (value > 0 && value < 0.01) return "<0.01";
   if (value < 0 && value > -0.01) return ">-0.01";
@@ -38,19 +53,28 @@ export function LlmMetaBadge({
   const segments: ReactNode[] = [];
   if (modelShort) segments.push(<span key="model">{modelShort}</span>);
   if (hasTokens) {
+    const promptExact = promptTokens.toLocaleString();
+    const completionExact = completionTokens.toLocaleString();
+    const totalExact = totalTokens.toLocaleString();
     segments.push(
       showTokenBreakdown ? (
-        <span key="tok">
-          in {promptTokens.toLocaleString()} / out {completionTokens.toLocaleString()} tok
+        <span key="tok" title={`in ${promptExact} / out ${completionExact} tok`}>
+          in {formatCompactNumber(promptTokens)} / out {formatCompactNumber(completionTokens)} tok
         </span>
       ) : (
-        <span key="tok">{totalTokens.toLocaleString()} tok</span>
+        <span key="tok" title={`${totalExact} tok`}>
+          {formatCompactNumber(totalTokens)} tok
+        </span>
       ),
     );
   }
   if (hasDuration) segments.push(<span key="s">{(durationMs / 1000).toFixed(1)}s</span>);
   if (estimatedCostUsd != null) {
-    segments.push(<span key="usd">${formatUsd(estimatedCostUsd)}</span>);
+    segments.push(
+      <span key="usd" title={`$${formatExactUsd(estimatedCostUsd)}`}>
+        ${formatUsd(estimatedCostUsd)}
+      </span>,
+    );
   }
 
   if (segments.length === 0) return null;

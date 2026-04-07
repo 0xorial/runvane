@@ -27,3 +27,17 @@ export function formatRelativeChatTime(iso?: string | null): string {
     year: diffMs > 365 * 86_400_000 ? "numeric" : undefined,
   });
 }
+
+export function formatExactChatTime(iso?: string | null): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  return new Date(t).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
