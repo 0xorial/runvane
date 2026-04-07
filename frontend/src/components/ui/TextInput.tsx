@@ -1,4 +1,4 @@
-import type { HTMLInputTypeAttribute } from "react";
+import type { HTMLInputTypeAttribute, Ref } from "react";
 
 type TextInputProps = {
   value: string;
@@ -10,6 +10,7 @@ type TextInputProps = {
   clearButtonClassName?: string;
   clearAriaLabel?: string;
   type?: HTMLInputTypeAttribute;
+  inputRef?: Ref<HTMLInputElement>;
 };
 
 export function TextInput({
@@ -22,12 +23,14 @@ export function TextInput({
   clearButtonClassName = "",
   clearAriaLabel = "Clear input",
   type = "text",
+  inputRef,
 }: TextInputProps) {
   const hasValue = String(value || "").length > 0;
 
   if (!showClearButton) {
     return (
       <input
+        ref={inputRef}
         type={type}
         className={className}
         placeholder={placeholder}
@@ -40,6 +43,7 @@ export function TextInput({
   return (
     <div className={wrapperClassName}>
       <input
+        ref={inputRef}
         type={type}
         className={className}
         placeholder={placeholder}

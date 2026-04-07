@@ -9,6 +9,7 @@ type ModelSelectorProps = {
   disabled?: boolean;
   placeholder?: string;
   searchPlaceholder?: string;
+  buttonClassName?: string;
 };
 
 export function ModelSelector({
@@ -18,6 +19,7 @@ export function ModelSelector({
   disabled = false,
   placeholder = "Select model",
   searchPlaceholder = "Search model",
+  buttonClassName,
 }: ModelSelectorProps) {
   return (
     <ModelDropdown
@@ -27,6 +29,7 @@ export function ModelSelector({
       disabled={disabled}
       placeholder={placeholder}
       searchPlaceholder={searchPlaceholder}
+      buttonClassName={buttonClassName}
       footer={<Link to="/settings/model-presets">Model configurations ↗</Link>}
     />
   );

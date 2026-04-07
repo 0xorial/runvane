@@ -6,7 +6,7 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from "react";
-import { Globe, Plus, SendHorizontal } from "lucide-react";
+import { Paperclip, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -28,6 +28,7 @@ export type MessageComposerProps = {
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onPickFiles: () => void;
   attachmentsSlot?: ReactNode;
+  selectionSlot?: ReactNode;
   placeholder?: string;
 };
 
@@ -47,6 +48,7 @@ export function MessageComposer({
   onFileInputChange,
   onPickFiles,
   attachmentsSlot,
+  selectionSlot,
   placeholder = "Send a message…",
 }: MessageComposerProps) {
   useEffect(() => {
@@ -79,9 +81,9 @@ export function MessageComposer({
 
         <div
           className={cn(
-            "flex flex-col gap-0 rounded-xl border border-border bg-secondary/30 p-1.5 shadow-sm transition-[box-shadow,border-color]",
+            "flex flex-col gap-0 rounded-2xl border border-border/80 bg-card/70 p-1.5 shadow-sm transition-[box-shadow,border-color]",
             "focus-within:border-primary/35 focus-within:shadow-[0_0_0_1px_hsl(var(--primary)/0.22)]",
-            "dark:bg-secondary/25 dark:focus-within:border-primary/40",
+            "dark:bg-card/55 dark:focus-within:border-primary/40",
           )}
         >
           <textarea
@@ -99,24 +101,25 @@ export function MessageComposer({
             )}
           />
 
-          <div className="flex items-center justify-between gap-1 px-0.5 pt-0.5">
-            <div className="flex min-w-0 items-center gap-0">
+          <div className="mt-1 flex items-center justify-between gap-2 border-t border-border/60 px-0.5 pt-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="h-6 w-6 shrink-0 rounded-full text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+                size="sm"
+                className="h-6 shrink-0 gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
                 onClick={onPickFiles}
                 aria-label="Attach files"
               >
-                <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <Paperclip className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <span className="text-xs">Attach</span>
               </Button>
-              <span
-                className="pointer-events-none flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground/30"
-                aria-hidden
-              >
-                <Globe className="h-3.5 w-3.5" strokeWidth={1.75} />
-              </span>
+              {selectionSlot ? (
+                <>
+                  <span className="h-4 w-px shrink-0 bg-border/80" aria-hidden />
+                  <div className="min-w-0 flex-1 overflow-hidden">{selectionSlot}</div>
+                </>
+              ) : null}
             </div>
 
             <AsyncButton

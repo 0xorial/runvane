@@ -110,7 +110,6 @@ export function ChatPage({
         onOpenSettings={onOpenSettings}
         settingsPressed={settingsPressed}
       />
-      <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} />
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <StickToBottomScrollArea
@@ -151,6 +150,9 @@ export function ChatPage({
         onPickFiles={() => fileInputRef.current?.click()}
         canSend={canSend}
         placeholder="Send a message…"
+        selectionSlot={
+          <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />
+        }
         attachmentsSlot={
           selectedFiles.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">

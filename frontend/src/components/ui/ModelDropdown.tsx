@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DropdownItem, ModelGroup } from "../../pages/settings/helpers";
 import { TextInput } from "./TextInput";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 
 function normalizeToken(value: unknown): string {
   return String(value || "")
@@ -26,6 +27,7 @@ type ModelDropdownProps = {
   searchPlaceholder?: string;
   footer?: ReactNode;
   disabled?: boolean;
+  buttonClassName?: string;
 };
 
 export function ModelDropdown({
@@ -36,50 +38,20 @@ export function ModelDropdown({
   searchPlaceholder = "Search model",
   footer,
   disabled = false,
+  buttonClassName,
 }: ModelDropdownProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (disabled) setOpen(false);
   }, [disabled]);
 
   useEffect(() => {
-    function onDocClick(e: MouseEvent) {
-      if (!rootRef.current) return;
-      const t = e.target;
-      if (t instanceof Node && !rootRef.current.contains(t)) setOpen(false);
-    }
-    window.addEventListener("mousedown", onDocClick);
-    return () => window.removeEventListener("mousedown", onDocClick);
-  }, []);
-
-  useEffect(() => {
     if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase?.();
-      const isTypingInField =
-        tag === "input" || tag === "textarea" || target?.isContentEditable;
-      if (isTypingInField) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-      if (e.key === "Backspace") {
-        e.preventDefault();
-        setQuery((prev) => prev.slice(0, -1));
-        return;
-      }
-      if (e.key === "Escape") {
-        setOpen(false);
-        return;
-      }
-      if (e.key.length === 1) {
-        setQuery((prev) => prev + e.key);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const id = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
   }, [open]);
 
   const normalizedQuery = normalizeToken(query);
@@ -110,38 +82,43 @@ export function ModelDropdown({
   }, [groups, value]);
 
   return (
-    <div className={cn("relative w-full", disabled && "[&_button]:cursor-not-allowed [&_button]:opacity-55")} ref={rootRef}>
-      <button
-        type="button"
-        className="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground"
-        disabled={disabled}
-        onClick={() => {
-          if (disabled) return;
-          setOpen((v) => !v);
-        }}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground",
+            disabled && "cursor-not-allowed opacity-55",
+            buttonClassName,
+          )}
+          disabled={disabled}
+        >
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate whitespace-nowrap",
+              !selectedLabel && "text-muted-foreground",
+            )}
+          >
+            {selectedLabel || placeholder}
+          </span>
+          <span
+            className={cn(
+              "text-muted-foreground transition-transform duration-150",
+              open && "rotate-180",
+            )}
+          >
+            ⌄
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="center"
+        sideOffset={6}
+        className="z-[1400] w-fit max-w-[90vw] overflow-hidden rounded-lg border border-border bg-popover p-0 shadow-xl"
       >
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate whitespace-nowrap",
-            !selectedLabel && "text-muted-foreground",
-          )}
-        >
-          {selectedLabel || placeholder}
-        </span>
-        <span
-          className={cn(
-            "text-muted-foreground transition-transform duration-150",
-            open && "rotate-180",
-          )}
-        >
-          ⌄
-        </span>
-      </button>
-
-      {open ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[1400] overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
           <div className="border-b border-border p-2.5">
             <TextInput
+              inputRef={searchInputRef}
               value={query}
               onChange={setQuery}
               placeholder={searchPlaceholder}
@@ -172,7 +149,7 @@ export function ModelDropdown({
                       key={`${g.id}:${v}`}
                       type="button"
                       className={cn(
-                        "w-full cursor-pointer rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10",
+                        "block cursor-pointer whitespace-nowrap rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10",
                         v === value && "bg-primary/15",
                       )}
                       onClick={() => {
@@ -193,8 +170,7 @@ export function ModelDropdown({
               {footer}
             </div>
           ) : null}
-        </div>
-      ) : null}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

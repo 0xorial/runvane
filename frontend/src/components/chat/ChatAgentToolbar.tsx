@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Bot, Cpu, SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
 import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
@@ -37,13 +38,21 @@ type LlmSelection = {
 
 type ChatAgentToolbarProps = {
   onSelectionChange: (selection: ChatAgentSelection) => void;
+  showAgent?: boolean;
+  embedded?: boolean;
 };
 
 const toolbarLabelClass =
   "flex min-w-0 w-full flex-nowrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground";
+const toolbarLabelEmbeddedClass =
+  "flex min-w-0 shrink-0 items-center gap-1 text-xs text-muted-foreground";
+const embeddedDropdownButtonClass =
+  "min-h-[24px] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45 focus-visible:ring-1 focus-visible:ring-border";
 
 export function ChatAgentToolbar({
   onSelectionChange,
+  showAgent = true,
+  embedded = false,
 }: ChatAgentToolbarProps) {
   const [urlParams, setUrlParams] = useSearchParams();
   const [allAgents, setAllAgents] = useState<AgentListItemResponse[] | null>(null);
@@ -255,11 +264,105 @@ export function ChatAgentToolbar({
 
   if (allAgents != null && allAgents.length === 0) {
     return (
-      <div className="relative z-10 flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5 text-sm">
+      <div
+        className={cn(
+          "relative z-10 flex shrink-0 items-center gap-2 text-sm",
+          embedded
+            ? "rounded-md border border-border/70 bg-background/60 px-2 py-1.5"
+            : "border-b border-border bg-muted/30 px-3 py-1.5",
+        )}
+      >
         <span className="text-muted-foreground">No agents configured.</span>
         <Button variant="outline" size="sm" className="ml-auto" asChild>
           <Link to="/settings/agents">Configure agents</Link>
         </Button>
+      </div>
+    );
+  }
+
+  if (embedded) {
+    return (
+      <div className="relative z-10 flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pr-1 scrollbar-thin">
+        {showAgent ? (
+          <label className={toolbarLabelEmbeddedClass}>
+            <span className="inline-flex shrink-0 items-center justify-center text-muted-foreground">
+              <Bot className="h-3.5 w-3.5" strokeWidth={1.85} aria-hidden />
+              <span className="sr-only">Agent</span>
+            </span>
+            <div className="min-w-[96px] max-w-[176px]">
+              <ModelDropdown
+                value={selectedAgentId}
+                onChange={(id) => setAgentIdAndUrl(id)}
+                groups={agentGroups}
+                placeholder="Select agent"
+                searchPlaceholder="Search agent"
+                buttonClassName={embeddedDropdownButtonClass}
+                footer={
+                  <Link
+                    to="/settings/agents"
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    Configure agents ↗
+                  </Link>
+                }
+              />
+            </div>
+          </label>
+        ) : null}
+        <span className="h-4 w-px shrink-0 bg-border/80" aria-hidden />
+        <label className={toolbarLabelEmbeddedClass}>
+          <span className="inline-flex shrink-0 items-center justify-center text-muted-foreground">
+            <Cpu className="h-3.5 w-3.5" strokeWidth={1.85} aria-hidden />
+            <span className="sr-only">Model</span>
+          </span>
+          <div className="min-w-[104px] max-w-[188px]">
+            <ModelSelector
+              value={effectiveLlm.model || ""}
+              onChange={(m, providerId) => {
+                setSelectedLlm({
+                  provider_id: providerId
+                    ? String(providerId)
+                    : String(
+                        effectiveLlm.provider_id ||
+                          normalizedAgentDefault?.provider_id ||
+                          firstAvailableLlm?.provider_id ||
+                          "",
+                      ).trim(),
+                  model: m,
+                });
+              }}
+              modelGroups={allLlms}
+              placeholder="Select model"
+              searchPlaceholder="Search model"
+              buttonClassName={embeddedDropdownButtonClass}
+            />
+          </div>
+        </label>
+        <span className="h-4 w-px shrink-0 bg-border/80" aria-hidden />
+        <label className={toolbarLabelEmbeddedClass}>
+          <span className="inline-flex shrink-0 items-center justify-center text-muted-foreground">
+            <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.85} aria-hidden />
+            <span className="sr-only">Preset</span>
+          </span>
+          <div className="min-w-[92px] max-w-[168px]">
+            <ModelDropdown
+              value={selectedPresetId != null ? String(selectedPresetId) : ""}
+              onChange={(id) => setPresetIdAndUrl(id)}
+              groups={presetGroups}
+              placeholder="No preset"
+              searchPlaceholder="Search preset"
+              buttonClassName={embeddedDropdownButtonClass}
+              footer={
+                <Link
+                  to="/settings/model-presets"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  Configure presets ↗
+                </Link>
+              }
+            />
+          </div>
+        </label>
       </div>
     );
   }
@@ -269,32 +372,44 @@ export function ChatAgentToolbar({
       className={cn(
         // Stack above the message list so absolute ModelDropdown panels are not covered by
         // later siblings (scroll area paints after this row in DOM order).
-        "relative z-10 grid shrink-0 gap-2 border-b border-border bg-card/40 px-3 py-1.5",
-        "grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]",
-        "items-end text-sm backdrop-blur-sm",
+        "relative z-10 grid shrink-0 gap-2",
+        embedded
+          ? "rounded-md border border-border/70 bg-background/60 px-2 py-1.5"
+          : "border-b border-border bg-card/40 px-3 py-1.5 backdrop-blur-sm",
+        embedded
+          ? "grid-cols-1 md:grid-cols-[repeat(3,minmax(0,1fr))]"
+          : "grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]",
+        "items-end",
       )}
     >
-      <label className={toolbarLabelClass}>
-        Agent
-        <div className="min-w-0 flex-1">
-          <ModelDropdown
-            value={selectedAgentId}
-            onChange={(id) => setAgentIdAndUrl(id)}
-            groups={agentGroups}
-            placeholder="Select agent"
-            searchPlaceholder="Search agent"
-            footer={
-              <Link
-                to="/settings/agents"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                Configure agents ↗
-              </Link>
-            }
-          />
-        </div>
-      </label>
-      <label className={cn(toolbarLabelClass, "min-w-0")}>
+      {showAgent ? (
+        <label className={embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass}>
+          Agent
+          <div className="min-w-0 flex-1">
+            <ModelDropdown
+              value={selectedAgentId}
+              onChange={(id) => setAgentIdAndUrl(id)}
+              groups={agentGroups}
+              placeholder="Select agent"
+              searchPlaceholder="Search agent"
+              footer={
+                <Link
+                  to="/settings/agents"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  Configure agents ↗
+                </Link>
+              }
+            />
+          </div>
+        </label>
+      ) : null}
+      <label
+        className={cn(
+          embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass,
+          "min-w-0",
+        )}
+      >
         Model
         <div className="min-w-0 flex-1">
           <ModelSelector
@@ -318,7 +433,7 @@ export function ChatAgentToolbar({
           />
         </div>
       </label>
-      <label className={toolbarLabelClass}>
+      <label className={embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass}>
         Preset
         <div className="min-w-0 flex-1">
           <ModelDropdown
