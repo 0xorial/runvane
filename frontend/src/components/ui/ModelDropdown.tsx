@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { DropdownItem, ModelGroup } from "../../pages/settings/helpers";
 import { TextInput } from "./TextInput";
 import { cn } from "@/lib/utils";
@@ -103,11 +104,12 @@ export function ModelDropdown({
           </span>
           <span
             className={cn(
-              "text-muted-foreground transition-transform duration-150",
+              "inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground transition-transform duration-150",
               open && "rotate-180",
             )}
+            aria-hidden
           >
-            ⌄
+            <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
           </span>
         </button>
       </PopoverTrigger>
