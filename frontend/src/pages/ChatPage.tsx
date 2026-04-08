@@ -63,6 +63,7 @@ export function ChatPage({
   const [input, setInput] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [topAnchorEntryId, setTopAnchorEntryId] = useState<string | null>(null);
   const [agentSelection, setAgentSelection] = useState<ChatAgentSelection>(
     () => ({
       agentId: agentIdFromSearchParams(searchParams) || "",
@@ -101,6 +102,21 @@ export function ChatPage({
     };
   }, [selectedFiles]);
 
+  useEffect(() => {
+    if (!conversationId || chatEntries.length === 0) {
+      setTopAnchorEntryId(null);
+      return;
+    }
+    for (let i = chatEntries.length - 1; i >= 0; i -= 1) {
+      const row = chatEntries[i].get();
+      if (row.type === "user-message") {
+        setTopAnchorEntryId(row.id);
+        return;
+      }
+    }
+    setTopAnchorEntryId(null);
+  }, [conversationId, chatEntries]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ChatTitlePanel
@@ -116,10 +132,20 @@ export function ChatPage({
             className={cn(
               "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-2 py-2",
             )}
+            topAnchorEntryId={topAnchorEntryId}
           >
-            {chatEntries.map((entry$) => (
-              <ChatMessageRow key={messageRowKey(entry$)} entry$={entry$} />
-            ))}
+            {chatEntries.map((entry$) => {
+              const entry = entry$.get();
+              return (
+                <div
+                  key={messageRowKey(entry$)}
+                  data-chat-entry-id={entry.id}
+                  data-chat-entry-type={entry.type}
+                >
+                  <ChatMessageRow entry$={entry$} />
+                </div>
+              );
+            })}
           </StickToBottomScrollArea>
         </main>
       </div>
@@ -205,7 +231,7 @@ export function ChatPage({
             if (!cid) {
               const created = await createConversation();
               cid = created.id;
-              appendOptimisticUserMessage({
+              const rowId = appendOptimisticUserMessage({
                 conversationId: cid,
                 text,
                 agentId: agentSelection.agentId,
@@ -214,6 +240,7 @@ export function ChatPage({
                 modelPresetId: agentSelection.modelPresetId,
                 attachments: uploadedAttachments,
               });
+              setTopAnchorEntryId(rowId);
               const q = searchParams.toString();
               navigate(
                 {
@@ -223,7 +250,7 @@ export function ChatPage({
                 { replace: true },
               );
             } else {
-              appendOptimisticUserMessage({
+              const rowId = appendOptimisticUserMessage({
                 conversationId: cid,
                 text,
                 agentId: agentSelection.agentId,
@@ -232,6 +259,7 @@ export function ChatPage({
                 modelPresetId: agentSelection.modelPresetId,
                 attachments: uploadedAttachments,
               });
+              setTopAnchorEntryId(rowId);
             }
             setInput("");
             setSelectedFiles([]);

@@ -1,70 +1,127 @@
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-/** Pin state resets on remount — pass a React `key` when the scrolled “document” is replaced. */
 export type StickToBottomScrollAreaProps = {
   className?: string;
-  pinThresholdPx?: number;
+  topAnchorEntryId?: string | null;
   children: ReactNode;
 };
 
 export function StickToBottomScrollArea({
   className,
-  pinThresholdPx = 120,
+  topAnchorEntryId = null,
   children,
 }: StickToBottomScrollAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const pinToBottomRef = useRef(true);
+  const spacerRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const triesRef = useRef(0);
+  const [bottomSpacerPx, setBottomSpacerPx] = useState(0);
 
-  const scrollToBottomIfPinned = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || !pinToBottomRef.current) return;
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
-    });
+  const cancelAlignRaf = useCallback(() => {
+    if (rafRef.current == null) return;
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
   }, []);
 
-  useEffect(() => {
-    const scrollEl = scrollRef.current;
+  const getAnchor = useCallback((entryId: string): HTMLElement | null => {
     const contentEl = contentRef.current;
-    if (!scrollEl || !contentEl) return;
+    if (!contentEl) return null;
+    return contentEl.querySelector<HTMLElement>(`[data-chat-entry-id="${entryId}"]`);
+  }, []);
 
+  const alignOnce = useCallback(
+    (entryId: string): boolean => {
+      const scrollEl = scrollRef.current;
+      const contentEl = contentRef.current;
+      const spacerEl = spacerRef.current;
+      const anchor = getAnchor(entryId);
+      if (!scrollEl || !contentEl || !spacerEl || !anchor) return false;
+
+      const viewportHeight = scrollEl.clientHeight;
+      const anchorTop = anchor.offsetTop;
+      const realContentHeight = Math.max(0, contentEl.scrollHeight - spacerEl.offsetHeight);
+      const naturalMaxScrollTop = Math.max(0, realContentHeight - viewportHeight);
+      const requiredTailSpacer = Math.max(0, anchorTop - naturalMaxScrollTop + 8);
+
+      if (Math.abs(requiredTailSpacer - bottomSpacerPx) > 1) {
+        setBottomSpacerPx(requiredTailSpacer);
+        return false;
+      }
+
+      scrollEl.scrollTop = anchorTop;
+      const deltaToTop = Math.abs(anchor.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top);
+      return deltaToTop <= 1;
+    },
+    [bottomSpacerPx, getAnchor],
+  );
+
+  const scheduleAlign = useCallback(
+    (entryId: string) => {
+      cancelAlignRaf();
+      triesRef.current = 0;
+      const run = () => {
+        if (!topAnchorEntryId || topAnchorEntryId !== entryId) return;
+        const done = alignOnce(entryId);
+        if (done) {
+          rafRef.current = null;
+          return;
+        }
+        triesRef.current += 1;
+        if (triesRef.current > 30) {
+          rafRef.current = null;
+          return;
+        }
+        rafRef.current = requestAnimationFrame(run);
+      };
+      rafRef.current = requestAnimationFrame(run);
+    },
+    [alignOnce, cancelAlignRaf, topAnchorEntryId],
+  );
+
+  useEffect(() => {
+    if (!topAnchorEntryId) {
+      cancelAlignRaf();
+      setBottomSpacerPx(0);
+      return;
+    }
+    scheduleAlign(topAnchorEntryId);
+    return cancelAlignRaf;
+  }, [cancelAlignRaf, scheduleAlign, topAnchorEntryId]);
+
+  useEffect(() => {
+    if (!topAnchorEntryId) return;
+    const contentEl = contentRef.current;
+    const scrollEl = scrollRef.current;
+    if (!contentEl || !scrollEl) return;
     const ro = new ResizeObserver(() => {
-      scrollToBottomIfPinned();
+      scheduleAlign(topAnchorEntryId);
     });
     ro.observe(contentEl);
-
+    ro.observe(scrollEl);
     const mo = new MutationObserver(() => {
-      scrollToBottomIfPinned();
+      scheduleAlign(topAnchorEntryId);
     });
-    mo.observe(contentEl, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    scrollToBottomIfPinned();
-
+    mo.observe(contentEl, { childList: true, subtree: true, characterData: true });
     return () => {
       ro.disconnect();
       mo.disconnect();
     };
-  }, [scrollToBottomIfPinned]);
-
-  function handleScroll() {
-    const el = scrollRef.current;
-    if (!el) return;
-    const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinToBottomRef.current = fromBottom <= pinThresholdPx;
-  }
+  }, [scheduleAlign, topAnchorEntryId]);
 
   return (
-    <div ref={scrollRef} className={className} onScroll={handleScroll}>
+    <div ref={scrollRef} className={className}>
       <div
         ref={contentRef}
-        className="flex min-h-full flex-col gap-0 pb-0.5"
+        className="flex min-h-full flex-col gap-0 pb-0.5 [&>[data-chat-entry-id]]:shrink-0"
       >
         {children}
+        <div
+          ref={spacerRef}
+          aria-hidden
+          className="shrink-0"
+          style={{ height: `${bottomSpacerPx}px` }}
+        />
       </div>
     </div>
   );

@@ -387,11 +387,11 @@ export function useChatSession(conversationId: string | null | undefined) {
       llmModel?: string;
       modelPresetId?: number | null;
       attachments?: ChatAttachment[];
-    }) => {
+    }): string | null => {
       const cid = String(input.conversationId || "").trim();
-      if (!cid) return;
+      if (!cid) return null;
       const text = String(input.text || "").trim();
-      if (!text) return;
+      if (!text) return null;
       const row: UserMessageEntry = {
         type: "user-message",
         id: `optimistic-user-${crypto.randomUUID()}`,
@@ -407,6 +407,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       const current = pendingUserByConversationRef.current.get(cid) ?? [];
       pendingUserByConversationRef.current.set(cid, [...current, row]);
       storeRef.current.append(row);
+      return row.id;
     },
     []
   );
