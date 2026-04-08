@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type StickToBottomScrollAreaProps = {
   className?: string;
@@ -27,7 +33,9 @@ export function StickToBottomScrollArea({
   const getAnchor = useCallback((entryId: string): HTMLElement | null => {
     const contentEl = contentRef.current;
     if (!contentEl) return null;
-    return contentEl.querySelector<HTMLElement>(`[data-chat-entry-id="${entryId}"]`);
+    return contentEl.querySelector<HTMLElement>(
+      `[data-chat-entry-id="${entryId}"]`
+    );
   }, []);
 
   const alignOnce = useCallback(
@@ -40,9 +48,18 @@ export function StickToBottomScrollArea({
 
       const viewportHeight = scrollEl.clientHeight;
       const anchorTop = anchor.offsetTop;
-      const realContentHeight = Math.max(0, contentEl.scrollHeight - spacerEl.offsetHeight);
-      const naturalMaxScrollTop = Math.max(0, realContentHeight - viewportHeight);
-      const requiredTailSpacer = Math.max(0, anchorTop - naturalMaxScrollTop + 8);
+      const realContentHeight = Math.max(
+        0,
+        contentEl.scrollHeight - spacerEl.offsetHeight
+      );
+      const naturalMaxScrollTop = Math.max(
+        0,
+        realContentHeight - viewportHeight
+      );
+      const requiredTailSpacer = Math.max(
+        0,
+        anchorTop - naturalMaxScrollTop - 8
+      );
 
       if (Math.abs(requiredTailSpacer - bottomSpacerPx) > 1) {
         setBottomSpacerPx(requiredTailSpacer);
@@ -50,10 +67,13 @@ export function StickToBottomScrollArea({
       }
 
       scrollEl.scrollTop = anchorTop;
-      const deltaToTop = Math.abs(anchor.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top);
+      const deltaToTop = Math.abs(
+        anchor.getBoundingClientRect().top -
+          scrollEl.getBoundingClientRect().top
+      );
       return deltaToTop <= 1;
     },
-    [bottomSpacerPx, getAnchor],
+    [bottomSpacerPx, getAnchor]
   );
 
   const scheduleAlign = useCallback(
@@ -76,7 +96,7 @@ export function StickToBottomScrollArea({
       };
       rafRef.current = requestAnimationFrame(run);
     },
-    [alignOnce, cancelAlignRaf, topAnchorEntryId],
+    [alignOnce, cancelAlignRaf, topAnchorEntryId]
   );
 
   useEffect(() => {
@@ -102,7 +122,11 @@ export function StickToBottomScrollArea({
     const mo = new MutationObserver(() => {
       scheduleAlign(topAnchorEntryId);
     });
-    mo.observe(contentEl, { childList: true, subtree: true, characterData: true });
+    mo.observe(contentEl, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
     return () => {
       ro.disconnect();
       mo.disconnect();
