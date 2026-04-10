@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 
-export type StickToBottomScrollAreaProps = {
+export type AnchorTopScrollAreaProps = {
   className?: string;
   topAnchorEntryId?: string | null;
   children: ReactNode;
@@ -40,11 +40,11 @@ function calculateAnchorScrollPlan({
   return { remainingContentHeight, spacerHeight, scrollTopTarget };
 }
 
-export function StickToBottomScrollArea({
+export function AnchorTopScrollArea({
   className,
   topAnchorEntryId = null,
   children,
-}: StickToBottomScrollAreaProps) {
+}: AnchorTopScrollAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);

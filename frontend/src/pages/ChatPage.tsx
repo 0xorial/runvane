@@ -21,7 +21,7 @@ import type {
   AsyncButtonHandle,
   AsyncResult,
 } from "../components/ui/AsyncButton";
-import { StickToBottomScrollArea } from "../components/ui/StickToBottomScrollArea";
+import { AnchorTopScrollArea } from "../components/ui/StickToBottomScrollArea";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import type { ChatAttachment } from "../protocol/chatEntry";
@@ -139,7 +139,7 @@ export function ChatPage({
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* important to not add any padding to the content here */}
-          <StickToBottomScrollArea
+          <AnchorTopScrollArea
             className={cn(
               "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden"
             )}
@@ -157,7 +157,7 @@ export function ChatPage({
                 </div>
               );
             })}
-          </StickToBottomScrollArea>
+          </AnchorTopScrollArea>
         </main>
       </div>
       <MessageComposer
