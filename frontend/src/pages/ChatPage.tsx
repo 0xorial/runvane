@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { createConversation, postConversationMessage, uploadFile } from "../api/client";
+import {
+  createConversation,
+  postConversationMessage,
+  uploadFile,
+} from "../api/client";
 import {
   agentIdFromSearchParams,
   ChatAgentToolbar,
@@ -13,7 +17,10 @@ import {
   ChatMessageRow,
   messageRowKey,
 } from "../components/chat/ChatMessageRow";
-import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
+import type {
+  AsyncButtonHandle,
+  AsyncResult,
+} from "../components/ui/AsyncButton";
 import { StickToBottomScrollArea } from "../components/ui/StickToBottomScrollArea";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
@@ -26,7 +33,7 @@ async function sendMessageToConversation(
   llmProviderId: string,
   llmModel: string,
   modelPresetId: number | null,
-  attachmentIds: string[],
+  attachmentIds: string[]
 ): Promise<AsyncResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
@@ -70,21 +77,24 @@ export function ChatPage({
       llmProviderId: "",
       llmModel: "",
       modelPresetId: null,
-    }),
+    })
   );
 
   const onAgentSelectionChange = useCallback(
     (selection: ChatAgentSelection) => {
       setAgentSelection(selection);
     },
-    [],
+    []
   );
 
-  const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
+  const { chatEntries, appendOptimisticUserMessage } =
+    useChatSession(conversationId);
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
-    const id = requestAnimationFrame(() => composerTextareaRef.current?.focus());
+    const id = requestAnimationFrame(() =>
+      composerTextareaRef.current?.focus()
+    );
     return () => cancelAnimationFrame(id);
   }, [conversationId, composerTextareaRef]);
 
@@ -92,7 +102,7 @@ export function ChatPage({
     const urls = selectedFiles.map((file) =>
       file.type.startsWith("image/") || file.type === "application/pdf"
         ? URL.createObjectURL(file)
-        : "",
+        : ""
     );
     setPreviewUrls(urls);
     return () => {
@@ -128,9 +138,10 @@ export function ChatPage({
       />
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {/* important to not add any padding to the content here */}
           <StickToBottomScrollArea
             className={cn(
-              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden px-2 py-2",
+              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden"
             )}
             topAnchorEntryId={topAnchorEntryId}
           >
@@ -158,7 +169,8 @@ export function ChatPage({
           const items = Array.from(e.clipboardData?.items ?? []);
           const images: File[] = [];
           for (const item of items) {
-            if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+            if (item.kind !== "file" || !item.type.startsWith("image/"))
+              continue;
             const file = item.getAsFile();
             if (file) images.push(file);
           }
@@ -177,7 +189,10 @@ export function ChatPage({
         canSend={canSend}
         placeholder="Send a message…"
         selectionSlot={
-          <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />
+          <ChatAgentToolbar
+            onSelectionChange={onAgentSelectionChange}
+            embedded
+          />
         }
         attachmentsSlot={
           selectedFiles.length > 0 ? (
@@ -211,8 +226,12 @@ export function ChatPage({
                       FILE
                     </div>
                   )}
-                  <div className="break-words text-xs leading-tight">{file.name}</div>
-                  <div className="text-[11px] text-muted-foreground">Remove</div>
+                  <div className="break-words text-xs leading-tight">
+                    {file.name}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Remove
+                  </div>
                 </button>
               ))}
             </div>
@@ -247,7 +266,7 @@ export function ChatPage({
                   pathname: `/chat/${encodeURIComponent(cid)}`,
                   search: q ? `?${q}` : "",
                 },
-                { replace: true },
+                { replace: true }
               );
             } else {
               const rowId = appendOptimisticUserMessage({
@@ -270,7 +289,7 @@ export function ChatPage({
               agentSelection.llmProviderId,
               agentSelection.llmModel,
               agentSelection.modelPresetId,
-              uploadedAttachments.map((x) => x.id),
+              uploadedAttachments.map((x) => x.id)
             );
           })();
         }}
