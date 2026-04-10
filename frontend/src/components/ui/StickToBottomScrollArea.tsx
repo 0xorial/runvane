@@ -38,6 +38,20 @@ export function StickToBottomScrollArea({
     );
   }, []);
 
+  function offsetTopWithinAncestor(
+    node: HTMLElement,
+    ancestor: HTMLElement
+  ): number | null {
+    let top = 0;
+    let current: HTMLElement | null = node;
+    while (current && current !== ancestor) {
+      top += current.offsetTop;
+      current = current.offsetParent as HTMLElement | null;
+    }
+    if (current !== ancestor) return null;
+    return top;
+  }
+
   const alignOnce = useCallback(
     (entryId: string): boolean => {
       const scrollEl = scrollRef.current;
@@ -47,7 +61,20 @@ export function StickToBottomScrollArea({
       if (!scrollEl || !contentEl || !spacerEl || !anchor) return false;
 
       const viewportHeight = scrollEl.clientHeight;
-      const anchorTop = anchor.offsetTop;
+      console.log("viewportHeight", viewportHeight);
+      const anchorTopFromOffsets = offsetTopWithinAncestor(anchor, contentEl);
+      const anchorTop =
+        anchorTopFromOffsets != null
+          ? anchorTopFromOffsets
+          : Math.max(
+              0,
+              scrollEl.scrollTop +
+                (anchor.getBoundingClientRect().top -
+                  scrollEl.getBoundingClientRect().top)
+            );
+      console.log("anchorTop", anchorTop);
+      console.log("contentEl.scrollHeight", contentEl.scrollHeight);
+      console.log("spacerEl.offsetHeight", spacerEl.offsetHeight);
       const realContentHeight = Math.max(
         0,
         contentEl.scrollHeight - spacerEl.offsetHeight
@@ -56,17 +83,20 @@ export function StickToBottomScrollArea({
         0,
         realContentHeight - viewportHeight
       );
-      const requiredTailSpacer = Math.max(
-        0,
-        anchorTop - naturalMaxScrollTop - 8
-      );
+      const requiredTailSpacer = Math.max(0, anchorTop - naturalMaxScrollTop);
 
       if (Math.abs(requiredTailSpacer - bottomSpacerPx) > 1) {
         setBottomSpacerPx(requiredTailSpacer);
+        console.log("setting bottom spacer px", requiredTailSpacer);
         return false;
       }
 
-      scrollEl.scrollTop = anchorTop;
+      // if content below anchor is taller than viewport, scroll back to still show the anchor
+      const targetScrollTop =
+        requiredTailSpacer > 0
+          ? scrollEl.scrollHeight - viewportHeight
+          : anchorTop;
+      scrollEl.scrollTop = Math.max(0, targetScrollTop);
       const deltaToTop = Math.abs(
         anchor.getBoundingClientRect().top -
           scrollEl.getBoundingClientRect().top
@@ -137,7 +167,7 @@ export function StickToBottomScrollArea({
     <div ref={scrollRef} className={className}>
       <div
         ref={contentRef}
-        className="flex min-h-full flex-col gap-0 pb-0.5 [&>[data-chat-entry-id]]:shrink-0"
+        className="relative flex min-h-full flex-col gap-0 pb-0.5 [&>[data-chat-entry-id]]:shrink-0"
       >
         {children}
         <div
