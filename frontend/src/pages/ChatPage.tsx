@@ -21,7 +21,7 @@ import type {
   AsyncButtonHandle,
   AsyncResult,
 } from "../components/ui/AsyncButton";
-import { AnchorTopScrollArea } from "../components/ui/StickToBottomScrollArea";
+import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import type { ChatAttachment } from "../protocol/chatEntry";
