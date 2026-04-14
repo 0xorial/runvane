@@ -164,6 +164,27 @@ export function ConversationSidebar({
     }
   }
 
+  function parseTimestampMs(rawValue: string | undefined): number {
+    const raw = String(rawValue || "").trim();
+    if (!raw) throw new Error("missing conversation timestamp");
+    const ms = Date.parse(raw);
+    if (!Number.isFinite(ms)) {
+      throw new Error(`invalid conversation timestamp: ${raw}`);
+    }
+    return ms;
+  }
+
+  function latestSectionTimestamp(rows: ConversationRow[]): { ms: number; raw: string } {
+    return rows.reduce(
+      (best, row) => {
+        const raw = String(row.updated_at || row.created_at || "").trim();
+        const ms = parseTimestampMs(raw);
+        return ms > best.ms ? { ms, raw } : best;
+      },
+      { ms: Number.NEGATIVE_INFINITY, raw: "" },
+    );
+  }
+
   const grouped = useMemo(() => {
     const ungrouped: ConversationRow[] = [];
     const byGroupId = new Map<string, ConversationRow[]>();
@@ -183,16 +204,9 @@ export function ConversationSidebar({
       list.push(row);
       byGroupId.set(groupId, list);
     }
-    const latestMs = (rows: ConversationRow[]) =>
-      rows.reduce((max, row) => {
-        const raw = row.updated_at || row.created_at || "";
-        const ms = Date.parse(String(raw));
-        return Number.isFinite(ms) ? Math.max(max, ms) : max;
-      }, 0);
-
     const groupIds = Array.from(byGroupId.keys());
-    type GroupSection =
-      | { kind: "ungrouped"; rows: ConversationRow[]; latestMs: number }
+    type SidebarSection =
+      | { kind: "conversation"; row: ConversationRow; latestMs: number }
       | {
           kind: "group";
           groupId: string;
@@ -200,32 +214,39 @@ export function ConversationSidebar({
           rows: ConversationRow[];
           latestMs: number;
         };
-    const orderedSections: GroupSection[] = [
-      {
-        kind: "ungrouped" as const,
-        rows: ungrouped,
-        latestMs: latestMs(ungrouped),
-      },
+    const orderedSections: SidebarSection[] = [
+      ...ungrouped.map((row) => ({
+        kind: "conversation" as const,
+        row,
+        latestMs: parseTimestampMs(String(row.updated_at || row.created_at || "")),
+      })),
       ...groupIds.map((groupId) => {
         const rows = byGroupId.get(groupId) ?? [];
         const groupName = groupById.get(groupId)?.name ?? "Unnamed group";
+        const latestMs = latestSectionTimestamp(rows).ms;
         return {
           kind: "group" as const,
           groupId,
           groupName,
           rows,
-          latestMs: latestMs(rows),
+          latestMs,
         };
       }),
     ]
-      .filter((section) => section.rows.length > 0)
+      .filter((section) =>
+        section.kind === "conversation" ? Boolean(section.row.id) : section.rows.length > 0,
+      )
       .sort((a, b) => {
         if (b.latestMs !== a.latestMs) return b.latestMs - a.latestMs;
-        if (a.kind === "ungrouped" && b.kind !== "ungrouped") return 1;
-        if (b.kind === "ungrouped" && a.kind !== "ungrouped") return -1;
-        const aName = a.kind === "group" ? a.groupName : "";
-        const bName = b.kind === "group" ? b.groupName : "";
-        return aName.localeCompare(bName, undefined, { sensitivity: "base" });
+        if (a.kind === "conversation" && b.kind === "conversation") {
+          return String(a.row.title || "").localeCompare(String(b.row.title || ""), undefined, {
+            sensitivity: "base",
+          });
+        }
+        if (a.kind === "group" && b.kind === "group") {
+          return a.groupName.localeCompare(b.groupName, undefined, { sensitivity: "base" });
+        }
+        return a.kind === "group" ? -1 : 1;
       });
 
     return {
@@ -285,12 +306,8 @@ export function ConversationSidebar({
 
         <div className="scrollbar-thin flex h-full min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 py-1.5">
           {grouped.orderedSections.map((section) => {
-            if (section.kind === "ungrouped") {
-              return (
-                <div key="ungrouped-section" className="flex flex-col gap-0.5">
-                  {section.rows.map((c) => renderConversationRow(c))}
-                </div>
-              );
+            if (section.kind === "conversation") {
+              return renderConversationRow(section.row);
             }
             const groupName = section.groupName;
             const groupId = section.groupId;
@@ -301,7 +318,7 @@ export function ConversationSidebar({
                 key={groupId}
                 groupName={groupName}
                 rows={rows}
-                latestTimestampIso={section.latestMs > 0 ? new Date(section.latestMs).toISOString() : ""}
+                latestTimestampIso={latestSectionTimestamp(rows).raw}
                 collapsed={collapsed}
                 onToggle={() =>
                   setCollapsedGroups((prev) => ({
