@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 import { useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
+import { ResizableSidePanel } from "@/components/ui/ResizableSidePanel";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ConversationSidebar } from "./components/ConversationSidebar";
@@ -74,6 +75,36 @@ export function App() {
   const settingsTab = location.pathname.startsWith("/settings");
   const playgroundTab = location.pathname.startsWith("/playground");
   const showTopHeader = !chatTab;
+  const appRoutes = (
+    <Routes>
+      <Route
+        path="/chat/:conversationId"
+        element={
+          <ChatPageShell
+            sidebarVisible={chatSidebarVisible}
+            onToggleSidebar={() => setChatSidebarVisible((v) => !v)}
+            onOpenSettings={() => navigate(settingsLinkTo(location))}
+            settingsPressed={settingsTab}
+          />
+        }
+      />
+      <Route path="/chat" element={<Navigate to="/chat/new" replace />} />
+      <Route
+        path="/permissions"
+        element={<Navigate to="/settings/tools" replace />}
+      />
+      <Route
+        path="/settings"
+        element={<Navigate to="/settings/model-providers" replace />}
+      />
+      <Route path="/settings/:section" element={<SettingsPage />} />
+      <Route
+        path="/playground/components"
+        element={<ComponentsPlaygroundPage />}
+      />
+      <Route path="*" element={<Navigate to="/chat/new" replace />} />
+    </Routes>
+  );
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -131,66 +162,40 @@ export function App() {
           </header>
         ) : null}
 
-        <div
-          className={cn(
-            "grid min-h-0 flex-1 overflow-hidden",
-            showConversationSidebar
-              ? "grid-cols-[var(--chat-sidebar-width)_minmax(0,1fr)] transition-[grid-template-columns] duration-200 ease-out"
-              : "grid-cols-1",
-          )}
-          style={
-            showConversationSidebar
-              ? ({
-                  "--chat-sidebar-width": chatSidebarVisible ? "16rem" : "0rem",
-                } as { [key: string]: string })
-              : undefined
-          }
-        >
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {showConversationSidebar ? (
-            <div
-              className={cn(
-                "h-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-200",
-                chatSidebarVisible ? "opacity-100" : "pointer-events-none opacity-0",
-              )}
-            >
-              <ConversationSidebar
-                activeConversationId={activeConversationId}
-                onNewChat={() => navigate("/chat/new")}
-                onSelect={(id) => navigate(`/chat/${id}`)}
-              />
-            </div>
-          ) : null}
-
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <Routes>
-              <Route
-                path="/chat/:conversationId"
-                element={
-                  <ChatPageShell
-                    sidebarVisible={chatSidebarVisible}
-                    onToggleSidebar={() => setChatSidebarVisible((v) => !v)}
-                    onOpenSettings={() => navigate(settingsLinkTo(location))}
-                    settingsPressed={settingsTab}
+            <ResizableSidePanel
+              open={chatSidebarVisible}
+              onOpenChange={setChatSidebarVisible}
+              defaultSize={14}
+              minSize={10}
+              maxSize={22}
+              side={
+                <div
+                  className={cn(
+                    "h-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-200",
+                    chatSidebarVisible
+                      ? "opacity-100"
+                      : "pointer-events-none opacity-0",
+                  )}
+                >
+                  <ConversationSidebar
+                    activeConversationId={activeConversationId}
+                    onNewChat={() => navigate("/chat/new")}
+                    onSelect={(id) => navigate(`/chat/${id}`)}
                   />
-                }
-              />
-              <Route path="/chat" element={<Navigate to="/chat/new" replace />} />
-              <Route
-                path="/permissions"
-                element={<Navigate to="/settings/tools" replace />}
-              />
-              <Route
-                path="/settings"
-                element={<Navigate to="/settings/model-providers" replace />}
-              />
-              <Route path="/settings/:section" element={<SettingsPage />} />
-              <Route
-                path="/playground/components"
-                element={<ComponentsPlaygroundPage />}
-              />
-              <Route path="*" element={<Navigate to="/chat/new" replace />} />
-            </Routes>
-          </section>
+                </div>
+              }
+            >
+              <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                {appRoutes}
+              </section>
+            </ResizableSidePanel>
+          ) : (
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {appRoutes}
+            </section>
+          )}
         </div>
       </div>
     </TooltipProvider>
