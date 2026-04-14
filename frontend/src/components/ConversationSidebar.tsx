@@ -4,8 +4,11 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createConversation,
   getConversations,
+  permanentlyDeleteConversation,
   postConversationMessage,
-  renameConversation
+  renameConversation,
+  softDeleteConversation,
+  undeleteConversation,
 } from "../api/client";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
@@ -31,6 +34,7 @@ export function ConversationSidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const [showDeletedOnly, setShowDeletedOnly] = useState(false);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [groups, setGroups] = useState<ConversationGroupRow[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -38,15 +42,19 @@ export function ConversationSidebar({
   const [probeBusy, setProbeBusy] = useState(false);
 
   const loadConversations = useCallback(async () => {
-    const data = await getConversations();
+    const data = await getConversations({ deletedOnly: showDeletedOnly });
     setConversations(data.conversations);
     setGroups(data.groups);
     return data;
-  }, []);
+  }, [showDeletedOnly]);
 
   useEffect(() => {
     void loadConversations();
-  }, []);
+  }, [loadConversations]);
+
+  useEffect(() => {
+    setSelectedConversationIds([]);
+  }, [showDeletedOnly]);
 
   useEffect(() => {
     setSelectedConversationIds((prev) =>
@@ -58,6 +66,7 @@ export function ConversationSidebar({
     const dispose = subscribeGlobalLive({
       onSseEvent: (ev) => {
         if (ev.type === SseType.CONVERSATION_CREATED) {
+          if (showDeletedOnly || ev.conversation.is_deleted) return;
           setConversations((prev) => {
             if (prev.some((item) => item.id === ev.conversation.id)) return prev;
             return [ev.conversation, ...prev];
@@ -65,31 +74,31 @@ export function ConversationSidebar({
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
+          const shouldShow = showDeletedOnly ? ev.conversation.is_deleted : !ev.conversation.is_deleted;
           setConversations((prev) =>
-            prev.map((item) =>
-              item.id === ev.conversation.id
-                ? {
-                    ...item,
-                    title: ev.conversation.title,
-                    group_id: ev.conversation.group_id,
-                    updated_at: ev.conversation.updated_at,
-                    prompt_tokens_total: ev.conversation.prompt_tokens_total,
-                    completion_tokens_total: ev.conversation.completion_tokens_total,
-                    estimated_cost_usd:
-                      typeof ev.conversation.estimated_cost_usd === "number" &&
-                      Number.isFinite(ev.conversation.estimated_cost_usd)
-                        ? ev.conversation.estimated_cost_usd
-                        : item.estimated_cost_usd,
-                  }
-                : item,
-            ),
+            (() => {
+              const index = prev.findIndex((item) => item.id === ev.conversation.id);
+              if (!shouldShow) {
+                if (index === -1) return prev;
+                const next = prev.slice();
+                next.splice(index, 1);
+                return next;
+              }
+              if (index === -1) return [ev.conversation, ...prev];
+              const next = prev.slice();
+              next[index] = {
+                ...next[index],
+                ...ev.conversation,
+              };
+              return next;
+            })(),
           );
           return;
         }
       },
     });
     return () => dispose();
-  }, [loadConversations]);
+  }, [showDeletedOnly]);
 
   async function onProbeTime() {
     if (probeBusy) return;
@@ -170,6 +179,75 @@ export function ConversationSidebar({
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  async function onSoftDeleteConversation(conversation: ConversationRow) {
+    try {
+      await softDeleteConversation(conversation.id);
+      await loadConversations();
+      if (selectedConversationIds.includes(conversation.id)) {
+        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
+      }
+    } catch (e: unknown) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onUndeleteConversation(conversation: ConversationRow) {
+    try {
+      await undeleteConversation(conversation.id);
+      await loadConversations();
+      if (selectedConversationIds.includes(conversation.id)) {
+        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
+      }
+    } catch (e: unknown) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onPermanentlyDeleteConversation(conversation: ConversationRow) {
+    const confirmed = window.confirm(
+      "Delete this conversation permanently? This action is irreversible.",
+    );
+    if (!confirmed) return;
+    try {
+      await permanentlyDeleteConversation(conversation.id);
+      await loadConversations();
+      if (selectedConversationIds.includes(conversation.id)) {
+        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
+      }
+    } catch (e: unknown) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onDeleteSelectedConversations() {
+    const selectedIds = selectedConversationIds;
+    if (selectedIds.length === 0) return;
+    const confirmed = window.confirm(
+      showDeletedOnly
+        ? "Delete selected conversations permanently? This action is irreversible."
+        : `Delete ${selectedIds.length} selected conversation(s)?`,
+    );
+    if (!confirmed) return;
+    const deletionFn = showDeletedOnly ? permanentlyDeleteConversation : softDeleteConversation;
+    const results = await Promise.allSettled(selectedIds.map((id) => deletionFn(id)));
+    const failedIds: string[] = [];
+    let firstReason = "";
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") return;
+      failedIds.push(selectedIds[index]);
+      if (!firstReason) {
+        firstReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      }
+    });
+    await loadConversations();
+    if (failedIds.length > 0) {
+      setSelectedConversationIds(failedIds);
+      notifyError(`Deleted ${selectedIds.length - failedIds.length}/${selectedIds.length}. ${firstReason}`);
+      return;
+    }
+    setSelectedConversationIds([]);
   }
 
   function parseTimestampMs(rawValue: string | undefined): number {
@@ -286,11 +364,15 @@ export function ConversationSidebar({
         nested={opts?.nested}
         knownGroups={knownGroups}
         multiSelectMode={multiSelectMode}
+        deletedMode={showDeletedOnly}
         selected={selectedConversationIds.includes(c.id)}
         onSelect={onSelect}
         onToggleSelected={onToggleSelected}
         onRenameConversation={onRenameConversation}
         onMoveConversationToGroup={onMoveConversationToGroup}
+        onSoftDeleteConversation={onSoftDeleteConversation}
+        onUndeleteConversation={onUndeleteConversation}
+        onPermanentlyDeleteConversation={onPermanentlyDeleteConversation}
       />
     );
   }
@@ -324,10 +406,18 @@ export function ConversationSidebar({
           >
             Probe: time (tmp)
           </button>
+          <button
+            type="button"
+            className="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setShowDeletedOnly((prev) => !prev)}
+          >
+            {showDeletedOnly ? "Show active" : "Show deleted"}
+          </button>
           {multiSelectMode ? (
             <MultiSelectPanel
               selectedConversationIds={selectedConversationIds}
               knownGroups={knownGroups}
+              deletedMode={showDeletedOnly}
               reloadConversations={async () => {
                 const data = await loadConversations();
                 return { groups: data.groups };
@@ -336,6 +426,7 @@ export function ConversationSidebar({
               onExpandGroup={(groupId) =>
                 setCollapsedGroups((prev) => ({ ...prev, [groupId]: false }))
               }
+              onDeleteSelected={onDeleteSelectedConversations}
             />
           ) : null}
         </div>

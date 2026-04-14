@@ -14,6 +14,17 @@ import {
 export function createConversationsRouter(runtime: Runtime) {
   const r = new Hono();
 
+  function toApiConversationRow(
+    row: ReturnType<Runtime["conversations"]["get"]> extends infer T ? Exclude<T, null> : never,
+    estimatedCostUsd: number,
+  ) {
+    return {
+      ...row,
+      is_deleted: Number(row.is_deleted ?? 0) === 1,
+      estimated_cost_usd: Number(estimatedCostUsd.toFixed(8)),
+    };
+  }
+
   function conversationCostsUsdById(): Map<string, number> {
     const usageRows = runtime.chatEntries.listConversationTokenUsageByModel();
     const capabilities = runtime.modelCapabilities.listEffective();
@@ -54,15 +65,13 @@ export function createConversationsRouter(runtime: Runtime) {
   }
 
   r.get("/", (c) => {
-    const rows = runtime.conversations.list();
+    const deletedMode = c.req.query("deleted") === "only";
+    const rows = runtime.conversations.list({ deletedOnly: deletedMode });
     const groups = runtime.conversations.listGroups();
     const costsById = conversationCostsUsdById();
     return c.json(
       {
-        conversations: rows.map((row) => ({
-          ...row,
-          estimated_cost_usd: Number((costsById.get(row.id) ?? 0).toFixed(8)),
-        })),
+        conversations: rows.map((row) => toApiConversationRow(row, costsById.get(row.id) ?? 0)),
         groups,
       },
     );
@@ -76,9 +85,9 @@ export function createConversationsRouter(runtime: Runtime) {
     const created = runtime.conversations.create(title);
     runtime.hub.publish(created.id, {
       type: SseType.CONVERSATION_CREATED,
-      conversation: created,
+      conversation: toApiConversationRow(created, 0),
     });
-    return c.json(created);
+    return c.json(toApiConversationRow(created, 0));
   });
 
   r.put("/:conversationId", async (c) => {
@@ -99,7 +108,7 @@ export function createConversationsRouter(runtime: Runtime) {
       return c.json({ detail: "provide either group_id or new_group_name, not both" }, 400);
     }
 
-    let updated = runtime.conversations.get(conversationId);
+    let updated = runtime.conversations.get(conversationId, { includeDeleted: true });
     if (!updated) return c.json({ detail: "conversation not found" }, 404);
 
     if (hasTitleUpdate) {
@@ -108,7 +117,7 @@ export function createConversationsRouter(runtime: Runtime) {
         return c.json({ detail: "title is required when provided" }, 400);
       }
       const titleUpdated = runtime.conversations.updateTitle(conversationId, nextTitle);
-      if (!titleUpdated) return c.json({ detail: "conversation not found" }, 404);
+      if (!titleUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
       updated = titleUpdated;
     }
 
@@ -120,7 +129,7 @@ export function createConversationsRouter(runtime: Runtime) {
         const detail = e instanceof Error ? e.message : "invalid group_id";
         return c.json({ detail }, 400);
       }
-      if (!groupUpdated) return c.json({ detail: "conversation not found" }, 404);
+      if (!groupUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
       updated = groupUpdated;
     }
 
@@ -129,14 +138,55 @@ export function createConversationsRouter(runtime: Runtime) {
         conversationId,
         String(update.new_group_name || ""),
       );
-      if (!groupUpdated) return c.json({ detail: "conversation not found" }, 404);
+      if (!groupUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
       updated = groupUpdated;
     }
     runtime.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
-      conversation: updated,
+      conversation: toApiConversationRow(updated, conversationCostsUsdById().get(conversationId) ?? 0),
     });
-    return c.json(updated);
+    return c.json(
+      toApiConversationRow(updated, conversationCostsUsdById().get(conversationId) ?? 0),
+    );
+  });
+
+  r.delete("/:conversationId", (c) => {
+    const conversationId = c.req.param("conversationId");
+    const deleted = runtime.conversations.softDelete(conversationId);
+    if (!deleted) return c.json({ detail: "conversation not found or already deleted" }, 404);
+    runtime.hub.publish(conversationId, {
+      type: SseType.CONVERSATION_UPDATED,
+      conversation: toApiConversationRow(
+        deleted,
+        conversationCostsUsdById().get(conversationId) ?? 0,
+      ),
+    });
+    return c.json(
+      toApiConversationRow(deleted, conversationCostsUsdById().get(conversationId) ?? 0),
+    );
+  });
+
+  r.post("/:conversationId/undelete", (c) => {
+    const conversationId = c.req.param("conversationId");
+    const restored = runtime.conversations.undelete(conversationId);
+    if (!restored) return c.json({ detail: "conversation not found or not deleted" }, 404);
+    runtime.hub.publish(conversationId, {
+      type: SseType.CONVERSATION_UPDATED,
+      conversation: toApiConversationRow(
+        restored,
+        conversationCostsUsdById().get(conversationId) ?? 0,
+      ),
+    });
+    return c.json(
+      toApiConversationRow(restored, conversationCostsUsdById().get(conversationId) ?? 0),
+    );
+  });
+
+  r.delete("/:conversationId/permanent", (c) => {
+    const conversationId = c.req.param("conversationId");
+    const removed = runtime.conversations.hardDelete(conversationId);
+    if (!removed) return c.json({ detail: "conversation not found or not deleted" }, 404);
+    return c.json({ conversation_id: conversationId, deleted: true });
   });
 
   r.get("/:conversationId/messages", (c) => {

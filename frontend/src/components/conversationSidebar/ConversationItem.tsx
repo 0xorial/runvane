@@ -28,6 +28,7 @@ type ConversationItemProps = {
   nested?: boolean;
   knownGroups: ConversationGroupRow[];
   multiSelectMode: boolean;
+  deletedMode: boolean;
   selected: boolean;
   onSelect: (id: string) => void;
   onToggleSelected: (id: string, checked: boolean) => void;
@@ -36,6 +37,9 @@ type ConversationItemProps = {
     conversation: ConversationRow,
     target: { groupId?: string | null; newGroupName?: string },
   ) => Promise<void>;
+  onSoftDeleteConversation: (conversation: ConversationRow) => Promise<void>;
+  onUndeleteConversation: (conversation: ConversationRow) => Promise<void>;
+  onPermanentlyDeleteConversation: (conversation: ConversationRow) => Promise<void>;
 };
 
 export function ConversationItem({
@@ -44,11 +48,15 @@ export function ConversationItem({
   nested = false,
   knownGroups,
   multiSelectMode,
+  deletedMode,
   selected,
   onSelect,
   onToggleSelected,
   onRenameConversation,
   onMoveConversationToGroup,
+  onSoftDeleteConversation,
+  onUndeleteConversation,
+  onPermanentlyDeleteConversation,
 }: ConversationItemProps) {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -163,32 +171,48 @@ export function ConversationItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onSelect={() => void onRenameConversation(conversation)}>
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-52">
-                  <DropdownMenuItem
-                    onSelect={() => void onMoveConversationToGroup(conversation, { groupId: null })}
-                  >
-                    No group
+              {deletedMode || conversation.is_deleted ? (
+                <>
+                  <DropdownMenuItem onSelect={() => void onUndeleteConversation(conversation)}>
+                    Undelete
                   </DropdownMenuItem>
-                  {knownGroups.map((group) => (
-                    <DropdownMenuItem
-                      key={group.id}
-                      onSelect={() =>
-                        void onMoveConversationToGroup(conversation, { groupId: group.id })
-                      }
-                    >
-                      {group.name}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
-                    New group...
+                  <DropdownMenuItem onSelect={() => void onPermanentlyDeleteConversation(conversation)}>
+                    Delete permanently
                   </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem onSelect={() => void onRenameConversation(conversation)}>
+                    Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-52">
+                      <DropdownMenuItem
+                        onSelect={() => void onMoveConversationToGroup(conversation, { groupId: null })}
+                      >
+                        No group
+                      </DropdownMenuItem>
+                      {knownGroups.map((group) => (
+                        <DropdownMenuItem
+                          key={group.id}
+                          onSelect={() =>
+                            void onMoveConversationToGroup(conversation, { groupId: group.id })
+                          }
+                        >
+                          {group.name}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
+                        New group...
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuItem onSelect={() => void onSoftDeleteConversation(conversation)}>
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

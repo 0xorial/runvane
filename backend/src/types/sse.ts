@@ -35,6 +35,7 @@ export type ConversationSseRow = {
   id: string;
   title: string;
   group_id: string | null;
+  is_deleted: boolean;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
@@ -45,6 +46,7 @@ export const ConversationSseRowSchema = z.object({
   id: z.string(),
   title: z.string(),
   group_id: z.string().nullable(),
+  is_deleted: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),

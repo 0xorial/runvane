@@ -4,6 +4,7 @@ export type ConversationRow = {
   id: string;
   title: string;
   group_id: string | null;
+  is_deleted: number;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
@@ -53,13 +54,15 @@ export class ConversationsRepo {
     }
   }
 
-  list(): ConversationRow[] {
+  list(options?: { deletedOnly?: boolean }): ConversationRow[] {
+    const deletedOnly = options?.deletedOnly === true ? 1 : 0;
     return this.db
       .prepare(
         `SELECT
            c.id,
            c.title,
            c.group_id,
+           c.is_deleted,
            c.created_at,
            c.updated_at,
            COALESCE((
@@ -75,18 +78,21 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS completion_tokens_total
          FROM conversations c
+         WHERE c.is_deleted = @deleted_only
          ORDER BY c.updated_at DESC`,
       )
-      .all() as ConversationRow[];
+      .all({ deleted_only: deletedOnly }) as ConversationRow[];
   }
 
-  get(id: string): ConversationRow | null {
+  get(id: string, options?: { includeDeleted?: boolean }): ConversationRow | null {
+    const includeDeleted = options?.includeDeleted === true ? 1 : 0;
     const row = this.db
       .prepare(
         `SELECT
            c.id,
            c.title,
            c.group_id,
+           c.is_deleted,
            c.created_at,
            c.updated_at,
            COALESCE((
@@ -102,9 +108,13 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS completion_tokens_total
          FROM conversations c
-         WHERE c.id = ?`,
+         WHERE c.id = @id
+           AND (@include_deleted = 1 OR c.is_deleted = 0)`,
       )
-      .get(id) as ConversationRow | undefined;
+      .get({
+        id,
+        include_deleted: includeDeleted,
+      }) as ConversationRow | undefined;
     return row ?? null;
   }
 
@@ -118,10 +128,19 @@ export class ConversationsRepo {
       .all() as ConversationGroupRow[];
   }
 
-  exists(id: string): boolean {
+  exists(id: string, options?: { includeDeleted?: boolean }): boolean {
+    const includeDeleted = options?.includeDeleted === true ? 1 : 0;
     const row = this.db
-      .prepare("SELECT 1 as ok FROM conversations WHERE id = ?")
-      .get(id) as { ok?: number } | undefined;
+      .prepare(
+        `SELECT 1 as ok
+         FROM conversations
+         WHERE id = @id
+           AND (@include_deleted = 1 OR is_deleted = 0)`,
+      )
+      .get({
+        id,
+        include_deleted: includeDeleted,
+      }) as { ok?: number } | undefined;
     return row?.ok === 1;
   }
 
@@ -132,6 +151,7 @@ export class ConversationsRepo {
       id: crypto.randomUUID(),
       title,
       group_id: null,
+      is_deleted: 0,
       created_at: now,
       updated_at: now,
       prompt_tokens_total: 0,
@@ -140,8 +160,8 @@ export class ConversationsRepo {
 
     this.db
       .prepare(
-        `INSERT INTO conversations (id, title, group_id, created_at, updated_at)
-         VALUES (@id, @title, NULL, @created_at, @updated_at)`,
+        `INSERT INTO conversations (id, title, group_id, is_deleted, created_at, updated_at)
+         VALUES (@id, @title, NULL, 0, @created_at, @updated_at)`,
       )
       .run(row);
 
@@ -156,7 +176,8 @@ export class ConversationsRepo {
       .prepare(
         `UPDATE conversations
          SET title = @title, updated_at = @updated_at
-         WHERE id = @id`,
+         WHERE id = @id
+           AND is_deleted = 0`,
       )
       .run({
         id,
@@ -164,7 +185,7 @@ export class ConversationsRepo {
         updated_at: now,
       });
     if (Number(result.changes ?? 0) !== 1) return null;
-    return this.get(id);
+    return this.get(id, { includeDeleted: true });
   }
 
   updateGroupName(id: string, groupNameRaw: string): ConversationRow | null {
@@ -175,7 +196,8 @@ export class ConversationsRepo {
       .prepare(
         `UPDATE conversations
          SET group_id = @group_id, updated_at = @updated_at
-         WHERE id = @id`,
+         WHERE id = @id
+           AND is_deleted = 0`,
       )
       .run({
         id,
@@ -183,7 +205,7 @@ export class ConversationsRepo {
         updated_at: now,
       });
     if (Number(result.changes ?? 0) !== 1) return null;
-    return this.get(id);
+    return this.get(id, { includeDeleted: true });
   }
 
   updateGroupId(id: string, groupIdRaw: string | null): ConversationRow | null {
@@ -202,7 +224,8 @@ export class ConversationsRepo {
       .prepare(
         `UPDATE conversations
          SET group_id = @group_id, updated_at = @updated_at
-         WHERE id = @id`,
+         WHERE id = @id
+           AND is_deleted = 0`,
       )
       .run({
         id,
@@ -210,6 +233,66 @@ export class ConversationsRepo {
         updated_at: now,
       });
     if (Number(result.changes ?? 0) !== 1) return null;
-    return this.get(id);
+    return this.get(id, { includeDeleted: true });
+  }
+
+  softDelete(id: string): ConversationRow | null {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE conversations
+         SET is_deleted = 1, updated_at = @updated_at
+         WHERE id = @id
+           AND is_deleted = 0`,
+      )
+      .run({
+        id,
+        updated_at: now,
+      });
+    if (Number(result.changes ?? 0) !== 1) return null;
+    return this.get(id, { includeDeleted: true });
+  }
+
+  undelete(id: string): ConversationRow | null {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE conversations
+         SET is_deleted = 0, updated_at = @updated_at
+         WHERE id = @id
+           AND is_deleted = 1`,
+      )
+      .run({
+        id,
+        updated_at: now,
+      });
+    if (Number(result.changes ?? 0) !== 1) return null;
+    return this.get(id, { includeDeleted: true });
+  }
+
+  hardDelete(id: string): boolean {
+    const tx = this.db.transaction((conversationId: string) => {
+      this.db
+        .prepare(
+          `DELETE FROM tool_execution_logs
+           WHERE conversation_id = ?`,
+        )
+        .run(conversationId);
+      this.db
+        .prepare(
+          `DELETE FROM chat_entries
+           WHERE conversation_id = ?`,
+        )
+        .run(conversationId);
+      const removed = this.db
+        .prepare(
+          `DELETE FROM conversations
+           WHERE id = ?
+             AND is_deleted = 1`,
+        )
+        .run(conversationId);
+      return Number(removed.changes ?? 0) === 1;
+    });
+    return tx(id);
   }
 }

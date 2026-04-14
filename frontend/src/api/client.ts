@@ -115,8 +115,10 @@ export type PostConversationMessageInput = {
   attachment_ids?: string[];
 };
 
-export function getConversations(): Promise<GetConversationsResponse> {
-  return getJson("/api/conversations").then(validateGetConversationsResponse);
+export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
+  const deletedOnly = options?.deletedOnly === true;
+  const path = deletedOnly ? "/api/conversations?deleted=only" : "/api/conversations";
+  return getJson(path).then(validateGetConversationsResponse);
 }
 
 export function createConversation(body: { title?: string } = {}): Promise<ConversationRow> {
@@ -132,6 +134,22 @@ export function renameConversation(
   return sendJson(`/api/conversations/${encodeURIComponent(conversationId)}`, "PUT", body).then(
     (data) => validateConversationRowResponse(data, "PUT /api/conversations/:id"),
   );
+}
+
+export function softDeleteConversation(conversationId: string): Promise<ConversationRow> {
+  return deleteJson(`/api/conversations/${encodeURIComponent(conversationId)}`).then((data) =>
+    validateConversationRowResponse(data, "DELETE /api/conversations/:id"),
+  );
+}
+
+export function undeleteConversation(conversationId: string): Promise<ConversationRow> {
+  return postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/undelete`, {}).then(
+    (result) => validateConversationRowResponse(result.data, "POST /api/conversations/:id/undelete"),
+  );
+}
+
+export function permanentlyDeleteConversation(conversationId: string): Promise<unknown> {
+  return deleteJson(`/api/conversations/${encodeURIComponent(conversationId)}/permanent`);
 }
 
 export function getConversationMessages(

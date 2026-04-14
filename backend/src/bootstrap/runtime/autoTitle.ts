@@ -198,7 +198,10 @@ export async function maybeAutoTitleConversation({
   if (!updated) return;
   hub.publish(conversationId, {
     type: SseType.CONVERSATION_UPDATED,
-    conversation: updated,
+    conversation: {
+      ...updated,
+      is_deleted: Number(updated.is_deleted ?? 0) === 1,
+    },
   });
 
   if (generationError) {
