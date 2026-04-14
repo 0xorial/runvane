@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { MessageSquare, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +27,10 @@ type ConversationItemProps = {
   active: boolean;
   nested?: boolean;
   knownGroups: ConversationGroupRow[];
+  multiSelectMode: boolean;
+  selected: boolean;
   onSelect: (id: string) => void;
+  onToggleSelected: (id: string, checked: boolean) => void;
   onRenameConversation: (conversation: ConversationRow) => Promise<void>;
   onMoveConversationToGroup: (
     conversation: ConversationRow,
@@ -39,7 +43,10 @@ export function ConversationItem({
   active,
   nested = false,
   knownGroups,
+  multiSelectMode,
+  selected,
   onSelect,
+  onToggleSelected,
   onRenameConversation,
   onMoveConversationToGroup,
 }: ConversationItemProps) {
@@ -85,15 +92,34 @@ export function ConversationItem({
       <div
         className={cn(
           "group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs transition-colors",
+          nested && "ml-3",
           active
             ? "bg-secondary text-foreground"
             : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
         )}
       >
+        <div className="flex w-6 shrink-0 items-center justify-center">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={(checked) => onToggleSelected(conversation.id, checked === true)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select conversation ${conversation.title || conversation.id}`}
+            className={cn(
+              "h-4 w-4 transition-opacity",
+              multiSelectMode ? "opacity-100" : "opacity-0 group-hover/row:opacity-100",
+            )}
+          />
+        </div>
         <button
           type="button"
-          className={cn("min-w-0 flex-1 px-2.5 py-2 text-left", nested && "pl-6")}
-          onClick={() => onSelect(conversation.id)}
+          className="min-w-0 flex-1 py-2 pl-0.5 pr-2.5 text-left"
+          onClick={() => {
+            if (multiSelectMode) {
+              onToggleSelected(conversation.id, !selected);
+              return;
+            }
+            onSelect(conversation.id);
+          }}
         >
           <div className="flex items-center gap-2">
             <MessageSquare className="h-3 w-3 shrink-0" aria-hidden />
@@ -117,53 +143,55 @@ export function ConversationItem({
             className="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
           />
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-auto w-7 shrink-0 rounded-none shadow-none",
-                "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
-                "opacity-60 group-hover/row:opacity-100",
-                active && "text-foreground opacity-100",
-              )}
-              aria-label="Chat menu"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreVertical className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem onSelect={() => void onRenameConversation(conversation)}>
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-52">
-                <DropdownMenuItem
-                  onSelect={() => void onMoveConversationToGroup(conversation, { groupId: null })}
-                >
-                  No group
-                </DropdownMenuItem>
-                {knownGroups.map((group) => (
+        {multiSelectMode ? null : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-auto w-7 shrink-0 rounded-none shadow-none",
+                  "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
+                  "opacity-60 group-hover/row:opacity-100",
+                  active && "text-foreground opacity-100",
+                )}
+                aria-label="Chat menu"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => void onRenameConversation(conversation)}>
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-52">
                   <DropdownMenuItem
-                    key={group.id}
-                    onSelect={() =>
-                      void onMoveConversationToGroup(conversation, { groupId: group.id })
-                    }
+                    onSelect={() => void onMoveConversationToGroup(conversation, { groupId: null })}
                   >
-                    {group.name}
+                    No group
                   </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
-                  New group...
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                  {knownGroups.map((group) => (
+                    <DropdownMenuItem
+                      key={group.id}
+                      onSelect={() =>
+                        void onMoveConversationToGroup(conversation, { groupId: group.id })
+                      }
+                    >
+                      {group.name}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
+                    New group...
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       <NewGroupDialog
         conversationId={conversation.id}

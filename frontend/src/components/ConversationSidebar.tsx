@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Plus } from "lucide-react";
+import { Bot, Plus, FolderInput, Trash2, X } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createConversation,
@@ -33,6 +33,7 @@ export function ConversationSidebar({
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [groups, setGroups] = useState<ConversationGroupRow[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
   const [probeBusy, setProbeBusy] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -45,6 +46,12 @@ export function ConversationSidebar({
   useEffect(() => {
     void loadConversations();
   }, []);
+
+  useEffect(() => {
+    setSelectedConversationIds((prev) =>
+      prev.filter((id) => conversations.some((row) => row.id === id)),
+    );
+  }, [conversations]);
 
   useEffect(() => {
     const dispose = subscribeGlobalLive({
@@ -256,6 +263,17 @@ export function ConversationSidebar({
   }, [conversations, groups]);
 
   const knownGroups = grouped.groups;
+  const multiSelectMode = selectedConversationIds.length > 0;
+
+  function onToggleSelected(conversationId: string, checked: boolean) {
+    setSelectedConversationIds((prev) => {
+      if (checked) {
+        if (prev.includes(conversationId)) return prev;
+        return [...prev, conversationId];
+      }
+      return prev.filter((id) => id !== conversationId);
+    });
+  }
 
   function renderConversationRow(c: ConversationRow, opts?: { nested?: boolean }) {
     const active = activeConversationId === c.id;
@@ -266,7 +284,10 @@ export function ConversationSidebar({
         active={active}
         nested={opts?.nested}
         knownGroups={knownGroups}
+        multiSelectMode={multiSelectMode}
+        selected={selectedConversationIds.includes(c.id)}
         onSelect={onSelect}
+        onToggleSelected={onToggleSelected}
         onRenameConversation={onRenameConversation}
         onMoveConversationToGroup={onMoveConversationToGroup}
       />
@@ -302,6 +323,40 @@ export function ConversationSidebar({
           >
             Probe: time (tmp)
           </button>
+          {multiSelectMode ? (
+            <div className="flex items-center justify-between border-t border-sidebar-border pt-1 text-xs text-muted-foreground">
+              <span>{selectedConversationIds.length} selected</span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  aria-label="Move selected conversations"
+                  title="Move selected conversations (coming soon)"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60"
+                  disabled
+                >
+                  <FolderInput className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete selected conversations"
+                  title="Delete selected conversations (coming soon)"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-destructive/70"
+                  disabled
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Exit multi-select mode"
+                  title="Exit multi-select mode"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+                  onClick={() => setSelectedConversationIds([])}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="scrollbar-thin flex h-full min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 py-1.5">
