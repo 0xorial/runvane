@@ -16,7 +16,10 @@ import { notifyError } from "../utils/toast";
 import { ConversationItem } from "./conversationSidebar/ConversationItem";
 import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupItem";
 import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
-import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
+import type {
+  ConversationGroupRow,
+  ConversationRow,
+} from "./conversationSidebar/types";
 
 type ConversationSidebarProps = {
   activeConversationId: string | null;
@@ -37,8 +40,12 @@ export function ConversationSidebar({
   const [showDeletedOnly, setShowDeletedOnly] = useState(false);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [groups, setGroups] = useState<ConversationGroupRow[]>([]);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [selectedConversationIds, setSelectedConversationIds] = useState<
+    string[]
+  >([]);
   const [probeBusy, setProbeBusy] = useState(false);
 
   const loadConversations = useCallback(async () => {
@@ -58,7 +65,7 @@ export function ConversationSidebar({
 
   useEffect(() => {
     setSelectedConversationIds((prev) =>
-      prev.filter((id) => conversations.some((row) => row.id === id)),
+      prev.filter((id) => conversations.some((row) => row.id === id))
     );
   }, [conversations]);
 
@@ -68,16 +75,21 @@ export function ConversationSidebar({
         if (ev.type === SseType.CONVERSATION_CREATED) {
           if (showDeletedOnly || ev.conversation.is_deleted) return;
           setConversations((prev) => {
-            if (prev.some((item) => item.id === ev.conversation.id)) return prev;
+            if (prev.some((item) => item.id === ev.conversation.id))
+              return prev;
             return [ev.conversation, ...prev];
           });
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
-          const shouldShow = showDeletedOnly ? ev.conversation.is_deleted : !ev.conversation.is_deleted;
+          const shouldShow = showDeletedOnly
+            ? ev.conversation.is_deleted
+            : !ev.conversation.is_deleted;
           setConversations((prev) =>
             (() => {
-              const index = prev.findIndex((item) => item.id === ev.conversation.id);
+              const index = prev.findIndex(
+                (item) => item.id === ev.conversation.id
+              );
               if (!shouldShow) {
                 if (index === -1) return prev;
                 const next = prev.slice();
@@ -91,7 +103,7 @@ export function ConversationSidebar({
                 ...ev.conversation,
               };
               return next;
-            })(),
+            })()
           );
           return;
         }
@@ -142,8 +154,8 @@ export function ConversationSidebar({
       const updated = await renameConversation(conversation.id, { title });
       setConversations((prev) =>
         prev.map((item) =>
-          item.id === updated.id ? { ...item, ...updated } : item,
-        ),
+          item.id === updated.id ? { ...item, ...updated } : item
+        )
       );
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -152,16 +164,19 @@ export function ConversationSidebar({
 
   async function onMoveConversationToGroup(
     conversation: ConversationRow,
-    target: { groupId?: string | null; newGroupName?: string },
+    target: { groupId?: string | null; newGroupName?: string }
   ) {
     try {
       await renameConversation(conversation.id, {
-        group_id:
-          Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
-        new_group_name:
-          Object.prototype.hasOwnProperty.call(target, "newGroupName")
-            ? String(target.newGroupName ?? "")
-            : undefined,
+        group_id: Object.prototype.hasOwnProperty.call(target, "groupId")
+          ? target.groupId ?? null
+          : undefined,
+        new_group_name: Object.prototype.hasOwnProperty.call(
+          target,
+          "newGroupName"
+        )
+          ? String(target.newGroupName ?? "")
+          : undefined,
       });
       const data = await loadConversations();
       const groupId = target.groupId;
@@ -170,7 +185,9 @@ export function ConversationSidebar({
       } else if (target.newGroupName) {
         const nextGroup = data.groups.find(
           (group) =>
-            group.name.localeCompare(target.newGroupName || "", undefined, { sensitivity: "base" }) === 0,
+            group.name.localeCompare(target.newGroupName || "", undefined, {
+              sensitivity: "base",
+            }) === 0
         );
         if (nextGroup?.id) {
           setCollapsedGroups((prev) => ({ ...prev, [nextGroup.id]: false }));
@@ -186,7 +203,9 @@ export function ConversationSidebar({
       await softDeleteConversation(conversation.id);
       await loadConversations();
       if (selectedConversationIds.includes(conversation.id)) {
-        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
+        setSelectedConversationIds((prev) =>
+          prev.filter((id) => id !== conversation.id)
+        );
       }
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -198,23 +217,29 @@ export function ConversationSidebar({
       await undeleteConversation(conversation.id);
       await loadConversations();
       if (selectedConversationIds.includes(conversation.id)) {
-        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
+        setSelectedConversationIds((prev) =>
+          prev.filter((id) => id !== conversation.id)
+        );
       }
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
   }
 
-  async function onPermanentlyDeleteConversation(conversation: ConversationRow) {
+  async function onPermanentlyDeleteConversation(
+    conversation: ConversationRow
+  ) {
     const confirmed = window.confirm(
-      "Delete this conversation permanently? This action is irreversible.",
+      "Delete this conversation permanently? This action is irreversible."
     );
     if (!confirmed) return;
     try {
       await permanentlyDeleteConversation(conversation.id);
       await loadConversations();
       if (selectedConversationIds.includes(conversation.id)) {
-        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
+        setSelectedConversationIds((prev) =>
+          prev.filter((id) => id !== conversation.id)
+        );
       }
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -227,24 +252,35 @@ export function ConversationSidebar({
     const confirmed = window.confirm(
       showDeletedOnly
         ? "Delete selected conversations permanently? This action is irreversible."
-        : `Delete ${selectedIds.length} selected conversation(s)?`,
+        : `Delete ${selectedIds.length} selected conversation(s)?`
     );
     if (!confirmed) return;
-    const deletionFn = showDeletedOnly ? permanentlyDeleteConversation : softDeleteConversation;
-    const results = await Promise.allSettled(selectedIds.map((id) => deletionFn(id)));
+    const deletionFn = showDeletedOnly
+      ? permanentlyDeleteConversation
+      : softDeleteConversation;
+    const results = await Promise.allSettled(
+      selectedIds.map((id) => deletionFn(id))
+    );
     const failedIds: string[] = [];
     let firstReason = "";
     results.forEach((result, index) => {
       if (result.status === "fulfilled") return;
       failedIds.push(selectedIds[index]);
       if (!firstReason) {
-        firstReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        firstReason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
       }
     });
     await loadConversations();
     if (failedIds.length > 0) {
       setSelectedConversationIds(failedIds);
-      notifyError(`Deleted ${selectedIds.length - failedIds.length}/${selectedIds.length}. ${firstReason}`);
+      notifyError(
+        `Deleted ${selectedIds.length - failedIds.length}/${
+          selectedIds.length
+        }. ${firstReason}`
+      );
       return;
     }
     setSelectedConversationIds([]);
@@ -260,14 +296,17 @@ export function ConversationSidebar({
     return ms;
   }
 
-  function latestSectionTimestamp(rows: ConversationRow[]): { ms: number; raw: string } {
+  function latestSectionTimestamp(rows: ConversationRow[]): {
+    ms: number;
+    raw: string;
+  } {
     return rows.reduce(
       (best, row) => {
         const raw = String(row.updated_at || row.created_at || "").trim();
         const ms = parseTimestampMs(raw);
         return ms > best.ms ? { ms, raw } : best;
       },
-      { ms: Number.NEGATIVE_INFINITY, raw: "" },
+      { ms: Number.NEGATIVE_INFINITY, raw: "" }
     );
   }
 
@@ -304,7 +343,9 @@ export function ConversationSidebar({
       ...ungrouped.map((row) => ({
         kind: "conversation" as const,
         row,
-        latestMs: parseTimestampMs(String(row.updated_at || row.created_at || "")),
+        latestMs: parseTimestampMs(
+          String(row.updated_at || row.created_at || "")
+        ),
       })),
       ...groupIds.map((groupId) => {
         const rows = byGroupId.get(groupId) ?? [];
@@ -320,17 +361,25 @@ export function ConversationSidebar({
       }),
     ]
       .filter((section) =>
-        section.kind === "conversation" ? Boolean(section.row.id) : section.rows.length > 0,
+        section.kind === "conversation"
+          ? Boolean(section.row.id)
+          : section.rows.length > 0
       )
       .sort((a, b) => {
         if (b.latestMs !== a.latestMs) return b.latestMs - a.latestMs;
         if (a.kind === "conversation" && b.kind === "conversation") {
-          return String(a.row.title || "").localeCompare(String(b.row.title || ""), undefined, {
-            sensitivity: "base",
-          });
+          return String(a.row.title || "").localeCompare(
+            String(b.row.title || ""),
+            undefined,
+            {
+              sensitivity: "base",
+            }
+          );
         }
         if (a.kind === "group" && b.kind === "group") {
-          return a.groupName.localeCompare(b.groupName, undefined, { sensitivity: "base" });
+          return a.groupName.localeCompare(b.groupName, undefined, {
+            sensitivity: "base",
+          });
         }
         return a.kind === "group" ? -1 : 1;
       });
@@ -354,7 +403,10 @@ export function ConversationSidebar({
     });
   }
 
-  function renderConversationRow(c: ConversationRow, opts?: { nested?: boolean }) {
+  function renderConversationRow(
+    c: ConversationRow,
+    opts?: { nested?: boolean }
+  ) {
     const active = activeConversationId === c.id;
     return (
       <ConversationItem
