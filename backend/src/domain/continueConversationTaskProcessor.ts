@@ -157,10 +157,14 @@ export class ContinueConversationTaskProcessor {
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(withoutFence);
-    } catch {
+    const tagged = extractTaggedContent(reply);
+    const parsed = parseFirstJsonObjectCandidate([
+      withoutFence,
+      stripThoughtTagBlock(withoutFence),
+      extractLastBalancedJsonObject(withoutFence),
+      extractLastBalancedJsonObject(stripThoughtTagBlock(withoutFence)),
+    ]);
+    if (parsed === null) {
       const tagged = extractTaggedContent(reply);
       const answer = tagged.answer.trim();
       return {
@@ -169,11 +173,15 @@ export class ContinueConversationTaskProcessor {
       };
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { type: "user-response", text: reply };
+      const answer = tagged.answer.trim();
+      return { type: "user-response", text: answer || reply };
     }
     const rec = parsed as Record<string, unknown>;
+    if (rec.type === "user-response") {
+      const text = typeof rec.text === "string" ? rec.text.trim() : "";
+      return { type: "user-response", text: text || tagged.answer.trim() || reply };
+    }
     if (rec.type !== "tool-invocation") {
-      const tagged = extractTaggedContent(reply);
       const answer = tagged.answer.trim();
       return { type: "user-response", text: answer || reply };
     }
@@ -231,7 +239,11 @@ export class ContinueConversationTaskProcessor {
     const doc = this.llmProviderSettings.getDocument();
     const out: Record<string, unknown> = {};
     const globalSettings = doc.llm_configuration.model_settings;
-    if (globalSettings && typeof globalSettings === "object" && !Array.isArray(globalSettings)) {
+    if (
+      globalSettings &&
+      typeof globalSettings === "object" &&
+      !Array.isArray(globalSettings)
+    ) {
       for (const [key, value] of Object.entries(globalSettings)) {
         out[key] = this.parseStructuredParamValue(key, value);
       }
@@ -356,10 +368,16 @@ export class ContinueConversationTaskProcessor {
       toolDescriptions,
     });
     const llmOverrides = this.resolveLlmOverrides(lastUserMessage);
-    const selectedAgent = lastUserMessage.agentId ? this.agents.get(lastUserMessage.agentId) : null;
+    const selectedAgent = lastUserMessage.agentId
+      ? this.agents.get(lastUserMessage.agentId)
+      : null;
     const effectiveModelPresetId =
-      lastUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
-    const requestParams = this.resolveRequestParams({ modelPresetId: effectiveModelPresetId });
+      lastUserMessage.modelPresetId ??
+      selectedAgent?.default_model_preset_id ??
+      null;
+    const requestParams = this.resolveRequestParams({
+      modelPresetId: effectiveModelPresetId,
+    });
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
     logger.info(
       {
@@ -370,8 +388,8 @@ export class ContinueConversationTaskProcessor {
         llmProviderId: llmOverrides.llmProviderId ?? null,
         llmModel: llmOverrides.llmModel ?? null,
         modelPresetId: lastUserMessage.modelPresetId ?? null,
-      effectiveModelPresetId,
-      requestParamKeys: Object.keys(requestParams),
+        effectiveModelPresetId,
+        requestParamKeys: Object.keys(requestParams),
       },
       "[task] planner request prepared"
     );
@@ -669,4 +687,68 @@ function commonPrefixLen(a: string, b: string): number {
   let i = 0;
   while (i < limit && a[i] === b[i]) i += 1;
   return i;
+}
+
+function stripThoughtTagBlock(text: string): string {
+  return String(text ?? "")
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
+    .trim();
+}
+
+function parseFirstJsonObjectCandidate(candidates: Array<string | null>): unknown | null {
+  for (const candidate of candidates) {
+    const raw = String(candidate ?? "").trim();
+    if (!raw) continue;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Try next candidate form.
+    }
+  }
+  return null;
+}
+
+function extractLastBalancedJsonObject(text: string): string | null {
+  const source = String(text ?? "");
+  if (!source) return null;
+  let end = source.length - 1;
+  while (end >= 0 && /\s/.test(source[end])) end -= 1;
+  if (end < 0 || source[end] !== "}") return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = end; i >= 0; i -= 1) {
+    const ch = source[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === "\"") {
+      inString = true;
+      continue;
+    }
+    if (ch === "}") {
+      depth += 1;
+      continue;
+    }
+    if (ch === "{") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(i, end + 1).trim();
+      }
+      continue;
+    }
+  }
+  return null;
 }
