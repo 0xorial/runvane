@@ -34,7 +34,7 @@ export const UserMessageSsePayloadSchema = z.object({
 export type ConversationSseRow = {
   id: string;
   title: string;
-  group_name: string;
+  group_id: string | null;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
@@ -44,7 +44,7 @@ export type ConversationSseRow = {
 export const ConversationSseRowSchema = z.object({
   id: z.string(),
   title: z.string(),
-  group_name: z.string(),
+  group_id: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),

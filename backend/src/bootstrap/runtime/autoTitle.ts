@@ -46,7 +46,6 @@ function normalizeGeneratedTitle(fullResponse: string): string | null {
   if (!clean) return null;
   const bounded = clean.length > 80 ? clean.slice(0, 80).trim() : clean;
   if (!bounded) return null;
-  // USER_INVARIANT[RV-013]: Auto-title must reject JSON-like garbage (e.g. "{}") and fallback.
   if (!/[a-z0-9]/i.test(bounded)) return null;
   if (/^[\s{}[\],:"'`]+$/.test(bounded)) return null;
   return bounded;

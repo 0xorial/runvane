@@ -14,6 +14,7 @@ import {
 import type {
   ChatMessageEntry,
   ConversationRow,
+  GetConversationsResponse,
   PostConversationMessageAcceptedResponse,
 } from "../../../backend/src/routes/conversations.types";
 import {
@@ -114,7 +115,7 @@ export type PostConversationMessageInput = {
   attachment_ids?: string[];
 };
 
-export function getConversations(): Promise<ConversationRow[]> {
+export function getConversations(): Promise<GetConversationsResponse> {
   return getJson("/api/conversations").then(validateGetConversationsResponse);
 }
 
@@ -126,7 +127,7 @@ export function createConversation(body: { title?: string } = {}): Promise<Conve
 
 export function renameConversation(
   conversationId: string,
-  body: { title?: string; group_name?: string },
+  body: { title?: string; group_id?: string | null; new_group_name?: string },
 ): Promise<ConversationRow> {
   return sendJson(`/api/conversations/${encodeURIComponent(conversationId)}`, "PUT", body).then(
     (data) => validateConversationRowResponse(data, "PUT /api/conversations/:id"),

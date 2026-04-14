@@ -6,12 +6,22 @@ import { ChatEntrySchema } from "../types/chatEntry.js";
 export type ConversationRow = {
   id: string;
   title: string;
-  group_name: string;
+  group_id: string | null;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
   completion_tokens_total: number;
   estimated_cost_usd?: number;
+};
+export type ConversationGroupRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+export type GetConversationsResponse = {
+  conversations: ConversationRow[];
+  groups: ConversationGroupRow[];
 };
 export type CreateConversationRequest = {
   title?: string;
@@ -32,12 +42,22 @@ export type PostConversationMessageAcceptedResponse = {
 const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   id: z.string(),
   title: z.string(),
-  group_name: z.string(),
+  group_id: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),
   completion_tokens_total: z.number().finite(),
   estimated_cost_usd: z.number().finite().optional(),
+});
+const ConversationGroupRowSchema: z.ZodType<ConversationGroupRow> = z.object({
+  id: z.string(),
+  name: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+const GetConversationsResponseSchema: z.ZodType<GetConversationsResponse> = z.object({
+  conversations: z.array(ConversationRowSchema),
+  groups: z.array(ConversationGroupRowSchema),
 });
 
 const CreateConversationRequestSchema: z.ZodType<CreateConversationRequest> = z.object({
@@ -56,9 +76,10 @@ const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationM
     conversation_id: z.string(),
   });
 
-const RenameConversationRequestSchema = z.object({
+const UpdateConversationRequestSchema = z.object({
   title: z.string().optional(),
-  group_name: z.string().optional(),
+  group_id: z.string().nullable().optional(),
+  new_group_name: z.string().optional(),
 });
 
 export function parseCreateConversationTitle(body: Record<string, unknown>): string {
@@ -67,10 +88,10 @@ export function parseCreateConversationTitle(body: Record<string, unknown>): str
   return typeof parsed.data.title === "string" ? parsed.data.title : "New chat";
 }
 
-export function parseRenameConversationTitle(
+export function parseUpdateConversationRequest(
   body: Record<string, unknown>
-): { title?: string; group_name?: string } {
-  const parsed = RenameConversationRequestSchema.safeParse(body);
+): { title?: string; group_id?: string | null; new_group_name?: string } {
+  const parsed = UpdateConversationRequestSchema.safeParse(body);
   return parsed.success ? parsed.data : {};
 }
 
@@ -120,8 +141,8 @@ export function validateConversationRowResponse(value: unknown, context: string)
   return parsed.data;
 }
 
-export function validateGetConversationsResponse(data: unknown): ConversationRow[] {
-  const parsed = z.array(ConversationRowSchema).safeParse(data);
+export function validateGetConversationsResponse(data: unknown): GetConversationsResponse {
+  const parsed = GetConversationsResponseSchema.safeParse(data);
   if (!parsed.success) throw formatZodError("GET /api/conversations", parsed.error);
   return parsed.data;
 }

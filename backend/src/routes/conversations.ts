@@ -6,7 +6,7 @@ import { SseType } from "../types/sse.js";
 import { parseJsonObjectOr400 } from "../http/parseJsonObjectOr400.js";
 import {
   parseCreateConversationTitle,
-  parseRenameConversationTitle,
+  parseUpdateConversationRequest,
   toPostConversationMessageAcceptedResponse,
   validatePostConversationMessageRequest,
 } from "./conversations.types.js";
@@ -55,12 +55,16 @@ export function createConversationsRouter(runtime: Runtime) {
 
   r.get("/", (c) => {
     const rows = runtime.conversations.list();
+    const groups = runtime.conversations.listGroups();
     const costsById = conversationCostsUsdById();
     return c.json(
-      rows.map((row) => ({
-        ...row,
-        estimated_cost_usd: Number((costsById.get(row.id) ?? 0).toFixed(8)),
-      })),
+      {
+        conversations: rows.map((row) => ({
+          ...row,
+          estimated_cost_usd: Number((costsById.get(row.id) ?? 0).toFixed(8)),
+        })),
+        groups,
+      },
     );
   });
 
@@ -81,14 +85,18 @@ export function createConversationsRouter(runtime: Runtime) {
     const conversationId = c.req.param("conversationId");
     const parsed = await parseJsonObjectOr400(c);
     if (!parsed.ok) return parsed.response;
-    const update = parseRenameConversationTitle(parsed.value);
+    const update = parseUpdateConversationRequest(parsed.value);
     if (!runtime.conversations.exists(conversationId)) {
       return c.json({ detail: "conversation not found" }, 404);
     }
     const hasTitleUpdate = Object.prototype.hasOwnProperty.call(update, "title");
-    const hasGroupUpdate = Object.prototype.hasOwnProperty.call(update, "group_name");
-    if (!hasTitleUpdate && !hasGroupUpdate) {
-      return c.json({ detail: "title or group_name is required" }, 400);
+    const hasGroupIdUpdate = Object.prototype.hasOwnProperty.call(update, "group_id");
+    const hasNewGroupNameUpdate = Object.prototype.hasOwnProperty.call(update, "new_group_name");
+    if (!hasTitleUpdate && !hasGroupIdUpdate && !hasNewGroupNameUpdate) {
+      return c.json({ detail: "title or group update is required" }, 400);
+    }
+    if (hasGroupIdUpdate && hasNewGroupNameUpdate) {
+      return c.json({ detail: "provide either group_id or new_group_name, not both" }, 400);
     }
 
     let updated = runtime.conversations.get(conversationId);
@@ -104,10 +112,22 @@ export function createConversationsRouter(runtime: Runtime) {
       updated = titleUpdated;
     }
 
-    if (hasGroupUpdate) {
+    if (hasGroupIdUpdate) {
+      let groupUpdated;
+      try {
+        groupUpdated = runtime.conversations.updateGroupId(conversationId, update.group_id ?? null);
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : "invalid group_id";
+        return c.json({ detail }, 400);
+      }
+      if (!groupUpdated) return c.json({ detail: "conversation not found" }, 404);
+      updated = groupUpdated;
+    }
+
+    if (hasNewGroupNameUpdate) {
       const groupUpdated = runtime.conversations.updateGroupName(
         conversationId,
-        String(update.group_name || ""),
+        String(update.new_group_name || ""),
       );
       if (!groupUpdated) return c.json({ detail: "conversation not found" }, 404);
       updated = groupUpdated;

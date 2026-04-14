@@ -3,11 +3,18 @@ import type { SqliteDb } from "../db/client.js";
 export type ConversationRow = {
   id: string;
   title: string;
-  group_name: string;
+  group_id: string | null;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
   completion_tokens_total: number;
+};
+
+export type ConversationGroupRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export class ConversationsRepo {
@@ -52,7 +59,7 @@ export class ConversationsRepo {
         `SELECT
            c.id,
            c.title,
-           COALESCE(g.name, trim(c.group_name), '') AS group_name,
+           c.group_id,
            c.created_at,
            c.updated_at,
            COALESCE((
@@ -68,7 +75,6 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS completion_tokens_total
          FROM conversations c
-         LEFT JOIN conversation_groups g ON g.id = c.group_id
          ORDER BY c.updated_at DESC`,
       )
       .all() as ConversationRow[];
@@ -80,7 +86,7 @@ export class ConversationsRepo {
         `SELECT
            c.id,
            c.title,
-           COALESCE(g.name, trim(c.group_name), '') AS group_name,
+           c.group_id,
            c.created_at,
            c.updated_at,
            COALESCE((
@@ -96,11 +102,20 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS completion_tokens_total
          FROM conversations c
-         LEFT JOIN conversation_groups g ON g.id = c.group_id
          WHERE c.id = ?`,
       )
       .get(id) as ConversationRow | undefined;
     return row ?? null;
+  }
+
+  listGroups(): ConversationGroupRow[] {
+    return this.db
+      .prepare(
+        `SELECT id, name, created_at, updated_at
+         FROM conversation_groups
+         ORDER BY name COLLATE NOCASE ASC`,
+      )
+      .all() as ConversationGroupRow[];
   }
 
   exists(id: string): boolean {
@@ -116,7 +131,7 @@ export class ConversationsRepo {
     const row: ConversationRow = {
       id: crypto.randomUUID(),
       title,
-      group_name: "",
+      group_id: null,
       created_at: now,
       updated_at: now,
       prompt_tokens_total: 0,
@@ -125,8 +140,8 @@ export class ConversationsRepo {
 
     this.db
       .prepare(
-        `INSERT INTO conversations (id, title, group_name, group_id, created_at, updated_at)
-         VALUES (@id, @title, @group_name, NULL, @created_at, @updated_at)`,
+        `INSERT INTO conversations (id, title, group_id, created_at, updated_at)
+         VALUES (@id, @title, NULL, @created_at, @updated_at)`,
       )
       .run(row);
 
@@ -155,18 +170,43 @@ export class ConversationsRepo {
   updateGroupName(id: string, groupNameRaw: string): ConversationRow | null {
     const now = new Date().toISOString();
     const group_name = String(groupNameRaw || "").trim();
-    // USER_INVARIANT[RV-016]: Conversation grouping is normalized via `conversation_groups` table.
     const groupId = group_name ? this.ensureGroupIdByName(group_name) : null;
     const result = this.db
       .prepare(
         `UPDATE conversations
-         SET group_name = @group_name, group_id = @group_id, updated_at = @updated_at
+         SET group_id = @group_id, updated_at = @updated_at
          WHERE id = @id`,
       )
       .run({
         id,
-        group_name,
         group_id: groupId,
+        updated_at: now,
+      });
+    if (Number(result.changes ?? 0) !== 1) return null;
+    return this.get(id);
+  }
+
+  updateGroupId(id: string, groupIdRaw: string | null): ConversationRow | null {
+    const now = new Date().toISOString();
+    const groupId = typeof groupIdRaw === "string" ? groupIdRaw.trim() : "";
+    const normalizedGroupId = groupId ? groupId : null;
+    if (normalizedGroupId) {
+      const existing = this.db
+        .prepare("SELECT id FROM conversation_groups WHERE id = ?")
+        .get(normalizedGroupId) as { id?: string } | undefined;
+      if (!existing?.id) {
+        throw new Error(`conversation group not found: ${normalizedGroupId}`);
+      }
+    }
+    const result = this.db
+      .prepare(
+        `UPDATE conversations
+         SET group_id = @group_id, updated_at = @updated_at
+         WHERE id = @id`,
+      )
+      .run({
+        id,
+        group_id: normalizedGroupId,
         updated_at: now,
       });
     if (Number(result.changes ?? 0) !== 1) return null;

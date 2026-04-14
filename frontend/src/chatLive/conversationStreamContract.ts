@@ -1,8 +1,3 @@
-/**
- * USER_INVARIANT[RV-005]: Global SSE contract for `GET /api/stream`.
- * Chat consumers should filter by `conversation_id`.
- */
-
 export function sseEventBelongsToConversation(
   eventConversationId: string | null,
   conversationId: string,

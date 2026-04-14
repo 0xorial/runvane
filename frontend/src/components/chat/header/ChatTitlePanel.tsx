@@ -31,8 +31,8 @@ export function ChatTitlePanel({
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
 
   async function refreshConversationMetrics(targetConversationId: string) {
-    const rows = await getConversations();
-    const row = rows.find((x) => x.id === targetConversationId);
+    const payload = await getConversations();
+    const row = payload.conversations.find((x) => x.id === targetConversationId);
     if (!row) return;
     setTokenTotals({
       prompt: row.prompt_tokens_total,
@@ -55,7 +55,7 @@ export function ChatTitlePanel({
       try {
         const rows = await getConversations();
         if (cancelled) return;
-        const row = rows.find((x) => x.id === conversationId);
+        const row = rows.conversations.find((x) => x.id === conversationId);
         setTitle(String(row?.title || "Untitled"));
         setTokenTotals({
           prompt: row?.prompt_tokens_total ?? 0,
@@ -114,7 +114,6 @@ export function ChatTitlePanel({
           });
         }
       },
-      pollTick: async () => false,
     });
     return () => dispose();
   }, [conversationId]);

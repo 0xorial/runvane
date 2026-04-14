@@ -40,10 +40,6 @@ function chatActiveIdFromPath(pathname: string): string | null {
   return segment === "new" || !segment ? null : segment;
 }
 
-/**
- * USER_INVARIANT[RV-005]: Single shell for `/chat/new` and `/chat/:id` so navigating
- * new → id does **not** remount ChatPage (SSE + state survive). Param `new` → null.
- */
 function ChatPageShell({
   sidebarVisible,
   onToggleSidebar,

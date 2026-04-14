@@ -5,8 +5,9 @@ import type { SseEvent } from "./sseTypes";
 
 export type GlobalLiveHandlers = {
   onSseEvent: (ev: SseEvent) => void;
-  pollTick: () => Promise<boolean>;
 };
+
+export type GlobalPollHandler = () => Promise<boolean> | boolean;
 
 const DEFAULT_POLL_MS = 450;
 const DEFAULT_RECOVERY_MS = 2500;
@@ -25,6 +26,7 @@ let recoveryWaits = 0;
 let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
 let pollId: ReturnType<typeof setInterval> | null = null;
 const subscribers = new Set<GlobalLiveHandlers>();
+const pollSubscribers = new Set<GlobalPollHandler>();
 
 function cleanupGlobal(): void {
   if (recoveryTimer != null) clearTimeout(recoveryTimer);
@@ -41,19 +43,23 @@ function cleanupGlobal(): void {
   es = null;
 }
 
+function maybeCleanupGlobal(): void {
+  if (subscribers.size === 0 && pollSubscribers.size === 0) cleanupGlobal();
+}
+
 function startPoll(pollMs: number): void {
   if (pollId != null) return;
   pollId = setInterval(() => {
     void (async () => {
-      for (const sub of [...subscribers]) {
+      for (const pollTick of [...pollSubscribers]) {
         try {
-          const stop = await sub.pollTick();
-          if (stop) subscribers.delete(sub);
+          const stop = await pollTick();
+          if (stop === true) pollSubscribers.delete(pollTick);
         } catch (e) {
           console.error("[runvane] global poll tick failed", e);
         }
       }
-      if (subscribers.size === 0) cleanupGlobal();
+      maybeCleanupGlobal();
     })();
   }, pollMs);
 }
@@ -128,13 +134,33 @@ export function subscribeGlobalLive(
     pollIntervalMs?: number;
     recoveryCheckMs?: number;
     maxRecoveryWaits?: number;
-  },
+  }
 ): () => void {
   disposed = false;
   subscribers.add(handlers);
   ensureGlobalSse(options);
   return () => {
     subscribers.delete(handlers);
-    if (subscribers.size === 0) cleanupGlobal();
+    maybeCleanupGlobal();
+  };
+}
+
+// TODO AI SLOP thinks polling should be exposed
+
+export function subscribeGlobalPoll(
+  pollTick: GlobalPollHandler,
+  options?: {
+    apiBaseUrl?: string;
+    pollIntervalMs?: number;
+    recoveryCheckMs?: number;
+    maxRecoveryWaits?: number;
+  }
+): () => void {
+  disposed = false;
+  pollSubscribers.add(pollTick);
+  ensureGlobalSse(options);
+  return () => {
+    pollSubscribers.delete(pollTick);
+    maybeCleanupGlobal();
   };
 }

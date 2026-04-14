@@ -17,4 +17,4 @@
 
 ## HTTP on conversation change
 
-- **`USER_INVARIANT[RV-006]`:** one messages GET when switching chats; runs/steps/approvals from SSE.
+- One messages GET when switching chats; runs/steps/approvals from SSE.

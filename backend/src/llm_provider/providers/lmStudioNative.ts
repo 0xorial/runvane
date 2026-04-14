@@ -264,7 +264,6 @@ export class LmStudioNativeProvider implements LlmProvider {
         ? (raw as { models: unknown[] }).models
         : []),
     ];
-    // USER_INVARIANT[RV-010]: LM Studio provider settings must list only loaded LLM models.
     const uniqueModels = Array.from(
       new Set(candidates.map((x) => parseModelIdentifier(x)).filter((x) => x.length > 0)),
     );
@@ -288,7 +287,6 @@ export class LmStudioNativeProvider implements LlmProvider {
       "[llm-provider] native completion request sending",
     );
     const requestParams = safeRequestParams(input.requestParams);
-    // USER_INVARIANT[RV-011]: LM Studio must use native API endpoint `/api/v1/chat` (not OpenAI `/v1/chat/completions`).
     const res = await fetch(requestUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { getConversationMessages } from "../api/client";
-import { subscribeGlobalLive } from "../protocol/runLiveClient";
+import {
+  subscribeGlobalLive,
+  subscribeGlobalPoll,
+} from "../protocol/runLiveClient";
 import {
   defaultChatEntries,
   mapApiMessagesToChatEntries,
 } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
-import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
+import type {
+  ChatAttachment,
+  ChatEntry,
+  UserMessageEntry,
+} from "../protocol/chatEntry";
 import { createObservableItemCollection } from "../utils/observableCollection";
 
 export function useChatSession(conversationId: string | null | undefined) {
@@ -15,7 +22,10 @@ export function useChatSession(conversationId: string | null | undefined) {
     createObservableItemCollection<ChatEntry>(defaultChatEntries)
   );
   const liveDisposeRef = useRef<(() => void) | null>(null);
-  const pendingUserByConversationRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
+  const pollDisposeRef = useRef<(() => void) | null>(null);
+  const pendingUserByConversationRef = useRef<Map<string, UserMessageEntry[]>>(
+    new Map()
+  );
 
   const mergePendingUsers = useCallback(
     (cid: string, fetched: ChatEntry[]): ChatEntry[] => {
@@ -54,11 +64,14 @@ export function useChatSession(conversationId: string | null | undefined) {
     []
   );
 
-  const reloadMessages = useCallback(async (cid: string) => {
-    const data = await getConversationMessages(cid);
-    const fetched = mapApiMessagesToChatEntries(data);
-    storeRef.current.replace(mergePendingUsers(cid, fetched));
-  }, [mergePendingUsers]);
+  const reloadMessages = useCallback(
+    async (cid: string) => {
+      const data = await getConversationMessages(cid);
+      const fetched = mapApiMessagesToChatEntries(data);
+      storeRef.current.replace(mergePendingUsers(cid, fetched));
+    },
+    [mergePendingUsers]
+  );
 
   const reconcileIncomingUserMessage = useCallback(
     (cid: string, incoming: UserMessageEntry): boolean => {
@@ -72,7 +85,8 @@ export function useChatSession(conversationId: string | null | undefined) {
         ...pending.slice(0, matchIndex),
         ...pending.slice(matchIndex + 1),
       ];
-      if (nextPending.length === 0) pendingUserByConversationRef.current.delete(cid);
+      if (nextPending.length === 0)
+        pendingUserByConversationRef.current.delete(cid);
       else pendingUserByConversationRef.current.set(cid, nextPending);
 
       const current = storeRef.current.getRows().map((row$) => row$.get());
@@ -100,6 +114,8 @@ export function useChatSession(conversationId: string | null | undefined) {
   useEffect(() => {
     liveDisposeRef.current?.();
     liveDisposeRef.current = null;
+    pollDisposeRef.current?.();
+    pollDisposeRef.current = null;
     if (!conversationId) return;
 
     const cid = String(conversationId);
@@ -344,16 +360,18 @@ export function useChatSession(conversationId: string | null | undefined) {
           });
         } else assertNever(ev);
       },
-      pollTick: async () => {
-        // Fallback when SSE is dead.
-        await reloadMessages(cid);
-        return false;
-      },
+    });
+    pollDisposeRef.current = subscribeGlobalPoll(async () => {
+      // Fallback when SSE is dead.
+      await reloadMessages(cid);
+      return false;
     });
 
     return () => {
       liveDisposeRef.current?.();
       liveDisposeRef.current = null;
+      pollDisposeRef.current?.();
+      pollDisposeRef.current = null;
     };
   }, [conversationId, reloadMessages, reconcileIncomingUserMessage]);
 
@@ -401,8 +419,12 @@ export function useChatSession(conversationId: string | null | undefined) {
         ...(input.agentId ? { agentId: input.agentId } : {}),
         ...(input.llmProviderId ? { llmProviderId: input.llmProviderId } : {}),
         ...(input.llmModel ? { llmModel: input.llmModel } : {}),
-        ...(input.modelPresetId != null ? { modelPresetId: input.modelPresetId } : {}),
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+        ...(input.modelPresetId != null
+          ? { modelPresetId: input.modelPresetId }
+          : {}),
+        ...(input.attachments?.length
+          ? { attachments: input.attachments }
+          : {}),
       };
       const current = pendingUserByConversationRef.current.get(cid) ?? [];
       pendingUserByConversationRef.current.set(cid, [...current, row]);
