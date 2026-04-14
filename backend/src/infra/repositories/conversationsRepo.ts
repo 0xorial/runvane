@@ -3,6 +3,7 @@ import type { SqliteDb } from "../db/client.js";
 export type ConversationRow = {
   id: string;
   title: string;
+  group_name: string;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
@@ -12,12 +13,46 @@ export type ConversationRow = {
 export class ConversationsRepo {
   constructor(private readonly db: SqliteDb) {}
 
+  private ensureGroupIdByName(groupNameRaw: string): string {
+    const name = String(groupNameRaw || "").trim();
+    if (!name) throw new Error("group name is required");
+
+    const existing = this.db
+      .prepare("SELECT id FROM conversation_groups WHERE name = ?")
+      .get(name) as { id?: string } | undefined;
+    if (typeof existing?.id === "string" && existing.id) return existing.id;
+
+    const now = new Date().toISOString();
+    const createdId = crypto.randomUUID();
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO conversation_groups (id, name, created_at, updated_at)
+           VALUES (@id, @name, @created_at, @updated_at)`,
+        )
+        .run({
+          id: createdId,
+          name,
+          created_at: now,
+          updated_at: now,
+        });
+      return createdId;
+    } catch (e) {
+      const retried = this.db
+        .prepare("SELECT id FROM conversation_groups WHERE name = ?")
+        .get(name) as { id?: string } | undefined;
+      if (typeof retried?.id === "string" && retried.id) return retried.id;
+      throw new Error(`failed to ensure conversation group "${name}"`, { cause: e });
+    }
+  }
+
   list(): ConversationRow[] {
     return this.db
       .prepare(
         `SELECT
            c.id,
            c.title,
+           COALESCE(g.name, trim(c.group_name), '') AS group_name,
            c.created_at,
            c.updated_at,
            COALESCE((
@@ -33,6 +68,7 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS completion_tokens_total
          FROM conversations c
+         LEFT JOIN conversation_groups g ON g.id = c.group_id
          ORDER BY c.updated_at DESC`,
       )
       .all() as ConversationRow[];
@@ -44,6 +80,7 @@ export class ConversationsRepo {
         `SELECT
            c.id,
            c.title,
+           COALESCE(g.name, trim(c.group_name), '') AS group_name,
            c.created_at,
            c.updated_at,
            COALESCE((
@@ -59,6 +96,7 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS completion_tokens_total
          FROM conversations c
+         LEFT JOIN conversation_groups g ON g.id = c.group_id
          WHERE c.id = ?`,
       )
       .get(id) as ConversationRow | undefined;
@@ -78,6 +116,7 @@ export class ConversationsRepo {
     const row: ConversationRow = {
       id: crypto.randomUUID(),
       title,
+      group_name: "",
       created_at: now,
       updated_at: now,
       prompt_tokens_total: 0,
@@ -86,8 +125,8 @@ export class ConversationsRepo {
 
     this.db
       .prepare(
-        `INSERT INTO conversations (id, title, created_at, updated_at)
-         VALUES (@id, @title, @created_at, @updated_at)`,
+        `INSERT INTO conversations (id, title, group_name, group_id, created_at, updated_at)
+         VALUES (@id, @title, @group_name, NULL, @created_at, @updated_at)`,
       )
       .run(row);
 
@@ -107,6 +146,27 @@ export class ConversationsRepo {
       .run({
         id,
         title,
+        updated_at: now,
+      });
+    if (Number(result.changes ?? 0) !== 1) return null;
+    return this.get(id);
+  }
+
+  updateGroupName(id: string, groupNameRaw: string): ConversationRow | null {
+    const now = new Date().toISOString();
+    const group_name = String(groupNameRaw || "").trim();
+    // USER_INVARIANT[RV-016]: Conversation grouping is normalized via `conversation_groups` table.
+    const groupId = group_name ? this.ensureGroupIdByName(group_name) : null;
+    const result = this.db
+      .prepare(
+        `UPDATE conversations
+         SET group_name = @group_name, group_id = @group_id, updated_at = @updated_at
+         WHERE id = @id`,
+      )
+      .run({
+        id,
+        group_name,
+        group_id: groupId,
         updated_at: now,
       });
     if (Number(result.changes ?? 0) !== 1) return null;

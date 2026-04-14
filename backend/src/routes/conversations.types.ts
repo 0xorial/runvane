@@ -6,6 +6,7 @@ import { ChatEntrySchema } from "../types/chatEntry.js";
 export type ConversationRow = {
   id: string;
   title: string;
+  group_name: string;
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
@@ -31,6 +32,7 @@ export type PostConversationMessageAcceptedResponse = {
 const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   id: z.string(),
   title: z.string(),
+  group_name: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),
@@ -55,7 +57,8 @@ const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationM
   });
 
 const RenameConversationRequestSchema = z.object({
-  title: z.string(),
+  title: z.string().optional(),
+  group_name: z.string().optional(),
 });
 
 export function parseCreateConversationTitle(body: Record<string, unknown>): string {
@@ -64,9 +67,11 @@ export function parseCreateConversationTitle(body: Record<string, unknown>): str
   return typeof parsed.data.title === "string" ? parsed.data.title : "New chat";
 }
 
-export function parseRenameConversationTitle(body: Record<string, unknown>): string {
+export function parseRenameConversationTitle(
+  body: Record<string, unknown>
+): { title?: string; group_name?: string } {
   const parsed = RenameConversationRequestSchema.safeParse(body);
-  return parsed.success ? parsed.data.title : "";
+  return parsed.success ? parsed.data : {};
 }
 
 export function toPostConversationMessageAcceptedResponse(

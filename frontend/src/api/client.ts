@@ -126,7 +126,7 @@ export function createConversation(body: { title?: string } = {}): Promise<Conve
 
 export function renameConversation(
   conversationId: string,
-  body: { title: string },
+  body: { title?: string; group_name?: string },
 ): Promise<ConversationRow> {
   return sendJson(`/api/conversations/${encodeURIComponent(conversationId)}`, "PUT", body).then(
     (data) => validateConversationRowResponse(data, "PUT /api/conversations/:id"),

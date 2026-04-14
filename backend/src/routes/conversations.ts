@@ -81,17 +81,36 @@ export function createConversationsRouter(runtime: Runtime) {
     const conversationId = c.req.param("conversationId");
     const parsed = await parseJsonObjectOr400(c);
     if (!parsed.ok) return parsed.response;
-    const title = parseRenameConversationTitle(parsed.value);
+    const update = parseRenameConversationTitle(parsed.value);
     if (!runtime.conversations.exists(conversationId)) {
       return c.json({ detail: "conversation not found" }, 404);
     }
-    const next = String(title || "").trim();
-    if (!next) {
-      return c.json({ detail: "title is required" }, 400);
+    const hasTitleUpdate = Object.prototype.hasOwnProperty.call(update, "title");
+    const hasGroupUpdate = Object.prototype.hasOwnProperty.call(update, "group_name");
+    if (!hasTitleUpdate && !hasGroupUpdate) {
+      return c.json({ detail: "title or group_name is required" }, 400);
     }
-    const updated = runtime.conversations.updateTitle(conversationId, next);
-    if (!updated) {
-      return c.json({ detail: "conversation not found" }, 404);
+
+    let updated = runtime.conversations.get(conversationId);
+    if (!updated) return c.json({ detail: "conversation not found" }, 404);
+
+    if (hasTitleUpdate) {
+      const nextTitle = String(update.title || "").trim();
+      if (!nextTitle) {
+        return c.json({ detail: "title is required when provided" }, 400);
+      }
+      const titleUpdated = runtime.conversations.updateTitle(conversationId, nextTitle);
+      if (!titleUpdated) return c.json({ detail: "conversation not found" }, 404);
+      updated = titleUpdated;
+    }
+
+    if (hasGroupUpdate) {
+      const groupUpdated = runtime.conversations.updateGroupName(
+        conversationId,
+        String(update.group_name || ""),
+      );
+      if (!groupUpdated) return c.json({ detail: "conversation not found" }, 404);
+      updated = groupUpdated;
     }
     runtime.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
