@@ -16,6 +16,7 @@ export type ConnectivityResult = {
 export type StreamTextCompletionInput = {
   model: string;
   prompt: string;
+  requestParams?: Record<string, unknown>;
   files?: Array<{
     filename: string;
     mimeType: string;

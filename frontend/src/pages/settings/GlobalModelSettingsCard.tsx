@@ -35,11 +35,15 @@ export function GlobalModelSettingsCard({
           </span>
           <ModelSelector
             value={settings.llm_configuration?.model_name || ""}
-            onChange={(nextValue) => {
+            onChange={(nextValue, providerId) => {
               setSettings((prev) => {
                 if (!prev) return prev;
                 const next = structuredClone(prev);
+                // USER_INVARIANT[RV-012]: Global model selection must persist both model and provider id.
                 next.llm_configuration.model_name = nextValue;
+                if (providerId && String(providerId).trim()) {
+                  next.llm_configuration.provider_id = String(providerId).trim();
+                }
                 return next;
               });
             }}

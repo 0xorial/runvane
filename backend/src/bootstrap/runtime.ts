@@ -78,6 +78,7 @@ export function createRuntime(opts: {
       chatEntries,
       hub,
       llmProviderSettings,
+      modelPresets,
       agents,
       uploads,
       tools,

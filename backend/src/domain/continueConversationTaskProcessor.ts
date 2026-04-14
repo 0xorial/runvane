@@ -3,6 +3,7 @@ import { logger } from "../infra/logger.js";
 import type { AgentsRepo } from "../infra/repositories/agentsRepo.js";
 import { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
 import { LlmProviderSettingsRepo } from "../infra/repositories/llmProviderSettingsRepo.js";
+import { ModelPresetsRepo } from "../infra/repositories/modelPresetsRepo.js";
 import { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import type { ContinueConversationTask } from "./agentTask.js";
 import type { ToolPermission } from "../tools/baseTool.js";
@@ -21,6 +22,7 @@ export class ContinueConversationTaskProcessor {
     private readonly chatEntries: ChatEntriesRepo,
     private readonly hub: ConversationEventHub,
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
+    private readonly modelPresets: ModelPresetsRepo,
     private readonly agents: AgentsRepo,
     private readonly uploads: UploadsRepo,
     private readonly tools: ToolRegistry,
@@ -201,9 +203,55 @@ export class ContinueConversationTaskProcessor {
     );
   }
 
+  private parseStructuredParamValue(key: string, value: unknown): unknown {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+
+    // Model presets editor stores values as strings; for structured output keys we require valid JSON.
+    if (
+      key === "response_format" ||
+      key === "json_schema" ||
+      key === "schema" ||
+      key === "structured_output"
+    ) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`invalid JSON for model parameter "${key}": ${msg}`);
+      }
+    }
+    return value;
+  }
+
+  private resolveRequestParams(input: {
+    modelPresetId?: number | null;
+  }): Record<string, unknown> {
+    const doc = this.llmProviderSettings.getDocument();
+    const out: Record<string, unknown> = {};
+    const globalSettings = doc.llm_configuration.model_settings;
+    if (globalSettings && typeof globalSettings === "object" && !Array.isArray(globalSettings)) {
+      for (const [key, value] of Object.entries(globalSettings)) {
+        out[key] = this.parseStructuredParamValue(key, value);
+      }
+    }
+    if (typeof input.modelPresetId === "number") {
+      const preset = this.modelPresets.get(input.modelPresetId);
+      if (!preset) {
+        throw new Error(`model preset not found: ${input.modelPresetId}`);
+      }
+      for (const [key, value] of Object.entries(preset.parameters ?? {})) {
+        out[key] = this.parseStructuredParamValue(key, value);
+      }
+    }
+    return out;
+  }
+
   private async callLlmStreaming(
     prompt: string,
     overrides: { llmProviderId?: string; llmModel?: string },
+    requestParams: Record<string, unknown>,
     files: Array<{
       filename: string;
       mimeType: string;
@@ -240,6 +288,7 @@ export class ContinueConversationTaskProcessor {
       {
         model,
         prompt,
+        requestParams,
         files,
       },
       (delta) => {
@@ -307,6 +356,10 @@ export class ContinueConversationTaskProcessor {
       toolDescriptions,
     });
     const llmOverrides = this.resolveLlmOverrides(lastUserMessage);
+    const selectedAgent = lastUserMessage.agentId ? this.agents.get(lastUserMessage.agentId) : null;
+    const effectiveModelPresetId =
+      lastUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
+    const requestParams = this.resolveRequestParams({ modelPresetId: effectiveModelPresetId });
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
     logger.info(
       {
@@ -317,6 +370,8 @@ export class ContinueConversationTaskProcessor {
         llmProviderId: llmOverrides.llmProviderId ?? null,
         llmModel: llmOverrides.llmModel ?? null,
         modelPresetId: lastUserMessage.modelPresetId ?? null,
+      effectiveModelPresetId,
+      requestParamKeys: Object.keys(requestParams),
       },
       "[task] planner request prepared"
     );
@@ -366,6 +421,7 @@ export class ContinueConversationTaskProcessor {
       const completion = await this.callLlmStreaming(
         requestText,
         llmOverrides,
+        requestParams,
         inputFiles,
         (delta) => {
           if (!firstDeltaPublished) {

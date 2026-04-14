@@ -23,7 +23,9 @@ type AutoTitleInput = {
 };
 
 function fallbackConversationTitle(firstMessage: string): string {
-  const text = String(firstMessage || "").replace(/\s+/g, " ").trim();
+  const text = String(firstMessage || "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) return "New chat";
   return text.length > 64 ? `${text.slice(0, 64).trim()}...` : text;
 }
@@ -36,10 +38,24 @@ function buildTitlePrompt(firstMessage: string): string {
   );
 }
 
+function normalizeGeneratedTitle(fullResponse: string): string | null {
+  const clean = fullResponse
+    .replace(/\s+/g, " ")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .trim();
+  if (!clean) return null;
+  const bounded = clean.length > 80 ? clean.slice(0, 80).trim() : clean;
+  if (!bounded) return null;
+  // USER_INVARIANT[RV-013]: Auto-title must reject JSON-like garbage (e.g. "{}") and fallback.
+  if (!/[a-z0-9]/i.test(bounded)) return null;
+  if (/^[\s{}[\],:"'`]+$/.test(bounded)) return null;
+  return bounded;
+}
+
 async function generateConversationTitleUsingSystemModel(
   llmProviderSettings: LlmProviderSettingsRepo,
   prompt: string,
-  onDelta: (delta: string) => void,
+  onDelta: (delta: string) => void
 ): Promise<TitleGenerationResult | null> {
   const doc = llmProviderSettings.getDocument();
   const providerId = String(doc.llm_configuration.provider_id || "").trim();
@@ -51,17 +67,14 @@ async function generateConversationTitleUsingSystemModel(
   const completion = await provider.streamTextCompletion(
     providerSettings,
     { model, prompt },
-    onDelta,
+    onDelta
   );
   const fullResponse = String(completion.text || "");
-  const clean = fullResponse
-    .replace(/\s+/g, " ")
-    .replace(/^["'`]+|["'`]+$/g, "")
-    .trim();
+  const clean = normalizeGeneratedTitle(fullResponse);
   return {
     model,
     fullResponse,
-    cleanTitle: clean ? (clean.length > 80 ? clean.slice(0, 80).trim() : clean) : null,
+    cleanTitle: clean,
     ...(completion.usage
       ? {
           promptTokens: completion.usage.promptTokens,
@@ -115,13 +128,13 @@ export async function maybeAutoTitleConversation({
           chat_entry_id: plannerEntry.id,
           delta,
         });
-      },
+      }
     );
   } catch (e) {
     generationError = e;
     logger.error(
       { conversationId, error: e },
-      "[chat] title generation request failed",
+      "[chat] title generation request failed"
     );
   }
 
@@ -191,7 +204,9 @@ export async function maybeAutoTitleConversation({
 
   if (generationError) {
     const detail =
-      generationError instanceof Error ? generationError.message : String(generationError);
+      generationError instanceof Error
+        ? generationError.message
+        : String(generationError);
     chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,

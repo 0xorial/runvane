@@ -38,6 +38,26 @@ function usageFromOpenAiPayload(usage: unknown): StreamTextCompletionUsage | und
   return undefined;
 }
 
+function safeRequestParams(params: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!params) return {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (!key) continue;
+    if (
+      key === "model" ||
+      key === "messages" ||
+      key === "stream" ||
+      key === "stream_options" ||
+      key === "input" ||
+      key === "prompt"
+    ) {
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
 const DEFAULT_SPEC: LlmProviderSettingSpec[] = [
   {
     key: "api_key",
@@ -53,15 +73,62 @@ const DEFAULT_SPEC: LlmProviderSettingSpec[] = [
   },
 ];
 
+type OpenAiCompatibleProviderOptions = {
+  requireApiKey?: boolean;
+};
+
+function parseModelIdentifier(
+  rawModel: unknown,
+  opts: { requireLlmType: boolean },
+): string {
+  if (rawModel == null || typeof rawModel !== "object") return "";
+  const rec = rawModel as {
+    id?: unknown;
+    key?: unknown;
+    type?: unknown;
+    status?: unknown;
+    state?: unknown;
+    loaded?: unknown;
+    loaded_instances?: unknown;
+  };
+
+  if (opts.requireLlmType && typeof rec.type === "string" && rec.type && rec.type !== "llm") {
+    return "";
+  }
+
+  if (typeof rec.id === "string" && rec.id.trim()) return rec.id.trim();
+  if (typeof rec.key === "string" && rec.key.trim()) return rec.key.trim();
+
+  if (Array.isArray(rec.loaded_instances) && rec.loaded_instances.length > 0) {
+    const first = rec.loaded_instances[0];
+    if (
+      first != null &&
+      typeof first === "object" &&
+      typeof (first as { id?: unknown }).id === "string"
+    ) {
+      return String((first as { id: string }).id).trim();
+    }
+  }
+  return "";
+}
+
 export class OpenAiCompatibleProvider implements LlmProvider {
+  private readonly requireApiKey: boolean;
+
   constructor(
     public readonly id: string,
     public readonly label: string,
     private readonly defaultBaseUrl: string,
-  ) {}
+    options: OpenAiCompatibleProviderOptions = {},
+  ) {
+    this.requireApiKey = options.requireApiKey ?? true;
+  }
 
   getSettingsSpec(): LlmProviderSettingSpec[] {
-    return DEFAULT_SPEC;
+    if (this.requireApiKey) return DEFAULT_SPEC;
+    return DEFAULT_SPEC.map((spec) =>
+      spec.key === "api_key" ? { ...spec, required: false } : spec,
+    );
   }
 
   private mergedSettings(settings: ProviderSettingsDict): ProviderSettingsDict {
@@ -75,19 +142,22 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const settings = this.mergedSettings(settingsIn);
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
+    const requestUrl = `${baseUrl}/models`;
 
     if (!baseUrl) return { ok: false, detail: "base_url is required" };
-    if (!key) return { ok: false, detail: "api_key is required" };
+    if (this.requireApiKey && !key) return { ok: false, detail: "api_key is required" };
 
     try {
       logger.info(
-        { providerId: this.id, baseUrl },
+        { providerId: this.id, baseUrl, requestUrl },
         "[llm-provider] connectivity request formatted",
       );
       logger.info({ providerId: this.id }, "[llm-provider] connectivity request sending");
-      const res = await fetch(`${baseUrl}/models`, {
+      const headers: Record<string, string> = {};
+      if (key) headers.Authorization = `Bearer ${key}`;
+      const res = await fetch(requestUrl, {
         method: "GET",
-        headers: { Authorization: `Bearer ${key}` },
+        headers,
       });
       logger.info(
         { providerId: this.id, status: res.status },
@@ -111,17 +181,17 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const settings = this.mergedSettings(settingsIn);
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
+    const requestUrl = `${baseUrl}/models`;
     logger.info(
-      { providerId: this.id, baseUrl },
+      { providerId: this.id, baseUrl, requestUrl },
       "[llm-provider] models request formatted",
     );
     logger.info({ providerId: this.id }, "[llm-provider] models request sending");
-    const res = await fetch(`${baseUrl}/models`, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (key) headers.Authorization = `Bearer ${key}`;
+    const res = await fetch(requestUrl, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
+      headers,
     });
     logger.info(
       { providerId: this.id, status: res.status },
@@ -131,24 +201,32 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       throw new Error(`models fetch failed (${res.status})`);
     }
     const raw = (await res.json()) as unknown;
-    const data =
+    const openAiData =
       raw != null &&
       typeof raw === "object" &&
       Array.isArray((raw as { data?: unknown }).data)
         ? (raw as { data: unknown[] }).data
         : [];
-    const models = data
-      .map((x) =>
-        x != null && typeof x === "object" && typeof (x as { id?: unknown }).id === "string"
-          ? String((x as { id: string }).id)
-          : "",
-      )
-      .filter((x) => x.length > 0);
+    const lmStudioData =
+      raw != null &&
+      typeof raw === "object" &&
+      Array.isArray((raw as { models?: unknown }).models)
+        ? (raw as { models: unknown[] }).models
+        : [];
+    const models = [
+      ...openAiData.map((x) =>
+        parseModelIdentifier(x, { requireLlmType: false }),
+      ),
+      ...lmStudioData.map((x) =>
+        parseModelIdentifier(x, { requireLlmType: true }),
+      ),
+    ].filter((x) => x.length > 0);
+    const uniqueModels = Array.from(new Set(models));
     logger.info(
-      { providerId: this.id, count: models.length },
+      { providerId: this.id, count: uniqueModels.length },
       "[llm-provider] models parsed",
     );
-    return models;
+    return uniqueModels;
   }
 
   async streamTextCompletion(
@@ -159,11 +237,12 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const settings = this.mergedSettings(settingsIn);
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
+    const requestUrl = `${baseUrl}/chat/completions`;
     if (!baseUrl) throw new Error("base_url is required");
-    if (!key) throw new Error("api_key is required");
+    if (this.requireApiKey && !key) throw new Error("api_key is required");
 
     logger.info(
-      { providerId: this.id, model: input.model, baseUrl },
+      { providerId: this.id, model: input.model, baseUrl, requestUrl },
       "[llm-provider] completion request sending",
     );
     const contentParts: Array<Record<string, unknown>> = [
@@ -178,13 +257,14 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         },
       });
     }
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (key) headers.Authorization = `Bearer ${key}`;
+    const requestParams = safeRequestParams(input.requestParams);
+    const res = await fetch(requestUrl, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
+        ...requestParams,
         model: input.model,
         stream: true,
         stream_options: { include_usage: true },

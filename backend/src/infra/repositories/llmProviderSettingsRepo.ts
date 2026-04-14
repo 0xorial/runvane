@@ -51,7 +51,12 @@ export class LlmProviderSettingsRepo {
       const settings: Record<string, unknown> = {};
       for (const spec of p.getSettingsSpec()) {
         if (spec.key === "base_url") {
-          settings.base_url = p.id === "grok" ? "https://api.x.ai/v1" : "https://api.openai.com/v1";
+          settings.base_url =
+            p.id === "grok"
+              ? "https://api.x.ai/v1"
+              : p.id === "lmstudio"
+                ? "http://127.0.0.1:1234/api/v1"
+                : "https://api.openai.com/v1";
         }
       }
       upsertProvider.run(p.id, p.label, JSON.stringify(settings), now, now);
