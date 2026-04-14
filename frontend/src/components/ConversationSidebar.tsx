@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Plus, FolderInput, Trash2, X } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createConversation,
   getConversations,
   postConversationMessage,
-  renameConversation,
+  renameConversation
 } from "../api/client";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
 import { notifyError } from "../utils/toast";
 import { ConversationItem } from "./conversationSidebar/ConversationItem";
 import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupItem";
+import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
 import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
 
 type ConversationSidebarProps = {
@@ -324,38 +325,18 @@ export function ConversationSidebar({
             Probe: time (tmp)
           </button>
           {multiSelectMode ? (
-            <div className="flex items-center justify-between border-t border-sidebar-border pt-1 text-xs text-muted-foreground">
-              <span>{selectedConversationIds.length} selected</span>
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  aria-label="Move selected conversations"
-                  title="Move selected conversations (coming soon)"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground/60"
-                  disabled
-                >
-                  <FolderInput className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete selected conversations"
-                  title="Delete selected conversations (coming soon)"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded text-destructive/70"
-                  disabled
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Exit multi-select mode"
-                  title="Exit multi-select mode"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-                  onClick={() => setSelectedConversationIds([])}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
+            <MultiSelectPanel
+              selectedConversationIds={selectedConversationIds}
+              knownGroups={knownGroups}
+              reloadConversations={async () => {
+                const data = await loadConversations();
+                return { groups: data.groups };
+              }}
+              onSelectionChange={setSelectedConversationIds}
+              onExpandGroup={(groupId) =>
+                setCollapsedGroups((prev) => ({ ...prev, [groupId]: false }))
+              }
+            />
           ) : null}
         </div>
 
