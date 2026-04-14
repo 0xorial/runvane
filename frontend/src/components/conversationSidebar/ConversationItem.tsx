@@ -97,7 +97,7 @@ export function ConversationItem({
         >
           <div className="flex items-center gap-2">
             <MessageSquare className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="truncate font-medium">
+            <span className="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
               {streamedTitle || conversation.title || "Untitled"}
             </span>
           </div>

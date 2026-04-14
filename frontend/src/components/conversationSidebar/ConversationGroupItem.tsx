@@ -40,7 +40,7 @@ export function ConversationGroupItem({
               <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
             )}
             <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="truncate">{groupName}</span>
+            <span className="truncate font-semibold uppercase text-foreground/90">{groupName}</span>
           </span>
           {stamp ? (
             <span className="ml-5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>
