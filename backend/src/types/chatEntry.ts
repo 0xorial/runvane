@@ -107,7 +107,7 @@ export const validateAndSanitizeChatAttachmentTyping = reqAttachmentTyping;
 export type UserMessageEntry = ChatEntryBase & {
   type: "user-message";
   text: string;
-  agentId?: string;
+  agentId: string;
   llmProviderId?: string;
   llmModel?: string;
   modelPresetId?: number | null;
@@ -116,20 +116,22 @@ export type UserMessageEntry = ChatEntryBase & {
 export const UserMessageEntrySchema = ChatEntryBaseSchema.extend({
     type: z.literal("user-message"),
     text: z.string(),
-    agentId: z.string().optional(),
+    agentId: z.string().min(1),
     llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
     modelPresetId: z.number().finite().nullable().optional(),
     attachments: z.array(ChatAttachmentSchema).optional(),
   });
 
-export type UserMessageSelection = Pick<
-  UserMessageEntry,
-  "agentId" | "llmProviderId" | "llmModel" | "modelPresetId"
->;
+export type UserMessageSelection = {
+  agentId: string;
+  llmProviderId?: string;
+  llmModel?: string;
+  modelPresetId?: number | null;
+};
 export const UserMessageSelectionSchema = z.object(
   {
-    agentId: z.string().optional(),
+    agentId: z.string().min(1),
     llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
     modelPresetId: z.number().finite().nullable().optional(),
@@ -145,14 +147,17 @@ function optionalFiniteNumber(value: unknown): number | null {
 }
 
 export function normalizeUserMessageSelection(
-  input?: UserMessageSelection
+  input: UserMessageSelection
 ): UserMessageSelection {
-  const agentId = optionalString(input?.agentId);
+  const agentId = String(input.agentId ?? "").trim();
+  if (!agentId) {
+    throw new Error("agentId is required for user message selection");
+  }
   const llmProviderId = optionalString(input?.llmProviderId);
   const llmModel = optionalString(input?.llmModel);
   const modelPresetId = optionalFiniteNumber(input?.modelPresetId);
   return {
-    ...(agentId !== undefined ? { agentId } : {}),
+    agentId,
     ...(llmProviderId !== undefined ? { llmProviderId } : {}),
     ...(llmModel !== undefined ? { llmModel } : {}),
     ...(modelPresetId != null ? { modelPresetId } : {}),
@@ -162,12 +167,15 @@ export function normalizeUserMessageSelection(
 export function userMessageSelectionFromPayload(
   payload: Record<string, unknown>
 ): UserMessageSelection {
-  const agentId = optionalString(payload.agentId);
+  const agentId = String(payload.agentId ?? "").trim();
+  if (!agentId) {
+    throw new Error("user-message payload missing required agentId");
+  }
   const llmProviderId = optionalString(payload.llmProviderId);
   const llmModel = optionalString(payload.llmModel);
   const modelPresetId = optionalFiniteNumber(payload.modelPresetId);
   return {
-    ...(agentId !== undefined ? { agentId } : {}),
+    agentId,
     ...(llmProviderId !== undefined ? { llmProviderId } : {}),
     ...(llmModel !== undefined ? { llmModel } : {}),
     ...(modelPresetId != null ? { modelPresetId } : {}),

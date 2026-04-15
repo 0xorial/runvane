@@ -130,9 +130,33 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const rec = value as Record<string, unknown>;
     const role = rec.role;
-    if (role === "user" || role === "assistant") {
+    if (role === "user") {
+      const agentId = String(rec.agentId ?? rec.agent_id ?? "").trim();
+      if (!agentId) {
+        throw new Error(
+          "GET /api/conversations/:id/messages validation failed: user role message missing agentId"
+        );
+      }
       return {
-        type: role === "user" ? "user-message" : "assistant-message",
+        type: "user-message",
+        id: typeof rec.id === "string" ? rec.id : "",
+        text: typeof rec.text === "string" ? rec.text : "",
+        agentId,
+        conversationIndex:
+          typeof rec.conversationIndex === "number" && Number.isFinite(rec.conversationIndex)
+            ? rec.conversationIndex
+            : index,
+        createdAt:
+          typeof rec.createdAt === "string"
+            ? rec.createdAt
+            : typeof rec.created_at === "string"
+              ? rec.created_at
+              : new Date().toISOString(),
+      };
+    }
+    if (role === "assistant") {
+      return {
+        type: "assistant-message",
         id: typeof rec.id === "string" ? rec.id : "",
         text: typeof rec.text === "string" ? rec.text : "",
         conversationIndex:

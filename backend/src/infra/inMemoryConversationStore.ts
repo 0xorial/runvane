@@ -15,12 +15,17 @@ export class InMemoryConversationStore {
     return next;
   }
 
-  appendUserMessage(conversationId: string, text: string): ChatMessageEntry {
+  appendUserMessage(
+    conversationId: string,
+    text: string,
+    agentId = "in-memory-agent"
+  ): ChatMessageEntry {
     const row: ChatMessageEntry = {
       type: "user-message",
       id: crypto.randomUUID(),
       conversationIndex: this.ensure(conversationId).messages.length,
       text,
+      agentId,
       createdAt: new Date().toISOString(),
     };
     this.ensure(conversationId).messages.push(row);

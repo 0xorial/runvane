@@ -27,6 +27,7 @@ import {
   DEFAULT_MAX_TOOL_CALLS_PER_TURN,
   shouldContinuePlannerLoop,
 } from "./agenticLoopGuards.js";
+import { usageByConversationId } from "./conversationUsage.js";
 
 export class ContinueConversationTaskProcessor {
   constructor(
@@ -115,8 +116,11 @@ export class ContinueConversationTaskProcessor {
         : "") +
       (input.priorToolResults.length > 0
         ? `<PRIOR_TOOL_RESULTS>\n${input.priorToolResults
-            .map((row, idx) =>
-              `${idx + 1}. tool=${row.toolId} ok=${row.ok} output=${this.stringify(row.output)} error=${row.error ?? ""}`,
+            .map(
+              (row, idx) =>
+                `${idx + 1}. tool=${row.toolId} ok=${
+                  row.ok
+                } output=${this.stringify(row.output)} error=${row.error ?? ""}`
             )
             .join("\n")}\n</PRIOR_TOOL_RESULTS>\n\n`
         : "") +
@@ -130,7 +134,7 @@ export class ContinueConversationTaskProcessor {
   }
   private parseAgenticPlannerOutput(
     reply: string,
-    streamedAnswer: string,
+    streamedAnswer: string
   ): {
     output: AgenticPlannerOutput;
     decision: LlmDecision;
@@ -152,7 +156,7 @@ export class ContinueConversationTaskProcessor {
     const parsedAgentic = AgenticPlannerOutputSchema.safeParse(parsed);
     if (parsedAgentic.success) {
       const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) =>
-        this.tools.get(call.toolId),
+        this.tools.get(call.toolId)
       );
       const output: AgenticPlannerOutput = {
         ...parsedAgentic.data,
@@ -182,7 +186,12 @@ export class ContinueConversationTaskProcessor {
           : assistantFallback,
       tool_calls:
         fallbackDecision.type === "tool-invocation"
-          ? [{ toolId: fallbackDecision.toolId, parameters: fallbackDecision.parameters }]
+          ? [
+              {
+                toolId: fallbackDecision.toolId,
+                parameters: fallbackDecision.parameters,
+              },
+            ]
           : [],
       followup:
         fallbackDecision.type === "tool-invocation"
@@ -192,63 +201,33 @@ export class ContinueConversationTaskProcessor {
     return { output: fallbackOutput, decision: fallbackDecision };
   }
 
-  private tokenUsageByModel(conversationId: string): Array<{
-    model_name: string;
-    prompt_tokens: number;
-    cached_prompt_tokens: number;
-    completion_tokens: number;
-  }> {
-    return this.chatEntries
-      .listConversationTokenUsageByModel()
-      .filter((usage) => usage.conversation_id === conversationId)
-      .map((usage) => {
-        const promptTokens =
-          typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens)
-            ? Math.max(0, Math.trunc(usage.prompt_tokens))
-            : 0;
-        const cachedPromptTokens =
-          typeof usage.cached_prompt_tokens === "number" &&
-          Number.isFinite(usage.cached_prompt_tokens)
-            ? Math.max(0, Math.min(Math.trunc(usage.cached_prompt_tokens), promptTokens))
-            : 0;
-        const completionTokens =
-          typeof usage.completion_tokens === "number" &&
-          Number.isFinite(usage.completion_tokens)
-            ? Math.max(0, Math.trunc(usage.completion_tokens))
-            : 0;
-        return {
-          model_name: String(usage.model_name || "").trim(),
-          prompt_tokens: promptTokens,
-          cached_prompt_tokens: cachedPromptTokens,
-          completion_tokens: completionTokens,
-        };
-      })
-      .filter((usage) => usage.model_name.length > 0);
-  }
-
   private publishConversationUpdated(conversationId: string): void {
-    const conversation = this.conversations.get(conversationId, { includeDeleted: true });
+    const conversation = this.conversations.get(conversationId, {
+      includeDeleted: true,
+    });
     if (!conversation) return;
     this.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
       conversation: {
         ...conversation,
         is_deleted: Number(conversation.is_deleted ?? 0) === 1,
-        token_usage_by_model: this.tokenUsageByModel(conversationId),
+        token_usage_by_model:
+          usageByConversationId(
+            this.chatEntries.listConversationTokenUsageByModel()
+          ).get(conversationId) ?? [],
       },
     });
   }
 
-
   private agentToolConfigFor(
-    agentId: string | undefined,
+    agentId: string,
     toolName: string
   ): {
     enabled: boolean;
     policy: ToolPermission;
     rules?: Record<string, unknown>;
   } {
-    const agent = agentId ? this.agents.get(agentId) : null;
+    const agent = this.agents.get(agentId);
     const toolCfg = agent?.default_llm_configuration?.tools?.[toolName];
     const enabled =
       toolCfg?.enabled === undefined ? true : toolCfg.enabled === true;
@@ -269,7 +248,7 @@ export class ContinueConversationTaskProcessor {
     llmModel?: string;
   } {
     const agentId = lastUserMessage.agentId;
-    const agent = agentId ? this.agents.get(agentId) : null;
+    const agent = this.agents.get(agentId);
     const cfg = agent?.default_llm_configuration;
     const cfgProviderId = cfg?.provider_id;
     const cfgModelName = cfg?.model_name ?? cfg?.model;
@@ -486,14 +465,9 @@ export class ContinueConversationTaskProcessor {
       );
       return;
     }
-    const agent =
-      lastUserMessage.agentId != null
-        ? this.agents.get(lastUserMessage.agentId)
-        : null;
+    const agent = this.agents.get(lastUserMessage.agentId);
     const llmOverrides = this.resolveLlmOverrides(lastUserMessage);
-    const selectedAgent = lastUserMessage.agentId
-      ? this.agents.get(lastUserMessage.agentId)
-      : null;
+    const selectedAgent = this.agents.get(lastUserMessage.agentId);
     const effectiveModelPresetId =
       lastUserMessage.modelPresetId ??
       selectedAgent?.default_model_preset_id ??
@@ -517,14 +491,19 @@ export class ContinueConversationTaskProcessor {
       .list()
       .filter(
         (tool) =>
-          this.agentToolConfigFor(lastUserMessage.agentId, tool.getName()).enabled
+          this.agentToolConfigFor(lastUserMessage.agentId, tool.getName())
+            .enabled
       )
       .map((tool) => tool.getName());
     const MAX_PLANNER_TURNS = DEFAULT_MAX_PLANNER_TURNS;
     const MAX_TOOL_CALLS_PER_TURN = DEFAULT_MAX_TOOL_CALLS_PER_TURN;
     let loopState: Record<string, unknown> = {};
 
-    for (let plannerTurn = 1; plannerTurn <= MAX_PLANNER_TURNS; plannerTurn += 1) {
+    for (
+      let plannerTurn = 1;
+      plannerTurn <= MAX_PLANNER_TURNS;
+      plannerTurn += 1
+    ) {
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_TURN_STARTED,
         planner_turn: plannerTurn,
@@ -534,12 +513,14 @@ export class ContinueConversationTaskProcessor {
       const priorToolResults = entries
         .filter(
           (entry): entry is Extract<ChatEntry, { type: "tool-invocation" }> =>
-            entry.type === "tool-invocation",
+            entry.type === "tool-invocation"
         )
         .slice(-8)
         .map((entry) => {
           const result =
-            entry.result && typeof entry.result === "object" && !Array.isArray(entry.result)
+            entry.result &&
+            typeof entry.result === "object" &&
+            !Array.isArray(entry.result)
               ? (entry.result as Record<string, unknown>)
               : {};
           return {
@@ -560,16 +541,19 @@ export class ContinueConversationTaskProcessor {
       const plannerEntryId = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const turnStartedMs = Date.now();
-      const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(conversationId, {
-        id: plannerEntryId,
-        createdAt,
-        llmRequest: requestText,
-        llmResponse: "",
-        thoughtMs: null,
-        decision: null,
-        failed: false,
-        llmModel: plannerLlmModel,
-      });
+      const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(
+        conversationId,
+        {
+          id: plannerEntryId,
+          createdAt,
+          llmRequest: requestText,
+          llmResponse: "",
+          thoughtMs: null,
+          decision: null,
+          failed: false,
+          llmModel: plannerLlmModel,
+        }
+      );
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_STARTING,
         chat_entry_id: plannerEntryId,
@@ -660,11 +644,16 @@ export class ContinueConversationTaskProcessor {
         throw e;
       }
 
-      const parsedAgentic = this.parseAgenticPlannerOutput(reply, streamedAnswer);
+      const parsedAgentic = this.parseAgenticPlannerOutput(
+        reply,
+        streamedAnswer
+      );
       const decision = parsedAgentic.decision;
       const agentic = parsedAgentic.output;
       loopState =
-        agentic.state && typeof agentic.state === "object" && !Array.isArray(agentic.state)
+        agentic.state &&
+        typeof agentic.state === "object" &&
+        !Array.isArray(agentic.state)
           ? agentic.state
           : loopState;
       this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
@@ -737,7 +726,7 @@ export class ContinueConversationTaskProcessor {
       if (agentic.tool_calls.length > 0) {
         const selectedCalls: AgenticToolCall[] = clampToolCallsForTurn(
           agentic.tool_calls,
-          MAX_TOOL_CALLS_PER_TURN,
+          MAX_TOOL_CALLS_PER_TURN
         );
         const batchId = crypto.randomUUID();
         this.hub.publish(conversationId, {
@@ -747,12 +736,16 @@ export class ContinueConversationTaskProcessor {
         });
         for (let i = 0; i < selectedCalls.length; i += 1) {
           const call = selectedCalls[i];
-          const toolCfg = this.agentToolConfigFor(lastUserMessage.agentId, call.toolId);
+          const toolCfg = this.agentToolConfigFor(
+            lastUserMessage.agentId,
+            call.toolId
+          );
           const shouldResumeAfterBatch =
-            shouldContinuePlannerLoop(agentic.followup) && i === selectedCalls.length - 1;
+            shouldContinuePlannerLoop(agentic.followup) &&
+            i === selectedCalls.length - 1;
           this.enqueueRunTool({
             conversationId,
-            agentId: lastUserMessage.agentId ?? null,
+            agentId: lastUserMessage.agentId,
             toolName: call.toolId,
             params: call.parameters,
             batchId,
@@ -769,7 +762,10 @@ export class ContinueConversationTaskProcessor {
       }
 
       if (!shouldContinuePlannerLoop(agentic.followup)) {
-        logger.info({ conversationId, plannerTurn }, "[task] continue_conversation completed");
+        logger.info(
+          { conversationId, plannerTurn },
+          "[task] continue_conversation completed"
+        );
         return;
       }
     }

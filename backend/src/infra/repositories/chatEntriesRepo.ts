@@ -104,7 +104,7 @@ export class ChatEntriesRepo {
   appendUserMessage(
     conversationId: string,
     text: string,
-    opts?: UserMessageSelection & { attachments?: ChatAttachment[] },
+    opts: UserMessageSelection & { attachments?: ChatAttachment[] },
   ): UserMessageEntry {
     const createDbEntryPayload = normalizeUserMessageSelection(opts);
     const attachments = Array.isArray(opts?.attachments) ? opts.attachments : [];

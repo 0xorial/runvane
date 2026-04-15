@@ -4,6 +4,7 @@ import { ConversationsRepo } from "../../infra/repositories/conversationsRepo.js
 import { LlmProviderSettingsRepo } from "../../infra/repositories/llmProviderSettingsRepo.js";
 import { ConversationEventHub } from "../../events/conversationEventHub.js";
 import { SseType } from "../../types/sse.js";
+import { normalizeConversationTokenUsageRow } from "../../domain/conversationUsage.js";
 
 type TitleGenerationResult = {
   model: string;
@@ -209,29 +210,8 @@ export async function maybeAutoTitleConversation({
   const tokenUsageByModel = chatEntries
     .listConversationTokenUsageByModel()
     .filter((usage) => usage.conversation_id === conversationId)
-    .map((usage) => {
-      const promptTokens =
-        typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens)
-          ? Math.max(0, Math.trunc(usage.prompt_tokens))
-          : 0;
-      const cachedPromptTokens =
-        typeof usage.cached_prompt_tokens === "number" &&
-        Number.isFinite(usage.cached_prompt_tokens)
-          ? Math.max(0, Math.min(Math.trunc(usage.cached_prompt_tokens), promptTokens))
-          : 0;
-      const completionTokens =
-        typeof usage.completion_tokens === "number" &&
-        Number.isFinite(usage.completion_tokens)
-          ? Math.max(0, Math.trunc(usage.completion_tokens))
-          : 0;
-      return {
-        model_name: String(usage.model_name || "").trim(),
-        prompt_tokens: promptTokens,
-        cached_prompt_tokens: cachedPromptTokens,
-        completion_tokens: completionTokens,
-      };
-    })
-    .filter((usage) => usage.model_name.length > 0);
+    .map((usage) => normalizeConversationTokenUsageRow(usage))
+    .filter((usage): usage is NonNullable<typeof usage> => usage !== null);
   hub.publish(conversationId, {
     type: SseType.CONVERSATION_UPDATED,
     conversation: {

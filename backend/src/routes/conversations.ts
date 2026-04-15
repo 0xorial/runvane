@@ -4,6 +4,7 @@ import type { Runtime } from "../bootstrap/runtime.js";
 import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
 import { parseJsonObjectOr400 } from "../http/parseJsonObjectOr400.js";
+import { usageByConversationId } from "../domain/conversationUsage.js";
 import {
   parseCreateConversationTitle,
   parseUpdateConversationRequest,
@@ -39,44 +40,7 @@ export function createConversationsRouter(runtime: Runtime) {
       completion_tokens: number;
     }>
   > {
-    const usageRows = runtime.chatEntries.listConversationTokenUsageByModel();
-    const out = new Map<
-      string,
-      Array<{
-        model_name: string;
-        prompt_tokens: number;
-        cached_prompt_tokens: number;
-        completion_tokens: number;
-      }>
-    >();
-    for (const row of usageRows) {
-      const boundedPromptTokens =
-        typeof row.prompt_tokens === "number" && Number.isFinite(row.prompt_tokens)
-          ? Math.max(0, Math.trunc(row.prompt_tokens))
-          : 0;
-      const boundedCachedTokens =
-        typeof row.cached_prompt_tokens === "number" && Number.isFinite(row.cached_prompt_tokens)
-          ? Math.max(
-              0,
-              Math.min(Math.trunc(row.cached_prompt_tokens), boundedPromptTokens),
-            )
-          : 0;
-      const boundedCompletionTokens =
-        typeof row.completion_tokens === "number" && Number.isFinite(row.completion_tokens)
-          ? Math.max(0, Math.trunc(row.completion_tokens))
-          : 0;
-      const usageRow = {
-        model_name: String(row.model_name || "").trim(),
-        prompt_tokens: boundedPromptTokens,
-        cached_prompt_tokens: boundedCachedTokens,
-        completion_tokens: boundedCompletionTokens,
-      };
-      if (!usageRow.model_name) continue;
-      const existing = out.get(row.conversation_id) ?? [];
-      existing.push(usageRow);
-      out.set(row.conversation_id, existing);
-    }
-    return out;
+    return usageByConversationId(runtime.chatEntries.listConversationTokenUsageByModel());
   }
 
   r.get("/", (c) => {

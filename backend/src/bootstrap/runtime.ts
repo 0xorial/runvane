@@ -166,7 +166,7 @@ export function createRuntime(opts: {
       createdAt: user.createdAt,
       type: "user-message",
       text: user.text,
-      ...(user.agentId ? { agentId: user.agentId } : {}),
+      agentId: user.agentId,
       ...(user.llmProviderId ? { llmProviderId: user.llmProviderId } : {}),
       ...(user.llmModel ? { llmModel: user.llmModel } : {}),
       ...(user.modelPresetId != null
