@@ -10,19 +10,12 @@ import type { ContinueConversationTask } from "./agentTask.js";
 import type { ToolPermission } from "../tools/baseTool.js";
 import { ToolRegistry } from "../tools/toolRegistry.js";
 import type {
-  AgenticPlannerOutput,
   AgenticToolCall,
   ChatEntry,
-  LlmDecision,
-  LlmDecisionTool,
-  LlmDecisionUserResponse,
   UserMessageEntry,
 } from "../types/chatEntry.js";
-import { AgenticPlannerOutputSchema } from "../types/chatEntry.js";
 import {
-  StreamInterruptedError,
   type StreamTextCompletionResult,
-  type StreamTextCompletionUsage,
 } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
 import {
@@ -36,6 +29,16 @@ import {
   isTaskCancelledError,
   throwIfCancelled,
 } from "./taskCancellation.js";
+import {
+  composeFailedPlannerResponse,
+  extractAssistantOutputFromJsonLike,
+  incrementalDelta,
+  usageFromStreamingError,
+} from "./continueConversationTaskProcessor.helpers.js";
+import {
+  buildPlannerPrompt,
+  parseAgenticPlannerOutput,
+} from "./continueConversationPlannerProtocol.js";
 
 export class ContinueConversationTaskProcessor {
   constructor(
@@ -61,157 +64,6 @@ export class ContinueConversationTaskProcessor {
       };
     }) => { taskId: number }
   ) {}
-
-  private stringify(value: unknown): string {
-    if (typeof value === "string") return value;
-    const serialized = JSON.stringify(value);
-    return typeof serialized === "string" ? serialized : String(serialized);
-  }
-
-  private summarizeEntry(entry: ChatEntry): string {
-    if (entry.type === "user-message") {
-      const attachments = entry.attachments ?? [];
-      if (attachments.length === 0) return `USER: ${entry.text}`;
-      const attachmentSummary = attachments
-        .map((a) => `${a.name} (${a.mimeType}, ${a.sizeBytes}b)`)
-        .join(", ");
-      return `USER: ${entry.text}\nATTACHMENTS: ${attachmentSummary}`;
-    }
-    if (entry.type === "assistant-message") {
-      return `ASSISTANT: ${entry.text}`;
-    }
-    if (entry.type === "planner_llm_stream") {
-      const response = entry.llmResponse ?? "";
-      return `THINKING: ${response}`;
-    }
-    if (entry.type === "title_llm_stream") {
-      const response = entry.llmResponse ?? "";
-      return `TITLE_THINKING: ${response}`;
-    }
-    const parameters = this.stringify(entry.parameters);
-    const result = this.stringify(entry.result);
-    return `TOOL: id=${entry.toolId} state=${entry.state} parameters=${parameters} result=${result}`;
-  }
-
-  private buildPrompt(input: {
-    systemPrompt: string;
-    entries: ChatEntry[];
-    anchorUserText: string;
-    triggerEntry: ChatEntry | null;
-    toolIds: string[];
-    priorToolResults: Array<{
-      toolId: string;
-      ok: boolean;
-      output: unknown;
-      error: string | null;
-    }>;
-    loopState: Record<string, unknown>;
-  }): string {
-    const summaryLines = input.entries.map((entry, idx) => {
-      return `${idx + 1}. ${this.summarizeEntry(entry)}`;
-    });
-    const summary = summaryLines.join("\n");
-    const systemBlock = input.systemPrompt
-      ? `<SYSTEM_PROMPT>\n${input.systemPrompt}\n</SYSTEM_PROMPT>\n\n`
-      : "";
-    return (
-      `${systemBlock}` +
-      (input.toolIds.length > 0
-        ? `<TOOLS>\n${input.toolIds
-            .map((line, idx) => `${idx + 1}. ${line}`)
-            .join(
-              "\n"
-            )}\n\nReturn ONLY valid JSON with this exact shape:\n{\"assistant_output\":\"string optional\",\"tool_calls\":[{\"toolId\":\"<tool_name>\",\"parameters\":{}}],\"followup\":\"finalize|continue_with_results|retry_with_adjustment\",\"state\":{}}\n\nRules:\n- Use tool IDs from <TOOLS> only.\n- If no tools are needed, return empty tool_calls and followup=\"finalize\".\n- If tools are needed, include all calls for this step in tool_calls.\n- If prior tool errors exist and you need another attempt, use followup=\"retry_with_adjustment\".\n- Keep assistant_output as user-facing text for this step.\n</TOOLS>\n\n`
-        : "") +
-      (input.priorToolResults.length > 0
-        ? `<PRIOR_TOOL_RESULTS>\n${input.priorToolResults
-            .map(
-              (row, idx) =>
-                `${idx + 1}. tool=${row.toolId} ok=${
-                  row.ok
-                } output=${this.stringify(row.output)} error=${row.error ?? ""}`
-            )
-            .join("\n")}\n</PRIOR_TOOL_RESULTS>\n\n`
-        : "") +
-      (Object.keys(input.loopState).length > 0
-        ? `<LOOP_STATE>\n${this.stringify(input.loopState)}\n</LOOP_STATE>\n\n`
-        : "") +
-      (input.triggerEntry
-        ? `<TRIGGER_ENTRY>\n${this.summarizeEntry(
-            input.triggerEntry
-          )}\n</TRIGGER_ENTRY>\n\n`
-        : "") +
-      `<CONVERSATION_SUMMARY>\n${summary}\n</CONVERSATION_SUMMARY>\n\n` +
-      `<ANCHOR_USER_MESSAGE>\n${input.anchorUserText}\n</ANCHOR_USER_MESSAGE>\n\n` +
-      "Provide best possible answer to user's question. Use tools if necessary."
-    );
-  }
-  private parseAgenticPlannerOutput(
-    reply: string,
-    streamedAnswer: string
-  ): {
-    output: AgenticPlannerOutput;
-    decision: LlmDecision;
-  } {
-    const cleaned = reply.trim();
-    const withoutFence = cleaned
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-    const parsed = parseFirstJsonObjectCandidate([
-      withoutFence,
-      extractLastBalancedJsonObject(withoutFence),
-    ]);
-    const assistantFallback =
-      streamedAnswer || extractAssistantOutputFromJsonLike(reply) || "";
-    const parsedAgentic = AgenticPlannerOutputSchema.safeParse(parsed);
-    if (parsedAgentic.success) {
-      const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) =>
-        this.tools.get(call.toolId)
-      );
-      const output: AgenticPlannerOutput = {
-        ...parsedAgentic.data,
-        tool_calls: normalizedToolCalls,
-        ...(parsedAgentic.data.assistant_output == null
-          ? { assistant_output: assistantFallback }
-          : {}),
-      };
-      const decision: LlmDecision =
-        normalizedToolCalls.length > 0
-          ? ({
-              type: "tool-invocation",
-              toolId: normalizedToolCalls[0].toolId,
-              parameters: normalizedToolCalls[0].parameters,
-            } satisfies LlmDecisionTool)
-          : ({
-              type: "user-response",
-              text: String(output.assistant_output ?? "").trim() || reply,
-            } satisfies LlmDecisionUserResponse);
-      return { output, decision };
-    }
-    const fallbackDecision = this.parseDecision(reply);
-    const fallbackOutput: AgenticPlannerOutput = {
-      assistant_output:
-        fallbackDecision.type === "user-response"
-          ? fallbackDecision.text
-          : assistantFallback,
-      tool_calls:
-        fallbackDecision.type === "tool-invocation"
-          ? [
-              {
-                toolId: fallbackDecision.toolId,
-                parameters: fallbackDecision.parameters,
-              },
-            ]
-          : [],
-      followup:
-        fallbackDecision.type === "tool-invocation"
-          ? "continue_with_results"
-          : "finalize",
-    };
-    return { output: fallbackOutput, decision: fallbackDecision };
-  }
 
   private publishConversationUpdated(conversationId: string): void {
     const conversation = this.conversations.get(conversationId, {
@@ -278,57 +130,6 @@ export class ContinueConversationTaskProcessor {
     return {
       ...(llmProviderId ? { llmProviderId } : {}),
       ...(llmModel ? { llmModel } : {}),
-    };
-  }
-
-  private parseDecision(
-    reply: string
-  ): LlmDecisionUserResponse | LlmDecisionTool {
-    const cleaned = reply.trim();
-    const withoutFence = cleaned
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-    const assistantFallback = extractAssistantOutputFromJsonLike(reply).trim();
-    const parsed = parseFirstJsonObjectCandidate([
-      withoutFence,
-      extractLastBalancedJsonObject(withoutFence),
-    ]);
-    if (parsed === null) {
-      return {
-        type: "user-response",
-        text: assistantFallback || reply,
-      };
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { type: "user-response", text: assistantFallback || reply };
-    }
-    const rec = parsed as Record<string, unknown>;
-    if (rec.type === "user-response") {
-      const text = typeof rec.text === "string" ? rec.text.trim() : "";
-      return {
-        type: "user-response",
-        text: text || assistantFallback || reply,
-      };
-    }
-    if (rec.type !== "tool-invocation") {
-      return { type: "user-response", text: assistantFallback || reply };
-    }
-    const toolId = typeof rec.toolId === "string" ? rec.toolId.trim() : "";
-    const parameters =
-      rec.parameters &&
-      typeof rec.parameters === "object" &&
-      !Array.isArray(rec.parameters)
-        ? (rec.parameters as Record<string, unknown>)
-        : {};
-    if (!toolId || !this.tools.get(toolId)) {
-      return { type: "user-response", text: assistantFallback || reply };
-    }
-    return {
-      type: "tool-invocation",
-      toolId,
-      parameters,
     };
   }
 
@@ -546,7 +347,7 @@ export class ContinueConversationTaskProcessor {
             error: typeof result.error === "string" ? result.error : null,
           };
         });
-      const requestText = this.buildPrompt({
+      const requestText = buildPlannerPrompt({
         systemPrompt: agent?.system_prompt ?? "",
         entries,
         anchorUserText: anchorUserMessage.text,
@@ -730,10 +531,11 @@ export class ContinueConversationTaskProcessor {
         throw e;
       }
 
-      const parsedAgentic = this.parseAgenticPlannerOutput(
+      const parsedAgentic = parseAgenticPlannerOutput({
         reply,
-        streamedAnswer
-      );
+        streamedAnswer,
+        isToolAvailable: (toolId) => this.tools.get(toolId) != null,
+      });
       throwIfCancelled(opts?.shouldCancel);
       const decision = parsedAgentic.decision;
       const agentic = parsedAgentic.output;
@@ -868,181 +670,4 @@ export class ContinueConversationTaskProcessor {
       "[task] planner guard stop reached"
     );
   }
-}
-
-function incrementalDelta(prev: string, next: string): string {
-  if (!next) return "";
-  if (!prev) return next;
-  if (next.startsWith(prev)) return next.slice(prev.length);
-  const prefix = commonPrefixLen(prev, next);
-  return next.slice(prefix);
-}
-
-function commonPrefixLen(a: string, b: string): number {
-  const limit = Math.min(a.length, b.length);
-  let i = 0;
-  while (i < limit && a[i] === b[i]) i += 1;
-  return i;
-}
-
-function extractAssistantOutputFromJsonLike(text: string): string {
-  const source = String(text ?? "");
-  if (!source) return "";
-  const keyMatch = /"assistant_output"\s*:\s*"/.exec(source);
-  if (!keyMatch) return "";
-  let i = keyMatch.index + keyMatch[0].length;
-  let out = "";
-  while (i < source.length) {
-    const ch = source[i];
-    if (ch === '"') return out;
-    if (ch !== "\\") {
-      out += ch;
-      i += 1;
-      continue;
-    }
-    const esc = source[i + 1];
-    if (esc == null) return out;
-    if (esc === '"' || esc === "\\" || esc === "/") {
-      out += esc;
-      i += 2;
-      continue;
-    }
-    if (esc === "b") {
-      out += "\b";
-      i += 2;
-      continue;
-    }
-    if (esc === "f") {
-      out += "\f";
-      i += 2;
-      continue;
-    }
-    if (esc === "n") {
-      out += "\n";
-      i += 2;
-      continue;
-    }
-    if (esc === "r") {
-      out += "\r";
-      i += 2;
-      continue;
-    }
-    if (esc === "t") {
-      out += "\t";
-      i += 2;
-      continue;
-    }
-    if (esc === "u") {
-      const hex = source.slice(i + 2, i + 6);
-      if (hex.length < 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) return out;
-      out += String.fromCharCode(Number.parseInt(hex, 16));
-      i += 6;
-      continue;
-    }
-    out += esc;
-    i += 2;
-  }
-  return out;
-}
-
-function composeFailedPlannerResponse(partialReply: string): string {
-  const partial = String(partialReply ?? "").trim();
-  if (partial) return partial;
-  return "";
-}
-
-function usageFromStreamingError(
-  error: unknown
-): StreamTextCompletionUsage | undefined {
-  if (error instanceof StreamInterruptedError) {
-    return error.usage;
-  }
-  if (!error || typeof error !== "object") return undefined;
-  const usage = (error as { usage?: unknown }).usage;
-  if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
-    return undefined;
-  }
-  const usageRec = usage as Record<string, unknown>;
-  const promptTokens = usageRec.promptTokens;
-  const completionTokens = usageRec.completionTokens;
-  const cachedPromptTokens = usageRec.cachedPromptTokens;
-  if (
-    typeof promptTokens !== "number" ||
-    !Number.isFinite(promptTokens) ||
-    typeof completionTokens !== "number" ||
-    !Number.isFinite(completionTokens)
-  ) {
-    return undefined;
-  }
-  const normalized: StreamTextCompletionUsage = {
-    promptTokens: Math.max(0, Math.trunc(promptTokens)),
-    completionTokens: Math.max(0, Math.trunc(completionTokens)),
-  };
-  if (
-    typeof cachedPromptTokens === "number" &&
-    Number.isFinite(cachedPromptTokens)
-  ) {
-    normalized.cachedPromptTokens = Math.max(0, Math.trunc(cachedPromptTokens));
-  }
-  return normalized;
-}
-
-function parseFirstJsonObjectCandidate(
-  candidates: Array<string | null>
-): unknown | null {
-  for (const candidate of candidates) {
-    const raw = String(candidate ?? "").trim();
-    if (!raw) continue;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      // Try next candidate form.
-    }
-  }
-  return null;
-}
-
-function extractLastBalancedJsonObject(text: string): string | null {
-  const source = String(text ?? "");
-  if (!source) return null;
-  let end = source.length - 1;
-  while (end >= 0 && /\s/.test(source[end])) end -= 1;
-  if (end < 0 || source[end] !== "}") return null;
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = end; i >= 0; i -= 1) {
-    const ch = source[i];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (ch === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "}") {
-      depth += 1;
-      continue;
-    }
-    if (ch === "{") {
-      depth -= 1;
-      if (depth === 0) {
-        return source.slice(i, end + 1).trim();
-      }
-      continue;
-    }
-  }
-  return null;
 }
