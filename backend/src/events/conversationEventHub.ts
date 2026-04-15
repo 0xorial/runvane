@@ -11,18 +11,11 @@ export class ConversationEventHub {
 
   publish(conversationId: string | null, payload: SsePayload): void {
     if (!conversationId) return;
-    const isConversationMeta =
-      payload.type === "conversation_created" || payload.type === "conversation_updated";
-    const ev: SseEvent = isConversationMeta
-      ? {
-          ...payload,
-          conversation_id: conversationId,
-        }
-      : {
-          ...payload,
-          conversation_id: conversationId,
-          seq: this.nextSeq++,
-        };
+    const ev: SseEvent = {
+      ...payload,
+      conversation_id: conversationId,
+      seq: this.nextSeq++,
+    };
     this.replay.push(ev);
     if (this.replay.length > this.replayMax) {
       this.replay.splice(0, this.replay.length - this.replayMax);
@@ -50,12 +43,7 @@ export class ConversationEventHub {
           : null;
       const buffered = [...this.replay];
       for (const ev of buffered) {
-        if (
-          afterSeq != null &&
-          "seq" in ev &&
-          typeof ev.seq === "number" &&
-          ev.seq <= afterSeq
-        ) {
+        if (afterSeq != null && ev.seq <= afterSeq) {
           continue;
         }
         listener(ev);

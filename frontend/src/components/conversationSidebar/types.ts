@@ -8,7 +8,12 @@ export type ConversationRow = {
   prompt_tokens_total?: number;
   cached_prompt_tokens_total?: number;
   completion_tokens_total?: number;
-  estimated_cost_usd?: number;
+  token_usage_by_model?: Array<{
+    model_name: string;
+    prompt_tokens: number;
+    cached_prompt_tokens: number;
+    completion_tokens: number;
+  }>;
 };
 
 export type ConversationGroupRow = {

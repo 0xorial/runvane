@@ -41,7 +41,12 @@ export type ConversationSseRow = {
   prompt_tokens_total: number;
   cached_prompt_tokens_total: number;
   completion_tokens_total: number;
-  estimated_cost_usd?: number;
+  token_usage_by_model: Array<{
+    model_name: string;
+    prompt_tokens: number;
+    cached_prompt_tokens: number;
+    completion_tokens: number;
+  }>;
 };
 export const ConversationSseRowSchema = z.object({
   id: z.string(),
@@ -53,7 +58,14 @@ export const ConversationSseRowSchema = z.object({
   prompt_tokens_total: z.number().finite(),
   cached_prompt_tokens_total: z.number().finite(),
   completion_tokens_total: z.number().finite(),
-  estimated_cost_usd: z.number().finite().optional(),
+  token_usage_by_model: z.array(
+    z.object({
+      model_name: z.string(),
+      prompt_tokens: z.number().finite(),
+      cached_prompt_tokens: z.number().finite(),
+      completion_tokens: z.number().finite(),
+    }),
+  ),
 });
 
 export type ConversationCreatedSsePayload = {
@@ -253,10 +265,7 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   ToolInvocationEndSsePayloadSchema,
 ]);
 
-/**
- * Wire event sent over SSE.
- * `seq` exists only for conversation-scoped runtime events.
- */
+/** Wire event sent over SSE. */
 type ConversationScopedPayload = Exclude<
   SsePayload,
   ConversationCreatedSsePayload | ConversationUpdatedSsePayload
@@ -351,14 +360,14 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type SseConversationMetaEvent =
-  | (ConversationCreatedSsePayload & { conversation_id: string })
-  | (ConversationUpdatedSsePayload & { conversation_id: string });
+  | (ConversationCreatedSsePayload & { conversation_id: string; seq: number })
+  | (ConversationUpdatedSsePayload & { conversation_id: string; seq: number });
 export const SseConversationMetaEventSchema = z.discriminatedUnion("type", [
-  SseEnvelopeSchema.extend({
+  SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.CONVERSATION_CREATED),
     conversation: ConversationSseRowSchema,
   }),
-  SseEnvelopeSchema.extend({
+  SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.CONVERSATION_UPDATED),
     conversation: ConversationSseRowSchema,
   }),

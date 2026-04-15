@@ -29,6 +29,7 @@ import type {
   LlmProviderRow,
   LlmProviderSettingsDocument,
 } from "../../../backend/src/routes/settings.types";
+import type { ModelCapabilityRow } from "../../../backend/src/types/modelCatalog";
 import {
   validateGetLlmSettingsResponse,
   validateLlmProviderConnectionTestResponse,
@@ -212,6 +213,35 @@ export function getLlmProviderSettings(): Promise<LlmProviderSettingsDocument> {
   return getJson("/api/settings/llm_provider").then(
     validateLlmProviderSettingsResponse,
   );
+}
+
+export function getModelCapabilities(): Promise<{ models: ModelCapabilityRow[] }> {
+  return getJson("/api/settings/model_capabilities").then((data) => {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("GET /api/settings/model_capabilities: invalid response envelope");
+    }
+    const rawModels = (data as { models?: unknown }).models;
+    if (!Array.isArray(rawModels)) {
+      throw new Error("GET /api/settings/model_capabilities: models must be an array");
+    }
+    const models = rawModels.map((raw, index) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error(
+          `GET /api/settings/model_capabilities: models[${index}] must be an object`,
+        );
+      }
+      const row = raw as Record<string, unknown>;
+      const providerId = String(row.provider_id ?? "").trim();
+      const modelName = String(row.model_name ?? "").trim();
+      if (!providerId || !modelName) {
+        throw new Error(
+          `GET /api/settings/model_capabilities: models[${index}] missing provider_id/model_name`,
+        );
+      }
+      return raw as ModelCapabilityRow;
+    });
+    return { models };
+  });
 }
 
 export function updateLlmProviderSettings(

@@ -16,71 +16,65 @@ export function createConversationsRouter(runtime: Runtime) {
 
   function toApiConversationRow(
     row: ReturnType<Runtime["conversations"]["get"]> extends infer T ? Exclude<T, null> : never,
-    estimatedCostUsd: number,
+    usageByModel: Array<{
+      model_name: string;
+      prompt_tokens: number;
+      cached_prompt_tokens: number;
+      completion_tokens: number;
+    }>,
   ) {
     return {
       ...row,
       is_deleted: Number(row.is_deleted ?? 0) === 1,
-      estimated_cost_usd: Number(estimatedCostUsd.toFixed(8)),
+      token_usage_by_model: usageByModel,
     };
   }
 
-  function conversationCostsUsdById(): Map<string, number> {
+  function conversationUsageById(): Map<
+    string,
+    Array<{
+      model_name: string;
+      prompt_tokens: number;
+      cached_prompt_tokens: number;
+      completion_tokens: number;
+    }>
+  > {
     const usageRows = runtime.chatEntries.listConversationTokenUsageByModel();
-    const capabilities = runtime.modelCapabilities.listEffective();
-    const pricingByModel = new Map<
+    const out = new Map<
       string,
-      { inCost: number; cachedInCost: number; outCost: number }
+      Array<{
+        model_name: string;
+        prompt_tokens: number;
+        cached_prompt_tokens: number;
+        completion_tokens: number;
+      }>
     >();
-    for (const cap of capabilities) {
-      const model = String(cap.model_name || "").trim();
-      if (!model || pricingByModel.has(model)) continue;
-      const inCost =
-        typeof cap.usd_per_1m_tokens_in === "number" &&
-        Number.isFinite(cap.usd_per_1m_tokens_in)
-          ? cap.usd_per_1m_tokens_in
-          : typeof cap.input_cost_per_1m === "number" &&
-              Number.isFinite(cap.input_cost_per_1m)
-            ? cap.input_cost_per_1m
-            : null;
-      const outCost =
-        typeof cap.usd_per_1m_tokens_out === "number" &&
-        Number.isFinite(cap.usd_per_1m_tokens_out)
-          ? cap.usd_per_1m_tokens_out
-          : typeof cap.output_cost_per_1m === "number" &&
-              Number.isFinite(cap.output_cost_per_1m)
-            ? cap.output_cost_per_1m
-            : null;
-      const cachedInCost =
-        typeof cap.usd_per_1m_tokens_in_cached === "number" &&
-        Number.isFinite(cap.usd_per_1m_tokens_in_cached)
-          ? cap.usd_per_1m_tokens_in_cached
-          : typeof cap.cached_input_cost_per_1m === "number" &&
-              Number.isFinite(cap.cached_input_cost_per_1m)
-            ? cap.cached_input_cost_per_1m
-            : inCost;
-      if (inCost == null || outCost == null || cachedInCost == null) continue;
-      pricingByModel.set(model, { inCost, cachedInCost, outCost });
-    }
-
-    const out = new Map<string, number>();
     for (const row of usageRows) {
-      const prices = pricingByModel.get(row.model_name);
-      if (!prices) continue;
-      const boundedPromptTokens = Math.max(0, row.prompt_tokens);
-      const boundedCachedTokens = Math.max(
-        0,
-        Math.min(row.cached_prompt_tokens, boundedPromptTokens),
-      );
-      const nonCachedPromptTokens = Math.max(
-        0,
-        boundedPromptTokens - boundedCachedTokens,
-      );
-      const estimate =
-        (nonCachedPromptTokens / 1_000_000) * prices.inCost +
-        (boundedCachedTokens / 1_000_000) * prices.cachedInCost +
-        (row.completion_tokens / 1_000_000) * prices.outCost;
-      out.set(row.conversation_id, (out.get(row.conversation_id) ?? 0) + estimate);
+      const boundedPromptTokens =
+        typeof row.prompt_tokens === "number" && Number.isFinite(row.prompt_tokens)
+          ? Math.max(0, Math.trunc(row.prompt_tokens))
+          : 0;
+      const boundedCachedTokens =
+        typeof row.cached_prompt_tokens === "number" && Number.isFinite(row.cached_prompt_tokens)
+          ? Math.max(
+              0,
+              Math.min(Math.trunc(row.cached_prompt_tokens), boundedPromptTokens),
+            )
+          : 0;
+      const boundedCompletionTokens =
+        typeof row.completion_tokens === "number" && Number.isFinite(row.completion_tokens)
+          ? Math.max(0, Math.trunc(row.completion_tokens))
+          : 0;
+      const usageRow = {
+        model_name: String(row.model_name || "").trim(),
+        prompt_tokens: boundedPromptTokens,
+        cached_prompt_tokens: boundedCachedTokens,
+        completion_tokens: boundedCompletionTokens,
+      };
+      if (!usageRow.model_name) continue;
+      const existing = out.get(row.conversation_id) ?? [];
+      existing.push(usageRow);
+      out.set(row.conversation_id, existing);
     }
     return out;
   }
@@ -89,10 +83,10 @@ export function createConversationsRouter(runtime: Runtime) {
     const deletedMode = c.req.query("deleted") === "only";
     const rows = runtime.conversations.list({ deletedOnly: deletedMode });
     const groups = runtime.conversations.listGroups();
-    const costsById = conversationCostsUsdById();
+    const usageById = conversationUsageById();
     return c.json(
       {
-        conversations: rows.map((row) => toApiConversationRow(row, costsById.get(row.id) ?? 0)),
+        conversations: rows.map((row) => toApiConversationRow(row, usageById.get(row.id) ?? [])),
         groups,
       },
     );
@@ -106,9 +100,9 @@ export function createConversationsRouter(runtime: Runtime) {
     const created = runtime.conversations.create(title);
     runtime.hub.publish(created.id, {
       type: SseType.CONVERSATION_CREATED,
-      conversation: toApiConversationRow(created, 0),
+      conversation: toApiConversationRow(created, []),
     });
-    return c.json(toApiConversationRow(created, 0));
+    return c.json(toApiConversationRow(created, []));
   });
 
   r.put("/:conversationId", async (c) => {
@@ -162,45 +156,36 @@ export function createConversationsRouter(runtime: Runtime) {
       if (!groupUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
       updated = groupUpdated;
     }
+    const usageById = conversationUsageById();
     runtime.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
-      conversation: toApiConversationRow(updated, conversationCostsUsdById().get(conversationId) ?? 0),
+      conversation: toApiConversationRow(updated, usageById.get(conversationId) ?? []),
     });
-    return c.json(
-      toApiConversationRow(updated, conversationCostsUsdById().get(conversationId) ?? 0),
-    );
+    return c.json(toApiConversationRow(updated, usageById.get(conversationId) ?? []));
   });
 
   r.delete("/:conversationId", (c) => {
     const conversationId = c.req.param("conversationId");
     const deleted = runtime.conversations.softDelete(conversationId);
     if (!deleted) return c.json({ detail: "conversation not found or already deleted" }, 404);
+    const usageById = conversationUsageById();
     runtime.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
-      conversation: toApiConversationRow(
-        deleted,
-        conversationCostsUsdById().get(conversationId) ?? 0,
-      ),
+      conversation: toApiConversationRow(deleted, usageById.get(conversationId) ?? []),
     });
-    return c.json(
-      toApiConversationRow(deleted, conversationCostsUsdById().get(conversationId) ?? 0),
-    );
+    return c.json(toApiConversationRow(deleted, usageById.get(conversationId) ?? []));
   });
 
   r.post("/:conversationId/undelete", (c) => {
     const conversationId = c.req.param("conversationId");
     const restored = runtime.conversations.undelete(conversationId);
     if (!restored) return c.json({ detail: "conversation not found or not deleted" }, 404);
+    const usageById = conversationUsageById();
     runtime.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
-      conversation: toApiConversationRow(
-        restored,
-        conversationCostsUsdById().get(conversationId) ?? 0,
-      ),
+      conversation: toApiConversationRow(restored, usageById.get(conversationId) ?? []),
     });
-    return c.json(
-      toApiConversationRow(restored, conversationCostsUsdById().get(conversationId) ?? 0),
-    );
+    return c.json(toApiConversationRow(restored, usageById.get(conversationId) ?? []));
   });
 
   r.delete("/:conversationId/permanent", (c) => {

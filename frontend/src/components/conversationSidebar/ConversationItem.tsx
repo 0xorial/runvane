@@ -21,6 +21,10 @@ import {
 import { LlmMetaBadge } from "../chat/LlmMetaBadge";
 import { NewGroupDialog } from "./NewGroupDialog";
 import type { ConversationGroupRow, ConversationRow } from "./types";
+import {
+  estimateConversationCostUsd,
+  type ModelPricing,
+} from "@/lib/costEstimation";
 
 type ConversationItemProps = {
   conversation: ConversationRow;
@@ -29,6 +33,7 @@ type ConversationItemProps = {
   knownGroups: ConversationGroupRow[];
   multiSelectMode: boolean;
   deletedMode: boolean;
+  pricingByModel: Map<string, ModelPricing>;
   selected: boolean;
   onSelect: (id: string) => void;
   onToggleSelected: (id: string, checked: boolean) => void;
@@ -49,6 +54,7 @@ export function ConversationItem({
   knownGroups,
   multiSelectMode,
   deletedMode,
+  pricingByModel,
   selected,
   onSelect,
   onToggleSelected,
@@ -67,7 +73,10 @@ export function ConversationItem({
   const promptTokens = Number(conversation.prompt_tokens_total ?? 0);
   const cachedPromptTokens = Number(conversation.cached_prompt_tokens_total ?? 0);
   const completionTokens = Number(conversation.completion_tokens_total ?? 0);
-  const estimatedCostUsd = Number(conversation.estimated_cost_usd ?? 0);
+  const estimatedCostUsd = estimateConversationCostUsd(
+    conversation.token_usage_by_model ?? [],
+    pricingByModel,
+  );
 
   async function submitNewGroupDialog() {
     const groupName = newGroupName.trim();

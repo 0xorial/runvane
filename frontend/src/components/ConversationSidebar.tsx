@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createConversation,
   getConversations,
+  getModelCapabilities,
   permanentlyDeleteConversation,
   postConversationMessage,
   renameConversation,
@@ -20,6 +21,7 @@ import type {
   ConversationGroupRow,
   ConversationRow,
 } from "./conversationSidebar/types";
+import { buildModelPricingByName, type ModelPricing } from "@/lib/costEstimation";
 
 type ConversationSidebarProps = {
   activeConversationId: string | null;
@@ -28,6 +30,13 @@ type ConversationSidebarProps = {
 };
 
 const PROBE_MESSAGE = "what is the time?";
+
+function timestampMs(value: string | undefined): number | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
 
 export function ConversationSidebar({
   activeConversationId,
@@ -47,6 +56,9 @@ export function ConversationSidebar({
     string[]
   >([]);
   const [probeBusy, setProbeBusy] = useState(false);
+  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(
+    () => new Map(),
+  );
 
   const loadConversations = useCallback(async () => {
     const data = await getConversations({ deletedOnly: showDeletedOnly });
@@ -58,6 +70,24 @@ export function ConversationSidebar({
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await getModelCapabilities();
+        if (cancelled) return;
+        setPricingByModel(buildModelPricingByName(data.models));
+      } catch (e) {
+        if (cancelled) return;
+        const detail = e instanceof Error ? e.message : String(e);
+        notifyError(`Failed to load model pricing: ${detail}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedConversationIds([]);
@@ -98,6 +128,15 @@ export function ConversationSidebar({
               }
               if (index === -1) return [ev.conversation, ...prev];
               const next = prev.slice();
+              const currentMs = timestampMs(next[index].updated_at);
+              const incomingMs = timestampMs(ev.conversation.updated_at);
+              if (
+                currentMs != null &&
+                incomingMs != null &&
+                incomingMs < currentMs
+              ) {
+                return prev;
+              }
               next[index] = {
                 ...next[index],
                 ...ev.conversation,
@@ -107,10 +146,20 @@ export function ConversationSidebar({
           );
           return;
         }
+        if (
+          ev.type === SseType.PLANNER_RESPONSE ||
+          ev.type === SseType.TITLE_RESPONSE
+        ) {
+          void loadConversations().catch((e: unknown) => {
+            const detail = e instanceof Error ? e.message : String(e);
+            notifyError(`Failed to refresh conversations: ${detail}`);
+          });
+          return;
+        }
       },
     });
     return () => dispose();
-  }, [showDeletedOnly]);
+  }, [showDeletedOnly, loadConversations]);
 
   async function onProbeTime() {
     if (probeBusy) return;
@@ -417,6 +466,7 @@ export function ConversationSidebar({
         knownGroups={knownGroups}
         multiSelectMode={multiSelectMode}
         deletedMode={showDeletedOnly}
+        pricingByModel={pricingByModel}
         selected={selectedConversationIds.includes(c.id)}
         onSelect={onSelect}
         onToggleSelected={onToggleSelected}

@@ -13,7 +13,12 @@ export type ConversationRow = {
   prompt_tokens_total: number;
   cached_prompt_tokens_total: number;
   completion_tokens_total: number;
-  estimated_cost_usd?: number;
+  token_usage_by_model: Array<{
+    model_name: string;
+    prompt_tokens: number;
+    cached_prompt_tokens: number;
+    completion_tokens: number;
+  }>;
 };
 export type ConversationGroupRow = {
   id: string;
@@ -51,7 +56,14 @@ const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   prompt_tokens_total: z.number().finite(),
   cached_prompt_tokens_total: z.number().finite(),
   completion_tokens_total: z.number().finite(),
-  estimated_cost_usd: z.number().finite().optional(),
+  token_usage_by_model: z.array(
+    z.object({
+      model_name: z.string(),
+      prompt_tokens: z.number().finite(),
+      cached_prompt_tokens: z.number().finite(),
+      completion_tokens: z.number().finite(),
+    }),
+  ),
 });
 const ConversationGroupRowSchema: z.ZodType<ConversationGroupRow> = z.object({
   id: z.string(),

@@ -12,6 +12,26 @@ export type GlobalPollHandler = () => Promise<boolean> | boolean;
 const DEFAULT_POLL_MS = 450;
 const DEFAULT_RECOVERY_MS = 2500;
 const DEFAULT_MAX_RECOVERY_WAITS = 12;
+const LAST_SEQ_STORAGE_KEY = "runvane:sse:last-seq";
+
+function readLastSeenSeq(): number | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_SEQ_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastSeenSeq(seq: number): void {
+  try {
+    window.localStorage.setItem(LAST_SEQ_STORAGE_KEY, String(Math.trunc(seq)));
+  } catch {
+    // Best-effort only.
+  }
+}
 
 type GlobalLiveOptions = {
   apiBaseUrl?: string;
@@ -67,7 +87,11 @@ function startPoll(pollMs: number): void {
 function ensureGlobalSse(options?: GlobalLiveOptions): void {
   if (es != null || disposed) return;
   const base = options?.apiBaseUrl ?? API_BASE_URL;
-  const streamUrl = `${base}/api/stream`;
+  const afterSeq = readLastSeenSeq();
+  const streamUrl =
+    afterSeq != null && afterSeq > 0
+      ? `${base}/api/stream?after_seq=${encodeURIComponent(String(afterSeq))}`
+      : `${base}/api/stream`;
   const pollMs = options?.pollIntervalMs ?? DEFAULT_POLL_MS;
   const recoveryMs = options?.recoveryCheckMs ?? DEFAULT_RECOVERY_MS;
   const maxWaits = options?.maxRecoveryWaits ?? DEFAULT_MAX_RECOVERY_WAITS;
@@ -117,6 +141,9 @@ function ensureGlobalSse(options?: GlobalLiveOptions): void {
       const raw = JSON.parse(event.data) as unknown;
       const ev = parseSseEventObject(raw);
       if (!ev) return;
+      if (typeof ev.seq === "number" && Number.isFinite(ev.seq)) {
+        writeLastSeenSeq(ev.seq);
+      }
       rvInfo("[runvane:sse] parsed", ev.type);
       for (const sub of [...subscribers]) {
         sub.onSseEvent(ev);

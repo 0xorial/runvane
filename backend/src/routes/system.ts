@@ -28,7 +28,9 @@ export function createSystemRouter(runtime: Runtime) {
   });
 
   r.get("/stream", async (c) => {
-    const afterSeq = parseSseAfterSeqHeader(c.req.header("Last-Event-ID"));
+    const afterSeqFromQuery = parseSseAfterSeqHeader(c.req.query("after_seq"));
+    const afterSeqFromHeader = parseSseAfterSeqHeader(c.req.header("Last-Event-ID"));
+    const afterSeq = afterSeqFromQuery ?? afterSeqFromHeader;
 
     logger.info({ afterSeq }, "[sse] global stream subscribed");
     return streamSSE(c, async (stream) => {
@@ -47,14 +49,10 @@ export function createSystemRouter(runtime: Runtime) {
         (ev) => {
           if (aborted) return;
           void stream.writeSSE(
-            "seq" in ev && typeof ev.seq === "number"
-              ? {
-                  id: String(ev.seq),
-                  data: JSON.stringify(ev),
-                }
-              : {
-                  data: JSON.stringify(ev),
-                },
+            {
+              id: String(ev.seq),
+              data: JSON.stringify(ev),
+            },
           );
         },
         {

@@ -206,11 +206,38 @@ export async function maybeAutoTitleConversation({
   if (!current || String(current.title || "").trim() !== "New chat") return;
   const updated = conversations.updateTitle(conversationId, title);
   if (!updated) return;
+  const tokenUsageByModel = chatEntries
+    .listConversationTokenUsageByModel()
+    .filter((usage) => usage.conversation_id === conversationId)
+    .map((usage) => {
+      const promptTokens =
+        typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens)
+          ? Math.max(0, Math.trunc(usage.prompt_tokens))
+          : 0;
+      const cachedPromptTokens =
+        typeof usage.cached_prompt_tokens === "number" &&
+        Number.isFinite(usage.cached_prompt_tokens)
+          ? Math.max(0, Math.min(Math.trunc(usage.cached_prompt_tokens), promptTokens))
+          : 0;
+      const completionTokens =
+        typeof usage.completion_tokens === "number" &&
+        Number.isFinite(usage.completion_tokens)
+          ? Math.max(0, Math.trunc(usage.completion_tokens))
+          : 0;
+      return {
+        model_name: String(usage.model_name || "").trim(),
+        prompt_tokens: promptTokens,
+        cached_prompt_tokens: cachedPromptTokens,
+        completion_tokens: completionTokens,
+      };
+    })
+    .filter((usage) => usage.model_name.length > 0);
   hub.publish(conversationId, {
     type: SseType.CONVERSATION_UPDATED,
     conversation: {
       ...updated,
       is_deleted: Number(updated.is_deleted ?? 0) === 1,
+      token_usage_by_model: tokenUsageByModel,
     },
   });
 

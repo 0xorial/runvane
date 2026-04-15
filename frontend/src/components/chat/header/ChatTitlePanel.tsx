@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { getConversations, renameConversation } from "../../../api/client";
+import {
+  getConversations,
+  getModelCapabilities,
+  renameConversation,
+} from "../../../api/client";
 import { subscribeGlobalLive } from "../../../protocol/runLiveClient";
 import { SseType } from "../../../protocol/sseTypes";
 import { notifyError } from "../../../utils/toast";
@@ -8,6 +12,12 @@ import { Button } from "../../ui/button";
 import { ThemeToggle } from "../../ThemeToggle";
 import { LlmMetaBadge } from "../LlmMetaBadge";
 import { EditableConversationTitle } from "./EditableConversationTitle";
+import {
+  buildModelPricingByName,
+  estimateConversationCostUsd,
+  type ModelPricing,
+  type TokenUsageByModelRow,
+} from "@/lib/costEstimation";
 
 type ChatTitlePanelProps = {
   conversationId: string | null;
@@ -16,6 +26,13 @@ type ChatTitlePanelProps = {
   onOpenSettings: () => void;
   settingsPressed?: boolean;
 };
+
+function timestampMs(value: string | undefined): number | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
 
 export function ChatTitlePanel({
   conversationId,
@@ -31,8 +48,16 @@ export function ChatTitlePanel({
     cachedPrompt: 0,
     completion: 0,
   });
-  const [estimatedCostUsd, setEstimatedCostUsd] = useState(0);
+  const [tokenUsageByModel, setTokenUsageByModel] = useState<TokenUsageByModelRow[]>([]);
+  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(
+    () => new Map(),
+  );
+  const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
+  const estimatedCostUsd = useMemo(
+    () => estimateConversationCostUsd(tokenUsageByModel, pricingByModel),
+    [tokenUsageByModel, pricingByModel],
+  );
 
   async function refreshConversationMetrics(targetConversationId: string) {
     const payload = await getConversations();
@@ -43,16 +68,16 @@ export function ChatTitlePanel({
       cachedPrompt: row.cached_prompt_tokens_total ?? 0,
       completion: row.completion_tokens_total,
     });
-    setEstimatedCostUsd(
-      row.estimated_cost_usd ?? 0,
-    );
+    setTokenUsageByModel(row.token_usage_by_model ?? []);
+    setConversationUpdatedAt(String(row.updated_at ?? ""));
   }
 
   function refreshTitle() {
     if (!conversationId) {
       setTitle("New chat");
       setTokenTotals({ prompt: 0, cachedPrompt: 0, completion: 0 });
-      setEstimatedCostUsd(0);
+      setTokenUsageByModel([]);
+      setConversationUpdatedAt("");
       return () => {};
     }
     let cancelled = false;
@@ -67,7 +92,8 @@ export function ChatTitlePanel({
           cachedPrompt: row?.cached_prompt_tokens_total ?? 0,
           completion: row?.completion_tokens_total ?? 0,
         });
-        setEstimatedCostUsd(row?.estimated_cost_usd ?? 0);
+        setTokenUsageByModel(row?.token_usage_by_model ?? []);
+        setConversationUpdatedAt(String(row?.updated_at ?? ""));
       } catch (e) {
         if (cancelled) return;
         const detail = e instanceof Error ? e.message : String(e);
@@ -81,10 +107,29 @@ export function ChatTitlePanel({
 
   useEffect(() => {
     setTokenTotals({ prompt: 0, cachedPrompt: 0, completion: 0 });
-    setEstimatedCostUsd(0);
+    setTokenUsageByModel([]);
+    setConversationUpdatedAt("");
     setStreamRawTitle("");
     return refreshTitle();
   }, [conversationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await getModelCapabilities();
+        if (cancelled) return;
+        setPricingByModel(buildModelPricingByName(data.models));
+      } catch (e) {
+        if (cancelled) return;
+        const detail = e instanceof Error ? e.message : String(e);
+        notifyError(`Failed to load model pricing: ${detail}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const cid = conversationId;
@@ -101,6 +146,15 @@ export function ChatTitlePanel({
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
+          const currentMs = timestampMs(conversationUpdatedAt);
+          const incomingMs = timestampMs(ev.conversation.updated_at);
+          if (
+            currentMs != null &&
+            incomingMs != null &&
+            incomingMs < currentMs
+          ) {
+            return;
+          }
           setStreamRawTitle("");
           setTitle(String(ev.conversation.title || "Untitled"));
           setTokenTotals({
@@ -108,7 +162,8 @@ export function ChatTitlePanel({
             cachedPrompt: ev.conversation.cached_prompt_tokens_total ?? 0,
             completion: ev.conversation.completion_tokens_total,
           });
-          setEstimatedCostUsd(ev.conversation.estimated_cost_usd ?? 0);
+          setTokenUsageByModel(ev.conversation.token_usage_by_model ?? []);
+          setConversationUpdatedAt(String(ev.conversation.updated_at ?? ""));
           return;
         }
         if (
@@ -123,7 +178,7 @@ export function ChatTitlePanel({
       },
     });
     return () => dispose();
-  }, [conversationId]);
+  }, [conversationId, conversationUpdatedAt]);
 
   async function onCommit(nextTitle: string) {
     if (!conversationId) return;
