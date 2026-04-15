@@ -109,6 +109,26 @@ export class TasksRepo {
     return row?.is_done === true && row.last_error === TASK_CANCELLED_BY_USER;
   }
 
+  hasUnfinishedRunToolTasksInBatch(batchId: string, excludeTaskId?: number): boolean {
+    const normalizedBatchId = String(batchId ?? "").trim();
+    if (!normalizedBatchId) return false;
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS has_pending
+         FROM tasks
+         WHERE task_type = 'run_tool'
+           AND finished_at IS NULL
+           AND json_extract(payload_json, '$.batchId') = @batch_id
+           AND (@exclude_id IS NULL OR id != @exclude_id)
+         LIMIT 1`,
+      )
+      .get({
+        batch_id: normalizedBatchId,
+        exclude_id: typeof excludeTaskId === "number" ? excludeTaskId : null,
+      }) as { has_pending?: number } | undefined;
+    return row?.has_pending === 1;
+  }
+
   cancelOpenByConversationId(conversationId: string): number {
     const now = new Date().toISOString();
     const result = this.db

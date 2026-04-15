@@ -89,6 +89,7 @@ export function createRuntime(opts: {
     hub,
     tools,
     toolExecutionLogs,
+    tasks,
     enqueueContinueConversation,
   );
   registerTaskQueueHandler({

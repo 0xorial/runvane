@@ -1,5 +1,6 @@
 import type { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
 import type { ToolExecutionLogsRepo } from "../infra/repositories/toolExecutionLogsRepo.js";
+import type { TasksRepo } from "../infra/repositories/tasksRepo.js";
 import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
 import type { RunToolTask } from "./agentTask.js";
@@ -23,6 +24,7 @@ export class RunToolTaskProcessor {
     private readonly hub: ConversationEventHub,
     private readonly tools: ToolRegistry,
     private readonly toolExecutionLogs: ToolExecutionLogsRepo,
+    private readonly tasks: TasksRepo,
     private readonly enqueueContinueConversation: (conversationId: string) => { taskId: number },
   ) {}
 
@@ -32,6 +34,9 @@ export class RunToolTaskProcessor {
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const argsPreview = safeStringify(task.params);
+    const batchId = typeof task.batchId === "string" && task.batchId.trim().length > 0 ? task.batchId.trim() : null;
+    const hasPendingBatchTools = (): boolean =>
+      batchId !== null ? this.tasks.hasUnfinishedRunToolTasksInBatch(batchId, taskId) : false;
     const toolEntryId = task.toolInvocationEntryId;
     const toolEntry = toolEntryId
       ? null
@@ -85,7 +90,7 @@ export class RunToolTaskProcessor {
         tool_name: task.toolName,
         output,
         ok: false,
-        run_continues: task.resumeAfterTool === false,
+        run_continues: hasPendingBatchTools(),
       });
       this.chatEntries.updateToolInvocation(conversationId, {
         id: toolEntryId ?? toolEntry?.id ?? "",
@@ -208,7 +213,7 @@ export class RunToolTaskProcessor {
       tool_name: task.toolName,
       output: safeStringify(outputValue),
       ok: true,
-      run_continues: task.resumeAfterTool === false,
+      run_continues: hasPendingBatchTools(),
     });
     this.chatEntries.updateToolInvocation(conversationId, {
       id: toolEntryId ?? toolEntry?.id ?? "",
@@ -222,7 +227,7 @@ export class RunToolTaskProcessor {
       phase: "completed",
       payload: { ...envelope, rules },
     });
-    if (task.resumeAfterTool !== false) {
+    if (!hasPendingBatchTools()) {
       this.enqueueContinueConversation(conversationId);
     }
     logger.info({ conversationId, toolName: task.toolName }, "[tool] run_tool completed");

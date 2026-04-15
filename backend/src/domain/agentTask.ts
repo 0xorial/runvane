@@ -15,7 +15,6 @@ export type RunToolTask = {
   toolName: string;
   params: unknown;
   batchId?: string;
-  resumeAfterTool?: boolean;
   toolInvocationEntryId?: string;
   approvalGranted?: boolean;
   agentToolConfig?: {

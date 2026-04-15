@@ -39,7 +39,6 @@ export class ContinueConversationTaskProcessor {
       params: unknown;
       toolInvocationEntryId?: string;
       batchId?: string;
-      resumeAfterTool?: boolean;
       agentToolConfig?: {
         enabled?: boolean;
         policy?: ToolPermission;
@@ -861,7 +860,6 @@ Return ONLY valid JSON object for tool parameters.`;
       for (let i = 0; i < selectedCalls.length; i += 1) {
         const call = selectedCalls[i].call;
         const toolCfg = this.agentToolConfigFor(anchorUserMessage.agentId, call.toolId);
-        const shouldResumeAfterBatch = agentic.followup === "continue" && i === selectedCalls.length - 1;
         this.enqueueRunTool({
           conversationId,
           agentId: anchorUserMessage.agentId,
@@ -869,7 +867,6 @@ Return ONLY valid JSON object for tool parameters.`;
           params: call.parameters,
           toolInvocationEntryId: selectedCalls[i].toolInvocationEntryId,
           batchId,
-          resumeAfterTool: shouldResumeAfterBatch,
           agentToolConfig: toolCfg,
         });
       }
