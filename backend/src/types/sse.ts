@@ -15,6 +15,11 @@ export const SseType = {
   TITLE_RESPONSE: "title_response",
   TOOL_INVOCATION_START: "tool_invocation_start",
   TOOL_INVOCATION_END: "tool_invocation_end",
+  PLANNER_TURN_STARTED: "planner_turn_started",
+  PLANNER_TURN_COMPLETED: "planner_turn_completed",
+  TOOL_BATCH_STARTED: "tool_batch_started",
+  TOOL_BATCH_COMPLETED: "tool_batch_completed",
+  PLANNER_GUARD_STOP: "planner_guard_stop",
 } as const;
 
 export type SseEventType = (typeof SseType)[keyof typeof SseType];
@@ -237,6 +242,65 @@ export const ToolInvocationEndSsePayloadSchema = z.object({
   run_continues: z.boolean().optional(),
 });
 
+export type PlannerTurnStartedSsePayload = {
+  type: typeof SseType.PLANNER_TURN_STARTED;
+  planner_turn: number;
+  max_turns: number;
+};
+export const PlannerTurnStartedSsePayloadSchema = z.object({
+  type: z.literal(SseType.PLANNER_TURN_STARTED),
+  planner_turn: z.number().finite(),
+  max_turns: z.number().finite(),
+});
+
+export type PlannerTurnCompletedSsePayload = {
+  type: typeof SseType.PLANNER_TURN_COMPLETED;
+  planner_turn: number;
+  followup: string;
+  tool_calls: number;
+};
+export const PlannerTurnCompletedSsePayloadSchema = z.object({
+  type: z.literal(SseType.PLANNER_TURN_COMPLETED),
+  planner_turn: z.number().finite(),
+  followup: z.string(),
+  tool_calls: z.number().finite(),
+});
+
+export type ToolBatchStartedSsePayload = {
+  type: typeof SseType.TOOL_BATCH_STARTED;
+  batch_id: string;
+  total_calls: number;
+};
+export const ToolBatchStartedSsePayloadSchema = z.object({
+  type: z.literal(SseType.TOOL_BATCH_STARTED),
+  batch_id: z.string(),
+  total_calls: z.number().finite(),
+});
+
+export type ToolBatchCompletedSsePayload = {
+  type: typeof SseType.TOOL_BATCH_COMPLETED;
+  batch_id: string;
+  total_calls: number;
+};
+export const ToolBatchCompletedSsePayloadSchema = z.object({
+  type: z.literal(SseType.TOOL_BATCH_COMPLETED),
+  batch_id: z.string(),
+  total_calls: z.number().finite(),
+});
+
+export type PlannerGuardStopSsePayload = {
+  type: typeof SseType.PLANNER_GUARD_STOP;
+  reason: string;
+  planner_turn: number;
+  max_turns: number;
+};
+export const PlannerGuardStopSsePayloadSchema = z.object({
+  type: z.literal(SseType.PLANNER_GUARD_STOP),
+  reason: z.string(),
+  planner_turn: z.number().finite(),
+  max_turns: z.number().finite(),
+});
+
 export type SsePayload =
   | UserMessageSsePayload
   | ConversationCreatedSsePayload
@@ -249,7 +313,12 @@ export type SsePayload =
   | PlannerResponseSsePayload
   | TitleResponseSsePayload
   | ToolInvocationStartSsePayload
-  | ToolInvocationEndSsePayload;
+  | ToolInvocationEndSsePayload
+  | PlannerTurnStartedSsePayload
+  | PlannerTurnCompletedSsePayload
+  | ToolBatchStartedSsePayload
+  | ToolBatchCompletedSsePayload
+  | PlannerGuardStopSsePayload;
 export const SsePayloadSchema = z.discriminatedUnion("type", [
   UserMessageSsePayloadSchema,
   ConversationCreatedSsePayloadSchema,
@@ -263,6 +332,11 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   TitleResponseSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
+  PlannerTurnStartedSsePayloadSchema,
+  PlannerTurnCompletedSsePayloadSchema,
+  ToolBatchStartedSsePayloadSchema,
+  ToolBatchCompletedSsePayloadSchema,
+  PlannerGuardStopSsePayloadSchema,
 ]);
 
 /** Wire event sent over SSE. */
@@ -356,6 +430,33 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     output: z.string(),
     ok: z.boolean(),
     run_continues: z.boolean().optional(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.PLANNER_TURN_STARTED),
+    planner_turn: z.number().finite(),
+    max_turns: z.number().finite(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.PLANNER_TURN_COMPLETED),
+    planner_turn: z.number().finite(),
+    followup: z.string(),
+    tool_calls: z.number().finite(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.TOOL_BATCH_STARTED),
+    batch_id: z.string(),
+    total_calls: z.number().finite(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.TOOL_BATCH_COMPLETED),
+    batch_id: z.string(),
+    total_calls: z.number().finite(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.PLANNER_GUARD_STOP),
+    reason: z.string(),
+    planner_turn: z.number().finite(),
+    max_turns: z.number().finite(),
   }),
 ]);
 

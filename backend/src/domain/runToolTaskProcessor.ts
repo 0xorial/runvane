@@ -9,6 +9,15 @@ import {
 } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
 
+type ToolExecutionEnvelope = {
+  ok: boolean;
+  toolId: string;
+  output: unknown;
+  error: string | null;
+  permission_state: "allow" | "ask_user" | "forbid";
+  timing: { started_at: string; finished_at: string; elapsed_ms: number };
+};
+
 export class RunToolTaskProcessor {
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -20,6 +29,8 @@ export class RunToolTaskProcessor {
 
   async process(task: RunToolTask, taskId?: number): Promise<void> {
     const conversationId = task.conversationId;
+    const startedAt = new Date();
+    const startedAtMs = startedAt.getTime();
     const argsPreview = safeStringify(task.params);
     const toolEntryId = task.toolInvocationEntryId;
     const toolEntry = toolEntryId
@@ -58,23 +69,37 @@ export class RunToolTaskProcessor {
     const tool = this.tools.get(task.toolName);
     if (!tool) {
       const output = `Tool not found: ${task.toolName}`;
+      const finishedAt = new Date();
+      const envelope: ToolExecutionEnvelope = {
+        ok: false,
+        toolId: task.toolName,
+        output: null,
+        error: output,
+        permission_state: "forbid",
+        timing: {
+          started_at: startedAt.toISOString(),
+          finished_at: finishedAt.toISOString(),
+          elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
+        },
+      };
       this.hub.publish(conversationId, {
         type: SseType.TOOL_INVOCATION_END,
         tool_name: task.toolName,
         output,
         ok: false,
+        run_continues: task.resumeAfterTool === false,
       });
       this.chatEntries.updateToolInvocation(conversationId, {
         id: toolEntryId ?? toolEntry?.id ?? "",
         state: "error",
-        result: output,
+        result: envelope,
       });
       this.toolExecutionLogs.append({
         taskId: taskId ?? null,
         conversationId,
         toolName: task.toolName,
         phase: "failed",
-        payload: { reason: output },
+        payload: envelope,
       });
       throw new Error(output);
     }
@@ -118,6 +143,19 @@ export class RunToolTaskProcessor {
         effectivePermission === "ask_user"
           ? "Tool requires user approval."
           : "Tool is forbidden by permission rules.";
+      const finishedAt = new Date();
+      const envelope: ToolExecutionEnvelope = {
+        ok: false,
+        toolId: task.toolName,
+        output: null,
+        error: reason,
+        permission_state: effectivePermission,
+        timing: {
+          started_at: startedAt.toISOString(),
+          finished_at: finishedAt.toISOString(),
+          elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
+        },
+      };
       if (effectivePermission === "ask_user") {
         this.hub.publish(conversationId, {
           type: SseType.TOOL_INVOCATION_START,
@@ -137,18 +175,14 @@ export class RunToolTaskProcessor {
       this.chatEntries.updateToolInvocation(conversationId, {
         id: toolEntryId ?? toolEntry?.id ?? "",
         state: outState,
-        result: reason,
+        result: envelope,
       });
       this.toolExecutionLogs.append({
         taskId: taskId ?? null,
         conversationId,
         toolName: task.toolName,
         phase: "blocked",
-        payload: {
-          reason,
-          rules,
-          kind: effectivePermission,
-        },
+        payload: { ...envelope, rules },
       });
       return;
     }
@@ -159,26 +193,42 @@ export class RunToolTaskProcessor {
       entries,
       toolRules: parsedRules,
     });
+    const finishedAt = new Date();
+    const envelope: ToolExecutionEnvelope = {
+      ok: true,
+      toolId: task.toolName,
+      output: outputValue,
+      error: null,
+      permission_state: "allow",
+      timing: {
+        started_at: startedAt.toISOString(),
+        finished_at: finishedAt.toISOString(),
+        elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
+      },
+    };
 
     this.hub.publish(conversationId, {
       type: SseType.TOOL_INVOCATION_END,
       tool_name: task.toolName,
       output: safeStringify(outputValue),
       ok: true,
+      run_continues: task.resumeAfterTool === false,
     });
     this.chatEntries.updateToolInvocation(conversationId, {
       id: toolEntryId ?? toolEntry?.id ?? "",
       state: "done",
-      result: outputValue,
+      result: envelope,
     });
     this.toolExecutionLogs.append({
       taskId: taskId ?? null,
       conversationId,
       toolName: task.toolName,
       phase: "completed",
-      payload: { output: outputValue, rules },
+      payload: { ...envelope, rules },
     });
-    this.enqueueContinueConversation(conversationId);
+    if (task.resumeAfterTool !== false) {
+      this.enqueueContinueConversation(conversationId);
+    }
     logger.info({ conversationId, toolName: task.toolName }, "[tool] run_tool completed");
   }
 }

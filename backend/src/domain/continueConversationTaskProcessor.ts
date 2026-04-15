@@ -2,6 +2,7 @@ import { ConversationEventHub } from "../events/conversationEventHub.js";
 import { logger } from "../infra/logger.js";
 import type { AgentsRepo } from "../infra/repositories/agentsRepo.js";
 import { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
+import { ConversationsRepo } from "../infra/repositories/conversationsRepo.js";
 import { LlmProviderSettingsRepo } from "../infra/repositories/llmProviderSettingsRepo.js";
 import { ModelPresetsRepo } from "../infra/repositories/modelPresetsRepo.js";
 import { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
@@ -9,17 +10,28 @@ import type { ContinueConversationTask } from "./agentTask.js";
 import type { ToolPermission } from "../tools/baseTool.js";
 import { ToolRegistry } from "../tools/toolRegistry.js";
 import type {
+  AgenticPlannerOutput,
+  AgenticToolCall,
   ChatEntry,
+  LlmDecision,
   LlmDecisionTool,
   LlmDecisionUserResponse,
   UserMessageEntry,
 } from "../types/chatEntry.js";
+import { AgenticPlannerOutputSchema } from "../types/chatEntry.js";
 import type { StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
+import {
+  clampToolCallsForTurn,
+  DEFAULT_MAX_PLANNER_TURNS,
+  DEFAULT_MAX_TOOL_CALLS_PER_TURN,
+  shouldContinuePlannerLoop,
+} from "./agenticLoopGuards.js";
 
 export class ContinueConversationTaskProcessor {
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
+    private readonly conversations: ConversationsRepo,
     private readonly hub: ConversationEventHub,
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
     private readonly modelPresets: ModelPresetsRepo,
@@ -31,6 +43,8 @@ export class ContinueConversationTaskProcessor {
       agentId: string | null;
       toolName: string;
       params: unknown;
+      batchId?: string;
+      resumeAfterTool?: boolean;
       agentToolConfig?: {
         enabled?: boolean;
         policy?: ToolPermission;
@@ -74,7 +88,14 @@ export class ContinueConversationTaskProcessor {
     systemPrompt: string;
     entries: ChatEntry[];
     latestUserText: string;
-    toolDescriptions: string[];
+    toolIds: string[];
+    priorToolResults: Array<{
+      toolId: string;
+      ok: boolean;
+      output: unknown;
+      error: string | null;
+    }>;
+    loopState: Record<string, unknown>;
   }): string {
     const summaryLines = input.entries.map((entry, idx) => {
       return `${idx + 1}. ${this.summarizeEntry(entry)}`;
@@ -85,18 +106,139 @@ export class ContinueConversationTaskProcessor {
       : "";
     return (
       `${systemBlock}` +
-      (input.toolDescriptions.length > 0
-        ? `<TOOLS>\n${input.toolDescriptions
+      (input.toolIds.length > 0
+        ? `<TOOLS>\n${input.toolIds
             .map((line, idx) => `${idx + 1}. ${line}`)
             .join(
               "\n"
-            )}\n\nIf a tool is required, return ONLY valid JSON with this exact shape:\n{"type":"tool-invocation","toolId":"<tool_name>","parameters":{}}\n\`parameters\` MUST match the tool params schema shown above.\nDo not wrap JSON in markdown fences.\n\nNever call the same tool repeatedly with identical parameters if a successful result already exists in recent conversation context.\nAfter receiving a successful tool result, produce <answer> unless another different tool call is strictly required.\n\nIf tool is NOT required, return text using XML tags:\n<thought>your reasoning shown in thinking pane</thought>\n<answer>only final user-visible answer</answer>\n</TOOLS>\n\n`
+            )}\n\nReturn ONLY valid JSON with this exact shape:\n{\"assistant_output\":\"string optional\",\"tool_calls\":[{\"toolId\":\"<tool_name>\",\"parameters\":{}}],\"followup\":\"finalize|continue_with_results|retry_with_adjustment\",\"state\":{}}\n\nRules:\n- Use tool IDs from <TOOLS> only.\n- If no tools are needed, return empty tool_calls and followup=\"finalize\".\n- If tools are needed, include all calls for this step in tool_calls.\n- If prior tool errors exist and you need another attempt, use followup=\"retry_with_adjustment\".\n- Keep assistant_output as user-facing text for this step.\n</TOOLS>\n\n`
+        : "") +
+      (input.priorToolResults.length > 0
+        ? `<PRIOR_TOOL_RESULTS>\n${input.priorToolResults
+            .map((row, idx) =>
+              `${idx + 1}. tool=${row.toolId} ok=${row.ok} output=${this.stringify(row.output)} error=${row.error ?? ""}`,
+            )
+            .join("\n")}\n</PRIOR_TOOL_RESULTS>\n\n`
+        : "") +
+      (Object.keys(input.loopState).length > 0
+        ? `<LOOP_STATE>\n${this.stringify(input.loopState)}\n</LOOP_STATE>\n\n`
         : "") +
       `<CONVERSATION_SUMMARY>\n${summary}\n</CONVERSATION_SUMMARY>\n\n` +
       `<LATEST_USER_MESSAGE>\n${input.latestUserText}\n</LATEST_USER_MESSAGE>\n\n` +
       "Provide best possible answer to user's question. Use tools if necessary."
     );
   }
+  private parseAgenticPlannerOutput(
+    reply: string,
+    streamedAnswer: string,
+  ): {
+    output: AgenticPlannerOutput;
+    decision: LlmDecision;
+  } {
+    const cleaned = reply.trim();
+    const withoutFence = cleaned
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    const parsed = parseFirstJsonObjectCandidate([
+      withoutFence,
+      stripThoughtTagBlock(withoutFence),
+      extractLastBalancedJsonObject(withoutFence),
+      extractLastBalancedJsonObject(stripThoughtTagBlock(withoutFence)),
+    ]);
+    const tagged = extractTaggedContent(reply);
+    const assistantFallback = streamedAnswer || tagged.answer || "";
+    const parsedAgentic = AgenticPlannerOutputSchema.safeParse(parsed);
+    if (parsedAgentic.success) {
+      const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) =>
+        this.tools.get(call.toolId),
+      );
+      const output: AgenticPlannerOutput = {
+        ...parsedAgentic.data,
+        tool_calls: normalizedToolCalls,
+        ...(parsedAgentic.data.assistant_output == null
+          ? { assistant_output: assistantFallback }
+          : {}),
+      };
+      const decision: LlmDecision =
+        normalizedToolCalls.length > 0
+          ? ({
+              type: "tool-invocation",
+              toolId: normalizedToolCalls[0].toolId,
+              parameters: normalizedToolCalls[0].parameters,
+            } satisfies LlmDecisionTool)
+          : ({
+              type: "user-response",
+              text: String(output.assistant_output ?? "").trim() || reply,
+            } satisfies LlmDecisionUserResponse);
+      return { output, decision };
+    }
+    const fallbackDecision = this.parseDecision(reply);
+    const fallbackOutput: AgenticPlannerOutput = {
+      assistant_output:
+        fallbackDecision.type === "user-response"
+          ? fallbackDecision.text
+          : assistantFallback,
+      tool_calls:
+        fallbackDecision.type === "tool-invocation"
+          ? [{ toolId: fallbackDecision.toolId, parameters: fallbackDecision.parameters }]
+          : [],
+      followup:
+        fallbackDecision.type === "tool-invocation"
+          ? "continue_with_results"
+          : "finalize",
+    };
+    return { output: fallbackOutput, decision: fallbackDecision };
+  }
+
+  private tokenUsageByModel(conversationId: string): Array<{
+    model_name: string;
+    prompt_tokens: number;
+    cached_prompt_tokens: number;
+    completion_tokens: number;
+  }> {
+    return this.chatEntries
+      .listConversationTokenUsageByModel()
+      .filter((usage) => usage.conversation_id === conversationId)
+      .map((usage) => {
+        const promptTokens =
+          typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens)
+            ? Math.max(0, Math.trunc(usage.prompt_tokens))
+            : 0;
+        const cachedPromptTokens =
+          typeof usage.cached_prompt_tokens === "number" &&
+          Number.isFinite(usage.cached_prompt_tokens)
+            ? Math.max(0, Math.min(Math.trunc(usage.cached_prompt_tokens), promptTokens))
+            : 0;
+        const completionTokens =
+          typeof usage.completion_tokens === "number" &&
+          Number.isFinite(usage.completion_tokens)
+            ? Math.max(0, Math.trunc(usage.completion_tokens))
+            : 0;
+        return {
+          model_name: String(usage.model_name || "").trim(),
+          prompt_tokens: promptTokens,
+          cached_prompt_tokens: cachedPromptTokens,
+          completion_tokens: completionTokens,
+        };
+      })
+      .filter((usage) => usage.model_name.length > 0);
+  }
+
+  private publishConversationUpdated(conversationId: string): void {
+    const conversation = this.conversations.get(conversationId, { includeDeleted: true });
+    if (!conversation) return;
+    this.hub.publish(conversationId, {
+      type: SseType.CONVERSATION_UPDATED,
+      conversation: {
+        ...conversation,
+        is_deleted: Number(conversation.is_deleted ?? 0) === 1,
+        token_usage_by_model: this.tokenUsageByModel(conversationId),
+      },
+    });
+  }
+
 
   private agentToolConfigFor(
     agentId: string | undefined,
@@ -344,32 +486,10 @@ export class ContinueConversationTaskProcessor {
       );
       return;
     }
-
-    const plannerEntryId = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    const startedAtMs = Date.now();
-    const entries = this.chatEntries.listMessages(conversationId);
     const agent =
       lastUserMessage.agentId != null
         ? this.agents.get(lastUserMessage.agentId)
         : null;
-    const toolDescriptions = this.tools
-      .list()
-      .filter(
-        (tool) =>
-          this.agentToolConfigFor(lastUserMessage.agentId, tool.getName())
-            .enabled
-      )
-      .map((tool) => {
-        const paramsSchema = JSON.stringify(tool.getParamsSchema());
-        return `${tool.getName()}: ${tool.getAiDescription()} paramsSchema=${paramsSchema}`;
-      });
-    const requestText = this.buildPrompt({
-      systemPrompt: agent?.system_prompt ?? "",
-      entries,
-      latestUserText: lastUserMessage.text,
-      toolDescriptions,
-    });
     const llmOverrides = this.resolveLlmOverrides(lastUserMessage);
     const selectedAgent = lastUserMessage.agentId
       ? this.agents.get(lastUserMessage.agentId)
@@ -382,50 +502,6 @@ export class ContinueConversationTaskProcessor {
       modelPresetId: effectiveModelPresetId,
     });
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
-    logger.info(
-      {
-        conversationId,
-        plannerEntryId,
-        requestChars: requestText.length,
-        agentId: lastUserMessage.agentId ?? null,
-        llmProviderId: llmOverrides.llmProviderId ?? null,
-        llmModel: llmOverrides.llmModel ?? null,
-        modelPresetId: lastUserMessage.modelPresetId ?? null,
-        effectiveModelPresetId,
-        requestParamKeys: Object.keys(requestParams),
-      },
-      "[task] planner request prepared"
-    );
-
-    const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(
-      conversationId,
-      {
-        id: plannerEntryId,
-        createdAt,
-        llmRequest: requestText,
-        llmResponse: "",
-        thoughtMs: null,
-        decision: null,
-        failed: false,
-        llmModel: plannerLlmModel,
-      }
-    );
-
-    this.hub.publish(conversationId, {
-      type: SseType.PLANNER_STARTING,
-      chat_entry_id: plannerEntryId,
-      conversationIndex: plannerEntry.conversationIndex,
-      createdAt: plannerEntry.createdAt,
-      request_text: requestText,
-      llm_model: plannerLlmModel,
-    });
-
-    let reply = "";
-    let firstDeltaPublished = false;
-    let plannerText = "";
-    let streamedAnswer = "";
-    let assistantEntryId: string | null = null;
-    let reconstructedReply = "";
     const inputFiles = (lastUserMessage.attachments ?? []).map((attachment) => {
       const content = this.uploads.readContentById(attachment.id);
       if (!content) {
@@ -437,172 +513,274 @@ export class ContinueConversationTaskProcessor {
         base64Data: content.data.toString("base64"),
       };
     });
-    let plannerTokenUsage: StreamTextCompletionResult["usage"];
-    try {
-      const completion = await this.callLlmStreaming(
-        requestText,
-        llmOverrides,
-        requestParams,
-        inputFiles,
-        (delta) => {
-          if (!firstDeltaPublished) {
-            firstDeltaPublished = true;
-            logger.info(
-              {
-                conversationId,
-                plannerEntryId,
-                firstStreamLatencyMs: Math.max(0, Date.now() - startedAtMs),
-              },
-              "[sse] first llm token streamed"
-            );
-          }
-          reconstructedReply += delta;
-          const tagged = extractTaggedContent(reconstructedReply);
-          const nextThought = trimPartialKnownTagSuffix(reconstructedReply);
-          const thoughtDelta = incrementalDelta(plannerText, nextThought);
-          if (thoughtDelta) {
-            this.hub.publish(conversationId, {
-              type: SseType.PLANNER_LLM_STREAM,
-              chat_entry_id: plannerEntryId,
-              delta: thoughtDelta,
-            });
-          }
-          plannerText = nextThought;
+    const enabledToolIds = this.tools
+      .list()
+      .filter(
+        (tool) =>
+          this.agentToolConfigFor(lastUserMessage.agentId, tool.getName()).enabled
+      )
+      .map((tool) => tool.getName());
+    const MAX_PLANNER_TURNS = DEFAULT_MAX_PLANNER_TURNS;
+    const MAX_TOOL_CALLS_PER_TURN = DEFAULT_MAX_TOOL_CALLS_PER_TURN;
+    let loopState: Record<string, unknown> = {};
 
-          const answerDelta = incrementalDelta(streamedAnswer, tagged.answer);
-          if (answerDelta) {
-            if (!assistantEntryId) {
-              assistantEntryId = crypto.randomUUID();
-              this.chatEntries.appendAssistantMessage(conversationId, "", {
-                id: assistantEntryId,
-              });
-            }
-            this.hub.publish(conversationId, {
-              type: SseType.ASSISTANT_STREAM,
-              chat_entry_id: assistantEntryId,
-              delta: answerDelta,
-            });
-          }
-          streamedAnswer = tagged.answer;
-        }
-      );
-      plannerTokenUsage = completion.usage;
-      reply = reconstructedReply || completion.text || "";
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      logger.error(
-        { conversationId, plannerEntryId, detail, error: e },
-        "[task] llm failed"
-      );
-      this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+    for (let plannerTurn = 1; plannerTurn <= MAX_PLANNER_TURNS; plannerTurn += 1) {
+      this.hub.publish(conversationId, {
+        type: SseType.PLANNER_TURN_STARTED,
+        planner_turn: plannerTurn,
+        max_turns: MAX_PLANNER_TURNS,
+      });
+      const entries = this.chatEntries.listMessages(conversationId);
+      const priorToolResults = entries
+        .filter(
+          (entry): entry is Extract<ChatEntry, { type: "tool-invocation" }> =>
+            entry.type === "tool-invocation",
+        )
+        .slice(-8)
+        .map((entry) => {
+          const result =
+            entry.result && typeof entry.result === "object" && !Array.isArray(entry.result)
+              ? (entry.result as Record<string, unknown>)
+              : {};
+          return {
+            toolId: String(result.toolId ?? entry.toolId),
+            ok: result.ok === true,
+            output: result.output ?? null,
+            error: typeof result.error === "string" ? result.error : null,
+          };
+        });
+      const requestText = this.buildPrompt({
+        systemPrompt: agent?.system_prompt ?? "",
+        entries,
+        latestUserText: lastUserMessage.text,
+        toolIds: enabledToolIds,
+        priorToolResults,
+        loopState,
+      });
+      const plannerEntryId = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      const turnStartedMs = Date.now();
+      const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(conversationId, {
         id: plannerEntryId,
+        createdAt,
         llmRequest: requestText,
-        llmResponse: detail,
-        thoughtMs: Math.max(0, Date.now() - startedAtMs),
+        llmResponse: "",
+        thoughtMs: null,
         decision: null,
-        failed: true,
+        failed: false,
         llmModel: plannerLlmModel,
       });
       this.hub.publish(conversationId, {
-        type: SseType.PLANNER_RESPONSE,
+        type: SseType.PLANNER_STARTING,
         chat_entry_id: plannerEntryId,
-        summary: detail,
-        finished: true,
-        action: "failed",
+        conversationIndex: plannerEntry.conversationIndex,
+        createdAt: plannerEntry.createdAt,
+        request_text: requestText,
         llm_model: plannerLlmModel,
       });
-      throw e;
-    }
 
-    const decision = this.parseDecision(reply);
-    logger.info(
-      {
-        conversationId,
-        plannerEntryId,
-        replyChars: reply.length,
-      },
-      "[task] persisting planner + assistant entries"
-    );
-    this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
-      id: plannerEntryId,
-      llmRequest: requestText,
-      llmResponse: reply,
-      thoughtMs: Math.max(0, Date.now() - startedAtMs),
-      decision,
-      failed: false,
-      llmModel: plannerLlmModel,
-      ...(plannerTokenUsage !== undefined
-        ? {
-            promptTokens: plannerTokenUsage.promptTokens,
-            ...(plannerTokenUsage.cachedPromptTokens !== undefined
-              ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
-              : {}),
-            completionTokens: plannerTokenUsage.completionTokens,
+      let reply = "";
+      let firstDeltaPublished = false;
+      let plannerText = "";
+      let streamedAnswer = "";
+      let assistantEntryId: string | null = null;
+      let reconstructedReply = "";
+      let plannerTokenUsage: StreamTextCompletionResult["usage"];
+      try {
+        const completion = await this.callLlmStreaming(
+          requestText,
+          llmOverrides,
+          requestParams,
+          inputFiles,
+          (delta) => {
+            if (!firstDeltaPublished) {
+              firstDeltaPublished = true;
+              logger.info(
+                {
+                  conversationId,
+                  plannerEntryId,
+                  plannerTurn,
+                  firstStreamLatencyMs: Math.max(0, Date.now() - turnStartedMs),
+                },
+                "[sse] first llm token streamed"
+              );
+            }
+            reconstructedReply += delta;
+            const tagged = extractTaggedContent(reconstructedReply);
+            const nextThought = trimPartialKnownTagSuffix(reconstructedReply);
+            const thoughtDelta = incrementalDelta(plannerText, nextThought);
+            if (thoughtDelta) {
+              this.hub.publish(conversationId, {
+                type: SseType.PLANNER_LLM_STREAM,
+                chat_entry_id: plannerEntryId,
+                delta: thoughtDelta,
+              });
+            }
+            plannerText = nextThought;
+
+            const answerDelta = incrementalDelta(streamedAnswer, tagged.answer);
+            if (answerDelta) {
+              if (!assistantEntryId) {
+                assistantEntryId = crypto.randomUUID();
+                this.chatEntries.appendAssistantMessage(conversationId, "", {
+                  id: assistantEntryId,
+                });
+              }
+              this.hub.publish(conversationId, {
+                type: SseType.ASSISTANT_STREAM,
+                chat_entry_id: assistantEntryId,
+                delta: answerDelta,
+              });
+            }
+            streamedAnswer = tagged.answer;
           }
-        : {}),
-    });
-    if (decision.type === "tool-invocation") {
-      const toolCfg = this.agentToolConfigFor(
-        lastUserMessage.agentId,
-        decision.toolId
-      );
-      this.enqueueRunTool({
-        conversationId,
-        agentId: lastUserMessage.agentId ?? null,
-        toolName: decision.toolId,
-        params: decision.parameters,
-        agentToolConfig: toolCfg,
-      });
-    } else {
-      const finalAnswer = decision.text;
-      if (!assistantEntryId) {
-        assistantEntryId = crypto.randomUUID();
-        this.chatEntries.appendAssistantMessage(conversationId, "", {
-          id: assistantEntryId,
+        );
+        plannerTokenUsage = completion.usage;
+        reply = reconstructedReply || completion.text || "";
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+          id: plannerEntryId,
+          llmRequest: requestText,
+          llmResponse: detail,
+          thoughtMs: Math.max(0, Date.now() - turnStartedMs),
+          decision: null,
+          failed: true,
+          llmModel: plannerLlmModel,
         });
+        this.publishConversationUpdated(conversationId);
         this.hub.publish(conversationId, {
-          type: SseType.ASSISTANT_STREAM,
-          chat_entry_id: assistantEntryId,
-          delta: finalAnswer,
+          type: SseType.PLANNER_RESPONSE,
+          chat_entry_id: plannerEntryId,
+          summary: detail,
+          finished: true,
+          action: "failed",
+          llm_model: plannerLlmModel,
+        });
+        throw e;
+      }
+
+      const parsedAgentic = this.parseAgenticPlannerOutput(reply, streamedAnswer);
+      const decision = parsedAgentic.decision;
+      const agentic = parsedAgentic.output;
+      loopState =
+        agentic.state && typeof agentic.state === "object" && !Array.isArray(agentic.state)
+          ? agentic.state
+          : loopState;
+      this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+        id: plannerEntryId,
+        llmRequest: requestText,
+        llmResponse: reply,
+        thoughtMs: Math.max(0, Date.now() - turnStartedMs),
+        decision,
+        failed: false,
+        llmModel: plannerLlmModel,
+        ...(plannerTokenUsage !== undefined
+          ? {
+              promptTokens: plannerTokenUsage.promptTokens,
+              ...(plannerTokenUsage.cachedPromptTokens !== undefined
+                ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
+                : {}),
+              completionTokens: plannerTokenUsage.completionTokens,
+            }
+          : {}),
+      });
+      const assistantText = String(agentic.assistant_output ?? "").trim();
+      if (assistantText) {
+        if (!assistantEntryId) {
+          assistantEntryId = crypto.randomUUID();
+          this.chatEntries.appendAssistantMessage(conversationId, "", {
+            id: assistantEntryId,
+          });
+          this.hub.publish(conversationId, {
+            type: SseType.ASSISTANT_STREAM,
+            chat_entry_id: assistantEntryId,
+            delta: assistantText,
+          });
+        }
+        this.chatEntries.updateAssistantMessage(conversationId, {
+          id: assistantEntryId,
+          text: assistantText,
         });
       }
-      this.chatEntries.updateAssistantMessage(conversationId, {
-        id: assistantEntryId,
-        text: finalAnswer,
+      this.publishConversationUpdated(conversationId);
+      this.hub.publish(conversationId, {
+        type: SseType.PLANNER_RESPONSE,
+        chat_entry_id: plannerEntryId,
+        summary:
+          agentic.tool_calls.length > 0
+            ? `Queued ${agentic.tool_calls.length} tool call(s)`
+            : assistantText || "planner step completed",
+        finished: true,
+        action: agentic.tool_calls.length > 0 ? "tool_call" : "final_answer",
+        ...(agentic.tool_calls.length > 0
+          ? { tool_name: agentic.tool_calls[0].toolId }
+          : {}),
+        llm_model: plannerLlmModel,
+        ...(plannerTokenUsage !== undefined
+          ? {
+              prompt_tokens: plannerTokenUsage.promptTokens,
+              ...(plannerTokenUsage.cachedPromptTokens !== undefined
+                ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
+                : {}),
+              completion_tokens: plannerTokenUsage.completionTokens,
+            }
+          : {}),
       });
+      this.hub.publish(conversationId, {
+        type: SseType.PLANNER_TURN_COMPLETED,
+        planner_turn: plannerTurn,
+        followup: agentic.followup,
+        tool_calls: agentic.tool_calls.length,
+      });
+
+      if (agentic.tool_calls.length > 0) {
+        const selectedCalls: AgenticToolCall[] = clampToolCallsForTurn(
+          agentic.tool_calls,
+          MAX_TOOL_CALLS_PER_TURN,
+        );
+        const batchId = crypto.randomUUID();
+        this.hub.publish(conversationId, {
+          type: SseType.TOOL_BATCH_STARTED,
+          batch_id: batchId,
+          total_calls: selectedCalls.length,
+        });
+        for (let i = 0; i < selectedCalls.length; i += 1) {
+          const call = selectedCalls[i];
+          const toolCfg = this.agentToolConfigFor(lastUserMessage.agentId, call.toolId);
+          this.enqueueRunTool({
+            conversationId,
+            agentId: lastUserMessage.agentId ?? null,
+            toolName: call.toolId,
+            params: call.parameters,
+            batchId,
+            resumeAfterTool: i === selectedCalls.length - 1,
+            agentToolConfig: toolCfg,
+          });
+        }
+        this.hub.publish(conversationId, {
+          type: SseType.TOOL_BATCH_COMPLETED,
+          batch_id: batchId,
+          total_calls: selectedCalls.length,
+        });
+        return;
+      }
+
+      if (!shouldContinuePlannerLoop(agentic.followup)) {
+        logger.info({ conversationId, plannerTurn }, "[task] continue_conversation completed");
+        return;
+      }
     }
 
     this.hub.publish(conversationId, {
-      type: SseType.PLANNER_RESPONSE,
-      chat_entry_id: plannerEntryId,
-      summary:
-        decision.type === "tool-invocation"
-          ? `Invoking tool: ${decision.toolId}`
-          : decision.text,
-      finished: true,
-      action:
-        decision.type === "tool-invocation" ? "tool_call" : "final_answer",
-      ...(decision.type === "tool-invocation"
-        ? { tool_name: decision.toolId }
-        : {}),
-      llm_model: plannerLlmModel,
-      ...(plannerTokenUsage !== undefined
-        ? {
-            prompt_tokens: plannerTokenUsage.promptTokens,
-            ...(plannerTokenUsage.cachedPromptTokens !== undefined
-              ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
-              : {}),
-            completion_tokens: plannerTokenUsage.completionTokens,
-          }
-        : {}),
+      type: SseType.PLANNER_GUARD_STOP,
+      reason: "max_planner_turns_reached",
+      planner_turn: MAX_PLANNER_TURNS,
+      max_turns: MAX_PLANNER_TURNS,
     });
-    logger.info(
-      {
-        conversationId,
-        plannerEntryId,
-        thoughtMs: Math.max(0, Date.now() - startedAtMs),
-      },
-      "[task] continue_conversation completed"
+    logger.warn(
+      { conversationId, maxTurns: MAX_PLANNER_TURNS },
+      "[task] planner guard stop reached"
     );
   }
 }
