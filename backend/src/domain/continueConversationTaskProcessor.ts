@@ -748,13 +748,15 @@ export class ContinueConversationTaskProcessor {
         for (let i = 0; i < selectedCalls.length; i += 1) {
           const call = selectedCalls[i];
           const toolCfg = this.agentToolConfigFor(lastUserMessage.agentId, call.toolId);
+          const shouldResumeAfterBatch =
+            shouldContinuePlannerLoop(agentic.followup) && i === selectedCalls.length - 1;
           this.enqueueRunTool({
             conversationId,
             agentId: lastUserMessage.agentId ?? null,
             toolName: call.toolId,
             params: call.parameters,
             batchId,
-            resumeAfterTool: i === selectedCalls.length - 1,
+            resumeAfterTool: shouldResumeAfterBatch,
             agentToolConfig: toolCfg,
           });
         }
