@@ -116,60 +116,84 @@ export type PostConversationMessageInput = {
   attachment_ids?: string[];
 };
 
-export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
+export function getConversations(options?: {
+  deletedOnly?: boolean;
+}): Promise<GetConversationsResponse> {
   const deletedOnly = options?.deletedOnly === true;
-  const path = deletedOnly ? "/api/conversations?deleted=only" : "/api/conversations";
+  const path = deletedOnly
+    ? "/api/conversations?deleted=only"
+    : "/api/conversations";
   return getJson(path).then(validateGetConversationsResponse);
 }
 
-export function createConversation(body: { title?: string } = {}): Promise<ConversationRow> {
+export function createConversation(
+  body: { title?: string } = {}
+): Promise<ConversationRow> {
   return sendJson("/api/conversations", "POST", body).then(
-    validatePostConversationsResponse,
+    validatePostConversationsResponse
   );
 }
 
 export function renameConversation(
   conversationId: string,
-  body: { title?: string; group_id?: string | null; new_group_name?: string },
+  body: { title?: string; group_id?: string | null; new_group_name?: string }
 ): Promise<ConversationRow> {
-  return sendJson(`/api/conversations/${encodeURIComponent(conversationId)}`, "PUT", body).then(
-    (data) => validateConversationRowResponse(data, "PUT /api/conversations/:id"),
+  return sendJson(
+    `/api/conversations/${encodeURIComponent(conversationId)}`,
+    "PUT",
+    body
+  ).then((data) =>
+    validateConversationRowResponse(data, "PUT /api/conversations/:id")
   );
 }
 
-export function softDeleteConversation(conversationId: string): Promise<ConversationRow> {
-  return deleteJson(`/api/conversations/${encodeURIComponent(conversationId)}`).then((data) =>
-    validateConversationRowResponse(data, "DELETE /api/conversations/:id"),
+export function softDeleteConversation(
+  conversationId: string
+): Promise<ConversationRow> {
+  return deleteJson(
+    `/api/conversations/${encodeURIComponent(conversationId)}`
+  ).then((data) =>
+    validateConversationRowResponse(data, "DELETE /api/conversations/:id")
   );
 }
 
-export function undeleteConversation(conversationId: string): Promise<ConversationRow> {
-  return postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/undelete`, {}).then(
-    (result) => validateConversationRowResponse(result.data, "POST /api/conversations/:id/undelete"),
+export function undeleteConversation(
+  conversationId: string
+): Promise<ConversationRow> {
+  return postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/undelete`,
+    {}
+  ).then((result) =>
+    validateConversationRowResponse(
+      result.data,
+      "POST /api/conversations/:id/undelete"
+    )
   );
 }
 
-export function permanentlyDeleteConversation(conversationId: string): Promise<unknown> {
-  return deleteJson(`/api/conversations/${encodeURIComponent(conversationId)}/permanent`);
+export function permanentlyDeleteConversation(
+  conversationId: string
+): Promise<unknown> {
+  return deleteJson(
+    `/api/conversations/${encodeURIComponent(conversationId)}/permanent`
+  );
 }
 
 export function getConversationMessages(
-  conversationId: string,
+  conversationId: string
 ): Promise<ChatMessageEntry[]> {
   return getJson(
-    `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
-  ).then(
-    validateGetConversationMessagesResponse,
-  );
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages`
+  ).then(validateGetConversationMessagesResponse);
 }
 
 export async function postConversationMessage(
   conversationId: string,
-  body: PostConversationMessageInput,
+  body: PostConversationMessageInput
 ): Promise<PostAcceptedResult<PostConversationMessageAcceptedResponse>> {
   const result = await postJsonAccepted(
     `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
-    body,
+    body
   );
   return {
     status: result.status,
@@ -179,13 +203,13 @@ export async function postConversationMessage(
 
 export async function approveToolInvocation(
   conversationId: string,
-  entryId: string,
+  entryId: string
 ): Promise<PostAcceptedResult<unknown>> {
   return postJsonAccepted(
     `/api/conversations/${encodeURIComponent(
-      conversationId,
+      conversationId
     )}/tool-invocations/${encodeURIComponent(entryId)}/approve`,
-    {},
+    {}
   );
 }
 
@@ -211,23 +235,29 @@ export function getLlmSettings(): Promise<{ providers: LlmProviderRow[] }> {
 
 export function getLlmProviderSettings(): Promise<LlmProviderSettingsDocument> {
   return getJson("/api/settings/llm_provider").then(
-    validateLlmProviderSettingsResponse,
+    validateLlmProviderSettingsResponse
   );
 }
 
-export function getModelCapabilities(): Promise<{ models: ModelCapabilityRow[] }> {
+export function getModelCapabilities(): Promise<{
+  models: ModelCapabilityRow[];
+}> {
   return getJson("/api/settings/model_capabilities").then((data) => {
     if (!data || typeof data !== "object" || Array.isArray(data)) {
-      throw new Error("GET /api/settings/model_capabilities: invalid response envelope");
+      throw new Error(
+        "GET /api/settings/model_capabilities: invalid response envelope"
+      );
     }
     const rawModels = (data as { models?: unknown }).models;
     if (!Array.isArray(rawModels)) {
-      throw new Error("GET /api/settings/model_capabilities: models must be an array");
+      throw new Error(
+        "GET /api/settings/model_capabilities: models must be an array"
+      );
     }
     const models = rawModels.map((raw, index) => {
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
         throw new Error(
-          `GET /api/settings/model_capabilities: models[${index}] must be an object`,
+          `GET /api/settings/model_capabilities: models[${index}] must be an object`
         );
       }
       const row = raw as Record<string, unknown>;
@@ -235,7 +265,7 @@ export function getModelCapabilities(): Promise<{ models: ModelCapabilityRow[] }
       const modelName = String(row.model_name ?? "").trim();
       if (!providerId || !modelName) {
         throw new Error(
-          `GET /api/settings/model_capabilities: models[${index}] missing provider_id/model_name`,
+          `GET /api/settings/model_capabilities: models[${index}] missing provider_id/model_name`
         );
       }
       return raw as ModelCapabilityRow;
@@ -245,10 +275,10 @@ export function getModelCapabilities(): Promise<{ models: ModelCapabilityRow[] }
 }
 
 export function updateLlmProviderSettings(
-  body: LlmProviderSettingsDocument,
+  body: LlmProviderSettingsDocument
 ): Promise<LlmProviderSettingsDocument> {
   return sendJson("/api/settings/llm_provider", "PUT", body).then(
-    validateLlmProviderSettingsResponse,
+    validateLlmProviderSettingsResponse
   );
 }
 
@@ -256,9 +286,11 @@ export function testLlmProviderConnection(body: {
   provider_id: string;
   settings?: Record<string, unknown>;
 }): Promise<LlmProviderConnectionTestResponse> {
-  return sendJson("/api/settings/llm_provider/test_connection", "POST", body).then(
-    validateLlmProviderConnectionTestResponse,
-  );
+  return sendJson(
+    "/api/settings/llm_provider/test_connection",
+    "POST",
+    body
+  ).then(validateLlmProviderConnectionTestResponse);
 }
 
 export function getTools(): Promise<ToolCatalogItemResponse[]> {
@@ -267,28 +299,30 @@ export function getTools(): Promise<ToolCatalogItemResponse[]> {
 
 export function getAgentById(agentId: string): Promise<AgentListItemResponse> {
   return getJson(`/api/agents/${encodeURIComponent(agentId)}`).then(
-    validateAgentResponse,
+    validateAgentResponse
   );
 }
 
 export function updateAgentById(
   agentId: string,
-  body: AgentUpsertRequest,
+  body: AgentUpsertRequest
 ): Promise<AgentListItemResponse> {
-  return sendJson(`/api/agents/${encodeURIComponent(agentId)}`, "PUT", body).then(
-    validateAgentResponse,
-  );
+  return sendJson(
+    `/api/agents/${encodeURIComponent(agentId)}`,
+    "PUT",
+    body
+  ).then(validateAgentResponse);
 }
 
 export function createAgent(
-  body: AgentUpsertRequest = {},
+  body: AgentUpsertRequest = {}
 ): Promise<AgentListItemResponse> {
   return sendJson("/api/agents", "POST", body).then(validateAgentResponse);
 }
 
 export function deleteAgentById(agentId: string): Promise<DeleteAgentResponse> {
   return deleteJson(`/api/agents/${encodeURIComponent(agentId)}`).then(
-    validateDeleteAgentResponse,
+    validateDeleteAgentResponse
   );
 }
 
@@ -296,43 +330,49 @@ export function getModelPresets(): Promise<ModelPresetResponse[]> {
   return getJson("/api/model-presets").then(validateGetModelPresetsResponse);
 }
 
-export function getModelPresetById(presetId: number): Promise<ModelPresetResponse> {
-  return getJson(`/api/model-presets/${encodeURIComponent(String(presetId))}`).then(
-    validateModelPresetResponse,
-  );
+export function getModelPresetById(
+  presetId: number
+): Promise<ModelPresetResponse> {
+  return getJson(
+    `/api/model-presets/${encodeURIComponent(String(presetId))}`
+  ).then(validateModelPresetResponse);
 }
 
 export function createModelPreset(
-  body: ModelPresetUpsertRequest = {},
+  body: ModelPresetUpsertRequest = {}
 ): Promise<ModelPresetResponse> {
-  return sendJson("/api/model-presets", "POST", body).then(validateModelPresetResponse);
+  return sendJson("/api/model-presets", "POST", body).then(
+    validateModelPresetResponse
+  );
 }
 
 export function updateModelPresetById(
   presetId: number,
-  body: ModelPresetUpsertRequest,
+  body: ModelPresetUpsertRequest
 ): Promise<ModelPresetResponse> {
   return sendJson(
     `/api/model-presets/${encodeURIComponent(String(presetId))}`,
     "PUT",
-    body,
+    body
   ).then(validateModelPresetResponse);
 }
 
-export function deleteModelPresetById(presetId: number): Promise<DeleteModelPresetResponse> {
-  return deleteJson(`/api/model-presets/${encodeURIComponent(String(presetId))}`).then(
-    validateDeleteModelPresetResponse,
-  );
+export function deleteModelPresetById(
+  presetId: number
+): Promise<DeleteModelPresetResponse> {
+  return deleteJson(
+    `/api/model-presets/${encodeURIComponent(String(presetId))}`
+  ).then(validateDeleteModelPresetResponse);
 }
 
 export function decideApproval(
   approvalId: string | number,
-  body: { decision: "approved" | "denied"; decided_by?: string },
+  body: { decision: "approved" | "denied"; decided_by?: string }
 ): Promise<unknown> {
   return sendJson(
     `/api/approvals/${encodeURIComponent(String(approvalId))}/decision`,
     "POST",
-    body,
+    body
   );
 }
 
@@ -348,6 +388,6 @@ export function resumeRunPauseById(runId: string): Promise<unknown> {
   return sendJson(
     `/api/runs/${encodeURIComponent(runId)}/resume_pause`,
     "POST",
-    {},
+    {}
   );
 }

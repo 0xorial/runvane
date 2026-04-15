@@ -179,7 +179,10 @@ export class ContinueConversationTaskProcessor {
     const rec = parsed as Record<string, unknown>;
     if (rec.type === "user-response") {
       const text = typeof rec.text === "string" ? rec.text.trim() : "";
-      return { type: "user-response", text: text || tagged.answer.trim() || reply };
+      return {
+        type: "user-response",
+        text: text || tagged.answer.trim() || reply,
+      };
     }
     if (rec.type !== "tool-invocation") {
       const answer = tagged.answer.trim();
@@ -701,7 +704,9 @@ function stripThoughtTagBlock(text: string): string {
     .trim();
 }
 
-function parseFirstJsonObjectCandidate(candidates: Array<string | null>): unknown | null {
+function parseFirstJsonObjectCandidate(
+  candidates: Array<string | null>
+): unknown | null {
   for (const candidate of candidates) {
     const raw = String(candidate ?? "").trim();
     if (!raw) continue;
@@ -735,12 +740,12 @@ function extractLastBalancedJsonObject(text: string): string | null {
         escaped = true;
         continue;
       }
-      if (ch === "\"") {
+      if (ch === '"') {
         inString = false;
       }
       continue;
     }
-    if (ch === "\"") {
+    if (ch === '"') {
       inString = true;
       continue;
     }

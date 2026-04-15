@@ -48,20 +48,25 @@ export function ChatTitlePanel({
     cachedPrompt: 0,
     completion: 0,
   });
-  const [tokenUsageByModel, setTokenUsageByModel] = useState<TokenUsageByModelRow[]>([]);
-  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(
-    () => new Map(),
-  );
-  const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
+  const [tokenUsageByModel, setTokenUsageByModel] = useState<
+    TokenUsageByModelRow[]
+  >([]);
+  const [pricingByModel, setPricingByModel] = useState<
+    Map<string, ModelPricing>
+  >(() => new Map());
+  const [conversationUpdatedAt, setConversationUpdatedAt] =
+    useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
   const estimatedCostUsd = useMemo(
     () => estimateConversationCostUsd(tokenUsageByModel, pricingByModel),
-    [tokenUsageByModel, pricingByModel],
+    [tokenUsageByModel, pricingByModel]
   );
 
   async function refreshConversationMetrics(targetConversationId: string) {
     const payload = await getConversations();
-    const row = payload.conversations.find((x) => x.id === targetConversationId);
+    const row = payload.conversations.find(
+      (x) => x.id === targetConversationId
+    );
     if (!row) return;
     setTokenTotals({
       prompt: row.prompt_tokens_total,
@@ -183,7 +188,9 @@ export function ChatTitlePanel({
   async function onCommit(nextTitle: string) {
     if (!conversationId) return;
     try {
-      const updated = await renameConversation(conversationId, { title: nextTitle });
+      const updated = await renameConversation(conversationId, {
+        title: nextTitle,
+      });
       setStreamRawTitle("");
       setTitle(String(updated.title || nextTitle));
     } catch (e) {
@@ -246,7 +253,9 @@ export function ChatTitlePanel({
           title="Settings"
         >
           <Settings
-            className={settingsPressed ? "h-3.5 w-3.5 text-foreground" : "h-3.5 w-3.5"}
+            className={
+              settingsPressed ? "h-3.5 w-3.5 text-foreground" : "h-3.5 w-3.5"
+            }
           />
         </Button>
       </div>

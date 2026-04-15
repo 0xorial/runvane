@@ -229,7 +229,8 @@ export function createRuntime(opts: {
       );
     const agentId = lastUser?.agentId ?? null;
     const agent = agentId ? agents.get(agentId) : null;
-    const rules = agent?.default_llm_configuration?.tools?.[row.toolId]?.rules ?? {};
+    const rules =
+      agent?.default_llm_configuration?.tools?.[row.toolId]?.rules ?? {};
 
     const { taskId } = enqueueRunTool({
       conversationId,

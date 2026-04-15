@@ -21,7 +21,10 @@ import type {
   ConversationGroupRow,
   ConversationRow,
 } from "./conversationSidebar/types";
-import { buildModelPricingByName, type ModelPricing } from "@/lib/costEstimation";
+import {
+  buildModelPricingByName,
+  type ModelPricing,
+} from "@/lib/costEstimation";
 
 type ConversationSidebarProps = {
   activeConversationId: string | null;
@@ -56,9 +59,9 @@ export function ConversationSidebar({
     string[]
   >([]);
   const [probeBusy, setProbeBusy] = useState(false);
-  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(
-    () => new Map(),
-  );
+  const [pricingByModel, setPricingByModel] = useState<
+    Map<string, ModelPricing>
+  >(() => new Map());
 
   const loadConversations = useCallback(async () => {
     const data = await getConversations({ deletedOnly: showDeletedOnly });
@@ -146,20 +149,10 @@ export function ConversationSidebar({
           );
           return;
         }
-        if (
-          ev.type === SseType.PLANNER_RESPONSE ||
-          ev.type === SseType.TITLE_RESPONSE
-        ) {
-          void loadConversations().catch((e: unknown) => {
-            const detail = e instanceof Error ? e.message : String(e);
-            notifyError(`Failed to refresh conversations: ${detail}`);
-          });
-          return;
-        }
       },
     });
     return () => dispose();
-  }, [showDeletedOnly, loadConversations]);
+  }, [showDeletedOnly]);
 
   async function onProbeTime() {
     if (probeBusy) return;
