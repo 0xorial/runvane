@@ -84,6 +84,59 @@ export class ModelCapabilitiesRepo {
       });
     }
 
+    const discovered = this.db
+      .prepare(
+        `SELECT
+           provider_id,
+           model_name,
+           supports_image_input,
+           supports_file_input,
+           max_context_tokens,
+           max_output_tokens,
+           input_cost_per_1m,
+           cached_input_cost_per_1m,
+           output_cost_per_1m,
+           currency,
+           source
+         FROM model_capabilities
+         ORDER BY provider_id ASC, model_name ASC`,
+      )
+      .all() as Array<{
+      provider_id: string;
+      model_name: string;
+      supports_image_input: number | null;
+      supports_file_input: number | null;
+      max_context_tokens: number | null;
+      max_output_tokens: number | null;
+      input_cost_per_1m: number | null;
+      cached_input_cost_per_1m: number | null;
+      output_cost_per_1m: number | null;
+      currency: string | null;
+      source: string | null;
+    }>;
+
+    for (const row of discovered) {
+      const key = `${row.provider_id}::${row.model_name}`;
+      if (seedMap.has(key)) continue;
+      seedMap.set(key, {
+        provider_id: row.provider_id,
+        model_name: row.model_name,
+        supports_image_input: asBool(row.supports_image_input),
+        supports_file_input: asBool(row.supports_file_input),
+        max_context_tokens: row.max_context_tokens ?? null,
+        max_output_tokens: row.max_output_tokens ?? null,
+        usd_per_1m_tokens_in: row.input_cost_per_1m ?? null,
+        usd_per_1m_tokens_in_cached: row.cached_input_cost_per_1m ?? null,
+        usd_per_1m_tokens_out: row.output_cost_per_1m ?? null,
+        input_cost_per_1m: row.input_cost_per_1m ?? null,
+        cached_input_cost_per_1m: row.cached_input_cost_per_1m ?? null,
+        output_cost_per_1m: row.output_cost_per_1m ?? null,
+        currency: row.currency || "USD",
+        source: row.source === "discovered" ? "discovered" : "seed",
+        overridden: false,
+      });
+    }
+
     const overrides = this.db
       .prepare(
         `SELECT
@@ -310,5 +363,100 @@ export class ModelCapabilitiesRepo {
       );
 
     return this.listEffective();
+  }
+
+  upsertDiscoveredProviderCapabilities(
+    providerId: string,
+    rows: Array<{
+      model_name: string;
+      supports_image_input: boolean;
+      supports_file_input: boolean;
+      max_context_tokens: number | null;
+      max_output_tokens: number | null;
+      input_cost_per_1m: number | null;
+      cached_input_cost_per_1m: number | null;
+      output_cost_per_1m: number | null;
+      currency?: string | null;
+    }>,
+  ): void {
+    const pid = String(providerId || "").trim();
+    if (!pid) throw new Error("provider_id is required");
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      const upsert = this.db.prepare(
+        `INSERT OR REPLACE INTO model_capabilities (
+           provider_id,
+           model_name,
+           supports_image_input,
+           supports_file_input,
+           max_context_tokens,
+           max_output_tokens,
+           input_cost_per_1m,
+           cached_input_cost_per_1m,
+           output_cost_per_1m,
+           currency,
+           source,
+           created_at,
+           updated_at
+         ) VALUES (
+           @provider_id,
+           @model_name,
+           @supports_image_input,
+           @supports_file_input,
+           @max_context_tokens,
+           @max_output_tokens,
+           @input_cost_per_1m,
+           @cached_input_cost_per_1m,
+           @output_cost_per_1m,
+           @currency,
+           'discovered',
+           COALESCE(
+             (SELECT created_at FROM model_capabilities WHERE provider_id = @provider_id AND model_name = @model_name),
+             @now
+           ),
+           @now
+         )`,
+      );
+      const keep = new Set<string>();
+      for (const row of rows) {
+        const modelName = String(row.model_name || "").trim();
+        if (!modelName) continue;
+        keep.add(modelName);
+        upsert.run({
+          provider_id: pid,
+          model_name: modelName,
+          supports_image_input: boolToInt(row.supports_image_input === true),
+          supports_file_input: boolToInt(row.supports_file_input === true),
+          max_context_tokens: row.max_context_tokens,
+          max_output_tokens: row.max_output_tokens,
+          input_cost_per_1m: row.input_cost_per_1m,
+          cached_input_cost_per_1m: row.cached_input_cost_per_1m,
+          output_cost_per_1m: row.output_cost_per_1m,
+          currency: String(row.currency || "USD").trim() || "USD",
+          now,
+        });
+      }
+
+      const existing = this.db
+        .prepare(
+          `SELECT model_name
+           FROM model_capabilities
+           WHERE provider_id = ?
+             AND source = 'discovered'`,
+        )
+        .all(pid) as Array<{ model_name: string }>;
+      const del = this.db.prepare(
+        `DELETE FROM model_capabilities
+         WHERE provider_id = ?
+           AND source = 'discovered'
+           AND model_name = ?`,
+      );
+      for (const row of existing) {
+        const modelName = String(row.model_name || "").trim();
+        if (!modelName || keep.has(modelName)) continue;
+        del.run(pid, modelName);
+      }
+    });
+    tx();
   }
 }

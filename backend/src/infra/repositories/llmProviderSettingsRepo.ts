@@ -54,12 +54,45 @@ export class LlmProviderSettingsRepo {
           settings.base_url =
             p.id === "grok"
               ? "https://api.x.ai/v1"
+              : p.id === "openrouter"
+                ? "https://openrouter.ai/api/v1"
               : p.id === "lmstudio"
                 ? "http://127.0.0.1:1234/api/v1"
                 : "https://api.openai.com/v1";
         }
       }
       upsertProvider.run(p.id, p.label, JSON.stringify(settings), now, now);
+
+      // Backfill OpenRouter default base_url for existing rows that still have
+      // the generic OpenAI URL. Preserve any user-customized base URL.
+      if (p.id === "openrouter") {
+        const current = this.db
+          .prepare("SELECT settings_json FROM llm_providers WHERE id = ?")
+          .get(p.id) as { settings_json?: string } | undefined;
+        const currentSettings = current?.settings_json
+          ? parseJsonObject(current.settings_json)
+          : {};
+        const currentBaseUrl = String(currentSettings.base_url ?? "").trim();
+        if (
+          !currentBaseUrl ||
+          currentBaseUrl === "https://api.openai.com/v1"
+        ) {
+          this.db
+            .prepare(
+              `UPDATE llm_providers
+               SET settings_json = ?, updated_at = ?
+               WHERE id = ?`,
+            )
+            .run(
+              JSON.stringify({
+                ...currentSettings,
+                base_url: "https://openrouter.ai/api/v1",
+              }),
+              now,
+              p.id,
+            );
+        }
+      }
     }
 
     const hasCfg = this.db

@@ -14,7 +14,7 @@ export type ModelCapabilityRow = {
   cached_input_cost_per_1m: number | null;
   output_cost_per_1m: number | null;
   currency: string;
-  source: "seed" | "override";
+  source: "seed" | "discovered" | "override";
   overridden: boolean;
 };
 
