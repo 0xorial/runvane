@@ -19,7 +19,11 @@ import type {
   UserMessageEntry,
 } from "../types/chatEntry.js";
 import { AgenticPlannerOutputSchema } from "../types/chatEntry.js";
-import type { StreamTextCompletionResult } from "../llm_provider/provider.js";
+import {
+  StreamInterruptedError,
+  type StreamTextCompletionResult,
+  type StreamTextCompletionUsage,
+} from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
 import {
   clampToolCallsForTurn,
@@ -640,6 +644,10 @@ export class ContinueConversationTaskProcessor {
         plannerTokenUsage = completion.usage;
         reply = reconstructedReply || completion.text || "";
       } catch (e) {
+        const partialUsage = usageFromStreamingError(e);
+        if (partialUsage) {
+          plannerTokenUsage = partialUsage;
+        }
         if (isTaskCancelledError(e)) {
           const detail = e instanceof Error ? e.message : String(e);
           this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
@@ -651,6 +659,15 @@ export class ContinueConversationTaskProcessor {
             status: "cancelled",
             error: detail,
             llmModel: plannerLlmModel,
+            ...(plannerTokenUsage !== undefined
+              ? {
+                  promptTokens: plannerTokenUsage.promptTokens,
+                  ...(plannerTokenUsage.cachedPromptTokens !== undefined
+                    ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
+                    : {}),
+                  completionTokens: plannerTokenUsage.completionTokens,
+                }
+              : {}),
           });
           this.publishConversationUpdated(conversationId);
           this.hub.publish(conversationId, {
@@ -660,6 +677,15 @@ export class ContinueConversationTaskProcessor {
             finished: true,
             action: "cancelled",
             llm_model: plannerLlmModel,
+            ...(plannerTokenUsage !== undefined
+              ? {
+                  prompt_tokens: plannerTokenUsage.promptTokens,
+                  ...(plannerTokenUsage.cachedPromptTokens !== undefined
+                    ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
+                    : {}),
+                  completion_tokens: plannerTokenUsage.completionTokens,
+                }
+              : {}),
           });
           return;
         }
@@ -673,6 +699,15 @@ export class ContinueConversationTaskProcessor {
           status: "failed",
           error: detail,
           llmModel: plannerLlmModel,
+          ...(plannerTokenUsage !== undefined
+            ? {
+                promptTokens: plannerTokenUsage.promptTokens,
+                ...(plannerTokenUsage.cachedPromptTokens !== undefined
+                  ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
+                  : {}),
+                completionTokens: plannerTokenUsage.completionTokens,
+              }
+            : {}),
         });
         this.publishConversationUpdated(conversationId);
         this.hub.publish(conversationId, {
@@ -682,6 +717,15 @@ export class ContinueConversationTaskProcessor {
           finished: true,
           action: "failed",
           llm_model: plannerLlmModel,
+          ...(plannerTokenUsage !== undefined
+            ? {
+                prompt_tokens: plannerTokenUsage.promptTokens,
+                ...(plannerTokenUsage.cachedPromptTokens !== undefined
+                  ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
+                  : {}),
+                completion_tokens: plannerTokenUsage.completionTokens,
+              }
+            : {}),
         });
         throw e;
       }
@@ -905,6 +949,42 @@ function composeFailedPlannerResponse(partialReply: string): string {
   const partial = String(partialReply ?? "").trim();
   if (partial) return partial;
   return "";
+}
+
+function usageFromStreamingError(
+  error: unknown
+): StreamTextCompletionUsage | undefined {
+  if (error instanceof StreamInterruptedError) {
+    return error.usage;
+  }
+  if (!error || typeof error !== "object") return undefined;
+  const usage = (error as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+    return undefined;
+  }
+  const usageRec = usage as Record<string, unknown>;
+  const promptTokens = usageRec.promptTokens;
+  const completionTokens = usageRec.completionTokens;
+  const cachedPromptTokens = usageRec.cachedPromptTokens;
+  if (
+    typeof promptTokens !== "number" ||
+    !Number.isFinite(promptTokens) ||
+    typeof completionTokens !== "number" ||
+    !Number.isFinite(completionTokens)
+  ) {
+    return undefined;
+  }
+  const normalized: StreamTextCompletionUsage = {
+    promptTokens: Math.max(0, Math.trunc(promptTokens)),
+    completionTokens: Math.max(0, Math.trunc(completionTokens)),
+  };
+  if (
+    typeof cachedPromptTokens === "number" &&
+    Number.isFinite(cachedPromptTokens)
+  ) {
+    normalized.cachedPromptTokens = Math.max(0, Math.trunc(cachedPromptTokens));
+  }
+  return normalized;
 }
 
 function parseFirstJsonObjectCandidate(

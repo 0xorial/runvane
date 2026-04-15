@@ -7,6 +7,7 @@ import type {
   StreamTextCompletionResult,
   StreamTextCompletionUsage,
 } from "../provider.js";
+import { StreamInterruptedError } from "../provider.js";
 import { logger } from "../../infra/logger.js";
 
 const SETTINGS_SPEC: LlmProviderSettingSpec[] = [
@@ -359,7 +360,6 @@ export class LmStudioNativeProvider implements LlmProvider {
       const payload = (await res.json()) as unknown;
       const text = extractDeltaFromPayload(payload);
       if (!text) throw new Error("llm returned empty response");
-      onDelta(text);
       let usage: StreamTextCompletionUsage | undefined;
       if (payload && typeof payload === "object") {
         const payloadRec = payload as { usage?: unknown; stats?: unknown; result?: unknown };
@@ -368,6 +368,16 @@ export class LmStudioNativeProvider implements LlmProvider {
           const resultRec = payloadRec.result as { usage?: unknown; stats?: unknown };
           usage = usageFromPayload(resultRec.usage) ?? usageFromStats(resultRec.stats);
         }
+      }
+      try {
+        onDelta(text);
+      } catch (e) {
+        throw new StreamInterruptedError({
+          message: "stream interrupted during callback",
+          partialText: text,
+          usage,
+          cause: e,
+        });
       }
       return usage !== undefined ? { text, usage } : { text };
     }
@@ -396,7 +406,16 @@ export class LmStudioNativeProvider implements LlmProvider {
       const delta = chatEndText ? incrementalSuffix(full, chatEndText) : extractDeltaFromPayload(parsed);
       if (!delta) return;
       full += delta;
-      onDelta(delta);
+      try {
+        onDelta(delta);
+      } catch (e) {
+        throw new StreamInterruptedError({
+          message: "stream interrupted during callback",
+          partialText: full,
+          usage: streamUsage,
+          cause: e,
+        });
+      }
     };
 
     const handleLine = (line: string): void => {

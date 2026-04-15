@@ -36,6 +36,25 @@ export type StreamTextCompletionResult = {
   usage?: StreamTextCompletionUsage;
 };
 
+export class StreamInterruptedError extends Error {
+  readonly partialText: string;
+  readonly usage?: StreamTextCompletionUsage;
+  readonly cause?: unknown;
+
+  constructor(input: {
+    message: string;
+    partialText: string;
+    usage?: StreamTextCompletionUsage;
+    cause?: unknown;
+  }) {
+    super(input.message);
+    this.name = "StreamInterruptedError";
+    this.partialText = input.partialText;
+    this.usage = input.usage;
+    this.cause = input.cause;
+  }
+}
+
 export interface LlmProvider {
   readonly id: string;
   readonly label: string;

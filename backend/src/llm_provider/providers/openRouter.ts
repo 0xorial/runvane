@@ -7,6 +7,7 @@ import type {
   StreamTextCompletionResult,
   StreamTextCompletionUsage,
 } from "../provider.js";
+import { StreamInterruptedError } from "../provider.js";
 import { logger } from "../../infra/logger.js";
 
 const SETTINGS_SPEC: LlmProviderSettingSpec[] = [
@@ -368,8 +369,17 @@ export class OpenRouterProvider implements LlmProvider {
       const content = data.choices?.[0]?.message?.content;
       const text = typeof content === "string" ? content : "";
       if (!text) throw new Error("llm returned empty response");
-      onDelta(text);
       const usage = usageFromOpenRouterPayload(data.usage);
+      try {
+        onDelta(text);
+      } catch (e) {
+        throw new StreamInterruptedError({
+          message: "stream interrupted during callback",
+          partialText: text,
+          usage,
+          cause: e,
+        });
+      }
       return usage !== undefined ? { text, usage } : { text };
     }
 
@@ -393,7 +403,16 @@ export class OpenRouterProvider implements LlmProvider {
       const delta = typeof part === "string" ? part : "";
       if (!delta) return;
       full += delta;
-      onDelta(delta);
+      try {
+        onDelta(delta);
+      } catch (e) {
+        throw new StreamInterruptedError({
+          message: "stream interrupted during callback",
+          partialText: full,
+          usage: streamUsage,
+          cause: e,
+        });
+      }
     };
 
     for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
