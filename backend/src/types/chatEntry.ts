@@ -202,7 +202,8 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   llmResponse?: string;
   thoughtMs?: number | null;
   decision?: LlmDecision | null;
-  failed?: boolean;
+  status?: "running" | "completed" | "failed" | "cancelled";
+  error?: string;
   llmModel?: string;
   promptTokens?: number;
   cachedPromptTokens?: number;
@@ -214,7 +215,8 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     llmResponse: z.string().optional(),
     thoughtMs: z.number().finite().nullable().optional(),
     decision: LlmDecisionSchema.nullable().optional(),
-    failed: z.boolean().optional(),
+    status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
+    error: z.string().optional(),
     llmModel: z.string().optional(),
     promptTokens: z.number().finite().optional(),
     cachedPromptTokens: z.number().finite().optional(),
@@ -227,7 +229,8 @@ export type TitleLlmStreamEntry = ChatEntryBase & {
   llmResponse?: string;
   thoughtMs?: number | null;
   decision?: LlmDecision | null;
-  failed?: boolean;
+  status?: "running" | "completed" | "failed" | "cancelled";
+  error?: string;
   llmModel?: string;
   promptTokens?: number;
   cachedPromptTokens?: number;
@@ -239,7 +242,8 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     llmResponse: z.string().optional(),
     thoughtMs: z.number().finite().nullable().optional(),
     decision: LlmDecisionSchema.nullable().optional(),
-    failed: z.boolean().optional(),
+    status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
+    error: z.string().optional(),
     llmModel: z.string().optional(),
     promptTokens: z.number().finite().optional(),
     cachedPromptTokens: z.number().finite().optional(),

@@ -34,12 +34,25 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
       : new Date().toISOString();
 
   if (role === "user") {
+    const agentIdRaw =
+      typeof raw.agentId === "string"
+        ? raw.agentId
+        : typeof raw.agent_id === "string"
+        ? raw.agent_id
+        : "";
+    const agentId = agentIdRaw.trim();
+    if (!agentId) {
+      throw new Error(
+        "normalizeChatEntry failed: role=user entry missing required agentId"
+      );
+    }
     return {
       type: "user-message",
       id,
       conversationIndex: index,
       createdAt,
       text,
+      agentId,
     };
   }
 

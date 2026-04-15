@@ -28,6 +28,10 @@ import {
   shouldContinuePlannerLoop,
 } from "./agenticLoopGuards.js";
 import { usageByConversationId } from "./conversationUsage.js";
+import {
+  isTaskCancelledError,
+  throwIfCancelled,
+} from "./taskCancellation.js";
 
 export class ContinueConversationTaskProcessor {
   constructor(
@@ -450,8 +454,12 @@ export class ContinueConversationTaskProcessor {
     return result;
   }
 
-  async process(task: ContinueConversationTask): Promise<void> {
+  async process(
+    task: ContinueConversationTask,
+    opts?: { shouldCancel?: () => boolean }
+  ): Promise<void> {
     const conversationId = task.conversationId;
+    throwIfCancelled(opts?.shouldCancel);
     const initialEntries = this.chatEntries.listMessages(conversationId);
     const triggerEntry = initialEntries.at(-1) ?? null;
     logger.info(
@@ -507,6 +515,7 @@ export class ContinueConversationTaskProcessor {
       plannerTurn <= MAX_PLANNER_TURNS;
       plannerTurn += 1
     ) {
+      throwIfCancelled(opts?.shouldCancel);
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_TURN_STARTED,
         planner_turn: plannerTurn,
@@ -554,7 +563,7 @@ export class ContinueConversationTaskProcessor {
           llmResponse: "",
           thoughtMs: null,
           decision: null,
-          failed: false,
+          status: "running",
           llmModel: plannerLlmModel,
         }
       );
@@ -581,6 +590,7 @@ export class ContinueConversationTaskProcessor {
           requestParams,
           inputFiles,
           (delta) => {
+            throwIfCancelled(opts?.shouldCancel);
             if (!firstDeltaPublished) {
               firstDeltaPublished = true;
               logger.info(
@@ -630,14 +640,38 @@ export class ContinueConversationTaskProcessor {
         plannerTokenUsage = completion.usage;
         reply = reconstructedReply || completion.text || "";
       } catch (e) {
+        if (isTaskCancelledError(e)) {
+          const detail = e instanceof Error ? e.message : String(e);
+          this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
+            id: plannerEntryId,
+            llmRequest: requestText,
+            llmResponse: composeFailedPlannerResponse(reconstructedReply),
+            thoughtMs: Math.max(0, Date.now() - turnStartedMs),
+            decision: null,
+            status: "cancelled",
+            error: detail,
+            llmModel: plannerLlmModel,
+          });
+          this.publishConversationUpdated(conversationId);
+          this.hub.publish(conversationId, {
+            type: SseType.PLANNER_RESPONSE,
+            chat_entry_id: plannerEntryId,
+            summary: "Cancelled",
+            finished: true,
+            action: "cancelled",
+            llm_model: plannerLlmModel,
+          });
+          return;
+        }
         const detail = e instanceof Error ? e.message : String(e);
         this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
           id: plannerEntryId,
           llmRequest: requestText,
-          llmResponse: detail,
+          llmResponse: composeFailedPlannerResponse(reconstructedReply),
           thoughtMs: Math.max(0, Date.now() - turnStartedMs),
           decision: null,
-          failed: true,
+          status: "failed",
+          error: detail,
           llmModel: plannerLlmModel,
         });
         this.publishConversationUpdated(conversationId);
@@ -656,6 +690,7 @@ export class ContinueConversationTaskProcessor {
         reply,
         streamedAnswer
       );
+      throwIfCancelled(opts?.shouldCancel);
       const decision = parsedAgentic.decision;
       const agentic = parsedAgentic.output;
       loopState =
@@ -670,7 +705,7 @@ export class ContinueConversationTaskProcessor {
         llmResponse: reply,
         thoughtMs: Math.max(0, Date.now() - turnStartedMs),
         decision,
-        failed: false,
+        status: "completed",
         llmModel: plannerLlmModel,
         ...(plannerTokenUsage !== undefined
           ? {
@@ -864,6 +899,12 @@ function extractAssistantOutputFromJsonLike(text: string): string {
     i += 2;
   }
   return out;
+}
+
+function composeFailedPlannerResponse(partialReply: string): string {
+  const partial = String(partialReply ?? "").trim();
+  if (partial) return partial;
+  return "";
 }
 
 function parseFirstJsonObjectCandidate(

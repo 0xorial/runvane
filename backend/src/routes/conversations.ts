@@ -215,5 +215,17 @@ export function createConversationsRouter(runtime: Runtime) {
     return c.json({ conversation_id: conversationId, task_id: result.taskId }, 202);
   });
 
+  r.post("/:conversationId/cancel-processing", (c) => {
+    const conversationId = c.req.param("conversationId");
+    const result = runtime.cancelConversationProcessing(conversationId);
+    if (result.kind === "conversation_not_found") {
+      return c.json({ detail: "conversation not found" }, 404);
+    }
+    return c.json({
+      conversation_id: conversationId,
+      cancelled_tasks: result.cancelledTaskCount,
+    });
+  });
+
   return r;
 }

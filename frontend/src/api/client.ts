@@ -213,6 +213,44 @@ export async function approveToolInvocation(
   );
 }
 
+export function cancelConversationProcessing(
+  conversationId: string
+): Promise<{
+  conversation_id: string;
+  cancelled_tasks: number;
+}> {
+  return postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/cancel-processing`,
+    {}
+  ).then((result) => {
+    const data = result.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error(
+        "POST /api/conversations/:id/cancel-processing: invalid response envelope"
+      );
+    }
+    const row = data as {
+      conversation_id?: unknown;
+      cancelled_tasks?: unknown;
+    };
+    const conversationIdOut = String(row.conversation_id ?? "").trim();
+    const cancelledTasks =
+      typeof row.cancelled_tasks === "number" &&
+      Number.isFinite(row.cancelled_tasks)
+        ? Math.max(0, Math.trunc(row.cancelled_tasks))
+        : NaN;
+    if (!conversationIdOut || Number.isNaN(cancelledTasks)) {
+      throw new Error(
+        "POST /api/conversations/:id/cancel-processing: invalid response fields"
+      );
+    }
+    return {
+      conversation_id: conversationIdOut,
+      cancelled_tasks: cancelledTasks,
+    };
+  });
+}
+
 export async function uploadFile(file: File): Promise<UploadFileResponse> {
   const form = new FormData();
   form.append("file", file);

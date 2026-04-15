@@ -8,6 +8,7 @@ import {
   mostPermissivePermission,
 } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
+import { throwIfCancelled } from "./taskCancellation.js";
 
 type ToolExecutionEnvelope = {
   ok: boolean;
@@ -27,8 +28,13 @@ export class RunToolTaskProcessor {
     private readonly enqueueContinueConversation: (conversationId: string) => { taskId: number },
   ) {}
 
-  async process(task: RunToolTask, taskId?: number): Promise<void> {
+  async process(
+    task: RunToolTask,
+    taskId?: number,
+    opts?: { shouldCancel?: () => boolean }
+  ): Promise<void> {
     const conversationId = task.conversationId;
+    throwIfCancelled(opts?.shouldCancel);
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const argsPreview = safeStringify(task.params);
@@ -110,6 +116,7 @@ export class RunToolTaskProcessor {
         : {};
     const parsedRules = tool.parseRules(task.agentToolConfig?.rules ?? defaultRulesRaw);
     const parsedParams = tool.parseParams(task.params);
+    throwIfCancelled(opts?.shouldCancel);
 
     const rules = await tool.evaluatePermission({
       conversationId,
@@ -187,12 +194,14 @@ export class RunToolTaskProcessor {
       return;
     }
 
+    throwIfCancelled(opts?.shouldCancel);
     const outputValue = await tool.runTool(parsedParams, {
       conversationId,
       agentId: task.agentId,
       entries,
       toolRules: parsedRules,
     });
+    throwIfCancelled(opts?.shouldCancel);
     const finishedAt = new Date();
     const envelope: ToolExecutionEnvelope = {
       ok: true,

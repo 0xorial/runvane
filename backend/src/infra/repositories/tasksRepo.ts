@@ -12,6 +12,8 @@ export type TaskRow = {
   last_error: string | null;
 };
 
+export const TASK_CANCELLED_BY_USER = "cancelled_by_user";
+
 type TaskDbRow = {
   id: number;
   task_type: string;
@@ -89,7 +91,7 @@ export class TasksRepo {
       .prepare(
         `UPDATE tasks
          SET is_done = 1, finished_at = @finished_at, last_error = NULL
-         WHERE id = @id`,
+         WHERE id = @id AND is_done = 0`,
       )
       .run({ id, finished_at: now });
   }
@@ -100,8 +102,32 @@ export class TasksRepo {
       .prepare(
         `UPDATE tasks
          SET finished_at = @finished_at, last_error = @last_error
-         WHERE id = @id`,
+         WHERE id = @id AND is_done = 0`,
       )
       .run({ id, finished_at: now, last_error: detail });
+  }
+
+  isCancelledByUser(id: number): boolean {
+    const row = this.getById(id);
+    return row?.is_done === true && row.last_error === TASK_CANCELLED_BY_USER;
+  }
+
+  cancelOpenByConversationId(conversationId: string): number {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE tasks
+         SET is_done = 1,
+             finished_at = @finished_at,
+             last_error = @last_error
+         WHERE is_done = 0
+           AND json_extract(payload_json, '$.conversationId') = @conversation_id`,
+      )
+      .run({
+        finished_at: now,
+        last_error: TASK_CANCELLED_BY_USER,
+        conversation_id: conversationId,
+      });
+    return Number(result.changes ?? 0);
   }
 }

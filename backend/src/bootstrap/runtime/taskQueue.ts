@@ -1,6 +1,7 @@
 import { AgentTaskType, type AgentTask } from "../../domain/agentTask.js";
 import { ContinueConversationTaskProcessor } from "../../domain/continueConversationTaskProcessor.js";
 import { RunToolTaskProcessor } from "../../domain/runToolTaskProcessor.js";
+import { isTaskCancelledError } from "../../domain/taskCancellation.js";
 import { InMemoryJobQueue } from "../../infra/inMemoryJobQueue.js";
 import { logger } from "../../infra/logger.js";
 import { TasksRepo, type TaskRow } from "../../infra/repositories/tasksRepo.js";
@@ -157,23 +158,28 @@ export function registerTaskQueueHandler(opts: {
     );
 
     try {
+      const shouldCancel = () => tasks.isCancelledByUser(row.id);
       const parsed = taskFromRow(row);
       if (parsed.type === AgentTaskType.CONTINUE_CONVERSATION) {
         logger.info(
           { taskId: row.id, conversationId: parsed.conversationId },
           "[queue] processing continue_conversation",
         );
-        await continueConversationTaskProcessor.process(parsed);
+        await continueConversationTaskProcessor.process(parsed, { shouldCancel });
       } else if (parsed.type === AgentTaskType.RUN_TOOL) {
         logger.info(
           { taskId: row.id, conversationId: parsed.conversationId, toolName: parsed.toolName },
           "[queue] processing run_tool",
         );
-        await runToolTaskProcessor.process(parsed, row.id);
+        await runToolTaskProcessor.process(parsed, row.id, { shouldCancel });
       }
       tasks.markDone(row.id);
       logger.info({ taskId: row.id }, "[queue] task marked done");
     } catch (e) {
+      if (isTaskCancelledError(e) || tasks.isCancelledByUser(row.id)) {
+        logger.info({ taskId: row.id }, "[queue] task cancelled");
+        return;
+      }
       const detail = e instanceof Error ? e.message : String(e);
       tasks.markFailed(row.id, detail);
       logger.error({ taskId: row.id, detail, error: e }, "[queue] task failed");

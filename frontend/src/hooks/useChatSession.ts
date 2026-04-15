@@ -153,7 +153,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               conversationIndex: ev.conversationIndex,
               createdAt: ev.createdAt,
               llmRequest: ev.request_text,
-              failed: false,
+              status: "running",
               ...(llmModel !== undefined ? { llmModel } : {}),
             });
           }
@@ -178,7 +178,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               createdAt: new Date().toISOString(),
               llmRequest: "",
               llmResponse: ev.delta,
-              failed: false,
+              status: "running",
             });
             return;
           }
@@ -191,6 +191,8 @@ export function useChatSession(conversationId: string | null | undefined) {
               return;
             }
             next.llmResponse = `${next.llmResponse ?? ""}${ev.delta}`;
+            next.status = "running";
+            delete next.error;
           });
           return;
         } else if (ev.type === SseType.ASSISTANT_STREAM) {
@@ -255,9 +257,14 @@ export function useChatSession(conversationId: string | null | undefined) {
                   ? Math.max(0, Date.now() - createdAtMs)
                   : next.thoughtMs ?? null;
               if (ev.action === "failed") {
-                next.failed = true;
+                next.status = "failed";
+                next.error = ev.summary;
+              } else if (ev.action === "cancelled") {
+                next.status = "cancelled";
+                next.error = ev.summary;
               } else if (ev.finished) {
-                next.failed = false;
+                next.status = "completed";
+                delete next.error;
               }
               const modelWire =
                 typeof ev.llm_model === "string" ? ev.llm_model.trim() : "";
@@ -285,7 +292,15 @@ export function useChatSession(conversationId: string | null | undefined) {
               createdAt: new Date().toISOString(),
               llmRequest: "",
               thoughtMs: null,
-              failed: ev.action === "failed",
+              status:
+                ev.action === "failed"
+                  ? "failed"
+                  : ev.action === "cancelled"
+                    ? "cancelled"
+                    : "completed",
+              ...(ev.action === "failed" || ev.action === "cancelled"
+                ? { error: ev.summary }
+                : {}),
               decision:
                 ev.type === SseType.PLANNER_RESPONSE &&
                 ev.action === "tool_call" &&
@@ -408,7 +423,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     (input: {
       conversationId: string;
       text: string;
-      agentId?: string;
+      agentId: string;
       llmProviderId?: string;
       llmModel?: string;
       modelPresetId?: number | null;
@@ -418,13 +433,17 @@ export function useChatSession(conversationId: string | null | undefined) {
       if (!cid) return null;
       const text = String(input.text || "").trim();
       if (!text) return null;
+      const agentId = String(input.agentId || "").trim();
+      if (!agentId) {
+        throw new Error("appendOptimisticUserMessage requires agentId");
+      }
       const row: UserMessageEntry = {
         type: "user-message",
         id: `optimistic-user-${crypto.randomUUID()}`,
         conversationIndex: storeRef.current.getRows().length,
         createdAt: new Date().toISOString(),
         text,
-        ...(input.agentId ? { agentId: input.agentId } : {}),
+        agentId,
         ...(input.llmProviderId ? { llmProviderId: input.llmProviderId } : {}),
         ...(input.llmModel ? { llmModel: input.llmModel } : {}),
         ...(input.modelPresetId != null

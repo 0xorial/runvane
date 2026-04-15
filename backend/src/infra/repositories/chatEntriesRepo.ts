@@ -296,7 +296,8 @@ export class ChatEntriesRepo {
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
-      failed?: boolean;
+      status?: "running" | "completed" | "failed" | "cancelled";
+      error?: string;
       llmModel?: string;
     },
   ): PlannerLlmStreamEntry {
@@ -312,7 +313,8 @@ export class ChatEntriesRepo {
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
       decision: input.decision ?? null,
-      failed: input.failed === true,
+      status: input.status ?? "running",
+      ...(input.error ? { error: input.error } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
     const payload: Record<string, unknown> = {
@@ -320,7 +322,8 @@ export class ChatEntriesRepo {
       llmResponse: entry.llmResponse ?? "",
       thoughtMs: entry.thoughtMs ?? null,
       decision: entry.decision ?? null,
-      failed: entry.failed === true,
+      status: entry.status ?? "running",
+      ...(entry.error ? { error: entry.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
     this.db
@@ -350,7 +353,8 @@ export class ChatEntriesRepo {
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
-      failed?: boolean;
+      status?: "running" | "completed" | "failed" | "cancelled";
+      error?: string;
       llmModel?: string;
     },
   ): TitleLlmStreamEntry {
@@ -366,7 +370,8 @@ export class ChatEntriesRepo {
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
       decision: input.decision ?? null,
-      failed: input.failed === true,
+      status: input.status ?? "running",
+      ...(input.error ? { error: input.error } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
     const payload: Record<string, unknown> = {
@@ -374,7 +379,8 @@ export class ChatEntriesRepo {
       llmResponse: entry.llmResponse ?? "",
       thoughtMs: entry.thoughtMs ?? null,
       decision: entry.decision ?? null,
-      failed: entry.failed === true,
+      status: entry.status ?? "running",
+      ...(entry.error ? { error: entry.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
     this.db
@@ -403,7 +409,8 @@ export class ChatEntriesRepo {
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
-      failed?: boolean;
+      status?: "running" | "completed" | "failed" | "cancelled";
+      error?: string;
       llmModel?: string;
       promptTokens?: number;
       cachedPromptTokens?: number;
@@ -417,7 +424,8 @@ export class ChatEntriesRepo {
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
       decision: input.decision ?? null,
-      failed: input.failed === true,
+      status: input.status ?? "running",
+      ...(input.error ? { error: input.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
@@ -460,7 +468,8 @@ export class ChatEntriesRepo {
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
-      failed?: boolean;
+      status?: "running" | "completed" | "failed" | "cancelled";
+      error?: string;
       llmModel?: string;
       promptTokens?: number;
       cachedPromptTokens?: number;
@@ -474,7 +483,8 @@ export class ChatEntriesRepo {
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
       decision: input.decision ?? null,
-      failed: input.failed === true,
+      status: input.status ?? "running",
+      ...(input.error ? { error: input.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
@@ -587,6 +597,21 @@ export class ChatEntriesRepo {
           Number.isFinite(payload.completionTokens)
             ? payload.completionTokens
             : undefined;
+        const status =
+          payload.status === "running" ||
+          payload.status === "completed" ||
+          payload.status === "failed" ||
+          payload.status === "cancelled"
+            ? payload.status
+            : payload.failed === true
+              ? "failed"
+              : Number.isFinite(payload.thoughtMs as number)
+                ? "completed"
+                : "running";
+        const error =
+          typeof payload.error === "string" && payload.error.trim() !== ""
+            ? payload.error
+            : undefined;
         return {
           type: "planner_llm_stream",
           id: row.id,
@@ -602,7 +627,8 @@ export class ChatEntriesRepo {
             payload.decision && typeof payload.decision === "object"
               ? (payload.decision as LlmDecision)
               : null,
-          failed: payload.failed === true,
+          status,
+          ...(error !== undefined ? { error } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),
           ...(promptTokens !== undefined ? { promptTokens } : {}),
           ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
@@ -628,6 +654,21 @@ export class ChatEntriesRepo {
           Number.isFinite(payload.completionTokens)
             ? payload.completionTokens
             : undefined;
+        const status =
+          payload.status === "running" ||
+          payload.status === "completed" ||
+          payload.status === "failed" ||
+          payload.status === "cancelled"
+            ? payload.status
+            : payload.failed === true
+              ? "failed"
+              : Number.isFinite(payload.thoughtMs as number)
+                ? "completed"
+                : "running";
+        const error =
+          typeof payload.error === "string" && payload.error.trim() !== ""
+            ? payload.error
+            : undefined;
         return {
           type: "title_llm_stream",
           id: row.id,
@@ -643,7 +684,8 @@ export class ChatEntriesRepo {
             payload.decision && typeof payload.decision === "object"
               ? (payload.decision as LlmDecision)
               : null,
-          failed: payload.failed === true,
+          status,
+          ...(error !== undefined ? { error } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),
           ...(promptTokens !== undefined ? { promptTokens } : {}),
           ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),

@@ -38,6 +38,10 @@ export type ApproveToolInvocationResult =
   | { kind: "tool_invocation_not_found" }
   | { kind: "tool_invocation_not_requested" };
 
+export type CancelConversationProcessingResult =
+  | { kind: "ok"; cancelledTaskCount: number }
+  | { kind: "conversation_not_found" };
+
 export type Runtime = ReturnType<typeof createRuntime>;
 
 export function createRuntime(opts: {
@@ -249,6 +253,20 @@ export function createRuntime(opts: {
     return { kind: "ok", taskId };
   }
 
+  function cancelConversationProcessing(
+    conversationId: string
+  ): CancelConversationProcessingResult {
+    if (!conversations.exists(conversationId)) {
+      return { kind: "conversation_not_found" };
+    }
+    const cancelledTaskCount = tasks.cancelOpenByConversationId(conversationId);
+    logger.info(
+      { conversationId, cancelledTaskCount },
+      "[chat] cancel conversation processing requested"
+    );
+    return { kind: "ok", cancelledTaskCount };
+  }
+
   return {
     agents,
     conversations,
@@ -264,6 +282,7 @@ export function createRuntime(opts: {
     continueConversationTaskProcessor,
     enqueueUserMessage,
     approveToolInvocation,
+    cancelConversationProcessing,
     enqueueRunTool,
   };
 }

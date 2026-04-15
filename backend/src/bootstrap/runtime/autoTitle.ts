@@ -111,7 +111,7 @@ export async function maybeAutoTitleConversation({
     llmResponse: "",
     thoughtMs: null,
     decision: null,
-    failed: false,
+    status: "running",
   });
   hub.publish(conversationId, {
     type: SseType.TITLE_STARTING,
@@ -143,13 +143,18 @@ export async function maybeAutoTitleConversation({
   }
 
   if (generated) {
+    const titleOutcomeFailed = generated.cleanTitle == null;
+    const titleOutcomeError = titleOutcomeFailed
+      ? "Generated title was empty, fallback used"
+      : "";
     chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
       llmResponse: generated.fullResponse,
       thoughtMs: Math.max(0, Date.now() - startedAtMs),
       decision: null,
-      failed: false,
+      status: titleOutcomeFailed ? "failed" : "completed",
+      ...(titleOutcomeFailed ? { error: titleOutcomeError } : {}),
       llmModel: generated.model,
       ...(generated.promptTokens != null && generated.completionTokens != null
         ? {
@@ -187,10 +192,11 @@ export async function maybeAutoTitleConversation({
     chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
-      llmResponse: detail,
+      llmResponse: "",
       thoughtMs: Math.max(0, Date.now() - startedAtMs),
       decision: null,
-      failed: true,
+      status: "failed",
+      error: detail,
     });
     hub.publish(conversationId, {
       type: SseType.TITLE_RESPONSE,
@@ -229,18 +235,12 @@ export async function maybeAutoTitleConversation({
     chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
-      llmResponse: streamedResponse ? `${streamedResponse}\n${detail}` : detail,
+      llmResponse: streamedResponse,
       thoughtMs: Math.max(0, Date.now() - startedAtMs),
       decision: null,
-      failed: true,
+      status: "failed",
+      error: detail,
     });
-    if (detail) {
-      hub.publish(conversationId, {
-        type: SseType.TITLE_LLM_STREAM,
-        chat_entry_id: plannerEntry.id,
-        delta: detail,
-      });
-    }
     hub.publish(conversationId, {
       type: SseType.TITLE_RESPONSE,
       chat_entry_id: plannerEntry.id,

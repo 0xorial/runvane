@@ -17,12 +17,17 @@ function startTimestampMs(messageCreatedAt: string): number {
 }
 
 function isDone(entry: PlannerLlmStreamEntry | TitleLlmStreamEntry): boolean {
+  if (entry.status === "completed" || entry.status === "failed" || entry.status === "cancelled") {
+    return true;
+  }
   return typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs);
 }
 
 export function ThinkingRow({ entry }: ThinkingRowProps) {
   const done = isDone(entry);
-  const failed = entry.failed === true;
+  const status = entry.status ?? "running";
+  const failed = status === "failed";
+  const cancelled = status === "cancelled";
   const [expanded, setExpanded] = useState(false);
   const [tick, setTick] = useState(0);
   const detailsWrapRef = useRef<HTMLDivElement | null>(null);
@@ -31,6 +36,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   const startedAt = useMemo(() => startTimestampMs(entry.createdAt), [entry.createdAt]);
   const requestText = String(entry.llmRequest || "").trim();
   const responseText = String(entry.llmResponse || "").trim();
+  const errorText = String(entry.error ?? "").trim();
   const hasDetails = requestText.length > 0 || responseText.length > 0;
   const modelLabel = String(entry.llmModel ?? "").trim();
   const pt = entry.promptTokens;
@@ -54,12 +60,12 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   }, [expanded]);
 
   useEffect(() => {
-    if (done && !failed) setExpanded(false);
-  }, [done, failed]);
+    if (done && !failed && !cancelled) setExpanded(false);
+  }, [done, failed, cancelled]);
 
   useEffect(() => {
-    if (failed) setExpanded(true);
-  }, [failed]);
+    if (failed || cancelled) setExpanded(true);
+  }, [failed, cancelled]);
 
   useEffect(() => {
     if (!expanded || !autoscrollEnabled) return;
@@ -84,12 +90,15 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   const title = done
     ? failed
       ? `Thought failed after ${formatDuration(durationMs)}`
-      : `Thought for ${formatDuration(durationMs)}`
+      : cancelled
+        ? `Thought cancelled after ${formatDuration(durationMs)}`
+        : `Thought completed in ${formatDuration(durationMs)}`
     : `Thinking… ${formatDuration(elapsedMs)}`;
 
   const titleClass = cn(
     "inline-flex min-h-[18px] items-center gap-2 text-xs font-semibold leading-tight text-slate-400",
     failed && "text-red-300",
+    cancelled && "text-amber-700 dark:text-amber-300",
   );
 
   return (
@@ -135,6 +144,10 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
           <div className="mt-0.5 text-[10px] leading-snug text-rose-300">
             Request failed. See details below.
           </div>
+        ) : cancelled ? (
+          <div className="mt-0.5 text-[10px] leading-snug text-amber-700 dark:text-amber-300">
+            Request cancelled by user.
+          </div>
         ) : null}
         {expanded && hasDetails ? (
           <div
@@ -172,17 +185,32 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
               {responseText ? (
                 <>
                   <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    {failed ? "Error" : "Response"}
+                    Response
+                  </div>
+                  <pre
+                    className={cn(
+                      "m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words rounded-md border p-2 font-mono text-xs leading-snug first:mt-0",
+                      "border-border/60 bg-muted/40 text-foreground",
+                    )}
+                  >
+                    {responseText}
+                  </pre>
+                </>
+              ) : null}
+              {failed && errorText ? (
+                <>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Error
                   </div>
                   <pre
                     className={cn(
                       "m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words rounded-md border p-2 font-mono text-xs leading-snug first:mt-0",
                       failed
                         ? "border-destructive/30 bg-destructive/10 text-destructive"
-                        : "border-border/60 bg-muted/40 text-foreground",
+                        : "border-amber-500/30 bg-amber-500/10 text-amber-200",
                     )}
                   >
-                    {responseText}
+                    {errorText}
                   </pre>
                 </>
               ) : null}
