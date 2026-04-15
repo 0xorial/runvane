@@ -20,10 +20,7 @@ import { CurlTool } from "../tools/builtins/curl/tool.js";
 import type { UserMessageEntry } from "../types/chatEntry.js";
 import { SseType } from "../types/sse.js";
 import { maybeAutoTitleConversation } from "./runtime/autoTitle.js";
-import {
-  createTaskEnqueueHelpers,
-  registerTaskQueueHandler,
-} from "./runtime/taskQueue.js";
+import { createTaskEnqueueHelpers, registerTaskQueueHandler } from "./runtime/taskQueue.js";
 
 export type EnqueueUserMessageResult =
   | { kind: "ok"; taskId: number }
@@ -71,30 +68,28 @@ export function createRuntime(opts: {
   const tools = new ToolRegistry();
   tools.register(new GetCurrentTimeTool());
   tools.register(new CurlTool());
-  const { enqueueContinueConversation, enqueueRunTool } =
-    createTaskEnqueueHelpers({
-      tasks,
-      queue,
-    });
+  const { enqueueContinueConversation, enqueueRunTool } = createTaskEnqueueHelpers({
+    tasks,
+    queue,
+  });
 
-  const continueConversationTaskProcessor =
-    new ContinueConversationTaskProcessor(
-      chatEntries,
-      conversations,
-      hub,
-      llmProviderSettings,
-      modelPresets,
-      agents,
-      uploads,
-      tools,
-      enqueueRunTool
-    );
+  const continueConversationTaskProcessor = new ContinueConversationTaskProcessor(
+    chatEntries,
+    conversations,
+    hub,
+    llmProviderSettings,
+    modelPresets,
+    agents,
+    uploads,
+    tools,
+    enqueueRunTool,
+  );
   const runToolTaskProcessor = new RunToolTaskProcessor(
     chatEntries,
     hub,
     tools,
     toolExecutionLogs,
-    enqueueContinueConversation
+    enqueueContinueConversation,
   );
   registerTaskQueueHandler({
     queue,
@@ -103,10 +98,7 @@ export function createRuntime(opts: {
     runToolTaskProcessor,
   });
 
-  function enqueueUserMessage(
-    conversationId: string,
-    body: PostConversationMessageRequest
-  ): EnqueueUserMessageResult {
+  function enqueueUserMessage(conversationId: string, body: PostConversationMessageRequest): EnqueueUserMessageResult {
     const entriesBefore = chatEntries.countEntries(conversationId);
     const text = String(body.message ?? "").trim();
     const attachmentIds = Array.isArray(body.attachment_ids)
@@ -122,26 +114,18 @@ export function createRuntime(opts: {
     if (missing) {
       return { kind: "invalid_attachment", attachmentId: missing.id };
     }
-    const resolvedAttachments = attachments
-      .map((row) => row.attachment)
-      .filter((x): x is NonNullable<typeof x> => !!x);
+    const resolvedAttachments = attachments.map((row) => row.attachment).filter((x): x is NonNullable<typeof x> => !!x);
     if (!text && resolvedAttachments.length === 0) {
       logger.warn({ conversationId }, "[chat] rejected empty user message");
       return { kind: "invalid_message" };
     }
     if (!conversations.exists(conversationId)) {
-      logger.warn(
-        { conversationId },
-        "[chat] rejected user message: conversation not found"
-      );
+      logger.warn({ conversationId }, "[chat] rejected user message: conversation not found");
       return { kind: "conversation_not_found" };
     }
     const agentId = String(body.agent_id ?? "").trim();
     if (!agentId || !agents.get(agentId)) {
-      logger.warn(
-        { conversationId, agentId: agentId || null },
-        "[chat] rejected user message: agent not found"
-      );
+      logger.warn({ conversationId, agentId: agentId || null }, "[chat] rejected user message: agent not found");
       return { kind: "agent_not_found" };
     }
 
@@ -155,7 +139,7 @@ export function createRuntime(opts: {
         modelPresetId: body.model_preset_id ?? null,
         attachmentCount: resolvedAttachments.length,
       },
-      "[chat] enqueue user message"
+      "[chat] enqueue user message",
     );
     const user = chatEntries.appendUserMessage(conversationId, text, {
       agentId,
@@ -173,9 +157,7 @@ export function createRuntime(opts: {
       agentId: user.agentId,
       ...(user.llmProviderId ? { llmProviderId: user.llmProviderId } : {}),
       ...(user.llmModel ? { llmModel: user.llmModel } : {}),
-      ...(user.modelPresetId != null
-        ? { modelPresetId: user.modelPresetId }
-        : {}),
+      ...(user.modelPresetId != null ? { modelPresetId: user.modelPresetId } : {}),
       ...(user.attachments?.length ? { attachments: user.attachments } : {}),
     };
     hub.publish(conversationId, {
@@ -187,15 +169,9 @@ export function createRuntime(opts: {
       task_type: AgentTaskType.CONTINUE_CONVERSATION,
       payload: { conversationId },
     });
-    logger.info(
-      { conversationId, taskId: task.id },
-      "[chat] continue_conversation task created"
-    );
+    logger.info({ conversationId, taskId: task.id }, "[chat] continue_conversation task created");
     queue.enqueue({ taskId: task.id });
-    logger.info(
-      { conversationId, taskId: task.id },
-      "[chat] continue_conversation task enqueued"
-    );
+    logger.info({ conversationId, taskId: task.id }, "[chat] continue_conversation task enqueued");
     if (entriesBefore === 0) {
       void maybeAutoTitleConversation({
         conversations,
@@ -209,17 +185,10 @@ export function createRuntime(opts: {
     return { kind: "ok", taskId: task.id };
   }
 
-  function approveToolInvocation(
-    conversationId: string,
-    toolInvocationId: string
-  ): ApproveToolInvocationResult {
-    if (!conversations.exists(conversationId))
-      return { kind: "conversation_not_found" };
+  function approveToolInvocation(conversationId: string, toolInvocationId: string): ApproveToolInvocationResult {
+    if (!conversations.exists(conversationId)) return { kind: "conversation_not_found" };
     const entries = chatEntries.listMessages(conversationId);
-    const row = entries.find(
-      (entry) =>
-        entry.type === "tool-invocation" && entry.id === toolInvocationId
-    );
+    const row = entries.find((entry) => entry.type === "tool-invocation" && entry.id === toolInvocationId);
     if (!row || row.type !== "tool-invocation") {
       return { kind: "tool_invocation_not_found" };
     }
@@ -227,15 +196,10 @@ export function createRuntime(opts: {
       return { kind: "tool_invocation_not_requested" };
     }
 
-    const lastUser = [...entries]
-      .reverse()
-      .find(
-        (entry): entry is UserMessageEntry => entry.type === "user-message"
-      );
+    const lastUser = [...entries].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message");
     const agentId = lastUser?.agentId ?? null;
     const agent = agentId ? agents.get(agentId) : null;
-    const rules =
-      agent?.default_llm_configuration?.tools?.[row.toolId]?.rules ?? {};
+    const rules = agent?.default_llm_configuration?.tools?.[row.toolId]?.rules ?? {};
 
     const { taskId } = enqueueRunTool({
       conversationId,
@@ -253,17 +217,12 @@ export function createRuntime(opts: {
     return { kind: "ok", taskId };
   }
 
-  function cancelConversationProcessing(
-    conversationId: string
-  ): CancelConversationProcessingResult {
+  function cancelConversationProcessing(conversationId: string): CancelConversationProcessingResult {
     if (!conversations.exists(conversationId)) {
       return { kind: "conversation_not_found" };
     }
     const cancelledTaskCount = tasks.cancelOpenByConversationId(conversationId);
-    logger.info(
-      { conversationId, cancelledTaskCount },
-      "[chat] cancel conversation processing requested"
-    );
+    logger.info({ conversationId, cancelledTaskCount }, "[chat] cancel conversation processing requested");
     return { kind: "ok", cancelledTaskCount };
   }
 

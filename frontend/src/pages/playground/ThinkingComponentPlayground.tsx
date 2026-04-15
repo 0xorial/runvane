@@ -62,7 +62,7 @@ function createInitialEntry(id: string): PlannerLlmStreamEntry {
 
 export function ThinkingComponentPlayground() {
   const [entry, setEntry] = useState<PlannerLlmStreamEntry>(() =>
-    createInitialEntry("playground-thinking-interactive")
+    createInitialEntry("playground-thinking-interactive"),
   );
   const [chunkIndex, setChunkIndex] = useState(0);
   const [paused, setPaused] = useState(false);

@@ -9,11 +9,7 @@ import { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import type { ContinueConversationTask } from "./agentTask.js";
 import type { ToolPermission } from "../tools/baseTool.js";
 import { ToolRegistry } from "../tools/toolRegistry.js";
-import type {
-  AgenticToolCall,
-  ChatEntry,
-  UserMessageEntry,
-} from "../types/chatEntry.js";
+import type { AgenticToolCall, ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
 import { type StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
 import {
@@ -30,10 +26,7 @@ import {
   incrementalDelta,
   usageFromStreamingError,
 } from "./continueConversationTaskProcessor.helpers.js";
-import {
-  buildPlannerPrompt,
-  parseAgenticPlannerOutput,
-} from "./continueConversationPlannerProtocol.js";
+import { buildPlannerPrompt, parseAgenticPlannerOutput } from "./continueConversationPlannerProtocol.js";
 
 export class ContinueConversationTaskProcessor {
   constructor(
@@ -57,7 +50,7 @@ export class ContinueConversationTaskProcessor {
         policy?: ToolPermission;
         rules?: Record<string, unknown>;
       };
-    }) => { taskId: number }
+    }) => { taskId: number },
   ) {}
 
   private publishConversationUpdated(conversationId: string): void {
@@ -71,16 +64,14 @@ export class ContinueConversationTaskProcessor {
         ...conversation,
         is_deleted: Number(conversation.is_deleted ?? 0) === 1,
         token_usage_by_model:
-          usageByConversationId(
-            this.chatEntries.listConversationTokenUsageByModel()
-          ).get(conversationId) ?? [],
+          usageByConversationId(this.chatEntries.listConversationTokenUsageByModel()).get(conversationId) ?? [],
       },
     });
   }
 
   private agentToolConfigFor(
     agentId: string,
-    toolName: string
+    toolName: string,
   ): {
     enabled: boolean;
     policy: ToolPermission;
@@ -88,14 +79,11 @@ export class ContinueConversationTaskProcessor {
   } {
     const agent = this.agents.get(agentId);
     const toolCfg = agent?.default_llm_configuration?.tools?.[toolName];
-    const enabled =
-      toolCfg?.enabled === undefined ? true : toolCfg.enabled === true;
+    const enabled = toolCfg?.enabled === undefined ? true : toolCfg.enabled === true;
     const policy: ToolPermission = toolCfg?.policy ?? "allow";
     const tool = this.tools.get(toolName);
     const defaultRules =
-      tool &&
-      typeof tool.getDefaultRules() === "object" &&
-      tool.getDefaultRules() != null
+      tool && typeof tool.getDefaultRules() === "object" && tool.getDefaultRules() != null
         ? (tool.getDefaultRules() as unknown as Record<string, unknown>)
         : {};
     const rules = toolCfg?.rules ?? defaultRules;
@@ -114,9 +102,7 @@ export class ContinueConversationTaskProcessor {
       agent?.model_reference?.provider_id;
 
     const llmModel =
-      anchorUserMessage.llmModel ??
-      agent?.default_llm_configuration?.model_name ??
-      agent?.model_reference?.model_name;
+      anchorUserMessage.llmModel ?? agent?.default_llm_configuration?.model_name ?? agent?.model_reference?.model_name;
 
     return {
       ...(llmProviderId ? { llmProviderId } : {}),
@@ -126,9 +112,7 @@ export class ContinueConversationTaskProcessor {
 
   private resolvePlannerModel(overrides: { llmModel?: string }): string {
     const doc = this.llmProviderSettings.getDocument();
-    return String(
-      overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini"
-    );
+    return String(overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini");
   }
 
   private parseStructuredParamValue(key: string, value: unknown): unknown {
@@ -137,12 +121,7 @@ export class ContinueConversationTaskProcessor {
     if (!trimmed) return value;
 
     // Model presets editor stores values as strings; for structured output keys we require valid JSON.
-    if (
-      key === "response_format" ||
-      key === "json_schema" ||
-      key === "schema" ||
-      key === "structured_output"
-    ) {
+    if (key === "response_format" || key === "json_schema" || key === "schema" || key === "structured_output") {
       try {
         return JSON.parse(trimmed);
       } catch (e) {
@@ -153,17 +132,11 @@ export class ContinueConversationTaskProcessor {
     return value;
   }
 
-  private resolveRequestParams(input: {
-    modelPresetId?: number | null;
-  }): Record<string, unknown> {
+  private resolveRequestParams(input: { modelPresetId?: number | null }): Record<string, unknown> {
     const doc = this.llmProviderSettings.getDocument();
     const out: Record<string, unknown> = {};
     const globalSettings = doc.llm_configuration.model_settings;
-    if (
-      globalSettings &&
-      typeof globalSettings === "object" &&
-      !Array.isArray(globalSettings)
-    ) {
+    if (globalSettings && typeof globalSettings === "object" && !Array.isArray(globalSettings)) {
       for (const [key, value] of Object.entries(globalSettings)) {
         out[key] = this.parseStructuredParamValue(key, value);
       }
@@ -189,19 +162,15 @@ export class ContinueConversationTaskProcessor {
       mimeType: string;
       base64Data: string;
     }>,
-    onDelta: (delta: string) => void
+    onDelta: (delta: string) => void,
   ): Promise<StreamTextCompletionResult> {
     const doc = this.llmProviderSettings.getDocument();
-    const providerId = String(
-      overrides.llmProviderId || doc.llm_configuration.provider_id || "openai"
-    );
+    const providerId = String(overrides.llmProviderId || doc.llm_configuration.provider_id || "openai");
     const model = this.resolvePlannerModel(overrides);
     const provider = this.llmProviderSettings.getProvider(providerId);
     if (!provider) throw new Error(`unknown provider: ${providerId}`);
-    const providerSettings =
-      this.llmProviderSettings.getProviderSettings(providerId);
-    if (!providerSettings)
-      throw new Error(`provider settings not found: ${providerId}`);
+    const providerSettings = this.llmProviderSettings.getProviderSettings(providerId);
+    if (!providerSettings) throw new Error(`provider settings not found: ${providerId}`);
 
     logger.info(
       {
@@ -209,7 +178,7 @@ export class ContinueConversationTaskProcessor {
         model,
         promptChars: prompt.length,
       },
-      "[llm] request formatted"
+      "[llm] request formatted",
     );
     logger.info({ providerId, model }, "[llm] sending request");
     const requestSentAtMs = Date.now();
@@ -232,11 +201,11 @@ export class ContinueConversationTaskProcessor {
               model,
               firstTokenLatencyMs: Math.max(0, Date.now() - requestSentAtMs),
             },
-            "[llm] first token received"
+            "[llm] first token received",
           );
         }
         onDelta(delta);
-      }
+      },
     );
     logger.info(
       {
@@ -245,76 +214,58 @@ export class ContinueConversationTaskProcessor {
         responseChars: result.text.length,
         usage: result.usage ?? null,
       },
-      "[llm] completion finished"
+      "[llm] completion finished",
     );
     return result;
   }
 
-  async process(
-    task: ContinueConversationTask,
-    opts?: { shouldCancel?: () => boolean }
-  ): Promise<void> {
+  async process(task: ContinueConversationTask, opts?: { shouldCancel?: () => boolean }): Promise<void> {
     const conversationId = task.conversationId;
     throwIfCancelled(opts?.shouldCancel);
     const initialEntries = this.chatEntries.listMessages(conversationId);
     const triggerEntry = initialEntries.at(-1) ?? null;
     logger.info(
       { conversationId, triggerEntryType: triggerEntry?.type ?? null },
-      "[task] continue_conversation started"
+      "[task] continue_conversation started",
     );
     const anchorUserMessage = [...initialEntries]
       .reverse()
-      .find(
-        (entry): entry is UserMessageEntry => entry.type === "user-message"
-      );
+      .find((entry): entry is UserMessageEntry => entry.type === "user-message");
     if (!anchorUserMessage) {
       logger.warn(
         { conversationId, triggerEntryType: triggerEntry?.type ?? null },
-        "[task] skipped continue_conversation: no user message"
+        "[task] skipped continue_conversation: no user message",
       );
       return;
     }
     const agent = this.agents.get(anchorUserMessage.agentId);
     const llmOverrides = this.resolveLlmOverrides(anchorUserMessage);
     const selectedAgent = this.agents.get(anchorUserMessage.agentId);
-    const effectiveModelPresetId =
-      anchorUserMessage.modelPresetId ??
-      selectedAgent?.default_model_preset_id ??
-      null;
+    const effectiveModelPresetId = anchorUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
     const requestParams = this.resolveRequestParams({
       modelPresetId: effectiveModelPresetId,
     });
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
-    const inputFiles = (anchorUserMessage.attachments ?? []).map(
-      (attachment) => {
-        const content = this.uploads.readContentById(attachment.id);
-        if (!content) {
-          throw new Error(`attachment content not found: ${attachment.id}`);
-        }
-        return {
-          filename: attachment.name,
-          mimeType: attachment.mimeType || "application/octet-stream",
-          base64Data: content.data.toString("base64"),
-        };
+    const inputFiles = (anchorUserMessage.attachments ?? []).map((attachment) => {
+      const content = this.uploads.readContentById(attachment.id);
+      if (!content) {
+        throw new Error(`attachment content not found: ${attachment.id}`);
       }
-    );
+      return {
+        filename: attachment.name,
+        mimeType: attachment.mimeType || "application/octet-stream",
+        base64Data: content.data.toString("base64"),
+      };
+    });
     const enabledToolIds = this.tools
       .list()
-      .filter(
-        (tool) =>
-          this.agentToolConfigFor(anchorUserMessage.agentId, tool.getName())
-            .enabled
-      )
+      .filter((tool) => this.agentToolConfigFor(anchorUserMessage.agentId, tool.getName()).enabled)
       .map((tool) => tool.getName());
     const MAX_PLANNER_TURNS = DEFAULT_MAX_PLANNER_TURNS;
     const MAX_TOOL_CALLS_PER_TURN = DEFAULT_MAX_TOOL_CALLS_PER_TURN;
     let loopState: Record<string, unknown> = {};
 
-    for (
-      let plannerTurn = 1;
-      plannerTurn <= MAX_PLANNER_TURNS;
-      plannerTurn += 1
-    ) {
+    for (let plannerTurn = 1; plannerTurn <= MAX_PLANNER_TURNS; plannerTurn += 1) {
       throwIfCancelled(opts?.shouldCancel);
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_TURN_STARTED,
@@ -323,16 +274,11 @@ export class ContinueConversationTaskProcessor {
       });
       const entries = this.chatEntries.listMessages(conversationId);
       const priorToolResults = entries
-        .filter(
-          (entry): entry is Extract<ChatEntry, { type: "tool-invocation" }> =>
-            entry.type === "tool-invocation"
-        )
+        .filter((entry): entry is Extract<ChatEntry, { type: "tool-invocation" }> => entry.type === "tool-invocation")
         .slice(-8)
         .map((entry) => {
           const result =
-            entry.result &&
-            typeof entry.result === "object" &&
-            !Array.isArray(entry.result)
+            entry.result && typeof entry.result === "object" && !Array.isArray(entry.result)
               ? (entry.result as Record<string, unknown>)
               : {};
           return {
@@ -354,19 +300,16 @@ export class ContinueConversationTaskProcessor {
       const plannerEntryId = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const turnStartedMs = Date.now();
-      const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(
-        conversationId,
-        {
-          id: plannerEntryId,
-          createdAt,
-          llmRequest: requestText,
-          llmResponse: "",
-          thoughtMs: null,
-          decision: null,
-          status: "running",
-          llmModel: plannerLlmModel,
-        }
-      );
+      const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(conversationId, {
+        id: plannerEntryId,
+        createdAt,
+        llmRequest: requestText,
+        llmResponse: "",
+        thoughtMs: null,
+        decision: null,
+        status: "running",
+        llmModel: plannerLlmModel,
+      });
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_STARTING,
         chat_entry_id: plannerEntryId,
@@ -400,7 +343,7 @@ export class ContinueConversationTaskProcessor {
                   plannerTurn,
                   firstStreamLatencyMs: Math.max(0, Date.now() - turnStartedMs),
                 },
-                "[sse] first llm token streamed"
+                "[sse] first llm token streamed",
               );
             }
             reconstructedReply += delta;
@@ -415,12 +358,8 @@ export class ContinueConversationTaskProcessor {
             }
             plannerText = nextThought;
 
-            const streamedAssistantOutput =
-              extractAssistantOutputFromJsonLike(reconstructedReply);
-            const answerDelta = incrementalDelta(
-              streamedAnswer,
-              streamedAssistantOutput
-            );
+            const streamedAssistantOutput = extractAssistantOutputFromJsonLike(reconstructedReply);
+            const answerDelta = incrementalDelta(streamedAnswer, streamedAssistantOutput);
             if (answerDelta) {
               if (!assistantEntryId) {
                 assistantEntryId = crypto.randomUUID();
@@ -435,7 +374,7 @@ export class ContinueConversationTaskProcessor {
               });
             }
             streamedAnswer = streamedAssistantOutput;
-          }
+          },
         );
         plannerTokenUsage = completion.usage;
         reply = reconstructedReply || completion.text || "";
@@ -460,8 +399,7 @@ export class ContinueConversationTaskProcessor {
                   promptTokens: plannerTokenUsage.promptTokens,
                   ...(plannerTokenUsage.cachedPromptTokens !== undefined
                     ? {
-                        cachedPromptTokens:
-                          plannerTokenUsage.cachedPromptTokens,
+                        cachedPromptTokens: plannerTokenUsage.cachedPromptTokens,
                       }
                     : {}),
                   completionTokens: plannerTokenUsage.completionTokens,
@@ -481,8 +419,7 @@ export class ContinueConversationTaskProcessor {
                   prompt_tokens: plannerTokenUsage.promptTokens,
                   ...(plannerTokenUsage.cachedPromptTokens !== undefined
                     ? {
-                        cached_prompt_tokens:
-                          plannerTokenUsage.cachedPromptTokens,
+                        cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens,
                       }
                     : {}),
                   completion_tokens: plannerTokenUsage.completionTokens,
@@ -524,8 +461,7 @@ export class ContinueConversationTaskProcessor {
                 prompt_tokens: plannerTokenUsage.promptTokens,
                 ...(plannerTokenUsage.cachedPromptTokens !== undefined
                   ? {
-                      cached_prompt_tokens:
-                        plannerTokenUsage.cachedPromptTokens,
+                      cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens,
                     }
                   : {}),
                 completion_tokens: plannerTokenUsage.completionTokens,
@@ -544,11 +480,7 @@ export class ContinueConversationTaskProcessor {
       const decision = parsedAgentic.decision;
       const agentic = parsedAgentic.output;
       loopState =
-        agentic.state &&
-        typeof agentic.state === "object" &&
-        !Array.isArray(agentic.state)
-          ? agentic.state
-          : loopState;
+        agentic.state && typeof agentic.state === "object" && !Array.isArray(agentic.state) ? agentic.state : loopState;
       this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
         id: plannerEntryId,
         llmRequest: requestText,
@@ -595,9 +527,7 @@ export class ContinueConversationTaskProcessor {
             : assistantText || "planner step completed",
         finished: true,
         action: agentic.tool_calls.length > 0 ? "tool_call" : "final_answer",
-        ...(agentic.tool_calls.length > 0
-          ? { tool_name: agentic.tool_calls[0].toolId }
-          : {}),
+        ...(agentic.tool_calls.length > 0 ? { tool_name: agentic.tool_calls[0].toolId } : {}),
         llm_model: plannerLlmModel,
         ...(plannerTokenUsage !== undefined
           ? {
@@ -617,10 +547,7 @@ export class ContinueConversationTaskProcessor {
       });
 
       if (agentic.tool_calls.length > 0) {
-        const selectedCalls: AgenticToolCall[] = clampToolCallsForTurn(
-          agentic.tool_calls,
-          MAX_TOOL_CALLS_PER_TURN
-        );
+        const selectedCalls: AgenticToolCall[] = clampToolCallsForTurn(agentic.tool_calls, MAX_TOOL_CALLS_PER_TURN);
         const batchId = crypto.randomUUID();
         this.hub.publish(conversationId, {
           type: SseType.TOOL_BATCH_STARTED,
@@ -629,13 +556,8 @@ export class ContinueConversationTaskProcessor {
         });
         for (let i = 0; i < selectedCalls.length; i += 1) {
           const call = selectedCalls[i];
-          const toolCfg = this.agentToolConfigFor(
-            anchorUserMessage.agentId,
-            call.toolId
-          );
-          const shouldResumeAfterBatch =
-            shouldContinuePlannerLoop(agentic.followup) &&
-            i === selectedCalls.length - 1;
+          const toolCfg = this.agentToolConfigFor(anchorUserMessage.agentId, call.toolId);
+          const shouldResumeAfterBatch = shouldContinuePlannerLoop(agentic.followup) && i === selectedCalls.length - 1;
           this.enqueueRunTool({
             conversationId,
             agentId: anchorUserMessage.agentId,
@@ -655,10 +577,7 @@ export class ContinueConversationTaskProcessor {
       }
 
       if (!shouldContinuePlannerLoop(agentic.followup)) {
-        logger.info(
-          { conversationId, plannerTurn },
-          "[task] continue_conversation completed"
-        );
+        logger.info({ conversationId, plannerTurn }, "[task] continue_conversation completed");
         return;
       }
     }
@@ -669,9 +588,6 @@ export class ContinueConversationTaskProcessor {
       planner_turn: MAX_PLANNER_TURNS,
       max_turns: MAX_PLANNER_TURNS,
     });
-    logger.warn(
-      { conversationId, maxTurns: MAX_PLANNER_TURNS },
-      "[task] planner guard stop reached"
-    );
+    logger.warn({ conversationId, maxTurns: MAX_PLANNER_TURNS }, "[task] planner guard stop reached");
   }
 }

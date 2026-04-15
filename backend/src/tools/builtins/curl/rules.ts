@@ -14,13 +14,7 @@ const CurlToolRulesSchema = z
     allowed: z.enum(["always", "never", "ask"]).default("ask"),
     allowHttp: z.boolean().default(false),
     allowedHosts: HostListSchema.default([]),
-    blockedHosts: HostListSchema.default([
-      "localhost",
-      "127.0.0.1",
-      "::1",
-      "0.0.0.0",
-      "169.254.169.254",
-    ]),
+    blockedHosts: HostListSchema.default(["localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254"]),
     maxTimeoutMs: z.number().finite().int().min(100).max(60000).default(10000),
     maxResponseBytes: z.number().finite().int().min(256).max(1000000).default(50000),
   })
@@ -46,8 +40,7 @@ export function curlRulesSchema(): Record<string, unknown> {
         type: "array",
         items: { type: "string" },
         default: [],
-        description:
-          "Optional allowlist. Empty means no allowlist check. Supports exact host or *.example.com.",
+        description: "Optional allowlist. Empty means no allowlist check. Supports exact host or *.example.com.",
       },
       blockedHosts: {
         type: "array",

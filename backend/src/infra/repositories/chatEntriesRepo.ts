@@ -84,17 +84,13 @@ export class ChatEntriesRepo {
         conversation_id: row.conversation_id,
         model_name: String(row.model_name || "").trim(),
         prompt_tokens:
-          typeof row.prompt_tokens === "number" && Number.isFinite(row.prompt_tokens)
-            ? row.prompt_tokens
-            : 0,
+          typeof row.prompt_tokens === "number" && Number.isFinite(row.prompt_tokens) ? row.prompt_tokens : 0,
         cached_prompt_tokens:
-          typeof row.cached_prompt_tokens === "number" &&
-          Number.isFinite(row.cached_prompt_tokens)
+          typeof row.cached_prompt_tokens === "number" && Number.isFinite(row.cached_prompt_tokens)
             ? row.cached_prompt_tokens
             : 0,
         completion_tokens:
-          typeof row.completion_tokens === "number" &&
-          Number.isFinite(row.completion_tokens)
+          typeof row.completion_tokens === "number" && Number.isFinite(row.completion_tokens)
             ? row.completion_tokens
             : 0,
       }))
@@ -173,10 +169,7 @@ export class ChatEntriesRepo {
     return entry;
   }
 
-  updateAssistantMessage(
-    conversationId: string,
-    input: { id: string; text: string },
-  ): void {
+  updateAssistantMessage(conversationId: string, input: { id: string; text: string }): void {
     const result = this.db
       .prepare(
         `UPDATE chat_entries
@@ -191,9 +184,7 @@ export class ChatEntriesRepo {
         payload_json: JSON.stringify({ text: input.text }),
       });
     if (Number(result.changes ?? 0) !== 1) {
-      throw new Error(
-        `assistant-message entry not found for update: conversation=${conversationId} id=${input.id}`,
-      );
+      throw new Error(`assistant-message entry not found for update: conversation=${conversationId} id=${input.id}`);
     }
   }
 
@@ -259,9 +250,7 @@ export class ChatEntriesRepo {
       )
       .get(input.id, conversationId) as { payload_json?: string } | undefined;
     if (!row?.payload_json) {
-      throw new Error(
-        `tool-invocation entry not found for update: conversation=${conversationId} id=${input.id}`,
-      );
+      throw new Error(`tool-invocation entry not found for update: conversation=${conversationId} id=${input.id}`);
     }
     const payload = parseJsonObject(row.payload_json);
     this.db
@@ -278,10 +267,7 @@ export class ChatEntriesRepo {
         payload_json: JSON.stringify({
           toolId: String(payload.toolId ?? ""),
           state: input.state,
-          parameters:
-            payload.parameters && typeof payload.parameters === "object"
-              ? payload.parameters
-              : {},
+          parameters: payload.parameters && typeof payload.parameters === "object" ? payload.parameters : {},
           result: input.result,
         }),
       });
@@ -431,10 +417,7 @@ export class ChatEntriesRepo {
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
       payload.promptTokens = input.promptTokens;
     }
-    if (
-      typeof input.cachedPromptTokens === "number" &&
-      Number.isFinite(input.cachedPromptTokens)
-    ) {
+    if (typeof input.cachedPromptTokens === "number" && Number.isFinite(input.cachedPromptTokens)) {
       payload.cachedPromptTokens = input.cachedPromptTokens;
     }
     if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
@@ -454,9 +437,7 @@ export class ChatEntriesRepo {
         payload_json: JSON.stringify(payload),
       });
     if (Number(result.changes ?? 0) !== 1) {
-      throw new Error(
-        `planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`,
-      );
+      throw new Error(`planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
     }
   }
 
@@ -490,10 +471,7 @@ export class ChatEntriesRepo {
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
       payload.promptTokens = input.promptTokens;
     }
-    if (
-      typeof input.cachedPromptTokens === "number" &&
-      Number.isFinite(input.cachedPromptTokens)
-    ) {
+    if (typeof input.cachedPromptTokens === "number" && Number.isFinite(input.cachedPromptTokens)) {
       payload.cachedPromptTokens = input.cachedPromptTokens;
     }
     if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
@@ -513,9 +491,7 @@ export class ChatEntriesRepo {
         payload_json: JSON.stringify(payload),
       });
     if (Number(result.changes ?? 0) !== 1) {
-      throw new Error(
-        `title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`,
-      );
+      throw new Error(`title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
     }
   }
 
@@ -580,21 +556,17 @@ export class ChatEntriesRepo {
       }
       if (row.type === "planner_llm_stream") {
         const llmModel =
-          typeof payload.llmModel === "string" && payload.llmModel.trim() !== ""
-            ? payload.llmModel.trim()
-            : undefined;
+          typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         const promptTokens =
           typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
             ? payload.promptTokens
             : undefined;
         const cachedPromptTokens =
-          typeof payload.cachedPromptTokens === "number" &&
-          Number.isFinite(payload.cachedPromptTokens)
+          typeof payload.cachedPromptTokens === "number" && Number.isFinite(payload.cachedPromptTokens)
             ? payload.cachedPromptTokens
             : undefined;
         const completionTokens =
-          typeof payload.completionTokens === "number" &&
-          Number.isFinite(payload.completionTokens)
+          typeof payload.completionTokens === "number" && Number.isFinite(payload.completionTokens)
             ? payload.completionTokens
             : undefined;
         const status =
@@ -608,25 +580,16 @@ export class ChatEntriesRepo {
               : Number.isFinite(payload.thoughtMs as number)
                 ? "completed"
                 : "running";
-        const error =
-          typeof payload.error === "string" && payload.error.trim() !== ""
-            ? payload.error
-            : undefined;
+        const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
         return {
           type: "planner_llm_stream",
           id: row.id,
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
           llmRequest: String(payload.llmRequest ?? ""),
-          llmResponse:
-            typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
-          thoughtMs: Number.isFinite(payload.thoughtMs as number)
-            ? (payload.thoughtMs as number)
-            : null,
-          decision:
-            payload.decision && typeof payload.decision === "object"
-              ? (payload.decision as LlmDecision)
-              : null,
+          llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
+          thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
+          decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
           status,
           ...(error !== undefined ? { error } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),
@@ -637,21 +600,17 @@ export class ChatEntriesRepo {
       }
       if (row.type === "title_llm_stream") {
         const llmModel =
-          typeof payload.llmModel === "string" && payload.llmModel.trim() !== ""
-            ? payload.llmModel.trim()
-            : undefined;
+          typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         const promptTokens =
           typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
             ? payload.promptTokens
             : undefined;
         const cachedPromptTokens =
-          typeof payload.cachedPromptTokens === "number" &&
-          Number.isFinite(payload.cachedPromptTokens)
+          typeof payload.cachedPromptTokens === "number" && Number.isFinite(payload.cachedPromptTokens)
             ? payload.cachedPromptTokens
             : undefined;
         const completionTokens =
-          typeof payload.completionTokens === "number" &&
-          Number.isFinite(payload.completionTokens)
+          typeof payload.completionTokens === "number" && Number.isFinite(payload.completionTokens)
             ? payload.completionTokens
             : undefined;
         const status =
@@ -665,25 +624,16 @@ export class ChatEntriesRepo {
               : Number.isFinite(payload.thoughtMs as number)
                 ? "completed"
                 : "running";
-        const error =
-          typeof payload.error === "string" && payload.error.trim() !== ""
-            ? payload.error
-            : undefined;
+        const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
         return {
           type: "title_llm_stream",
           id: row.id,
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
           llmRequest: String(payload.llmRequest ?? ""),
-          llmResponse:
-            typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
-          thoughtMs: Number.isFinite(payload.thoughtMs as number)
-            ? (payload.thoughtMs as number)
-            : null,
-          decision:
-            payload.decision && typeof payload.decision === "object"
-              ? (payload.decision as LlmDecision)
-              : null,
+          llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
+          thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
+          decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
           status,
           ...(error !== undefined ? { error } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),

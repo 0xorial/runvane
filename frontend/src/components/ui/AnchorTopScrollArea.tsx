@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 export type AnchorTopScrollAreaProps = {
   className?: string;
@@ -40,11 +34,7 @@ function calculateAnchorScrollPlan({
   return { remainingContentHeight, spacerHeight, scrollTopTarget };
 }
 
-export function AnchorTopScrollArea({
-  className,
-  topAnchorEntryId = null,
-  children,
-}: AnchorTopScrollAreaProps) {
+export function AnchorTopScrollArea({ className, topAnchorEntryId = null, children }: AnchorTopScrollAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -66,15 +56,10 @@ export function AnchorTopScrollArea({
   const getAnchor = useCallback((entryId: string): HTMLElement | null => {
     const contentEl = contentRef.current;
     if (!contentEl) return null;
-    return contentEl.querySelector<HTMLElement>(
-      `[data-chat-entry-id="${entryId}"]`
-    );
+    return contentEl.querySelector<HTMLElement>(`[data-chat-entry-id="${entryId}"]`);
   }, []);
 
-  function offsetTopWithinAncestor(
-    node: HTMLElement,
-    ancestor: HTMLElement
-  ): number | null {
+  function offsetTopWithinAncestor(node: HTMLElement, ancestor: HTMLElement): number | null {
     let top = 0;
     let current: HTMLElement | null = node;
     while (current && current !== ancestor) {
@@ -99,9 +84,7 @@ export function AnchorTopScrollArea({
           ? anchorTopFromOffsets
           : Math.max(
               0,
-              scrollEl.scrollTop +
-                (anchor.getBoundingClientRect().top -
-                  scrollEl.getBoundingClientRect().top)
+              scrollEl.scrollTop + (anchor.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top),
             );
       const anchorBottom = anchorTop + anchor.offsetHeight;
       const totalContentHeight = Math.max(0, contentEl.scrollHeight);
@@ -118,13 +101,10 @@ export function AnchorTopScrollArea({
         return false;
       }
       scrollEl.scrollTop = Math.max(0, plan.scrollTopTarget);
-      const deltaToTop = Math.abs(
-        anchor.getBoundingClientRect().top -
-          scrollEl.getBoundingClientRect().top
-      );
+      const deltaToTop = Math.abs(anchor.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top);
       return deltaToTop <= 1;
     },
-    [getAnchor]
+    [getAnchor],
   );
 
   const scheduleAlign = useCallback(
@@ -147,7 +127,7 @@ export function AnchorTopScrollArea({
       };
       rafRef.current = requestAnimationFrame(run);
     },
-    [alignOnce, cancelAlignRaf, topAnchorEntryId]
+    [alignOnce, cancelAlignRaf, topAnchorEntryId],
   );
 
   useEffect(() => {
@@ -169,11 +149,7 @@ export function AnchorTopScrollArea({
       <div ref={contentRef} className="relative flex min-h-full flex-col gap-0">
         {children}
       </div>
-      <div
-        aria-hidden
-        className="shrink-0"
-        style={{ height: `${bottomSpacerPx}px` }}
-      />
+      <div aria-hidden className="shrink-0" style={{ height: `${bottomSpacerPx}px` }} />
     </div>
   );
 }

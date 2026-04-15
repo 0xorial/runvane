@@ -4,16 +4,8 @@ import {
   type ToolPermissionContext,
   type ToolRunContext,
 } from "../../baseTool.js";
-import {
-  curlParamsSchema,
-  parseCurlToolParams,
-  type CurlToolParams,
-} from "./params.js";
-import {
-  curlRulesSchema,
-  parseCurlToolRules,
-  type CurlToolRules,
-} from "./rules.js";
+import { curlParamsSchema, parseCurlToolParams, type CurlToolParams } from "./params.js";
+import { curlRulesSchema, parseCurlToolRules, type CurlToolRules } from "./rules.js";
 
 export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
   getName(): string {
@@ -55,16 +47,9 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
     return parseCurlToolRules(raw);
   }
 
-  evaluatePermission(
-    context: ToolPermissionContext<CurlToolRules>,
-  ): RuleEvaluationResult[] {
+  evaluatePermission(context: ToolPermissionContext<CurlToolRules>): RuleEvaluationResult[] {
     const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission =
-      allowedRule === "always"
-        ? "allow"
-        : allowedRule === "never"
-        ? "forbid"
-        : "ask_user";
+    const permission = allowedRule === "always" ? "allow" : allowedRule === "never" ? "forbid" : "ask_user";
     return [
       {
         ruleName: "allowed",
@@ -99,8 +84,7 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
 
     const timeoutMs = Math.min(params.timeoutMs, rules.maxTimeoutMs);
     const maxBytes = Math.min(params.maxResponseBytes, rules.maxResponseBytes);
-    const body =
-      params.method === "GET" || params.method === "HEAD" ? undefined : params.body;
+    const body = params.method === "GET" || params.method === "HEAD" ? undefined : params.body;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

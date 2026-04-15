@@ -72,16 +72,9 @@ function usageFromOpenRouterPayload(usage: unknown): StreamTextCompletionUsage |
       : null;
   const cachedRaw = details?.cached_tokens;
   const cachedPromptTokens =
-    typeof cachedRaw === "number" && Number.isFinite(cachedRaw)
-      ? Math.max(0, Math.trunc(cachedRaw))
-      : undefined;
+    typeof cachedRaw === "number" && Number.isFinite(cachedRaw) ? Math.max(0, Math.trunc(cachedRaw)) : undefined;
 
-  if (
-    typeof pt === "number" &&
-    Number.isFinite(pt) &&
-    typeof ct === "number" &&
-    Number.isFinite(ct)
-  ) {
+  if (typeof pt === "number" && Number.isFinite(pt) && typeof ct === "number" && Number.isFinite(ct)) {
     return {
       promptTokens: pt,
       completionTokens: ct,
@@ -91,12 +84,7 @@ function usageFromOpenRouterPayload(usage: unknown): StreamTextCompletionUsage |
     };
   }
   const total = rec.total_tokens;
-  if (
-    typeof total === "number" &&
-    Number.isFinite(total) &&
-    typeof pt === "number" &&
-    Number.isFinite(pt)
-  ) {
+  if (typeof total === "number" && Number.isFinite(total) && typeof pt === "number" && Number.isFinite(pt)) {
     return {
       promptTokens: pt,
       completionTokens: Math.max(0, total - pt),
@@ -167,9 +155,7 @@ export class OpenRouterProvider implements LlmProvider {
       throw new Error(`models fetch failed (${res.status})`);
     }
     const raw = (await res.json()) as unknown;
-    return raw != null &&
-      typeof raw === "object" &&
-      Array.isArray((raw as { data?: unknown }).data)
+    return raw != null && typeof raw === "object" && Array.isArray((raw as { data?: unknown }).data)
       ? (raw as { data: unknown[] }).data
       : [];
   }
@@ -214,9 +200,7 @@ export class OpenRouterProvider implements LlmProvider {
       "[llm-provider] openrouter models request sending",
     );
     const data = await this.fetchModelsPayload(settingsIn);
-    return Array.from(
-      new Set(data.map(parseModelIdentifier).filter((x) => x.length > 0)),
-    );
+    return Array.from(new Set(data.map(parseModelIdentifier).filter((x) => x.length > 0)));
   }
 
   listModelCapabilitiesFromPayload(payload: unknown[]): Array<{
@@ -245,14 +229,16 @@ export class OpenRouterProvider implements LlmProvider {
         if (!model_name) return null;
 
         const architecture =
-          rec.architecture &&
-          typeof rec.architecture === "object" &&
-          !Array.isArray(rec.architecture)
+          rec.architecture && typeof rec.architecture === "object" && !Array.isArray(rec.architecture)
             ? (rec.architecture as Record<string, unknown>)
             : {};
         const inputModalities = Array.isArray(architecture.input_modalities)
           ? architecture.input_modalities
-              .map((x) => String(x || "").trim().toLowerCase())
+              .map((x) =>
+                String(x || "")
+                  .trim()
+                  .toLowerCase(),
+              )
               .filter((x) => x.length > 0)
           : [];
         const supports_image_input = inputModalities.includes("image");
@@ -260,32 +246,22 @@ export class OpenRouterProvider implements LlmProvider {
 
         const contextRaw = rec.context_length;
         const max_context_tokens =
-          typeof contextRaw === "number" && Number.isFinite(contextRaw)
-            ? Math.trunc(contextRaw)
-            : null;
+          typeof contextRaw === "number" && Number.isFinite(contextRaw) ? Math.trunc(contextRaw) : null;
 
         const topProvider =
-          rec.top_provider &&
-          typeof rec.top_provider === "object" &&
-          !Array.isArray(rec.top_provider)
+          rec.top_provider && typeof rec.top_provider === "object" && !Array.isArray(rec.top_provider)
             ? (rec.top_provider as Record<string, unknown>)
             : {};
         const maxOutputRaw = topProvider.max_completion_tokens;
         const max_output_tokens =
-          typeof maxOutputRaw === "number" && Number.isFinite(maxOutputRaw)
-            ? Math.trunc(maxOutputRaw)
-            : null;
+          typeof maxOutputRaw === "number" && Number.isFinite(maxOutputRaw) ? Math.trunc(maxOutputRaw) : null;
 
         const pricing =
-          rec.pricing &&
-          typeof rec.pricing === "object" &&
-          !Array.isArray(rec.pricing)
+          rec.pricing && typeof rec.pricing === "object" && !Array.isArray(rec.pricing)
             ? (rec.pricing as Record<string, unknown>)
             : {};
         const input_cost_per_1m = parseUsdPerTokenToPer1M(pricing.prompt);
-        const cached_input_cost_per_1m = parseUsdPerTokenToPer1M(
-          pricing.input_cache_read,
-        );
+        const cached_input_cost_per_1m = parseUsdPerTokenToPer1M(pricing.input_cache_read);
         const output_cost_per_1m = parseUsdPerTokenToPer1M(pricing.completion);
 
         return {

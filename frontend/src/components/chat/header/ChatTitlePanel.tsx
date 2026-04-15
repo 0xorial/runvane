@@ -49,26 +49,19 @@ export function ChatTitlePanel({
     cachedPrompt: 0,
     completion: 0,
   });
-  const [tokenUsageByModel, setTokenUsageByModel] = useState<
-    TokenUsageByModelRow[]
-  >([]);
-  const [pricingByModel, setPricingByModel] = useState<
-    Map<string, ModelPricing>
-  >(() => new Map());
-  const [conversationUpdatedAt, setConversationUpdatedAt] =
-    useState<string>("");
+  const [tokenUsageByModel, setTokenUsageByModel] = useState<TokenUsageByModelRow[]>([]);
+  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(() => new Map());
+  const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const estimatedCostUsd = useMemo(
     () => estimateConversationCostUsd(tokenUsageByModel, pricingByModel),
-    [tokenUsageByModel, pricingByModel]
+    [tokenUsageByModel, pricingByModel],
   );
 
   async function refreshConversationMetrics(targetConversationId: string) {
     const payload = await getConversations();
-    const row = payload.conversations.find(
-      (x) => x.id === targetConversationId
-    );
+    const row = payload.conversations.find((x) => x.id === targetConversationId);
     if (!row) return;
     setTokenTotals({
       prompt: row.prompt_tokens_total,
@@ -155,11 +148,7 @@ export function ChatTitlePanel({
         if (ev.type === SseType.CONVERSATION_UPDATED) {
           const currentMs = timestampMs(conversationUpdatedAt);
           const incomingMs = timestampMs(ev.conversation.updated_at);
-          if (
-            currentMs != null &&
-            incomingMs != null &&
-            incomingMs < currentMs
-          ) {
+          if (currentMs != null && incomingMs != null && incomingMs < currentMs) {
             return;
           }
           setStreamRawTitle("");
@@ -173,10 +162,7 @@ export function ChatTitlePanel({
           setConversationUpdatedAt(String(ev.conversation.updated_at ?? ""));
           return;
         }
-        if (
-          ev.type === SseType.PLANNER_RESPONSE ||
-          ev.type === SseType.TITLE_RESPONSE
-        ) {
+        if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
           void refreshConversationMetrics(cid).catch((e) => {
             const detail = e instanceof Error ? e.message : String(e);
             notifyError(`Failed to refresh chat metrics: ${detail}`);
@@ -226,19 +212,11 @@ export function ChatTitlePanel({
         aria-label={sidebarVisible ? "Hide chat sidebar" : "Show chat sidebar"}
         title={sidebarVisible ? "Hide chats" : "Show chats"}
       >
-        {sidebarVisible ? (
-          <PanelLeftClose className="h-3.5 w-3.5" />
-        ) : (
-          <PanelLeftOpen className="h-3.5 w-3.5" />
-        )}
+        {sidebarVisible ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
       </Button>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <EditableConversationTitle
-            title={streamRawTitle || title}
-            disabled={!conversationId}
-            onCommit={onCommit}
-          />
+          <EditableConversationTitle title={streamRawTitle || title} disabled={!conversationId} onCommit={onCommit} />
           <LlmMetaBadge
             promptTokens={tokenTotals.prompt}
             cachedPromptTokens={tokenTotals.cachedPrompt}
@@ -281,11 +259,7 @@ export function ChatTitlePanel({
           aria-label="Open settings"
           title="Settings"
         >
-          <Settings
-            className={
-              settingsPressed ? "h-3.5 w-3.5 text-foreground" : "h-3.5 w-3.5"
-            }
-          />
+          <Settings className={settingsPressed ? "h-3.5 w-3.5 text-foreground" : "h-3.5 w-3.5"} />
         </Button>
       </div>
     </div>

@@ -4,10 +4,7 @@ import type { Runtime } from "../bootstrap/runtime.js";
 import { parseJsonObjectOr400 } from "../http/parseJsonObjectOr400.js";
 import { logger } from "../infra/logger.js";
 import { OpenRouterProvider } from "../llm_provider/providers/openRouter.js";
-import {
-  parseLlmProviderConnectionTestRequest,
-  parseLlmProviderSettingsPutRequest,
-} from "./settings.types.js";
+import { parseLlmProviderConnectionTestRequest, parseLlmProviderSettingsPutRequest } from "./settings.types.js";
 
 export function createSettingsRouter(runtime: Runtime) {
   const r = new Hono();
@@ -68,20 +65,13 @@ export function createSettingsRouter(runtime: Runtime) {
       return c.json(tested.value);
     }
 
-    runtime.llmProviderSettings.upsertProviderModels(
-      providerId,
-      settings,
-      tested.value.models,
-    );
+    runtime.llmProviderSettings.upsertProviderModels(providerId, settings, tested.value.models);
     if (providerId === "openrouter") {
       const provider = runtime.llmProviderSettings.getProvider(providerId);
       if (provider instanceof OpenRouterProvider) {
         try {
           const capabilities = await provider.listModelCapabilities(settings);
-          runtime.modelCapabilities.upsertDiscoveredProviderCapabilities(
-            providerId,
-            capabilities,
-          );
+          runtime.modelCapabilities.upsertDiscoveredProviderCapabilities(providerId, capabilities);
         } catch (e) {
           logger.warn(
             {

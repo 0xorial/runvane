@@ -1,11 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 
 type ResizableSidePanelProps = {
@@ -63,18 +59,12 @@ export function ResizableSidePanel({
 
       <ResizableHandle
         withHandle={open}
-        className={cn(
-          "transition-opacity duration-200",
-          open ? "opacity-100" : "pointer-events-none opacity-0"
-        )}
+        className={cn("transition-opacity duration-200", open ? "opacity-100" : "pointer-events-none opacity-0")}
       />
 
       <ResizablePanel
         minSize={typeof maxSize === "number" ? Math.max(0, 100 - maxSize) : 0}
-        className={cn(
-          "flex h-full min-h-0 min-w-0 flex-col overflow-hidden",
-          mainClassName
-        )}
+        className={cn("flex h-full min-h-0 min-w-0 flex-col overflow-hidden", mainClassName)}
       >
         {children}
       </ResizablePanel>

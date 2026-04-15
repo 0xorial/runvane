@@ -21,9 +21,7 @@ function asObject(v: unknown): Record<string, unknown> {
 function parseJsonArrayOrDefault(raw: string): string[] {
   try {
     const arr = JSON.parse(raw) as unknown;
-    return Array.isArray(arr)
-      ? arr.map((x) => String(x)).filter((x) => x.length > 0)
-      : [];
+    return Array.isArray(arr) ? arr.map((x) => String(x)).filter((x) => x.length > 0) : [];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(`invalid json array in DB: ${msg}`);
@@ -56,9 +54,9 @@ export class LlmProviderSettingsRepo {
               ? "https://api.x.ai/v1"
               : p.id === "openrouter"
                 ? "https://openrouter.ai/api/v1"
-              : p.id === "lmstudio"
-                ? "http://127.0.0.1:1234/api/v1"
-                : "https://api.openai.com/v1";
+                : p.id === "lmstudio"
+                  ? "http://127.0.0.1:1234/api/v1"
+                  : "https://api.openai.com/v1";
         }
       }
       upsertProvider.run(p.id, p.label, JSON.stringify(settings), now, now);
@@ -66,17 +64,12 @@ export class LlmProviderSettingsRepo {
       // Backfill OpenRouter default base_url for existing rows that still have
       // the generic OpenAI URL. Preserve any user-customized base URL.
       if (p.id === "openrouter") {
-        const current = this.db
-          .prepare("SELECT settings_json FROM llm_providers WHERE id = ?")
-          .get(p.id) as { settings_json?: string } | undefined;
-        const currentSettings = current?.settings_json
-          ? parseJsonObject(current.settings_json)
-          : {};
+        const current = this.db.prepare("SELECT settings_json FROM llm_providers WHERE id = ?").get(p.id) as
+          | { settings_json?: string }
+          | undefined;
+        const currentSettings = current?.settings_json ? parseJsonObject(current.settings_json) : {};
         const currentBaseUrl = String(currentSettings.base_url ?? "").trim();
-        if (
-          !currentBaseUrl ||
-          currentBaseUrl === "https://api.openai.com/v1"
-        ) {
+        if (!currentBaseUrl || currentBaseUrl === "https://api.openai.com/v1") {
           this.db
             .prepare(
               `UPDATE llm_providers
@@ -95,9 +88,9 @@ export class LlmProviderSettingsRepo {
       }
     }
 
-    const hasCfg = this.db
-      .prepare("SELECT key FROM settings WHERE key = 'llm_configuration'")
-      .get() as { key?: string } | undefined;
+    const hasCfg = this.db.prepare("SELECT key FROM settings WHERE key = 'llm_configuration'").get() as
+      | { key?: string }
+      | undefined;
     if (!hasCfg?.key) {
       this.db
         .prepare(
@@ -224,9 +217,9 @@ export class LlmProviderSettingsRepo {
   }
 
   getProviderSettings(providerId: string): ProviderSettingsDict | null {
-    const row = this.db
-      .prepare("SELECT settings_json FROM llm_providers WHERE id = ?")
-      .get(providerId) as { settings_json?: string } | undefined;
+    const row = this.db.prepare("SELECT settings_json FROM llm_providers WHERE id = ?").get(providerId) as
+      | { settings_json?: string }
+      | undefined;
     if (!row?.settings_json) return null;
     return parseJsonObject(row.settings_json);
   }
@@ -235,15 +228,11 @@ export class LlmProviderSettingsRepo {
     return this.registry.get(providerId);
   }
 
-  upsertProviderModels(
-    providerId: string,
-    settings: ProviderSettingsDict,
-    models: string[],
-  ): void {
+  upsertProviderModels(providerId: string, settings: ProviderSettingsDict, models: string[]): void {
     const now = new Date().toISOString();
-    const cur = this.db
-      .prepare("SELECT label, created_at FROM llm_providers WHERE id = ?")
-      .get(providerId) as { label?: string; created_at?: string } | undefined;
+    const cur = this.db.prepare("SELECT label, created_at FROM llm_providers WHERE id = ?").get(providerId) as
+      | { label?: string; created_at?: string }
+      | undefined;
 
     const label = String(cur?.label || this.registry.get(providerId)?.label || providerId);
     const createdAt = cur?.created_at || now;
@@ -254,14 +243,7 @@ export class LlmProviderSettingsRepo {
          (id, label, settings_json, models_json, models_verified, created_at, updated_at)
          VALUES (?, ?, ?, ?, 1, ?, ?)`,
       )
-      .run(
-        providerId,
-        label,
-        JSON.stringify(asObject(settings)),
-        JSON.stringify(models),
-        createdAt,
-        now,
-      );
+      .run(providerId, label, JSON.stringify(asObject(settings)), JSON.stringify(models), createdAt, now);
   }
 
   async testConnection(

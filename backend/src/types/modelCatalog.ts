@@ -82,8 +82,7 @@ export const SeedModelCapabilitySchema: z.ZodType<SeedModelCapability> = z
   })
   .transform((row) => {
     const inCost = row.usd_per_1m_tokens_in ?? row.input_cost_per_1m ?? null;
-    const cachedInCost =
-      row.usd_per_1m_tokens_in_cached ?? row.cached_input_cost_per_1m ?? null;
+    const cachedInCost = row.usd_per_1m_tokens_in_cached ?? row.cached_input_cost_per_1m ?? null;
     const outCost = row.usd_per_1m_tokens_out ?? row.output_cost_per_1m ?? null;
     return {
       ...row,
@@ -96,24 +95,23 @@ export const SeedModelCapabilitySchema: z.ZodType<SeedModelCapability> = z
     };
   });
 
-export const ModelCapabilityOverrideUpsertSchema: z.ZodType<ModelCapabilityOverrideUpsert> =
-  z.object({
-    provider_id: NonEmptyString,
-    model_name: NonEmptyString,
-    supports_image_input: NullableBoolean.optional(),
-    supports_file_input: NullableBoolean.optional(),
-    max_context_tokens: NullableFiniteNumber.optional(),
-    max_output_tokens: NullableFiniteNumber.optional(),
-    usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
-    usd_per_1m_tokens_in_cached: NullableFiniteNumber.optional(),
-    usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
-    input_cost_per_1m: NullableFiniteNumber.optional(),
-    cached_input_cost_per_1m: NullableFiniteNumber.optional(),
-    output_cost_per_1m: NullableFiniteNumber.optional(),
-    currency: OptionalNullableString,
-    notes: OptionalNullableString,
-    updated_by: OptionalNullableString,
-  });
+export const ModelCapabilityOverrideUpsertSchema: z.ZodType<ModelCapabilityOverrideUpsert> = z.object({
+  provider_id: NonEmptyString,
+  model_name: NonEmptyString,
+  supports_image_input: NullableBoolean.optional(),
+  supports_file_input: NullableBoolean.optional(),
+  max_context_tokens: NullableFiniteNumber.optional(),
+  max_output_tokens: NullableFiniteNumber.optional(),
+  usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
+  usd_per_1m_tokens_in_cached: NullableFiniteNumber.optional(),
+  usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
+  input_cost_per_1m: NullableFiniteNumber.optional(),
+  cached_input_cost_per_1m: NullableFiniteNumber.optional(),
+  output_cost_per_1m: NullableFiniteNumber.optional(),
+  currency: OptionalNullableString,
+  notes: OptionalNullableString,
+  updated_by: OptionalNullableString,
+});
 
 function formatZodIssues(error: z.ZodError, context: string): Error {
   const details = error.issues
@@ -133,9 +131,7 @@ export function validateSeedModelCapabilities(data: unknown): SeedModelCapabilit
   return parsed.data;
 }
 
-export function validateModelCapabilityOverrideUpsert(
-  data: unknown,
-): ModelCapabilityOverrideUpsert {
+export function validateModelCapabilityOverrideUpsert(data: unknown): ModelCapabilityOverrideUpsert {
   const parsed = ModelCapabilityOverrideUpsertSchema.safeParse(data);
   if (!parsed.success) {
     throw formatZodIssues(parsed.error, "PUT /api/settings/model_capabilities/override");

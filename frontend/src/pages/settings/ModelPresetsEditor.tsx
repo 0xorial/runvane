@@ -3,14 +3,7 @@ import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPr
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
 import { cn } from "@/lib/utils";
-import {
-  chipActive,
-  chipBase,
-  ghostBtn,
-  ghostDanger,
-  loadError as loadErrorBanner,
-  loadHint,
-} from "./settingsClasses";
+import { chipActive, chipBase, ghostBtn, ghostDanger, loadError as loadErrorBanner, loadHint } from "./settingsClasses";
 
 type ModelPresetsEditorProps = {
   presets: ModelPresetResponse[];
@@ -33,11 +26,7 @@ type SettingRow = {
 
 function valueToInputString(value: unknown): string {
   if (typeof value === "string") return value;
-  if (
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    value == null
-  ) {
+  if (typeof value === "number" || typeof value === "boolean" || value == null) {
     return String(value ?? "");
   }
   try {
@@ -65,8 +54,7 @@ function rowsToSettings(rows: SettingRow[]): Record<string, unknown> {
   return out;
 }
 
-const inputBase =
-  "box-border min-h-[30px] w-full rounded-md border border-input bg-background px-3 text-sm";
+const inputBase = "box-border min-h-[30px] w-full rounded-md border border-input bg-background px-3 text-sm";
 
 export function ModelPresetsEditor({
   presets,
@@ -109,23 +97,14 @@ export function ModelPresetsEditor({
     });
   }
 
-  function updateSettingRow(
-    rowId: number,
-    field: "key" | "value",
-    nextValue: string,
-  ) {
-    const nextRows = settingRows.map((row) =>
-      row.id === rowId ? { ...row, [field]: nextValue } : row,
-    );
+  function updateSettingRow(rowId: number, field: "key" | "value", nextValue: string) {
+    const nextRows = settingRows.map((row) => (row.id === rowId ? { ...row, [field]: nextValue } : row));
     setSettingRows(nextRows);
     commitRows(nextRows);
   }
 
   function addSettingRow() {
-    const nextRows = [
-      ...settingRows,
-      { id: nextSettingRowIdRef.current, key: "", value: "" },
-    ];
+    const nextRows = [...settingRows, { id: nextSettingRowIdRef.current, key: "", value: "" }];
     nextSettingRowIdRef.current += 1;
     setSettingRows(nextRows);
     commitRows(nextRows);
@@ -202,21 +181,13 @@ export function ModelPresetsEditor({
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium">Parameters</span>
-                <button
-                  type="button"
-                  className={ghostBtn}
-                  disabled={!canEdit}
-                  onClick={() => addSettingRow()}
-                >
+                <button type="button" className={ghostBtn} disabled={!canEdit} onClick={() => addSettingRow()}>
                   Add parameter
                 </button>
               </div>
               <div className="mt-2 flex flex-col gap-2.5">
                 {settingRows.map((row) => (
-                  <div
-                    key={row.id}
-                    className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_auto]"
-                  >
+                  <div key={row.id} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <input
                       className={inputBase}
                       placeholder="key"
@@ -245,11 +216,7 @@ export function ModelPresetsEditor({
             </div>
 
             <div className="flex justify-end gap-2.5">
-              <button
-                type="button"
-                className={cn(ghostBtn, ghostDanger)}
-                onClick={() => void handleDelete()}
-              >
+              <button type="button" className={cn(ghostBtn, ghostDanger)} onClick={() => void handleDelete()}>
                 Delete
               </button>
               <AsyncButton className={ghostBtn} disabled={!canEdit} onClickAsync={savePreset}>

@@ -107,10 +107,7 @@ export function AgentsEditor({
         ? (cfg.tools as Record<string, unknown>)
         : {};
     const raw = tools[toolName];
-    const rec =
-      raw && typeof raw === "object" && !Array.isArray(raw)
-        ? (raw as Record<string, unknown>)
-        : {};
+    const rec = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
     const config =
       rec.rules && typeof rec.rules === "object" && !Array.isArray(rec.rules)
         ? (rec.rules as Record<string, unknown>)
@@ -174,11 +171,7 @@ export function AgentsEditor({
     if (!tool || typeof tool !== "object" || Array.isArray(tool)) return {};
     const rec = tool as Record<string, unknown>;
     const defaultRulesRaw = rec.default_rules;
-    if (
-      defaultRulesRaw &&
-      typeof defaultRulesRaw === "object" &&
-      !Array.isArray(defaultRulesRaw)
-    ) {
+    if (defaultRulesRaw && typeof defaultRulesRaw === "object" && !Array.isArray(defaultRulesRaw)) {
       return { ...(defaultRulesRaw as Record<string, unknown>) };
     }
     const rulesSchema =
@@ -186,9 +179,7 @@ export function AgentsEditor({
         ? (rec.rules_schema as Record<string, unknown>)
         : {};
     const properties =
-      rulesSchema.properties &&
-      typeof rulesSchema.properties === "object" &&
-      !Array.isArray(rulesSchema.properties)
+      rulesSchema.properties && typeof rulesSchema.properties === "object" && !Array.isArray(rulesSchema.properties)
         ? (rulesSchema.properties as Record<string, unknown>)
         : {};
     const defaults: Record<string, unknown> = {};
@@ -217,8 +208,7 @@ export function AgentsEditor({
     const existing = toolConfigDrafts[toolName];
     if (existing != null) return existing;
     const current = getToolConfig(toolName).config;
-    const base =
-      Object.keys(current).length > 0 ? current : getToolDefaultConfig(toolName);
+    const base = Object.keys(current).length > 0 ? current : getToolDefaultConfig(toolName);
     return JSON.stringify(base, null, 2);
   }
 
@@ -311,11 +301,7 @@ export function AgentsEditor({
                     >
                       Delete
                     </button>
-                    <AsyncButton
-                      className={ghostBtn}
-                      disabled={!canEdit}
-                      onClickAsync={saveAgent}
-                    >
+                    <AsyncButton className={ghostBtn} disabled={!canEdit} onClickAsync={saveAgent}>
                       Save
                     </AsyncButton>
                     <AsyncButton
@@ -384,7 +370,10 @@ export function AgentsEditor({
                                     {expanded ? "▾" : "▸"}
                                   </button>
                                 ) : (
-                                  <span className="inline-flex h-4 w-4 items-center justify-center text-[11px] text-transparent" aria-hidden="true">
+                                  <span
+                                    className="inline-flex h-4 w-4 items-center justify-center text-[11px] text-transparent"
+                                    aria-hidden="true"
+                                  >
                                     ▸
                                   </span>
                                 )}

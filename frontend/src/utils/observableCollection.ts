@@ -27,9 +27,7 @@ export type ObservableCollection<T extends { id: string }> = {
   updateById: (id: string, updater: (current: T) => T) => boolean;
 };
 
-export function createObservableCollection<T extends { id: string }>(
-  initial: T[] = [],
-): ObservableCollection<T> {
+export function createObservableCollection<T extends { id: string }>(initial: T[] = []): ObservableCollection<T> {
   let items: T[] = [];
   let byId = new Map<string, T>();
   const version$ = createObservable({ value: 0 });

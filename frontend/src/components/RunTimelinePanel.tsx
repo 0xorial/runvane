@@ -9,7 +9,13 @@ type RunStep = {
   summary: string;
 };
 
-type RunRow = { id: string; status?: string; user_message?: string; cancel_requested?: boolean; pause_requested?: boolean };
+type RunRow = {
+  id: string;
+  status?: string;
+  user_message?: string;
+  cancel_requested?: boolean;
+  pause_requested?: boolean;
+};
 
 type RunTimelinePanelProps = {
   runs: RunRow[];
@@ -19,13 +25,7 @@ type RunTimelinePanelProps = {
   onRefresh?: () => void;
 };
 
-export function RunTimelinePanel({
-  runs,
-  selectedRunId,
-  onSelectRun,
-  runSteps,
-  onRefresh,
-}: RunTimelinePanelProps) {
+export function RunTimelinePanel({ runs, selectedRunId, onSelectRun, runSteps, onRefresh }: RunTimelinePanelProps) {
   async function cancelRun() {
     if (!selectedRunId) return false;
     await cancelRunById(selectedRunId);
@@ -49,25 +49,13 @@ export function RunTimelinePanel({
     <aside className="run-panel">
       <div className="run-panel-header">Run timeline</div>
       <div className="run-actions">
-        <AsyncButton
-          className="run-action-btn"
-          onClickAsync={cancelRun}
-          disabled={!selectedRunId}
-        >
+        <AsyncButton className="run-action-btn" onClickAsync={cancelRun} disabled={!selectedRunId}>
           Cancel run
         </AsyncButton>
-        <AsyncButton
-          className="run-action-btn"
-          onClickAsync={pauseRun}
-          disabled={!selectedRunId}
-        >
+        <AsyncButton className="run-action-btn" onClickAsync={pauseRun} disabled={!selectedRunId}>
           Pause
         </AsyncButton>
-        <AsyncButton
-          className="run-action-btn"
-          onClickAsync={resumePause}
-          disabled={!selectedRunId}
-        >
+        <AsyncButton className="run-action-btn" onClickAsync={resumePause} disabled={!selectedRunId}>
           Resume pause
         </AsyncButton>
       </div>

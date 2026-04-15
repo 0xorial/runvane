@@ -93,9 +93,7 @@ export class ModelPresetsRepo {
   }
 
   delete(id: number): "ok" | "not_found" {
-    const row = this.db
-      .prepare("SELECT id FROM model_presets WHERE id = ?")
-      .get(id) as { id?: number } | undefined;
+    const row = this.db.prepare("SELECT id FROM model_presets WHERE id = ?").get(id) as { id?: number } | undefined;
     if (!row?.id) return "not_found";
     this.db.prepare("DELETE FROM model_presets WHERE id = ?").run(id);
     return "ok";

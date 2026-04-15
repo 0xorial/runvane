@@ -20,9 +20,7 @@ export function createObservable<T extends object>(initial: T): Observable<T> {
       mutator(value);
       // `useSyncExternalStore` compares snapshots by reference. We mutate in place,
       // so force a new top-level reference to guarantee subscribers re-render.
-      value = (Array.isArray(value)
-        ? [...value]
-        : { ...(value as Record<string, unknown>) }) as T;
+      value = (Array.isArray(value) ? [...value] : { ...(value as Record<string, unknown>) }) as T;
       notify();
     },
     subscribe: (listener) => {

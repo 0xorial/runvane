@@ -12,11 +12,7 @@ type GlobalModelSettingsCardProps = {
 
 const labelRow = "inline-flex items-center gap-1.5 text-[13px] font-bold text-muted-foreground";
 
-export function GlobalModelSettingsCard({
-  settings,
-  setSettings,
-  modelGroups,
-}: GlobalModelSettingsCardProps) {
+export function GlobalModelSettingsCard({ settings, setSettings, modelGroups }: GlobalModelSettingsCardProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-3.5">
       <div className="mb-2.5 text-[15px] font-extrabold">Global settings</div>

@@ -2,9 +2,7 @@ import type { AgentListItemResponse } from "../../../../backend/src/routes/agent
 
 export type AgentLlmRow = { provider_id: string; model: string };
 
-export function getAgentLlm(
-  agent: AgentListItemResponse | null | undefined,
-): AgentLlmRow {
+export function getAgentLlm(agent: AgentListItemResponse | null | undefined): AgentLlmRow {
   const cfg = agent?.default_llm_configuration;
   const modelRef = agent?.model_reference;
   if (!cfg && !modelRef) return { provider_id: "", model: "" };
@@ -14,10 +12,7 @@ export function getAgentLlm(
   };
 }
 
-export function patchAgentLlm(
-  agent: AgentListItemResponse,
-  patch: Partial<AgentLlmRow>,
-): AgentListItemResponse {
+export function patchAgentLlm(agent: AgentListItemResponse, patch: Partial<AgentLlmRow>): AgentListItemResponse {
   const cur = getAgentLlm(agent);
   return {
     ...agent,

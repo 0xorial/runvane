@@ -44,14 +44,10 @@ export function MoveSelectedToGroupControl({
     try {
       if (selectedConversationIds.length === 0) return;
       const requestBody = {
-        group_id:
-          Object.prototype.hasOwnProperty.call(target, "groupId")
-            ? (target.groupId ?? null)
-            : undefined,
-        new_group_name:
-          Object.prototype.hasOwnProperty.call(target, "newGroupName")
-            ? String(target.newGroupName ?? "")
-            : undefined,
+        group_id: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
+        new_group_name: Object.prototype.hasOwnProperty.call(target, "newGroupName")
+          ? String(target.newGroupName ?? "")
+          : undefined,
       };
 
       const results = await Promise.allSettled(
@@ -120,23 +116,16 @@ export function MoveSelectedToGroupControl({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onSelect={() => void moveSelected({ groupId: null })}>
-            No group
-          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void moveSelected({ groupId: null })}>No group</DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-52">
               {knownGroups.map((group) => (
-                <DropdownMenuItem
-                  key={group.id}
-                  onSelect={() => void moveSelected({ groupId: group.id })}
-                >
+                <DropdownMenuItem key={group.id} onSelect={() => void moveSelected({ groupId: group.id })}>
                   {group.name}
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
-                New group...
-              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>New group...</DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuContent>

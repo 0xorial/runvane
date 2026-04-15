@@ -16,9 +16,7 @@ function ensureMigrationsTable(db: SqliteDb): void {
 export function runMigrations(db: SqliteDb, dir?: string): void {
   ensureMigrationsTable(db);
 
-  const migrationsDir = dir
-    ? path.resolve(dir)
-    : path.resolve(process.cwd(), "migrations");
+  const migrationsDir = dir ? path.resolve(dir) : path.resolve(process.cwd(), "migrations");
 
   if (!fs.existsSync(migrationsDir)) return;
 
@@ -34,9 +32,7 @@ export function runMigrations(db: SqliteDb, dir?: string): void {
       .map((r) => String((r as { id: string }).id)),
   );
 
-  const insertApplied = db.prepare(
-    "INSERT INTO _migrations (id, applied_at) VALUES (?, ?)",
-  );
+  const insertApplied = db.prepare("INSERT INTO _migrations (id, applied_at) VALUES (?, ?)");
 
   const pending = files.filter((f) => !applied.has(f));
   if (pending.length === 0) {

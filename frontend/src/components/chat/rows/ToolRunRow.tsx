@@ -23,8 +23,7 @@ type ToolRunRowProps = {
 /** Mirrors frontend2/src/components/chat/ToolCallBlock.tsx */
 export function ToolRunRow({ entry }: ToolRunRowProps) {
   const { conversationId: rawConversationId } = useParams();
-  const conversationId =
-    rawConversationId && rawConversationId !== "new" ? rawConversationId : "";
+  const conversationId = rawConversationId && rawConversationId !== "new" ? rawConversationId : "";
   const toolName = entry.toolId || "tool";
   const [expanded, setExpanded] = useState(entry.state === "requested");
   const [approving, setApproving] = useState(false);
@@ -98,35 +97,22 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
           <Wrench className="h-3 w-3 shrink-0 text-primary" />
           <span className="font-mono font-medium text-foreground">{toolName}</span>
           <StatusIcon className={cn("ml-auto h-3 w-3 shrink-0", statusClass)} />
-          <span
-            className={cn(
-              "text-[10px] font-medium",
-              isAwaiting ? "text-warning" : "text-muted-foreground",
-            )}
-          >
-            {isAwaiting || isRunning || isError
-              ? statusLabel
-              : isDone
-                ? "Done"
-                : ""}
+          <span className={cn("text-[10px] font-medium", isAwaiting ? "text-warning" : "text-muted-foreground")}>
+            {isAwaiting || isRunning || isError ? statusLabel : isDone ? "Done" : ""}
           </span>
         </button>
 
         {expanded ? (
           <div className="animate-slide-in space-y-2 border-t px-3 py-2">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Arguments
-              </span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Arguments</span>
               <pre className="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">
                 {stringifyMaybe(entry.parameters)}
               </pre>
             </div>
             {entry.result !== undefined && entry.result !== null && stringifyMaybe(entry.result).length > 0 ? (
               <div>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Result
-                </span>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Result</span>
                 <pre className="scrollbar-thin mt-1 max-h-40 overflow-y-auto overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">
                   {stringifyMaybe(entry.result)}
                 </pre>

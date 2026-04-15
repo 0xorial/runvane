@@ -18,14 +18,10 @@ export const AgentDefaultLlmConfigurationSchema = z
   })
   .strict();
 
-export type AgentDefaultLlmConfiguration = z.infer<
-  typeof AgentDefaultLlmConfigurationSchema
->;
+export type AgentDefaultLlmConfiguration = z.infer<typeof AgentDefaultLlmConfigurationSchema>;
 
 function formatConfigError(context: string, err: z.ZodError): Error {
-  const details = err.issues
-    .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
-    .join("; ");
+  const details = err.issues.map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`).join("; ");
   return new Error(`${context} invalid default_llm_configuration: ${details}`);
 }
 

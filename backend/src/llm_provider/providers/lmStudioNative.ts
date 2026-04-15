@@ -49,10 +49,7 @@ function usageFromPayload(usage: unknown): StreamTextCompletionUsage | undefined
       completionTokens: completionTokensRaw,
       ...(cachedPromptTokens !== undefined
         ? {
-            cachedPromptTokens: Math.min(
-              cachedPromptTokens,
-              Math.max(0, Math.trunc(promptTokensRaw)),
-            ),
+            cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(promptTokensRaw))),
           }
         : {}),
     };
@@ -69,10 +66,7 @@ function usageFromPayload(usage: unknown): StreamTextCompletionUsage | undefined
       completionTokens: Math.max(0, totalTokensRaw - promptTokensRaw),
       ...(cachedPromptTokens !== undefined
         ? {
-            cachedPromptTokens: Math.min(
-              cachedPromptTokens,
-              Math.max(0, Math.trunc(promptTokensRaw)),
-            ),
+            cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(promptTokensRaw))),
           }
         : {}),
     };
@@ -86,10 +80,7 @@ function usageFromStats(stats: unknown): StreamTextCompletionUsage | undefined {
   const promptTokensRaw = rec.input_tokens;
   const completionTokensRaw = rec.total_output_tokens;
   const cachedPromptRaw =
-    rec.cached_input_tokens ??
-    rec.cache_read_input_tokens ??
-    rec.cached_prompt_tokens ??
-    rec.cached_tokens;
+    rec.cached_input_tokens ?? rec.cache_read_input_tokens ?? rec.cached_prompt_tokens ?? rec.cached_tokens;
   const cachedPromptTokens =
     typeof cachedPromptRaw === "number" && Number.isFinite(cachedPromptRaw)
       ? Math.max(0, Math.trunc(cachedPromptRaw))
@@ -105,10 +96,7 @@ function usageFromStats(stats: unknown): StreamTextCompletionUsage | undefined {
       completionTokens: completionTokensRaw,
       ...(cachedPromptTokens !== undefined
         ? {
-            cachedPromptTokens: Math.min(
-              cachedPromptTokens,
-              Math.max(0, Math.trunc(promptTokensRaw)),
-            ),
+            cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(promptTokensRaw))),
           }
         : {}),
     };
@@ -262,10 +250,7 @@ export class LmStudioNativeProvider implements LlmProvider {
     const requestUrl = `${baseUrl}/models`;
     if (!baseUrl) return { ok: false, detail: "base_url is required" };
     try {
-      logger.info(
-        { providerId: this.id, baseUrl, requestUrl },
-        "[llm-provider] native connectivity request formatted",
-      );
+      logger.info({ providerId: this.id, baseUrl, requestUrl }, "[llm-provider] native connectivity request formatted");
       const res = await fetch(requestUrl, { method: "GET" });
       if (!res.ok) {
         const body = await res.text();
@@ -284,18 +269,12 @@ export class LmStudioNativeProvider implements LlmProvider {
   async listModels(settings: ProviderSettingsDict): Promise<string[]> {
     const baseUrl = normalizeBaseUrl(settings, this.defaultBaseUrl);
     const requestUrl = `${baseUrl}/models`;
-    logger.info(
-      { providerId: this.id, baseUrl, requestUrl },
-      "[llm-provider] models request sending",
-    );
+    logger.info({ providerId: this.id, baseUrl, requestUrl }, "[llm-provider] models request sending");
     const res = await fetch(requestUrl, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
     });
-    logger.info(
-      { providerId: this.id, status: res.status },
-      "[llm-provider] models response received",
-    );
+    logger.info({ providerId: this.id, status: res.status }, "[llm-provider] models response received");
     if (!res.ok) {
       throw new Error(`models fetch failed (${res.status})`);
     }
@@ -312,10 +291,7 @@ export class LmStudioNativeProvider implements LlmProvider {
     const uniqueModels = Array.from(
       new Set(candidates.map((x) => parseModelIdentifier(x)).filter((x) => x.length > 0)),
     );
-    logger.info(
-      { providerId: this.id, count: uniqueModels.length },
-      "[llm-provider] models parsed",
-    );
+    logger.info({ providerId: this.id, count: uniqueModels.length }, "[llm-provider] models parsed");
     return uniqueModels;
   }
 
@@ -397,8 +373,8 @@ export class LmStudioNativeProvider implements LlmProvider {
           usageFromPayload(parsedRec.usage) ??
           usageFromStats(parsedRec.stats) ??
           (parsedRec.result && typeof parsedRec.result === "object"
-            ? usageFromPayload((parsedRec.result as { usage?: unknown }).usage) ??
-              usageFromStats((parsedRec.result as { stats?: unknown }).stats)
+            ? (usageFromPayload((parsedRec.result as { usage?: unknown }).usage) ??
+              usageFromStats((parsedRec.result as { stats?: unknown }).stats))
             : undefined);
         if (usage) streamUsage = usage;
       }

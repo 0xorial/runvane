@@ -20,11 +20,7 @@ export function ChatMessage({ message, onToolApprove, onToolDeny }: ChatMessageP
             isUser ? "bg-secondary" : "bg-primary/10 glow-accent-sm"
           }`}
         >
-          {isUser ? (
-            <User className="w-4 h-4 text-secondary-foreground" />
-          ) : (
-            <Bot className="w-4 h-4 text-primary" />
-          )}
+          {isUser ? <User className="w-4 h-4 text-secondary-foreground" /> : <Bot className="w-4 h-4 text-primary" />}
         </div>
 
         <div className="flex-1 min-w-0 space-y-2">
@@ -32,22 +28,13 @@ export function ChatMessage({ message, onToolApprove, onToolDeny }: ChatMessageP
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               {isUser ? "You" : "Agent"}
             </span>
-            {message.llmRequest && (
-              <LLMRequestBadge request={message.llmRequest} />
-            )}
+            {message.llmRequest && <LLMRequestBadge request={message.llmRequest} />}
           </div>
 
-          <div className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-            {message.content}
-          </div>
+          <div className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{message.content}</div>
 
           {message.toolCalls?.map((tc) => (
-            <ToolCallBlock
-              key={tc.id}
-              toolCall={tc}
-              onApprove={onToolApprove}
-              onDeny={onToolDeny}
-            />
+            <ToolCallBlock key={tc.id} toolCall={tc} onApprove={onToolApprove} onDeny={onToolDeny} />
           ))}
         </div>
       </div>

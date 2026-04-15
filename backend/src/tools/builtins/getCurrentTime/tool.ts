@@ -1,23 +1,8 @@
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-} from "../../baseTool.js";
-import {
-  getCurrentTimeParamsSchema,
-  parseGetCurrentTimeToolParams,
-  type GetCurrentTimeToolParams,
-} from "./params.js";
-import {
-  getCurrentTimeRulesSchema,
-  parseGetCurrentTimeToolRules,
-  type GetCurrentTimeToolRules,
-} from "./rules.js";
+import { BaseTool, type RuleEvaluationResult, type ToolPermissionContext } from "../../baseTool.js";
+import { getCurrentTimeParamsSchema, parseGetCurrentTimeToolParams, type GetCurrentTimeToolParams } from "./params.js";
+import { getCurrentTimeRulesSchema, parseGetCurrentTimeToolRules, type GetCurrentTimeToolRules } from "./rules.js";
 
-export class GetCurrentTimeTool extends BaseTool<
-  GetCurrentTimeToolParams,
-  GetCurrentTimeToolRules
-> {
+export class GetCurrentTimeTool extends BaseTool<GetCurrentTimeToolParams, GetCurrentTimeToolRules> {
   getName(): string {
     return "get_current_time";
   }
@@ -50,16 +35,9 @@ export class GetCurrentTimeTool extends BaseTool<
     return parseGetCurrentTimeToolRules(raw);
   }
 
-  evaluatePermission(
-    context: ToolPermissionContext<GetCurrentTimeToolRules>,
-  ): RuleEvaluationResult[] {
+  evaluatePermission(context: ToolPermissionContext<GetCurrentTimeToolRules>): RuleEvaluationResult[] {
     const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission =
-      allowedRule === "always"
-        ? "allow"
-        : allowedRule === "never"
-        ? "forbid"
-        : "ask_user";
+    const permission = allowedRule === "always" ? "allow" : allowedRule === "never" ? "forbid" : "ask_user";
     return [
       {
         ruleName: "allowed",

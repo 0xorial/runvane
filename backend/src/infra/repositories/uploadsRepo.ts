@@ -50,11 +50,7 @@ export class UploadsRepo {
     };
   }
 
-  async saveUpload(input: {
-    name: string;
-    mimeType: string;
-    bytes: ArrayBuffer;
-  }): Promise<ChatAttachment> {
+  async saveUpload(input: { name: string; mimeType: string; bytes: ArrayBuffer }): Promise<ChatAttachment> {
     const id = crypto.randomUUID();
     const safeName = safeFilename(input.name);
     const mimeType = String(input.mimeType || "application/octet-stream");
@@ -83,10 +79,7 @@ export class UploadsRepo {
     }
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const rec = raw as Record<string, unknown>;
-    const sizeBytes =
-      typeof rec.sizeBytes === "number" && Number.isFinite(rec.sizeBytes)
-        ? rec.sizeBytes
-        : null;
+    const sizeBytes = typeof rec.sizeBytes === "number" && Number.isFinite(rec.sizeBytes) ? rec.sizeBytes : null;
     const meta: StoredUploadMeta | null =
       typeof rec.id === "string" &&
       typeof rec.name === "string" &&

@@ -23,9 +23,7 @@ export const SseType = {
 } as const;
 
 export type SseEventType = (typeof SseType)[keyof typeof SseType];
-export const RUN_SSE_TYPE_VALUES: ReadonlySet<SseEventType> = new Set(
-  Object.values(SseType),
-);
+export const RUN_SSE_TYPE_VALUES: ReadonlySet<SseEventType> = new Set(Object.values(SseType));
 
 export type UserMessageSsePayload = {
   type: typeof SseType.USER_MESSAGE;
@@ -340,10 +338,7 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
 ]);
 
 /** Wire event sent over SSE. */
-type ConversationScopedPayload = Exclude<
-  SsePayload,
-  ConversationCreatedSsePayload | ConversationUpdatedSsePayload
->;
+type ConversationScopedPayload = Exclude<SsePayload, ConversationCreatedSsePayload | ConversationUpdatedSsePayload>;
 
 export type SseConversationEvent = ConversationScopedPayload & {
   conversation_id: string;
@@ -492,9 +487,7 @@ export function parseSseEvent(data: string): SseEvent | null {
 export function sseEventType(ev: unknown): SseEventType | null {
   if (!ev || typeof ev !== "object" || Array.isArray(ev)) return null;
   const t = (ev as { type?: unknown }).type;
-  return typeof t === "string" && RUN_SSE_TYPE_VALUES.has(t as SseEventType)
-    ? (t as SseEventType)
-    : null;
+  return typeof t === "string" && RUN_SSE_TYPE_VALUES.has(t as SseEventType) ? (t as SseEventType) : null;
 }
 
 export function isSseEvent(ev: unknown): ev is SseEvent {

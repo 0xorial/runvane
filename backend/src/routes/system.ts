@@ -3,10 +3,7 @@ import { streamSSE } from "hono/streaming";
 
 import type { Runtime } from "../bootstrap/runtime.js";
 import { logger } from "../infra/logger.js";
-import {
-  buildTypesPingResponse,
-  parseSseAfterSeqHeader,
-} from "./system.types.js";
+import { buildTypesPingResponse, parseSseAfterSeqHeader } from "./system.types.js";
 
 export function createSystemRouter(runtime: Runtime) {
   const r = new Hono();
@@ -48,12 +45,10 @@ export function createSystemRouter(runtime: Runtime) {
       unsubscribe = runtime.hub.subscribe(
         (ev) => {
           if (aborted) return;
-          void stream.writeSSE(
-            {
-              id: String(ev.seq),
-              data: JSON.stringify(ev),
-            },
-          );
+          void stream.writeSSE({
+            id: String(ev.seq),
+            data: JSON.stringify(ev),
+          });
         },
         {
           replay: true,

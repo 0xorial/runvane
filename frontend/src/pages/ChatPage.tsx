@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import {
-  createConversation,
-  postConversationMessage,
-  uploadFile,
-} from "../api/client";
+import { createConversation, postConversationMessage, uploadFile } from "../api/client";
 import {
   agentIdFromSearchParams,
   ChatAgentToolbar,
@@ -13,14 +9,8 @@ import {
 } from "../components/chat/ChatAgentToolbar";
 import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
-import {
-  ChatMessageRow,
-  messageRowKey,
-} from "../components/chat/ChatMessageRow";
-import type {
-  AsyncButtonHandle,
-  AsyncResult,
-} from "../components/ui/AsyncButton";
+import { ChatMessageRow, messageRowKey } from "../components/chat/ChatMessageRow";
+import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
@@ -33,7 +23,7 @@ async function sendMessageToConversation(
   llmProviderId: string,
   llmModel: string,
   modelPresetId: number | null,
-  attachmentIds: string[]
+  attachmentIds: string[],
 ): Promise<AsyncResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
@@ -71,38 +61,28 @@ export function ChatPage({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [topAnchorEntryId, setTopAnchorEntryId] = useState<string | null>(null);
-  const [agentSelection, setAgentSelection] = useState<ChatAgentSelection>(
-    () => ({
-      agentId: agentIdFromSearchParams(searchParams) || "",
-      llmProviderId: "",
-      llmModel: "",
-      modelPresetId: null,
-    })
-  );
+  const [agentSelection, setAgentSelection] = useState<ChatAgentSelection>(() => ({
+    agentId: agentIdFromSearchParams(searchParams) || "",
+    llmProviderId: "",
+    llmModel: "",
+    modelPresetId: null,
+  }));
 
-  const onAgentSelectionChange = useCallback(
-    (selection: ChatAgentSelection) => {
-      setAgentSelection(selection);
-    },
-    []
-  );
+  const onAgentSelectionChange = useCallback((selection: ChatAgentSelection) => {
+    setAgentSelection(selection);
+  }, []);
 
-  const { chatEntries, appendOptimisticUserMessage } =
-    useChatSession(conversationId);
+  const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
-    const id = requestAnimationFrame(() =>
-      composerTextareaRef.current?.focus()
-    );
+    const id = requestAnimationFrame(() => composerTextareaRef.current?.focus());
     return () => cancelAnimationFrame(id);
   }, [conversationId, composerTextareaRef]);
 
   useEffect(() => {
     const urls = selectedFiles.map((file) =>
-      file.type.startsWith("image/") || file.type === "application/pdf"
-        ? URL.createObjectURL(file)
-        : ""
+      file.type.startsWith("image/") || file.type === "application/pdf" ? URL.createObjectURL(file) : "",
     );
     setPreviewUrls(urls);
     return () => {
@@ -140,19 +120,13 @@ export function ChatPage({
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* important to not add any padding to the content here */}
           <AnchorTopScrollArea
-            className={cn(
-              "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden"
-            )}
+            className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
             topAnchorEntryId={topAnchorEntryId}
           >
             {chatEntries.map((entry$) => {
               const entry = entry$.get();
               return (
-                <div
-                  key={messageRowKey(entry$)}
-                  data-chat-entry-id={entry.id}
-                  data-chat-entry-type={entry.type}
-                >
+                <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
                   <ChatMessageRow entry$={entry$} />
                 </div>
               );
@@ -169,8 +143,7 @@ export function ChatPage({
           const items = Array.from(e.clipboardData?.items ?? []);
           const images: File[] = [];
           for (const item of items) {
-            if (item.kind !== "file" || !item.type.startsWith("image/"))
-              continue;
+            if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
             const file = item.getAsFile();
             if (file) images.push(file);
           }
@@ -188,12 +161,7 @@ export function ChatPage({
         onPickFiles={() => fileInputRef.current?.click()}
         canSend={canSend}
         placeholder="Send a message…"
-        selectionSlot={
-          <ChatAgentToolbar
-            onSelectionChange={onAgentSelectionChange}
-            embedded
-          />
-        }
+        selectionSlot={<ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />}
         attachmentsSlot={
           selectedFiles.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
@@ -202,9 +170,7 @@ export function ChatPage({
                   key={`${file.name}-${file.size}-${idx}`}
                   type="button"
                   className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
-                  onClick={() =>
-                    setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))
-                  }
+                  onClick={() => setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))}
                   title="Remove file"
                 >
                   {previewUrls[idx] ? (
@@ -215,23 +181,15 @@ export function ChatPage({
                         title={file.name}
                       />
                     ) : (
-                      <img
-                        className="h-[76px] w-full rounded-md object-cover"
-                        src={previewUrls[idx]}
-                        alt={file.name}
-                      />
+                      <img className="h-[76px] w-full rounded-md object-cover" src={previewUrls[idx]} alt={file.name} />
                     )
                   ) : (
                     <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
                       FILE
                     </div>
                   )}
-                  <div className="break-words text-xs leading-tight">
-                    {file.name}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    Remove
-                  </div>
+                  <div className="break-words text-xs leading-tight">{file.name}</div>
+                  <div className="text-[11px] text-muted-foreground">Remove</div>
                 </button>
               ))}
             </div>
@@ -266,7 +224,7 @@ export function ChatPage({
                   pathname: `/chat/${encodeURIComponent(cid)}`,
                   search: q ? `?${q}` : "",
                 },
-                { replace: true }
+                { replace: true },
               );
             } else {
               const rowId = appendOptimisticUserMessage({
@@ -289,7 +247,7 @@ export function ChatPage({
               agentSelection.llmProviderId,
               agentSelection.llmModel,
               agentSelection.modelPresetId,
-              uploadedAttachments.map((x) => x.id)
+              uploadedAttachments.map((x) => x.id),
             );
           })();
         }}

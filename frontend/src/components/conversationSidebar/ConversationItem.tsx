@@ -14,17 +14,11 @@ import {
 import { cn } from "@/lib/utils";
 import { subscribeGlobalLive } from "../../protocol/runLiveClient";
 import { SseType } from "../../protocol/sseTypes";
-import {
-  formatExactChatTime,
-  formatRelativeChatTime,
-} from "../../utils/formatRelativeChatTime";
+import { formatExactChatTime, formatRelativeChatTime } from "../../utils/formatRelativeChatTime";
 import { LlmMetaBadge } from "../chat/LlmMetaBadge";
 import { NewGroupDialog } from "./NewGroupDialog";
 import type { ConversationGroupRow, ConversationRow } from "./types";
-import {
-  estimateConversationCostUsd,
-  type ModelPricing,
-} from "@/lib/costEstimation";
+import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
 
 type ConversationItemProps = {
   conversation: ConversationRow;
@@ -73,10 +67,7 @@ export function ConversationItem({
   const promptTokens = Number(conversation.prompt_tokens_total ?? 0);
   const cachedPromptTokens = Number(conversation.cached_prompt_tokens_total ?? 0);
   const completionTokens = Number(conversation.completion_tokens_total ?? 0);
-  const estimatedCostUsd = estimateConversationCostUsd(
-    conversation.token_usage_by_model ?? [],
-    pricingByModel,
-  );
+  const estimatedCostUsd = estimateConversationCostUsd(conversation.token_usage_by_model ?? [], pricingByModel);
 
   async function submitNewGroupDialog() {
     const groupName = newGroupName.trim();
@@ -111,9 +102,7 @@ export function ConversationItem({
         className={cn(
           "group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs transition-colors",
           nested && "ml-3",
-          active
-            ? "bg-secondary text-foreground"
-            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+          active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
         )}
       >
         <div className="flex w-6 shrink-0 items-center justify-center">
@@ -146,10 +135,7 @@ export function ConversationItem({
             </span>
           </div>
           {stamp ? (
-            <span
-              className="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground"
-              title={stampExact}
-            >
+            <span className="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>
               {stamp}
             </span>
           ) : null}
@@ -193,9 +179,7 @@ export function ConversationItem({
                 </>
               ) : (
                 <>
-                  <DropdownMenuItem onSelect={() => void onRenameConversation(conversation)}>
-                    Rename
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void onRenameConversation(conversation)}>Rename</DropdownMenuItem>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-52">
@@ -207,16 +191,12 @@ export function ConversationItem({
                       {knownGroups.map((group) => (
                         <DropdownMenuItem
                           key={group.id}
-                          onSelect={() =>
-                            void onMoveConversationToGroup(conversation, { groupId: group.id })
-                          }
+                          onSelect={() => void onMoveConversationToGroup(conversation, { groupId: group.id })}
                         >
                           {group.name}
                         </DropdownMenuItem>
                       ))}
-                      <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>
-                        New group...
-                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setMoveDialogOpen(true)}>New group...</DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                   <DropdownMenuItem onSelect={() => void onSoftDeleteConversation(conversation)}>

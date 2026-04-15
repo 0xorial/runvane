@@ -38,9 +38,7 @@ export function parsePresetId(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function normalizePresetInput(
-  body: Record<string, unknown>
-): ModelPresetUpsertInput {
+export function normalizePresetInput(body: Record<string, unknown>): ModelPresetUpsertInput {
   const parsed = ModelPresetBodySchema.safeParse(body);
   if (!parsed.success) {
     return { name: "New preset", parameters: {} };
@@ -53,9 +51,7 @@ export function normalizePresetInput(
 }
 
 function formatZodError(context: string, err: z.ZodError): Error {
-  const details = err.issues
-    .map((i) => `${context}.${i.path.join(".") || "<root>"}: ${i.message}`)
-    .join("; ");
+  const details = err.issues.map((i) => `${context}.${i.path.join(".") || "<root>"}: ${i.message}`).join("; ");
   return new Error(`${context} validation failed: ${details}`);
 }
 

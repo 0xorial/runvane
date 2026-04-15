@@ -9,11 +9,7 @@ import {
 import { Paperclip, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  AsyncButton,
-  type AsyncButtonHandle,
-  type AsyncResult,
-} from "@/components/ui/AsyncButton";
+import { AsyncButton, type AsyncButtonHandle, type AsyncResult } from "@/components/ui/AsyncButton";
 
 /** Props for the chat footer where the user types and sends the next message. */
 export type MessageComposerProps = {
@@ -67,17 +63,9 @@ export function MessageComposer({
 
   return (
     <footer className="shrink-0 bg-card/40 px-2 pb-1.5 pt-1 backdrop-blur-sm">
-      <input
-        ref={fileInputRef}
-        className="hidden"
-        type="file"
-        multiple
-        onChange={onFileInputChange}
-      />
+      <input ref={fileInputRef} className="hidden" type="file" multiple onChange={onFileInputChange} />
       <div className="mx-auto w-full max-w-3xl">
-        {attachmentsSlot ? (
-          <div className="mb-1.5">{attachmentsSlot}</div>
-        ) : null}
+        {attachmentsSlot ? <div className="mb-1.5">{attachmentsSlot}</div> : null}
 
         <div
           className={cn(

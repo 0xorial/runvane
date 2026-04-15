@@ -38,10 +38,7 @@ export class InMemoryJobQueue {
         try {
           await this.handler(hint);
         } catch (e) {
-          logger.error(
-            { taskId: hint.taskId, error: e },
-            "[backend] task failed",
-          );
+          logger.error({ taskId: hint.taskId, error: e }, "[backend] task failed");
         }
       }
     } finally {

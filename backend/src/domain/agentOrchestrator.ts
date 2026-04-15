@@ -36,9 +36,7 @@ export class AgentOrchestrator {
     });
 
     const reply = fakeAssistantReply(job.message);
-    const chunks = [reply.slice(0, 16), reply.slice(16, 40), reply.slice(40)].filter(
-      (x) => x.length > 0,
-    );
+    const chunks = [reply.slice(0, 16), reply.slice(16, 40), reply.slice(40)].filter((x) => x.length > 0);
 
     for (const delta of chunks) {
       await sleep(120);

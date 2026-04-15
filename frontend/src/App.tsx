@@ -1,12 +1,4 @@
-import {
-  Navigate,
-  NavLink,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { ResizableSidePanel } from "@/components/ui/ResizableSidePanel";
@@ -94,19 +86,10 @@ export function App() {
         }
       />
       <Route path="/chat" element={<Navigate to="/chat/new" replace />} />
-      <Route
-        path="/permissions"
-        element={<Navigate to="/settings/tools" replace />}
-      />
-      <Route
-        path="/settings"
-        element={<Navigate to="/settings/model-providers" replace />}
-      />
+      <Route path="/permissions" element={<Navigate to="/settings/tools" replace />} />
+      <Route path="/settings" element={<Navigate to="/settings/model-providers" replace />} />
       <Route path="/settings/:section" element={<SettingsPage />} />
-      <Route
-        path="/playground/components"
-        element={<ComponentsPlaygroundPage />}
-      />
+      <Route path="/playground/components" element={<ComponentsPlaygroundPage />} />
       <Route path="*" element={<Navigate to="/chat/new" replace />} />
     </Routes>
   );
@@ -118,9 +101,7 @@ export function App() {
         {showTopHeader ? (
           <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/50 px-3 py-2 backdrop-blur-sm">
             <div className="flex flex-wrap items-center gap-2 md:gap-3">
-              <span className="text-sm font-semibold tracking-tight text-foreground">
-                Runvane
-              </span>
+              <span className="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
               <nav className="flex flex-wrap gap-2">
                 <NavLink
                   to="/chat/new"
@@ -178,9 +159,7 @@ export function App() {
                 <div
                   className={cn(
                     "h-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-200",
-                    chatSidebarVisible
-                      ? "opacity-100"
-                      : "pointer-events-none opacity-0",
+                    chatSidebarVisible ? "opacity-100" : "pointer-events-none opacity-0",
                   )}
                 >
                   <ConversationSidebar
@@ -191,14 +170,10 @@ export function App() {
                 </div>
               }
             >
-              <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                {appRoutes}
-              </section>
+              <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{appRoutes}</section>
             </ResizableSidePanel>
           ) : (
-            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              {appRoutes}
-            </section>
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{appRoutes}</section>
           )}
         </div>
       </div>

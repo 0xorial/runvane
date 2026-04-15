@@ -56,7 +56,7 @@ function normalizeGeneratedTitle(fullResponse: string): string | null {
 async function generateConversationTitleUsingSystemModel(
   llmProviderSettings: LlmProviderSettingsRepo,
   prompt: string,
-  onDelta: (delta: string) => void
+  onDelta: (delta: string) => void,
 ): Promise<TitleGenerationResult | null> {
   const doc = llmProviderSettings.getDocument();
   const providerId = String(doc.llm_configuration.provider_id || "").trim();
@@ -65,11 +65,7 @@ async function generateConversationTitleUsingSystemModel(
   const provider = llmProviderSettings.getProvider(providerId);
   const providerSettings = llmProviderSettings.getProviderSettings(providerId);
   if (!provider || !providerSettings) return null;
-  const completion = await provider.streamTextCompletion(
-    providerSettings,
-    { model, prompt },
-    onDelta
-  );
+  const completion = await provider.streamTextCompletion(providerSettings, { model, prompt }, onDelta);
   const fullResponse = String(completion.text || "");
   const clean = normalizeGeneratedTitle(fullResponse);
   return {
@@ -122,31 +118,22 @@ export async function maybeAutoTitleConversation({
   });
   let streamedResponse = "";
   try {
-    generated = await generateConversationTitleUsingSystemModel(
-      llmProviderSettings,
-      titlePrompt,
-      (delta) => {
-        streamedResponse += delta;
-        hub.publish(conversationId, {
-          type: SseType.TITLE_LLM_STREAM,
-          chat_entry_id: plannerEntry.id,
-          delta,
-        });
-      }
-    );
+    generated = await generateConversationTitleUsingSystemModel(llmProviderSettings, titlePrompt, (delta) => {
+      streamedResponse += delta;
+      hub.publish(conversationId, {
+        type: SseType.TITLE_LLM_STREAM,
+        chat_entry_id: plannerEntry.id,
+        delta,
+      });
+    });
   } catch (e) {
     generationError = e;
-    logger.error(
-      { conversationId, error: e },
-      "[chat] title generation request failed"
-    );
+    logger.error({ conversationId, error: e }, "[chat] title generation request failed");
   }
 
   if (generated) {
     const titleOutcomeFailed = generated.cleanTitle == null;
-    const titleOutcomeError = titleOutcomeFailed
-      ? "Generated title was empty, fallback used"
-      : "";
+    const titleOutcomeError = titleOutcomeFailed ? "Generated title was empty, fallback used" : "";
     chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,
@@ -159,9 +146,7 @@ export async function maybeAutoTitleConversation({
       ...(generated.promptTokens != null && generated.completionTokens != null
         ? {
             promptTokens: generated.promptTokens,
-            ...(generated.cachedPromptTokens != null
-              ? { cachedPromptTokens: generated.cachedPromptTokens }
-              : {}),
+            ...(generated.cachedPromptTokens != null ? { cachedPromptTokens: generated.cachedPromptTokens } : {}),
             completionTokens: generated.completionTokens,
           }
         : {}),
@@ -179,9 +164,7 @@ export async function maybeAutoTitleConversation({
       ...(generated.promptTokens != null && generated.completionTokens != null
         ? {
             prompt_tokens: generated.promptTokens,
-            ...(generated.cachedPromptTokens != null
-              ? { cached_prompt_tokens: generated.cachedPromptTokens }
-              : {}),
+            ...(generated.cachedPromptTokens != null ? { cached_prompt_tokens: generated.cachedPromptTokens } : {}),
             completion_tokens: generated.completionTokens,
           }
         : {}),
@@ -228,10 +211,7 @@ export async function maybeAutoTitleConversation({
   });
 
   if (generationError) {
-    const detail =
-      generationError instanceof Error
-        ? generationError.message
-        : String(generationError);
+    const detail = generationError instanceof Error ? generationError.message : String(generationError);
     chatEntries.updateTitleLlmStreamEntry(conversationId, {
       id: plannerEntryId,
       llmRequest: titlePrompt,

@@ -39,10 +39,7 @@ function taskFromRow(row: TaskRow): AgentTask {
     if (!conversationId) throw new Error("run_tool task missing payload.conversationId");
     if (!toolName) throw new Error("run_tool task missing payload.toolName");
     const agentIdRaw = row.payload.agentId;
-    const agentId =
-      typeof agentIdRaw === "string" && agentIdRaw.trim().length > 0
-        ? agentIdRaw.trim()
-        : null;
+    const agentId = typeof agentIdRaw === "string" && agentIdRaw.trim().length > 0 ? agentIdRaw.trim() : null;
     return {
       type: AgentTaskType.RUN_TOOL,
       conversationId,
@@ -55,8 +52,7 @@ function taskFromRow(row: TaskRow): AgentTask {
           : undefined,
       resumeAfterTool: row.payload.resumeAfterTool !== false,
       toolInvocationEntryId:
-        typeof row.payload.toolInvocationEntryId === "string" &&
-        row.payload.toolInvocationEntryId.trim().length > 0
+        typeof row.payload.toolInvocationEntryId === "string" && row.payload.toolInvocationEntryId.trim().length > 0
           ? row.payload.toolInvocationEntryId.trim()
           : undefined,
       approvalGranted: row.payload.approvalGranted === true,
@@ -69,22 +65,16 @@ function taskFromRow(row: TaskRow): AgentTask {
                 (row.payload.agentToolConfig as Record<string, unknown>).enabled === undefined
                   ? undefined
                   : (row.payload.agentToolConfig as Record<string, unknown>).enabled === true,
-              policy:
-                (() => {
-                  const raw = String(
-                    (row.payload.agentToolConfig as Record<string, unknown>).policy ?? "",
-                  );
-                  return raw === "allow" || raw === "ask_user" || raw === "forbid"
-                    ? raw
-                    : undefined;
-                })(),
-              rules:
-                (() => {
-                  const raw = (row.payload.agentToolConfig as Record<string, unknown>).rules;
-                  return raw && typeof raw === "object" && !Array.isArray(raw)
-                    ? (raw as Record<string, unknown>)
-                    : undefined;
-                })(),
+              policy: (() => {
+                const raw = String((row.payload.agentToolConfig as Record<string, unknown>).policy ?? "");
+                return raw === "allow" || raw === "ask_user" || raw === "forbid" ? raw : undefined;
+              })(),
+              rules: (() => {
+                const raw = (row.payload.agentToolConfig as Record<string, unknown>).rules;
+                return raw && typeof raw === "object" && !Array.isArray(raw)
+                  ? (raw as Record<string, unknown>)
+                  : undefined;
+              })(),
             }
           : undefined,
     };
@@ -92,10 +82,7 @@ function taskFromRow(row: TaskRow): AgentTask {
   throw new Error(`unsupported task_type: ${row.task_type}`);
 }
 
-export function createTaskEnqueueHelpers(opts: {
-  tasks: TasksRepo;
-  queue: InMemoryJobQueue;
-}): {
+export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemoryJobQueue }): {
   enqueueContinueConversation: (conversationId: string) => { taskId: number };
   enqueueRunTool: (input: EnqueueRunToolInput) => { taskId: number };
 } {
@@ -152,10 +139,7 @@ export function registerTaskQueueHandler(opts: {
       logger.debug({ taskId: row.id }, "[queue] task start skipped");
       return;
     }
-    logger.info(
-      { taskId: row.id, taskType: row.task_type },
-      "[queue] task marked started",
-    );
+    logger.info({ taskId: row.id, taskType: row.task_type }, "[queue] task marked started");
 
     try {
       const shouldCancel = () => tasks.isCancelledByUser(row.id);

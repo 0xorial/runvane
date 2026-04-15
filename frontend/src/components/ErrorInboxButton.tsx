@@ -1,16 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  dismissAllToasts,
-  dismissToast,
-  subscribeToastStore,
-} from "../utils/toast";
+import { dismissAllToasts, dismissToast, subscribeToastStore } from "../utils/toast";
 import type { ToastItem } from "../utils/toast";
 
 export function ErrorInboxButton() {
@@ -62,9 +54,7 @@ export function ErrorInboxButton() {
           </Button>
         </div>
         {count === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            No errors.
-          </div>
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">No errors.</div>
         ) : (
           <div className="max-h-64 overflow-y-auto p-2">
             {errors

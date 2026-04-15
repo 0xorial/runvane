@@ -27,16 +27,12 @@ export function ToolRegistry({ tools, onPermissionChange }: ToolRegistryProps) {
     <div className="p-3 space-y-4">
       <div className="flex items-center gap-2 px-1">
         <Shield className="w-4 h-4 text-primary" />
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Tool Permissions
-        </h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tool Permissions</h3>
       </div>
 
       {categories.map((cat) => (
         <div key={cat}>
-          <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground px-1 mb-1.5">
-            {cat}
-          </h4>
+          <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground px-1 mb-1.5">{cat}</h4>
           <div className="space-y-0.5">
             {tools
               .filter((t) => t.category === cat)
@@ -50,9 +46,7 @@ export function ToolRegistry({ tools, onPermissionChange }: ToolRegistryProps) {
                   >
                     <Wrench className="w-3 h-3 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-mono font-medium text-foreground">
-                        {tool.name}
-                      </span>
+                      <span className="text-xs font-mono font-medium text-foreground">{tool.name}</span>
                     </div>
                     <button
                       onClick={() => cyclePermission(tool)}

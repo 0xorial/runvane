@@ -5,11 +5,7 @@ import { cn } from "@/lib/utils";
 import { notifyError } from "../../utils/toast";
 import { Spinner } from "./Spinner";
 
-export type AsyncResult =
-  | boolean
-  | null
-  | undefined
-  | { ok?: boolean; error?: string; detail?: string };
+export type AsyncResult = boolean | null | undefined | { ok?: boolean; error?: string; detail?: string };
 
 export type AsyncButtonProps = {
   onClickAsync?: (event: MouseEvent<HTMLButtonElement>) => Promise<AsyncResult>;
@@ -33,24 +29,25 @@ export type AsyncButtonHandle = {
   trigger: () => void;
 };
 
-export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(function AsyncButton({
-  onClickAsync,
-  disabled = false,
-  className,
-  type = "button",
-  children,
-  iconOnly = false,
-  ariaLabel,
-  spinnerSize = 12,
-  successDurationMs = 5000,
-  errorDurationMs = 5000,
-  errorMessage = "Request failed",
-  falsyMessage = "Request failed. Please verify inputs and try again.",
-  onError,
-}, ref) {
-  const [state, setState] = useState<"idle" | "loading" | "success" | "error">(
-    "idle",
-  );
+export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(function AsyncButton(
+  {
+    onClickAsync,
+    disabled = false,
+    className,
+    type = "button",
+    children,
+    iconOnly = false,
+    ariaLabel,
+    spinnerSize = 12,
+    successDurationMs = 5000,
+    errorDurationMs = 5000,
+    errorMessage = "Request failed",
+    falsyMessage = "Request failed. Please verify inputs and try again.",
+    onError,
+  },
+  ref,
+) {
+  const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -87,10 +84,7 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
         resetTimerRef.current = null;
       }, successDurationMs);
     } catch (e) {
-      const message =
-        e instanceof Error
-          ? e.message
-          : String((e as { message?: string })?.message ?? errorMessage);
+      const message = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? errorMessage);
       setState("error");
       notifyError(message);
       if (onError) onError(e);

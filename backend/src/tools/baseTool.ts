@@ -45,10 +45,7 @@ export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknow
     context: ToolPermissionContext<TRules>,
   ): Promise<RuleEvaluationResult[]> | RuleEvaluationResult[];
 
-  abstract runTool(
-    params: TParams,
-    context: ToolRunContext,
-  ): Promise<unknown> | unknown;
+  abstract runTool(params: TParams, context: ToolRunContext): Promise<unknown> | unknown;
 }
 
 const rank: Record<ToolPermission, number> = {
@@ -57,9 +54,7 @@ const rank: Record<ToolPermission, number> = {
   allow: 2,
 };
 
-export function mostPermissivePermission(
-  rules: RuleEvaluationResult[],
-): ToolPermission {
+export function mostPermissivePermission(rules: RuleEvaluationResult[]): ToolPermission {
   if (rules.length === 0) return "forbid";
   let out: ToolPermission = "forbid";
   for (const row of rules) {

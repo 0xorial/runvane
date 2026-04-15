@@ -161,7 +161,7 @@ export function subscribeGlobalLive(
     pollIntervalMs?: number;
     recoveryCheckMs?: number;
     maxRecoveryWaits?: number;
-  }
+  },
 ): () => void {
   disposed = false;
   subscribers.add(handlers);
@@ -181,7 +181,7 @@ export function subscribeGlobalPoll(
     pollIntervalMs?: number;
     recoveryCheckMs?: number;
     maxRecoveryWaits?: number;
-  }
+  },
 ): () => void {
   disposed = false;
   pollSubscribers.add(pollTick);

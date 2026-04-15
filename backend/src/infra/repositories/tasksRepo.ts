@@ -41,10 +41,7 @@ function toRow(row: TaskDbRow): TaskRow {
 export class TasksRepo {
   constructor(private readonly db: SqliteDb) {}
 
-  create(input: {
-    task_type: string;
-    payload: Record<string, unknown>;
-  }): TaskRow {
+  create(input: { task_type: string; payload: Record<string, unknown> }): TaskRow {
     const now = new Date().toISOString();
     const inserted = this.db
       .prepare(

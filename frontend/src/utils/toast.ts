@@ -34,9 +34,7 @@ export function getToastStoreSnapshot(): ToastItem[] {
   return [...state.items];
 }
 
-export function subscribeToastStore(
-  onChange: (items: ToastItem[]) => void,
-): () => void {
+export function subscribeToastStore(onChange: (items: ToastItem[]) => void): () => void {
   function onStore(event: Event) {
     const ce = event as CustomEvent<ToastStoreDetail>;
     onChange(ce.detail?.items ?? []);
@@ -52,9 +50,7 @@ export function dismissToast(id: number): void {
 }
 
 export function ignoreToast(id: number): void {
-  state.items = state.items.map((x) =>
-    x.id === id ? { ...x, hidden: true } : x,
-  );
+  state.items = state.items.map((x) => (x.id === id ? { ...x, hidden: true } : x));
   emitStore();
 }
 

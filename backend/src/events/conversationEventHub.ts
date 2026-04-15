@@ -30,17 +30,12 @@ export class ConversationEventHub {
    * 2) emit buffered events newer than `afterSeq` (if provided)
    * 3) continue with live events via the attached listener
    */
-  subscribe(
-    listener: EventListener,
-    opts?: { replay?: boolean; afterSeq?: number | null },
-  ): () => void {
+  subscribe(listener: EventListener, opts?: { replay?: boolean; afterSeq?: number | null }): () => void {
     this.listeners.add(listener);
 
     if (opts?.replay) {
       const afterSeq =
-        typeof opts.afterSeq === "number" && Number.isFinite(opts.afterSeq)
-          ? Math.trunc(opts.afterSeq)
-          : null;
+        typeof opts.afterSeq === "number" && Number.isFinite(opts.afterSeq) ? Math.trunc(opts.afterSeq) : null;
       const buffered = [...this.replay];
       for (const ev of buffered) {
         if (afterSeq != null && ev.seq <= afterSeq) {

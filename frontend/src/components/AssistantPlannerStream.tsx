@@ -10,19 +10,12 @@ type AssistantPlannerStreamProps = {
 };
 
 /** Live planner LLM tokens; same shells as ThinkingComponent / persisted segments. */
-export function AssistantPlannerStream({
-  text,
-  embedded = false,
-}: AssistantPlannerStreamProps) {
+export function AssistantPlannerStream({ text, embedded = false }: AssistantPlannerStreamProps) {
   if (!text) return null;
 
   const finalRoute = isStreamingFinalAnswer(text);
-  const liveContent = finalRoute
-    ? extractStreamingFinalAnswerContent(text)
-    : null;
-  const toolNamePartial = !finalRoute
-    ? extractStreamingToolCallName(text)
-    : null;
+  const liveContent = finalRoute ? extractStreamingFinalAnswerContent(text) : null;
+  const toolNamePartial = !finalRoute ? extractStreamingToolCallName(text) : null;
 
   const inner = (
     <div className="run-progress">
@@ -35,28 +28,20 @@ export function AssistantPlannerStream({
                 <span className="run-plan-final__label">Final answer</span>
                 <span className="run-plan-final__badge">streaming</span>
               </div>
-              <div className="run-plan-final__body">
-                {liveContent !== null ? liveContent : "…"}
-              </div>
+              <div className="run-plan-final__body">{liveContent !== null ? liveContent : "…"}</div>
             </div>
           ) : (
             <>
               {toolNamePartial != null ? (
                 <div className="run-progress__thought-outcome run-progress__thought-outcome--pending">
                   <div className="run-progress__thought-outcome-head">
-                    <span className="run-progress__thought-outcome-label">
-                      Decision
-                    </span>
-                    <span className="mono run-progress__thought-outcome-tool">
-                      {toolNamePartial || "tool_call"}
-                    </span>
+                    <span className="run-progress__thought-outcome-label">Decision</span>
+                    <span className="mono run-progress__thought-outcome-tool">{toolNamePartial || "tool_call"}</span>
                     <span className="run-plan-final__badge">streaming</span>
                   </div>
                 </div>
               ) : null}
-              <pre className="run-progress__thought-outcome-fallback mono">
-                {text}
-              </pre>
+              <pre className="run-progress__thought-outcome-fallback mono">{text}</pre>
             </>
           )}
         </div>

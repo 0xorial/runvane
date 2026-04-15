@@ -14,9 +14,7 @@ export function isUploadFile(value: unknown): value is File {
   return value instanceof File;
 }
 
-export function toUploadFileResponse(
-  attachment: UploadFileResponse["attachment"]
-): UploadFileResponse {
+export function toUploadFileResponse(attachment: UploadFileResponse["attachment"]): UploadFileResponse {
   return { attachment };
 }
 

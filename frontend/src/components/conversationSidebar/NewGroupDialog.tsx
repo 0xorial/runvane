@@ -30,9 +30,7 @@ export function NewGroupDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New group</DialogTitle>
-          <DialogDescription>
-            Move this conversation to a new group.
-          </DialogDescription>
+          <DialogDescription>Move this conversation to a new group.</DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground" htmlFor={`new-group-${conversationId}`}>

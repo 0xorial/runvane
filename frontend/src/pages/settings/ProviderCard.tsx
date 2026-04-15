@@ -12,8 +12,8 @@ function enabledModelSetForProvider(provider: Provider): Set<string> {
   const explicit = Array.isArray(provider.quick_access_models)
     ? provider.quick_access_models
     : Array.isArray(provider.enabled_models)
-    ? provider.enabled_models
-    : null;
+      ? provider.enabled_models
+      : null;
   const initialModels = explicit ?? provider.models ?? [];
   return new Set(initialModels as string[]);
 }
@@ -58,11 +58,9 @@ export function ProviderCard({
   const enabledSet = enabledModelSetForProvider(provider);
   const allModels = provider.models_verified ? provider.models || [] : [];
   const sortedModels = [...allModels].sort((a, b) =>
-    String(a).localeCompare(String(b), undefined, { sensitivity: "base" })
+    String(a).localeCompare(String(b), undefined, { sensitivity: "base" }),
   );
-  const modelFilter = (modelFilters[String(provider.id)] || "")
-    .trim()
-    .toLowerCase();
+  const modelFilter = (modelFilters[String(provider.id)] || "").trim().toLowerCase();
   const normalizedModelFilter = normalizeSearchToken(modelFilter);
   const visibleModels = modelFilter
     ? sortedModels.filter((m) => {
@@ -72,29 +70,17 @@ export function ProviderCard({
       })
     : sortedModels;
   const isCollapsed = collapsedModels[providerKey] ?? true;
-  const settingsSpec = Array.isArray(provider.settings_spec)
-    ? provider.settings_spec
-    : [];
+  const settingsSpec = Array.isArray(provider.settings_spec) ? provider.settings_spec : [];
 
   return (
-    <div
-      className="rounded-lg border border-border bg-card p-3.5"
-      key={String(provider.id)}
-    >
+    <div className="rounded-lg border border-border bg-card p-3.5" key={String(provider.id)}>
       <div className="flex justify-between gap-3">
         <div>
-          <div className="text-sm font-black">
-            {String(provider.label ?? "")}
-          </div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
-            {String(provider.id)}
-          </div>
+          <div className="text-sm font-black">{String(provider.label ?? "")}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{String(provider.id)}</div>
         </div>
         <div>
-          <AsyncButton
-            className={providerGhostBtn}
-            onClickAsync={() => testConnection(provider)}
-          >
+          <AsyncButton className={providerGhostBtn} onClickAsync={() => testConnection(provider)}>
             Test connection
           </AsyncButton>
         </div>
@@ -169,14 +155,7 @@ export function ProviderCard({
             }
           >
             {allModels.length} Models
-            <span
-              className={cn(
-                "inline-block transition-transform duration-150",
-                isCollapsed && "-rotate-90"
-              )}
-            >
-              ⌄
-            </span>
+            <span className={cn("inline-block transition-transform duration-150", isCollapsed && "-rotate-90")}>⌄</span>
           </button>
           <TextInput
             className={`input control min-w-[180px] rounded-md border-0 bg-muted/40 pl-2 pr-8`}
@@ -210,7 +189,7 @@ export function ProviderCard({
                   key={String(m)}
                   className={cn(
                     "flex cursor-pointer select-none items-center gap-3 border-0 border-b border-border bg-transparent py-2 pl-0.5 last:border-b-0",
-                    !enabled && "opacity-55"
+                    !enabled && "opacity-55",
                   )}
                 >
                   <span className="font-mono text-[13px]">{m}</span>
@@ -221,13 +200,11 @@ export function ProviderCard({
                     onChange={(e) => {
                       mutProviders((arr, i) => {
                         const current = arr[i] as Provider;
-                        const explicit = Array.isArray(
-                          current.quick_access_models
-                        )
+                        const explicit = Array.isArray(current.quick_access_models)
                           ? current.quick_access_models
                           : Array.isArray(current.enabled_models)
-                          ? current.enabled_models
-                          : null;
+                            ? current.enabled_models
+                            : null;
                         const initial = explicit ?? current.models ?? [];
                         const set = new Set(initial);
                         if (e.target.checked) set.add(m);

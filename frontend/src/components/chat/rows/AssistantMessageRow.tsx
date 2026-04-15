@@ -15,9 +15,7 @@ export function AssistantMessageRow({ entry }: { entry: AssistantMessageEntry })
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              a: ({ node: _node, ...props }) => (
-                <a {...props} target="_blank" rel="noreferrer noopener" />
-              ),
+              a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
             }}
           >
             {entry.text}

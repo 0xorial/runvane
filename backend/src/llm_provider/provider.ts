@@ -41,12 +41,7 @@ export class StreamInterruptedError extends Error {
   readonly usage?: StreamTextCompletionUsage;
   readonly cause?: unknown;
 
-  constructor(input: {
-    message: string;
-    partialText: string;
-    usage?: StreamTextCompletionUsage;
-    cause?: unknown;
-  }) {
+  constructor(input: { message: string; partialText: string; usage?: StreamTextCompletionUsage; cause?: unknown }) {
     super(input.message);
     this.name = "StreamInterruptedError";
     this.partialText = input.partialText;

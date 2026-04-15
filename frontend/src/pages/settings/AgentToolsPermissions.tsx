@@ -31,22 +31,12 @@ export function AgentToolsPermissions({
 }: AgentToolsPermissionsProps) {
   const rows = (toolCatalog || [])
     .slice()
-    .sort((a, b) =>
-      String((a as ToolCatalogRow).name).localeCompare(
-        String((b as ToolCatalogRow).name),
-      ),
-    );
-  const catalogNames = rows
-    .map((t) => String((t as ToolCatalogRow).name || ""))
-    .filter(Boolean);
+    .sort((a, b) => String((a as ToolCatalogRow).name).localeCompare(String((b as ToolCatalogRow).name)));
+  const catalogNames = rows.map((t) => String((t as ToolCatalogRow).name || "")).filter(Boolean);
   const agent = tryParseAgentJson(agentJson);
-  const enabledCount = agent
-    ? catalogNames.filter((n) => isToolEnabled(agent, n)).length
-    : 0;
-  const allToolsEnabled =
-    catalogNames.length > 0 && enabledCount === catalogNames.length;
-  const someToolsEnabled =
-    enabledCount > 0 && enabledCount < catalogNames.length;
+  const enabledCount = agent ? catalogNames.filter((n) => isToolEnabled(agent, n)).length : 0;
+  const allToolsEnabled = catalogNames.length > 0 && enabledCount === catalogNames.length;
+  const someToolsEnabled = enabledCount > 0 && enabledCount < catalogNames.length;
   const headerEnabledRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -107,9 +97,7 @@ export function AgentToolsPermissions({
                   checked={allToolsEnabled}
                   disabled={catalogNames.length === 0 || !canEditAgent}
                   onChange={onToggleAllEnabled}
-                  aria-label={
-                    allToolsEnabled ? "Disable all tools" : "Enable all tools"
-                  }
+                  aria-label={allToolsEnabled ? "Disable all tools" : "Enable all tools"}
                 />
                 <span>Enabled</span>
               </label>

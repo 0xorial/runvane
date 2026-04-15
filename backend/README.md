@@ -37,13 +37,11 @@
 import type { SseEvent, PostConversationMessageRequest } from "@runvane/backend/types";
 ```
 
-
 ## LLM provider settings API
 
 - `GET /api/settings/llm_provider`
 - `PUT /api/settings/llm_provider`
 - `POST /api/settings/llm_provider/test_connection` (hits `<base_url>/models` and persists verified model list)
-
 
 ## CORS
 

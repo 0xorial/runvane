@@ -2,13 +2,9 @@ import type { Context } from "hono";
 
 export type JsonObject = Record<string, unknown>;
 
-export type ParseJsonObjectResult =
-  | { ok: true; value: JsonObject }
-  | { ok: false; response: Response };
+export type ParseJsonObjectResult = { ok: true; value: JsonObject } | { ok: false; response: Response };
 
-export async function parseJsonObjectOr400(
-  c: Context,
-): Promise<ParseJsonObjectResult> {
+export async function parseJsonObjectOr400(c: Context): Promise<ParseJsonObjectResult> {
   let raw: unknown;
   try {
     raw = await c.req.json<unknown>();

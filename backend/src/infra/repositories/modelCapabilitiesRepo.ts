@@ -7,10 +7,7 @@ import type {
   ModelCapabilityRow,
   SeedModelCapability,
 } from "../../types/modelCatalog.js";
-import {
-  validateModelCapabilityOverrideUpsert,
-  validateSeedModelCapabilities,
-} from "../../types/modelCatalog.js";
+import { validateModelCapabilityOverrideUpsert, validateSeedModelCapabilities } from "../../types/modelCatalog.js";
 
 const DEFAULT_SEED_DIR = path.resolve(process.cwd(), "model-catalog/models");
 
@@ -173,45 +170,23 @@ export class ModelCapabilitiesRepo {
         provider_id: ov.provider_id,
         model_name: ov.model_name,
         supports_image_input:
-          ov.supports_image_input == null
-            ? (base?.supports_image_input ?? false)
-            : asBool(ov.supports_image_input),
+          ov.supports_image_input == null ? (base?.supports_image_input ?? false) : asBool(ov.supports_image_input),
         supports_file_input:
-          ov.supports_file_input == null
-            ? (base?.supports_file_input ?? false)
-            : asBool(ov.supports_file_input),
-        max_context_tokens:
-          ov.max_context_tokens != null
-            ? ov.max_context_tokens
-            : (base?.max_context_tokens ?? null),
-        max_output_tokens:
-          ov.max_output_tokens != null
-            ? ov.max_output_tokens
-            : (base?.max_output_tokens ?? null),
+          ov.supports_file_input == null ? (base?.supports_file_input ?? false) : asBool(ov.supports_file_input),
+        max_context_tokens: ov.max_context_tokens != null ? ov.max_context_tokens : (base?.max_context_tokens ?? null),
+        max_output_tokens: ov.max_output_tokens != null ? ov.max_output_tokens : (base?.max_output_tokens ?? null),
         usd_per_1m_tokens_in:
-          ov.input_cost_per_1m != null
-            ? ov.input_cost_per_1m
-            : (base?.usd_per_1m_tokens_in ?? null),
+          ov.input_cost_per_1m != null ? ov.input_cost_per_1m : (base?.usd_per_1m_tokens_in ?? null),
         usd_per_1m_tokens_in_cached:
           ov.cached_input_cost_per_1m != null
             ? ov.cached_input_cost_per_1m
             : (base?.usd_per_1m_tokens_in_cached ?? null),
         usd_per_1m_tokens_out:
-          ov.output_cost_per_1m != null
-            ? ov.output_cost_per_1m
-            : (base?.usd_per_1m_tokens_out ?? null),
-        input_cost_per_1m:
-          ov.input_cost_per_1m != null
-            ? ov.input_cost_per_1m
-            : (base?.input_cost_per_1m ?? null),
+          ov.output_cost_per_1m != null ? ov.output_cost_per_1m : (base?.usd_per_1m_tokens_out ?? null),
+        input_cost_per_1m: ov.input_cost_per_1m != null ? ov.input_cost_per_1m : (base?.input_cost_per_1m ?? null),
         cached_input_cost_per_1m:
-          ov.cached_input_cost_per_1m != null
-            ? ov.cached_input_cost_per_1m
-            : (base?.cached_input_cost_per_1m ?? null),
-        output_cost_per_1m:
-          ov.output_cost_per_1m != null
-            ? ov.output_cost_per_1m
-            : (base?.output_cost_per_1m ?? null),
+          ov.cached_input_cost_per_1m != null ? ov.cached_input_cost_per_1m : (base?.cached_input_cost_per_1m ?? null),
+        output_cost_per_1m: ov.output_cost_per_1m != null ? ov.output_cost_per_1m : (base?.output_cost_per_1m ?? null),
         currency: ov.currency || base?.currency || "USD",
         source: "override",
         overridden: true,
@@ -274,13 +249,9 @@ export class ModelCapabilitiesRepo {
             : boolToInt(input.supports_file_input)
           : (existing?.supports_file_input ?? null),
       max_context_tokens:
-        input.max_context_tokens !== undefined
-          ? input.max_context_tokens
-          : (existing?.max_context_tokens ?? null),
+        input.max_context_tokens !== undefined ? input.max_context_tokens : (existing?.max_context_tokens ?? null),
       max_output_tokens:
-        input.max_output_tokens !== undefined
-          ? input.max_output_tokens
-          : (existing?.max_output_tokens ?? null),
+        input.max_output_tokens !== undefined ? input.max_output_tokens : (existing?.max_output_tokens ?? null),
       input_cost_per_1m:
         input.usd_per_1m_tokens_in !== undefined
           ? input.usd_per_1m_tokens_in
@@ -299,11 +270,9 @@ export class ModelCapabilitiesRepo {
           : input.output_cost_per_1m !== undefined
             ? input.output_cost_per_1m
             : (existing?.output_cost_per_1m ?? null),
-      currency:
-        input.currency !== undefined ? input.currency : (existing?.currency ?? null),
+      currency: input.currency !== undefined ? input.currency : (existing?.currency ?? null),
       notes: input.notes !== undefined ? input.notes : (existing?.notes ?? null),
-      updated_by:
-        input.updated_by !== undefined ? input.updated_by : (existing?.updated_by ?? null),
+      updated_by: input.updated_by !== undefined ? input.updated_by : (existing?.updated_by ?? null),
     };
 
     const allNull =

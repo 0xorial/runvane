@@ -120,4 +120,3 @@ Long term:
 
 - backend API may emit `ChatEntry[]` directly
 - adapter becomes a no-op passthrough
-

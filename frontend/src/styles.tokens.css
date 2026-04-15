@@ -1,8 +1,15 @@
 /* Legacy Runvane tokens (prefixed --rv-* so shadcn/Tailwind :root tokens stay canonical). */
 :root {
   color-scheme: light;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-    Helvetica, Arial, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
 
   --rv-bg: #f6f7fb;
   --rv-panel: #ffffff;
@@ -58,6 +65,5 @@
 
   --rv-control-height: 30px;
 
-  --rv-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    Liberation Mono, monospace;
+  --rv-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
 }

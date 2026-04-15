@@ -3,10 +3,7 @@ import { TextInput } from "../../components/ui/TextInput";
 function titleForSection(activeSection: string): string {
   if (activeSection === "model_provider") return "Model Provider";
   if (activeSection === "agents") return "Agents";
-  return activeSection
-    .replaceAll("_", " ")
-    .replaceAll("skills", "Skills")
-    .replaceAll("tools", "Tools");
+  return activeSection.replaceAll("_", " ").replaceAll("skills", "Skills").replaceAll("tools", "Tools");
 }
 
 type SettingsHeaderProps = {
@@ -15,11 +12,7 @@ type SettingsHeaderProps = {
   setSearch: (s: string) => void;
 };
 
-export function SettingsHeader({
-  activeSection,
-  search,
-  setSearch,
-}: SettingsHeaderProps) {
+export function SettingsHeader({ activeSection, search, setSearch }: SettingsHeaderProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-3 md:px-3.5">
       <div className="text-sm font-extrabold">{titleForSection(activeSection)}</div>

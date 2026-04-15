@@ -14,16 +14,9 @@ type AgentLlmSettingsProps = {
   presets: ModelPresetResponse[];
 };
 
-const fieldRow =
-  "inline-flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground";
+const fieldRow = "inline-flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground";
 
-export function AgentLlmSettings({
-  agent,
-  onChange,
-  canEdit,
-  modelGroups,
-  presets,
-}: AgentLlmSettingsProps) {
+export function AgentLlmSettings({ agent, onChange, canEdit, modelGroups, presets }: AgentLlmSettingsProps) {
   const groups = Array.isArray(modelGroups) ? modelGroups : [];
   const { model } = getAgentLlm(agent);
   const presetGroups: ModelGroup[] = [
@@ -72,11 +65,7 @@ export function AgentLlmSettings({
         Default preset
         <div className="ml-1.5 min-w-[260px] flex-1">
           <ModelDropdown
-            value={
-              agent.default_model_preset_id == null
-                ? ""
-                : String(agent.default_model_preset_id)
-            }
+            value={agent.default_model_preset_id == null ? "" : String(agent.default_model_preset_id)}
             disabled={!canEdit}
             onChange={(value) => {
               if (!canEdit) return;

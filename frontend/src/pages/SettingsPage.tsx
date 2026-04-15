@@ -25,11 +25,7 @@ import { cn } from "@/lib/utils";
 import { AgentsEditor } from "./settings/AgentsEditor";
 import { GlobalModelSettingsCard } from "./settings/GlobalModelSettingsCard";
 import { ModelPresetsEditor } from "./settings/ModelPresetsEditor";
-import {
-  filterProviders,
-  normalizeSection,
-  buildModelGroups,
-} from "./settings/helpers";
+import { filterProviders, normalizeSection, buildModelGroups } from "./settings/helpers";
 import type { LlmSettings } from "../types/llmSettings";
 import { ProviderCard } from "./settings/ProviderCard";
 import { SettingsHeader } from "./settings/SettingsHeader";
@@ -221,9 +217,10 @@ export function SettingsPage() {
     try {
       const rows = await getToolsApi();
       const out = Array.isArray(rows)
-        ? (rows as unknown[]).filter(
-            (x) => x && typeof x === "object" && !Array.isArray(x),
-          ) as Record<string, unknown>[]
+        ? ((rows as unknown[]).filter((x) => x && typeof x === "object" && !Array.isArray(x)) as Record<
+            string,
+            unknown
+          >[])
         : [];
       setToolCatalog(out);
       return out;
@@ -331,30 +328,18 @@ export function SettingsPage() {
   return (
     <section className="min-h-0 w-full flex-1 overflow-auto">
       <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[280px_minmax(0,1fr)]">
-        <SettingsSidebar
-          activeSection={activeSection}
-          navigate={navigate}
-          settingsSearch={location.search}
-        />
+        <SettingsSidebar activeSection={activeSection} navigate={navigate} settingsSearch={location.search} />
 
         <main className="flex min-w-0 flex-col gap-3.5">
           {activeSection === "model_provider" ||
           activeSection === "model_presets" ||
           activeSection === "agents" ? null : (
-            <SettingsHeader
-              activeSection={activeSection}
-              search={search}
-              setSearch={setSearch}
-            />
+            <SettingsHeader activeSection={activeSection} search={search} setSearch={setSearch} />
           )}
 
           {activeSection === "model_provider" ? (
             <div className="flex flex-col gap-3">
-              <GlobalModelSettingsCard
-                settings={settings}
-                setSettings={setSettings}
-                modelGroups={modelGroups}
-              />
+              <GlobalModelSettingsCard settings={settings} setSettings={setSettings} modelGroups={modelGroups} />
               {providerCards.map((p) => (
                 <ProviderCard
                   key={String(p.id)}

@@ -26,9 +26,9 @@ export class ConversationsRepo {
     const name = String(groupNameRaw || "").trim();
     if (!name) throw new Error("group name is required");
 
-    const existing = this.db
-      .prepare("SELECT id FROM conversation_groups WHERE name = ?")
-      .get(name) as { id?: string } | undefined;
+    const existing = this.db.prepare("SELECT id FROM conversation_groups WHERE name = ?").get(name) as
+      | { id?: string }
+      | undefined;
     if (typeof existing?.id === "string" && existing.id) return existing.id;
 
     const now = new Date().toISOString();
@@ -47,9 +47,9 @@ export class ConversationsRepo {
         });
       return createdId;
     } catch (e) {
-      const retried = this.db
-        .prepare("SELECT id FROM conversation_groups WHERE name = ?")
-        .get(name) as { id?: string } | undefined;
+      const retried = this.db.prepare("SELECT id FROM conversation_groups WHERE name = ?").get(name) as
+        | { id?: string }
+        | undefined;
       if (typeof retried?.id === "string" && retried.id) return retried.id;
       throw new Error(`failed to ensure conversation group "${name}"`, { cause: e });
     }
@@ -227,9 +227,9 @@ export class ConversationsRepo {
     const groupId = typeof groupIdRaw === "string" ? groupIdRaw.trim() : "";
     const normalizedGroupId = groupId ? groupId : null;
     if (normalizedGroupId) {
-      const existing = this.db
-        .prepare("SELECT id FROM conversation_groups WHERE id = ?")
-        .get(normalizedGroupId) as { id?: string } | undefined;
+      const existing = this.db.prepare("SELECT id FROM conversation_groups WHERE id = ?").get(normalizedGroupId) as
+        | { id?: string }
+        | undefined;
       if (!existing?.id) {
         throw new Error(`conversation group not found: ${normalizedGroupId}`);
       }

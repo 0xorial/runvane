@@ -51,12 +51,7 @@ export function TextInput({
         onChange={(e) => onChange(e.target.value)}
       />
       {hasValue ? (
-        <button
-          type="button"
-          className={clearButtonClassName}
-          onClick={() => onChange("")}
-          aria-label={clearAriaLabel}
-        >
+        <button type="button" className={clearButtonClassName} onClick={() => onChange("")} aria-label={clearAriaLabel}>
           ×
         </button>
       ) : null}

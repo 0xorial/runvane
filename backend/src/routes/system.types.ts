@@ -16,9 +16,7 @@ export function buildTypesPingResponse(): TypesPingResponse {
 
 export function parseSseAfterSeqHeader(rawLastEventId: string | undefined): number | null {
   const parsedLastEventId =
-    typeof rawLastEventId === "string" && rawLastEventId.length > 0
-      ? Number(rawLastEventId)
-      : NaN;
+    typeof rawLastEventId === "string" && rawLastEventId.length > 0 ? Number(rawLastEventId) : NaN;
   return Number.isFinite(parsedLastEventId) ? Math.trunc(parsedLastEventId) : null;
 }
 

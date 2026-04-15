@@ -17,24 +17,15 @@ export type LlmDecisionUserResponse = {
   type: "user-response";
   text: string;
 };
-export const LlmDecisionUserResponseSchema = z.object(
-  {
-    type: z.literal("user-response"),
-    text: z.string(),
-  }
-);
+export const LlmDecisionUserResponseSchema = z.object({
+  type: z.literal("user-response"),
+  text: z.string(),
+});
 
 export type LlmDecision = LlmDecisionTool | LlmDecisionUserResponse;
-export const LlmDecisionSchema = z.discriminatedUnion(
-  "type",
-  [LlmDecisionToolSchema, LlmDecisionUserResponseSchema]
-);
+export const LlmDecisionSchema = z.discriminatedUnion("type", [LlmDecisionToolSchema, LlmDecisionUserResponseSchema]);
 
-export const AgenticFollowupValues = [
-  "finalize",
-  "continue_with_results",
-  "retry_with_adjustment",
-] as const;
+export const AgenticFollowupValues = ["finalize", "continue_with_results", "retry_with_adjustment"] as const;
 export type AgenticFollowup = (typeof AgenticFollowupValues)[number];
 
 export type AgenticToolCall = {
@@ -86,11 +77,7 @@ export const ChatAttachmentSchema = z.object({
   url: z.string().min(1),
 });
 
-export function reqAttachmentTyping(
-  value: unknown,
-  ctx: ValidationSink,
-  path: string
-): ChatAttachment | null {
+export function reqAttachmentTyping(value: unknown, ctx: ValidationSink, path: string): ChatAttachment | null {
   const parsed = ChatAttachmentSchema.safeParse(value);
   if (!parsed.success) {
     parsed.error.issues.forEach((issue) => {
@@ -114,14 +101,14 @@ export type UserMessageEntry = ChatEntryBase & {
   attachments?: ChatAttachment[];
 };
 export const UserMessageEntrySchema = ChatEntryBaseSchema.extend({
-    type: z.literal("user-message"),
-    text: z.string(),
-    agentId: z.string().min(1),
-    llmProviderId: z.string().optional(),
-    llmModel: z.string().optional(),
-    modelPresetId: z.number().finite().nullable().optional(),
-    attachments: z.array(ChatAttachmentSchema).optional(),
-  });
+  type: z.literal("user-message"),
+  text: z.string(),
+  agentId: z.string().min(1),
+  llmProviderId: z.string().optional(),
+  llmModel: z.string().optional(),
+  modelPresetId: z.number().finite().nullable().optional(),
+  attachments: z.array(ChatAttachmentSchema).optional(),
+});
 
 export type UserMessageSelection = {
   agentId: string;
@@ -129,14 +116,12 @@ export type UserMessageSelection = {
   llmModel?: string;
   modelPresetId?: number | null;
 };
-export const UserMessageSelectionSchema = z.object(
-  {
-    agentId: z.string().min(1),
-    llmProviderId: z.string().optional(),
-    llmModel: z.string().optional(),
-    modelPresetId: z.number().finite().nullable().optional(),
-  }
-);
+export const UserMessageSelectionSchema = z.object({
+  agentId: z.string().min(1),
+  llmProviderId: z.string().optional(),
+  llmModel: z.string().optional(),
+  modelPresetId: z.number().finite().nullable().optional(),
+});
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -146,9 +131,7 @@ function optionalFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function normalizeUserMessageSelection(
-  input: UserMessageSelection
-): UserMessageSelection {
+export function normalizeUserMessageSelection(input: UserMessageSelection): UserMessageSelection {
   const agentId = String(input.agentId ?? "").trim();
   if (!agentId) {
     throw new Error("agentId is required for user message selection");
@@ -164,9 +147,7 @@ export function normalizeUserMessageSelection(
   };
 }
 
-export function userMessageSelectionFromPayload(
-  payload: Record<string, unknown>
-): UserMessageSelection {
+export function userMessageSelectionFromPayload(payload: Record<string, unknown>): UserMessageSelection {
   const agentId = String(payload.agentId ?? "").trim();
   if (!agentId) {
     throw new Error("user-message payload missing required agentId");
@@ -182,9 +163,7 @@ export function userMessageSelectionFromPayload(
   };
 }
 
-export function userMessageAttachmentsFromPayload(
-  payload: Record<string, unknown>
-): ChatAttachment[] {
+export function userMessageAttachmentsFromPayload(payload: Record<string, unknown>): ChatAttachment[] {
   const raw = payload.attachments;
   if (!Array.isArray(raw)) return [];
   const out: ChatAttachment[] = [];
@@ -210,18 +189,18 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   completionTokens?: number;
 };
 export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
-    type: z.literal("planner_llm_stream"),
-    llmRequest: z.string(),
-    llmResponse: z.string().optional(),
-    thoughtMs: z.number().finite().nullable().optional(),
-    decision: LlmDecisionSchema.nullable().optional(),
-    status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
-    error: z.string().optional(),
-    llmModel: z.string().optional(),
-    promptTokens: z.number().finite().optional(),
-    cachedPromptTokens: z.number().finite().optional(),
-    completionTokens: z.number().finite().optional(),
-  });
+  type: z.literal("planner_llm_stream"),
+  llmRequest: z.string(),
+  llmResponse: z.string().optional(),
+  thoughtMs: z.number().finite().nullable().optional(),
+  decision: LlmDecisionSchema.nullable().optional(),
+  status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
+  error: z.string().optional(),
+  llmModel: z.string().optional(),
+  promptTokens: z.number().finite().optional(),
+  cachedPromptTokens: z.number().finite().optional(),
+  completionTokens: z.number().finite().optional(),
+});
 
 export type TitleLlmStreamEntry = ChatEntryBase & {
   type: "title_llm_stream";
@@ -237,18 +216,18 @@ export type TitleLlmStreamEntry = ChatEntryBase & {
   completionTokens?: number;
 };
 export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
-    type: z.literal("title_llm_stream"),
-    llmRequest: z.string(),
-    llmResponse: z.string().optional(),
-    thoughtMs: z.number().finite().nullable().optional(),
-    decision: LlmDecisionSchema.nullable().optional(),
-    status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
-    error: z.string().optional(),
-    llmModel: z.string().optional(),
-    promptTokens: z.number().finite().optional(),
-    cachedPromptTokens: z.number().finite().optional(),
-    completionTokens: z.number().finite().optional(),
-  });
+  type: z.literal("title_llm_stream"),
+  llmRequest: z.string(),
+  llmResponse: z.string().optional(),
+  thoughtMs: z.number().finite().nullable().optional(),
+  decision: LlmDecisionSchema.nullable().optional(),
+  status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
+  error: z.string().optional(),
+  llmModel: z.string().optional(),
+  promptTokens: z.number().finite().optional(),
+  cachedPromptTokens: z.number().finite().optional(),
+  completionTokens: z.number().finite().optional(),
+});
 
 export type ToolInvocationEntry = ChatEntryBase & {
   type: "tool-invocation";
@@ -258,21 +237,21 @@ export type ToolInvocationEntry = ChatEntryBase & {
   result: unknown;
 };
 export const ToolInvocationEntrySchema = ChatEntryBaseSchema.extend({
-    type: z.literal("tool-invocation"),
-    toolId: z.string(),
-    state: z.enum(["requested", "running", "done", "error"]),
-    parameters: z.record(z.string(), z.unknown()),
-    result: z.unknown(),
-  });
+  type: z.literal("tool-invocation"),
+  toolId: z.string(),
+  state: z.enum(["requested", "running", "done", "error"]),
+  parameters: z.record(z.string(), z.unknown()),
+  result: z.unknown(),
+});
 
 export type AssistantMessageEntry = ChatEntryBase & {
   type: "assistant-message";
   text: string;
 };
 export const AssistantMessageEntrySchema = ChatEntryBaseSchema.extend({
-    type: z.literal("assistant-message"),
-    text: z.string(),
-  });
+  type: z.literal("assistant-message"),
+  text: z.string(),
+});
 
 export type ChatEntry =
   | UserMessageEntry
@@ -288,8 +267,6 @@ export const ChatEntrySchema = z.discriminatedUnion("type", [
   AssistantMessageEntrySchema,
 ]);
 
-export function isPlannerThinkingEntry(
-  e: ChatEntry
-): e is PlannerLlmStreamEntry {
+export function isPlannerThinkingEntry(e: ChatEntry): e is PlannerLlmStreamEntry {
   return e.type === "planner_llm_stream";
 }

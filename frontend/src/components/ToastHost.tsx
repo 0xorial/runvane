@@ -32,10 +32,7 @@ export function ToastHost() {
     const now = Date.now();
     return toasts.map((t) => {
       const elapsed = Math.max(0, now - t.createdAt);
-      const progress = Math.max(
-        0,
-        Math.min(100, 100 - (elapsed / t.durationMs) * 100),
-      );
+      const progress = Math.max(0, Math.min(100, 100 - (elapsed / t.durationMs) * 100));
       return { ...t, progress };
     });
   }, [toasts, tick]);
@@ -51,9 +48,7 @@ export function ToastHost() {
           key={t.id}
           className={cn(
             "pointer-events-auto rounded-md border border-border bg-card p-3 text-card-foreground shadow-lg",
-            t.type === "success"
-              ? "border-emerald-500/40"
-              : "border-destructive/40",
+            t.type === "success" ? "border-emerald-500/40" : "border-destructive/40",
           )}
         >
           <div className="flex items-start gap-2">

@@ -27,20 +27,14 @@ function ensurePolicyShape(agent: MutableAgent): void {
   }
 }
 
-function getPolicyCfg(
-  agent: MutableAgent,
-  toolName: string,
-): Record<string, unknown> {
+function getPolicyCfg(agent: MutableAgent, toolName: string): Record<string, unknown> {
   ensurePolicyShape(agent);
   const pol = agent.policy!.policies[toolName];
   if (pol && typeof pol === "object") return pol;
   return agent.policy!.default;
 }
 
-export function getToolPermissionMode(
-  agent: MutableAgent,
-  toolName: string,
-): "ask_every_time" | "allow_all" {
+export function getToolPermissionMode(agent: MutableAgent, toolName: string): "ask_every_time" | "allow_all" {
   const cfg = getPolicyCfg(agent, toolName);
   const mode = (cfg.mode as string) || "deny";
   if (mode === "deny") return "ask_every_time";
@@ -49,22 +43,14 @@ export function getToolPermissionMode(
 
 export function isToolEnabled(agent: MutableAgent, toolName: string): boolean {
   const tools = Array.isArray(agent.tools) ? agent.tools : [];
-  const row = tools.find(
-    (t) => t && String((t as { tool_name?: string }).tool_name) === toolName,
-  );
+  const row = tools.find((t) => t && String((t as { tool_name?: string }).tool_name) === toolName);
   if (!row) return false;
   return (row as { enabled?: boolean }).enabled !== false;
 }
 
-export function setToolEnabled(
-  agent: MutableAgent,
-  toolName: string,
-  enabled: boolean,
-): void {
+export function setToolEnabled(agent: MutableAgent, toolName: string, enabled: boolean): void {
   if (!Array.isArray(agent.tools)) agent.tools = [];
-  let row = agent.tools.find(
-    (t) => t && String((t as { tool_name?: string }).tool_name) === toolName,
-  );
+  let row = agent.tools.find((t) => t && String((t as { tool_name?: string }).tool_name) === toolName);
   if (!row) {
     row = { tool_name: toolName, enabled: true, overrides: {} };
     agent.tools.push(row);
@@ -73,11 +59,7 @@ export function setToolEnabled(
 }
 
 /** Apply enabled flag to every name in toolNames (creates rows as needed). */
-export function setAllToolsEnabled(
-  agent: MutableAgent,
-  toolNames: string[],
-  enabled: boolean,
-): void {
+export function setAllToolsEnabled(agent: MutableAgent, toolNames: string[], enabled: boolean): void {
   const on = !!enabled;
   for (const toolName of toolNames) {
     if (!toolName) continue;
@@ -85,15 +67,10 @@ export function setAllToolsEnabled(
   }
 }
 
-export function setToolPermissionMode(
-  agent: MutableAgent,
-  toolName: string,
-  mode: string,
-): void {
+export function setToolPermissionMode(agent: MutableAgent, toolName: string, mode: string): void {
   ensurePolicyShape(agent);
   const prev = agent.policy!.policies[toolName];
-  const base =
-    prev && typeof prev === "object" ? { ...prev } : ({} as Record<string, unknown>);
+  const base = prev && typeof prev === "object" ? { ...prev } : ({} as Record<string, unknown>);
   base.mode = "allow";
   base.require_approval = mode === "ask_every_time";
   agent.policy!.policies[toolName] = base;

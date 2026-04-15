@@ -1,15 +1,69 @@
 import { Conversation, ToolDefinition } from "@/types/agent";
 
 export const mockTools: ToolDefinition[] = [
-  { id: "1", name: "file_read", description: "Read contents of a file from the filesystem", permission: "allow", category: "Filesystem" },
-  { id: "2", name: "file_write", description: "Write or overwrite a file on the filesystem", permission: "ask", category: "Filesystem" },
-  { id: "3", name: "shell_exec", description: "Execute a shell command and return output", permission: "ask", category: "System" },
-  { id: "4", name: "web_search", description: "Search the web and return results", permission: "allow", category: "Web" },
-  { id: "5", name: "web_fetch", description: "Fetch a URL and return its content", permission: "allow", category: "Web" },
-  { id: "6", name: "db_query", description: "Execute a read-only SQL query against the database", permission: "allow", category: "Database" },
-  { id: "7", name: "db_mutate", description: "Execute a write SQL query (INSERT, UPDATE, DELETE)", permission: "ask", category: "Database" },
-  { id: "8", name: "code_interpret", description: "Run Python code in a sandboxed environment", permission: "allow", category: "Code" },
-  { id: "9", name: "send_email", description: "Send an email via configured SMTP", permission: "forbid", category: "Communication" },
+  {
+    id: "1",
+    name: "file_read",
+    description: "Read contents of a file from the filesystem",
+    permission: "allow",
+    category: "Filesystem",
+  },
+  {
+    id: "2",
+    name: "file_write",
+    description: "Write or overwrite a file on the filesystem",
+    permission: "ask",
+    category: "Filesystem",
+  },
+  {
+    id: "3",
+    name: "shell_exec",
+    description: "Execute a shell command and return output",
+    permission: "ask",
+    category: "System",
+  },
+  {
+    id: "4",
+    name: "web_search",
+    description: "Search the web and return results",
+    permission: "allow",
+    category: "Web",
+  },
+  {
+    id: "5",
+    name: "web_fetch",
+    description: "Fetch a URL and return its content",
+    permission: "allow",
+    category: "Web",
+  },
+  {
+    id: "6",
+    name: "db_query",
+    description: "Execute a read-only SQL query against the database",
+    permission: "allow",
+    category: "Database",
+  },
+  {
+    id: "7",
+    name: "db_mutate",
+    description: "Execute a write SQL query (INSERT, UPDATE, DELETE)",
+    permission: "ask",
+    category: "Database",
+  },
+  {
+    id: "8",
+    name: "code_interpret",
+    description: "Run Python code in a sandboxed environment",
+    permission: "allow",
+    category: "Code",
+  },
+  {
+    id: "9",
+    name: "send_email",
+    description: "Send an email via configured SMTP",
+    permission: "forbid",
+    category: "Communication",
+  },
 ];
 
 export const mockConversations: Conversation[] = [
@@ -54,7 +108,8 @@ export const mockConversations: Conversation[] = [
       {
         id: "m3",
         role: "assistant",
-        content: "I've analyzed the middleware. Here's what I found:\n\n1. **Token validation** is duplicated across 3 functions\n2. **Error handling** is inconsistent — some paths throw, others return null\n3. **Rate limiting** logic is mixed into auth checks\n\nI recommend extracting these into separate concerns. Want me to proceed with the refactor?",
+        content:
+          "I've analyzed the middleware. Here's what I found:\n\n1. **Token validation** is duplicated across 3 functions\n2. **Error handling** is inconsistent — some paths throw, others return null\n3. **Rate limiting** logic is mixed into auth checks\n\nI recommend extracting these into separate concerns. Want me to proceed with the refactor?",
         timestamp: Date.now() - 3580000,
         llmRequest: {
           id: "llm2",
@@ -83,7 +138,8 @@ export const mockConversations: Conversation[] = [
       {
         id: "m11",
         role: "assistant",
-        content: "I'll start by running the build, then execute the migration and deploy. Let me check the current status first.",
+        content:
+          "I'll start by running the build, then execute the migration and deploy. Let me check the current status first.",
         timestamp: Date.now() - 590000,
         llmRequest: {
           id: "llm10",
@@ -99,7 +155,8 @@ export const mockConversations: Conversation[] = [
             id: "tc10",
             toolName: "shell_exec",
             args: { command: "npm run build" },
-            result: "Build completed successfully in 12.4s\n✓ 847 modules transformed\n✓ dist/index.html  1.2 kB\n✓ dist/assets/index-abc123.js  248 kB",
+            result:
+              "Build completed successfully in 12.4s\n✓ 847 modules transformed\n✓ dist/index.html  1.2 kB\n✓ dist/assets/index-abc123.js  248 kB",
             status: "completed",
             startedAt: Date.now() - 589000,
             completedAt: Date.now() - 576000,
@@ -109,7 +166,8 @@ export const mockConversations: Conversation[] = [
       {
         id: "m12",
         role: "assistant",
-        content: "Build succeeded. Now I need to run the database migration. This will alter the `users` table and add a new `sessions` table. I need your approval since this modifies the database.",
+        content:
+          "Build succeeded. Now I need to run the database migration. This will alter the `users` table and add a new `sessions` table. I need your approval since this modifies the database.",
         timestamp: Date.now() - 570000,
         llmRequest: {
           id: "llm11",
@@ -125,7 +183,8 @@ export const mockConversations: Conversation[] = [
             id: "tc11",
             toolName: "db_mutate",
             args: {
-              query: "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP;\nCREATE TABLE sessions (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  user_id UUID REFERENCES users(id) ON DELETE CASCADE,\n  token TEXT NOT NULL,\n  expires_at TIMESTAMP NOT NULL,\n  created_at TIMESTAMP DEFAULT now()\n);",
+              query:
+                "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP;\nCREATE TABLE sessions (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  user_id UUID REFERENCES users(id) ON DELETE CASCADE,\n  token TEXT NOT NULL,\n  expires_at TIMESTAMP NOT NULL,\n  created_at TIMESTAMP DEFAULT now()\n);",
             },
             status: "awaiting_approval",
             startedAt: Date.now() - 569000,

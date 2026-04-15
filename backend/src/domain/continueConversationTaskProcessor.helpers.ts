@@ -1,7 +1,4 @@
-import {
-  StreamInterruptedError,
-  type StreamTextCompletionUsage,
-} from "../llm_provider/provider.js";
+import { StreamInterruptedError, type StreamTextCompletionUsage } from "../llm_provider/provider.js";
 
 export function incrementalDelta(prev: string, next: string): string {
   if (!next) return "";
@@ -84,9 +81,7 @@ export function composeFailedPlannerResponse(partialReply: string): string {
   return "";
 }
 
-export function usageFromStreamingError(
-  error: unknown
-): StreamTextCompletionUsage | undefined {
+export function usageFromStreamingError(error: unknown): StreamTextCompletionUsage | undefined {
   if (error instanceof StreamInterruptedError) {
     return error.usage;
   }
@@ -111,18 +106,13 @@ export function usageFromStreamingError(
     promptTokens: Math.max(0, Math.trunc(promptTokens)),
     completionTokens: Math.max(0, Math.trunc(completionTokens)),
   };
-  if (
-    typeof cachedPromptTokens === "number" &&
-    Number.isFinite(cachedPromptTokens)
-  ) {
+  if (typeof cachedPromptTokens === "number" && Number.isFinite(cachedPromptTokens)) {
     normalized.cachedPromptTokens = Math.max(0, Math.trunc(cachedPromptTokens));
   }
   return normalized;
 }
 
-export function parseFirstJsonObjectCandidate(
-  candidates: Array<string | null>
-): unknown | null {
+export function parseFirstJsonObjectCandidate(candidates: Array<string | null>): unknown | null {
   for (const candidate of candidates) {
     const raw = String(candidate ?? "").trim();
     if (!raw) continue;

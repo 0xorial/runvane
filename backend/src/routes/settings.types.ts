@@ -60,29 +60,22 @@ const LlmProviderConnectionTestSchema: z.ZodType<LlmProviderConnectionTestReques
   provider_id: z.string(),
   settings: z.record(z.string(), z.unknown()).optional(),
 });
-const LlmProviderConnectionTestResponseSchema: z.ZodType<LlmProviderConnectionTestResponse> =
-  z.object({
-    ok: z.boolean(),
-    detail: z.string().nullable(),
-    models: z.array(z.string()),
-  });
+const LlmProviderConnectionTestResponseSchema: z.ZodType<LlmProviderConnectionTestResponse> = z.object({
+  ok: z.boolean(),
+  detail: z.string().nullable(),
+  models: z.array(z.string()),
+});
 
-export function parseLlmProviderSettingsPutRequest(
-  body: Record<string, unknown>
-): LlmProviderSettingsPutRequest {
+export function parseLlmProviderSettingsPutRequest(body: Record<string, unknown>): LlmProviderSettingsPutRequest {
   return LlmProviderSettingsPutRequestSchema.parse(body);
 }
 
-export function parseLlmProviderConnectionTestRequest(
-  body: Record<string, unknown>
-): LlmProviderConnectionTestRequest {
+export function parseLlmProviderConnectionTestRequest(body: Record<string, unknown>): LlmProviderConnectionTestRequest {
   return LlmProviderConnectionTestSchema.parse(body);
 }
 
 function formatZodError(context: string, err: z.ZodError): Error {
-  const details = err.issues
-    .map((i) => `${context}.${i.path.join(".") || "<root>"}: ${i.message}`)
-    .join("; ");
+  const details = err.issues.map((i) => `${context}.${i.path.join(".") || "<root>"}: ${i.message}`).join("; ");
   return new Error(`${context} validation failed: ${details}`);
 }
 
@@ -92,17 +85,13 @@ export function validateGetLlmSettingsResponse(data: unknown): { providers: LlmP
   return parsed.data;
 }
 
-export function validateLlmProviderSettingsResponse(
-  data: unknown
-): LlmProviderSettingsDocument {
+export function validateLlmProviderSettingsResponse(data: unknown): LlmProviderSettingsDocument {
   const parsed = LlmProviderSettingsPutRequestSchema.safeParse(data);
   if (!parsed.success) throw formatZodError("GET/PUT /api/settings/llm_provider", parsed.error);
   return parsed.data;
 }
 
-export function validateLlmProviderConnectionTestResponse(
-  data: unknown
-): LlmProviderConnectionTestResponse {
+export function validateLlmProviderConnectionTestResponse(data: unknown): LlmProviderConnectionTestResponse {
   const parsed = LlmProviderConnectionTestResponseSchema.safeParse(data);
   if (!parsed.success) {
     throw formatZodError("POST /api/settings/llm_provider/test_connection", parsed.error);

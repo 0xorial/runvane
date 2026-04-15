@@ -4,9 +4,7 @@ import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
 import type { RunToolTask } from "./agentTask.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
-import {
-  mostPermissivePermission,
-} from "../tools/baseTool.js";
+import { mostPermissivePermission } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
 import { throwIfCancelled } from "./taskCancellation.js";
 
@@ -28,11 +26,7 @@ export class RunToolTaskProcessor {
     private readonly enqueueContinueConversation: (conversationId: string) => { taskId: number },
   ) {}
 
-  async process(
-    task: RunToolTask,
-    taskId?: number,
-    opts?: { shouldCancel?: () => boolean }
-  ): Promise<void> {
+  async process(task: RunToolTask, taskId?: number, opts?: { shouldCancel?: () => boolean }): Promise<void> {
     const conversationId = task.conversationId;
     throwIfCancelled(opts?.shouldCancel);
     const startedAt = new Date();
@@ -141,15 +135,10 @@ export class RunToolTaskProcessor {
       },
     });
 
-    if (
-      effectivePermission === "forbid" ||
-      (effectivePermission === "ask_user" && task.approvalGranted !== true)
-    ) {
+    if (effectivePermission === "forbid" || (effectivePermission === "ask_user" && task.approvalGranted !== true)) {
       const outState = effectivePermission === "ask_user" ? "requested" : "error";
       const reason =
-        effectivePermission === "ask_user"
-          ? "Tool requires user approval."
-          : "Tool is forbidden by permission rules.";
+        effectivePermission === "ask_user" ? "Tool requires user approval." : "Tool is forbidden by permission rules.";
       const finishedAt = new Date();
       const envelope: ToolExecutionEnvelope = {
         ok: false,

@@ -42,12 +42,9 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   const pt = entry.promptTokens;
   const cpt = entry.cachedPromptTokens;
   const ct = entry.completionTokens;
-  const promptTokens =
-    typeof pt === "number" && Number.isFinite(pt) ? pt : 0;
-  const cachedPromptTokens =
-    typeof cpt === "number" && Number.isFinite(cpt) ? cpt : 0;
-  const completionTokens =
-    typeof ct === "number" && Number.isFinite(ct) ? ct : 0;
+  const promptTokens = typeof pt === "number" && Number.isFinite(pt) ? pt : 0;
+  const cachedPromptTokens = typeof cpt === "number" && Number.isFinite(cpt) ? cpt : 0;
+  const completionTokens = typeof ct === "number" && Number.isFinite(ct) ? ct : 0;
 
   useEffect(() => {
     if (done) return undefined;
@@ -84,9 +81,8 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
 
   void tick;
   const elapsedMs = Math.max(0, Date.now() - startedAt);
-  const durationMs = typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs)
-    ? entry.thoughtMs
-    : elapsedMs;
+  const durationMs =
+    typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs) ? entry.thoughtMs : elapsedMs;
   const title = done
     ? failed
       ? `Thought failed after ${formatDuration(durationMs)}`
@@ -115,10 +111,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
           {hasDetails ? (
             <button
               type="button"
-              className={cn(
-                titleClass,
-                "cursor-pointer appearance-none border-0 bg-transparent px-0 py-0 text-left",
-              )}
+              className={cn(titleClass, "cursor-pointer appearance-none border-0 bg-transparent px-0 py-0 text-left")}
               onClick={() => setExpanded((v) => !v)}
               aria-label={expanded ? "Hide thought details" : "Show thought details"}
             >
@@ -141,9 +134,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
           />
         </div>
         {failed ? (
-          <div className="mt-0.5 text-[10px] leading-snug text-rose-300">
-            Request failed. See details below.
-          </div>
+          <div className="mt-0.5 text-[10px] leading-snug text-rose-300">Request failed. See details below.</div>
         ) : cancelled ? (
           <div className="mt-0.5 text-[10px] leading-snug text-amber-700 dark:text-amber-300">
             Request cancelled by user.
@@ -158,8 +149,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
               type="button"
               className={cn(
                 "sticky top-1.5 z-[1] ml-auto mr-1.5 inline-flex h-[22px] w-5 flex-col items-center justify-center gap-0 rounded-sm border border-border bg-muted px-0 pb-0 pt-px text-[10px] leading-none text-muted-foreground hover:text-foreground",
-                autoscrollEnabled &&
-                  "border-primary/70 bg-primary/15 text-foreground",
+                autoscrollEnabled && "border-primary/70 bg-primary/15 text-foreground",
               )}
               onClick={onAutoscrollToggle}
               aria-label="Toggle autoscroll"
@@ -174,9 +164,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
             <div className="flex flex-col gap-0.5">
               {requestText ? (
                 <>
-                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Request
-                  </div>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Request</div>
                   <pre className="m-0 mt-1 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/40 p-2 font-mono text-xs leading-snug text-foreground first:mt-0">
                     {requestText}
                   </pre>
@@ -184,9 +172,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
               ) : null}
               {responseText ? (
                 <>
-                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Response
-                  </div>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Response</div>
                   <pre
                     className={cn(
                       "m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words rounded-md border p-2 font-mono text-xs leading-snug first:mt-0",
@@ -199,9 +185,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
               ) : null}
               {failed && errorText ? (
                 <>
-                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Error
-                  </div>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Error</div>
                   <pre
                     className={cn(
                       "m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words rounded-md border p-2 font-mono text-xs leading-snug first:mt-0",

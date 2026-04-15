@@ -16,13 +16,7 @@ type ChatMessageShellProps = {
 export function ChatMessageShell({ role, badge, children, className }: ChatMessageShellProps) {
   const isUser = role === "user";
   return (
-    <div
-      className={cn(
-        "animate-slide-in group py-1.5",
-        isUser && "mt-7 first:mt-0",
-        className,
-      )}
-    >
+    <div className={cn("animate-slide-in group py-1.5", isUser && "mt-7 first:mt-0", className)}>
       <div className="mx-auto flex max-w-3xl gap-3">
         <div
           className={cn(
@@ -30,11 +24,7 @@ export function ChatMessageShell({ role, badge, children, className }: ChatMessa
             isUser ? "bg-secondary" : "bg-primary/10 glow-accent-sm",
           )}
         >
-          {isUser ? (
-            <User className="h-4 w-4 text-secondary-foreground" />
-          ) : (
-            <Bot className="h-4 w-4 text-primary" />
-          )}
+          {isUser ? <User className="h-4 w-4 text-secondary-foreground" /> : <Bot className="h-4 w-4 text-primary" />}
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">

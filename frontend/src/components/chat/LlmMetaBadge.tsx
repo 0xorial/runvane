@@ -45,10 +45,8 @@ export function LlmMetaBadge({
   className,
 }: LlmMetaBadgeProps) {
   const m = String(model ?? "").trim();
-  const modelShort = m.includes("/") ? m.split("/").pop() ?? m : m;
-  const hasTokens =
-    Number.isFinite(promptTokens) &&
-    Number.isFinite(completionTokens);
+  const modelShort = m.includes("/") ? (m.split("/").pop() ?? m) : m;
+  const hasTokens = Number.isFinite(promptTokens) && Number.isFinite(completionTokens);
   const totalTokens = hasTokens ? promptTokens + completionTokens : 0;
   const hasDuration = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0;
 
@@ -61,10 +59,7 @@ export function LlmMetaBadge({
     const totalExact = totalTokens.toLocaleString();
     segments.push(
       showTokenBreakdown ? (
-        <span
-          key="tok"
-          title={`in ${promptExact} / cached ${cachedPromptExact} / out ${completionExact} tok`}
-        >
+        <span key="tok" title={`in ${promptExact} / cached ${cachedPromptExact} / out ${completionExact} tok`}>
           in {formatCompactNumber(promptTokens)} / out {formatCompactNumber(completionTokens)} tok
         </span>
       ) : (

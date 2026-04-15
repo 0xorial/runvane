@@ -47,14 +47,8 @@ function toRow(row: AgentDbRow): AgentRow {
             `agents:${row.id}`,
           )
         : null,
-    default_model_preset_id:
-      typeof row.default_model_preset_id === "number"
-        ? row.default_model_preset_id
-        : null,
-    model_reference:
-      providerId || modelName
-        ? { provider_id: providerId, model_name: modelName }
-        : null,
+    default_model_preset_id: typeof row.default_model_preset_id === "number" ? row.default_model_preset_id : null,
+    model_reference: providerId || modelName ? { provider_id: providerId, model_name: modelName } : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -111,10 +105,7 @@ export class AgentsRepo {
     model_reference?: { provider_id?: string; model_name?: string } | null;
   }): AgentRow {
     const now = new Date().toISOString();
-    const cfg = parseAgentDefaultLlmConfigurationStrict(
-      input.default_llm_configuration,
-      "agents.create",
-    );
+    const cfg = parseAgentDefaultLlmConfigurationStrict(input.default_llm_configuration, "agents.create");
     const modelRefProviderId = String(input.model_reference?.provider_id ?? "").trim();
     const modelRefModelName = String(input.model_reference?.model_name ?? "").trim();
     const row: AgentRow = {
@@ -122,10 +113,7 @@ export class AgentsRepo {
       name: input.name,
       system_prompt: typeof input.system_prompt === "string" ? input.system_prompt : "",
       default_llm_configuration: cfg,
-      default_model_preset_id:
-        typeof input.default_model_preset_id === "number"
-          ? input.default_model_preset_id
-          : null,
+      default_model_preset_id: typeof input.default_model_preset_id === "number" ? input.default_model_preset_id : null,
       model_reference:
         modelRefProviderId || modelRefModelName
           ? { provider_id: modelRefProviderId, model_name: modelRefModelName }
@@ -185,20 +173,13 @@ export class AgentsRepo {
     },
   ): AgentRow | null {
     const now = new Date().toISOString();
-    const exists = this.db
-      .prepare("SELECT id FROM agents WHERE id = ?")
-      .get(id) as { id?: string } | undefined;
+    const exists = this.db.prepare("SELECT id FROM agents WHERE id = ?").get(id) as { id?: string } | undefined;
     if (!exists?.id) return null;
-    const cfg = parseAgentDefaultLlmConfigurationStrict(
-      input.default_llm_configuration,
-      `agents.update:${id}`,
-    );
+    const cfg = parseAgentDefaultLlmConfigurationStrict(input.default_llm_configuration, `agents.update:${id}`);
     const modelRefProviderId = String(input.model_reference?.provider_id ?? "").trim();
     const modelRefModelName = String(input.model_reference?.model_name ?? "").trim();
     const defaultModelPresetId =
-      typeof input.default_model_preset_id === "number"
-        ? input.default_model_preset_id
-        : null;
+      typeof input.default_model_preset_id === "number" ? input.default_model_preset_id : null;
     this.db
       .prepare(
         `UPDATE agents

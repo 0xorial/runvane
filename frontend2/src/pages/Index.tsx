@@ -40,18 +40,12 @@ const Index = () => {
       timestamp: Date.now(),
     };
     setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeConvId
-          ? { ...c, messages: [...c.messages, msg], updatedAt: Date.now() }
-          : c
-      )
+      prev.map((c) => (c.id === activeConvId ? { ...c, messages: [...c.messages, msg], updatedAt: Date.now() } : c)),
     );
   };
 
   const handlePermissionChange = (toolId: string, permission: ToolPermission) => {
-    setTools((prev) =>
-      prev.map((t) => (t.id === toolId ? { ...t, permission } : t))
-    );
+    setTools((prev) => prev.map((t) => (t.id === toolId ? { ...t, permission } : t)));
   };
 
   const handleToolDecision = (toolCallId: string, approved: boolean) => {
@@ -68,10 +62,10 @@ const Index = () => {
                   result: approved ? "Approved by user — executed successfully." : "Denied by user.",
                   completedAt: Date.now(),
                 }
-              : tc
+              : tc,
           ),
         })),
-      }))
+      })),
     );
   };
 
@@ -85,9 +79,7 @@ const Index = () => {
       >
         <div className="p-3 border-b flex items-center gap-2">
           <Bot className="w-5 h-5 text-primary" />
-          <span className="text-sm font-semibold text-foreground tracking-tight">
-            AgentOS
-          </span>
+          <span className="text-sm font-semibold text-foreground tracking-tight">AgentOS</span>
         </div>
         <ConversationList
           conversations={conversations}
@@ -107,9 +99,7 @@ const Index = () => {
           >
             {leftOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
           </button>
-          <span className="text-sm font-medium text-foreground truncate">
-            {activeConv?.title ?? "No conversation"}
-          </span>
+          <span className="text-sm font-medium text-foreground truncate">{activeConv?.title ?? "No conversation"}</span>
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
             <button
@@ -124,7 +114,7 @@ const Index = () => {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto scrollbar-thin px-4">
           {activeConv && activeConv.messages.length > 0 ? (
-             activeConv.messages.map((msg) => (
+            activeConv.messages.map((msg) => (
               <ChatMessage
                 key={msg.id}
                 message={msg}

@@ -1,11 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "../infra/logger.js";
 import type { Runtime } from "../bootstrap/runtime.js";
-import {
-  isUploadFile,
-  MAX_UPLOAD_BYTES,
-  toUploadFileResponse,
-} from "./uploads.types.js";
+import { isUploadFile, MAX_UPLOAD_BYTES, toUploadFileResponse } from "./uploads.types.js";
 
 export function createUploadsRouter(runtime: Runtime) {
   const r = new Hono();
@@ -28,10 +24,7 @@ export function createUploadsRouter(runtime: Runtime) {
       mimeType: maybeFile.type || "application/octet-stream",
       bytes,
     });
-    logger.info(
-      { attachmentId: attachment.id, sizeBytes: attachment.sizeBytes },
-      "[upload] file saved",
-    );
+    logger.info({ attachmentId: attachment.id, sizeBytes: attachment.sizeBytes }, "[upload] file saved");
     const out = toUploadFileResponse(attachment);
     return c.json(out, 201);
   });
@@ -41,10 +34,7 @@ export function createUploadsRouter(runtime: Runtime) {
     const content = runtime.uploads.readContentById(uploadId);
     if (!content) return c.json({ detail: "upload not found" }, 404);
     c.header("Content-Type", content.attachment.mimeType || "application/octet-stream");
-    c.header(
-      "Content-Disposition",
-      `inline; filename="${encodeURIComponent(content.attachment.name)}"`,
-    );
+    c.header("Content-Disposition", `inline; filename="${encodeURIComponent(content.attachment.name)}"`);
     return new Response(content.data, {
       headers: {
         "Content-Type": content.attachment.mimeType || "application/octet-stream",

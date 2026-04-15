@@ -61,9 +61,7 @@ export function ToolComponentPlayground() {
     <section className="flex flex-col gap-4">
       {scenarios.map((row) => (
         <div key={row.entry.id} className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {row.label}
-          </div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{row.label}</div>
           <ToolRunRow entry={row.entry} />
         </div>
       ))}

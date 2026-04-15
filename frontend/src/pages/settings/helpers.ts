@@ -1,12 +1,8 @@
 import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
 import type { ProviderRow } from "../../types/llmSettings";
 
-export function sortAgents(
-  list: AgentListItemResponse[] | null | undefined
-): AgentListItemResponse[] {
-  return [...(list || [])].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-  );
+export function sortAgents(list: AgentListItemResponse[] | null | undefined): AgentListItemResponse[] {
+  return [...(list || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
 export function normalizeSection(section: string | undefined): string {
@@ -32,24 +28,19 @@ export function normalizeSearchToken(value: unknown): string {
 export type DropdownItem = string | { value: string; label: string };
 export type ModelGroup = { id: string; label: string; models: DropdownItem[] };
 
-export function buildModelGroups(
-  providers: ProviderRow[] | null | undefined
-): ModelGroup[] {
+export function buildModelGroups(providers: ProviderRow[] | null | undefined): ModelGroup[] {
   return (providers || [])
     .map((p) => ({
       id: String(p.id || ""),
       label: String(p.label || p.id || ""),
       models: [...(p.models_verified ? p.models || [] : [])].sort((a, b) =>
-        String(a).localeCompare(String(b), undefined, { sensitivity: "base" })
+        String(a).localeCompare(String(b), undefined, { sensitivity: "base" }),
       ),
     }))
     .filter((g) => g.id && g.models.length > 0);
 }
 
-export function filterProviders(
-  providers: ProviderRow[] | null | undefined,
-  search: string
-): ProviderRow[] {
+export function filterProviders(providers: ProviderRow[] | null | undefined, search: string): ProviderRow[] {
   const q = String(search || "")
     .trim()
     .toLowerCase();

@@ -1,6 +1,1 @@
-export {
-  isSseEvent,
-  parseSseEvent,
-  parseSseEventObject,
-  sseEventType,
-} from "./sse.js";
+export { isSseEvent, parseSseEvent, parseSseEventObject, sseEventType } from "./sse.js";

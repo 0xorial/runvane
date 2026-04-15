@@ -87,10 +87,9 @@ const PostConversationMessageRequestSchema: z.ZodType<PostConversationMessageReq
   model_preset_id: z.number().finite().optional(),
   attachment_ids: z.array(z.string()).optional(),
 });
-const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationMessageAcceptedResponse> =
-  z.object({
-    conversation_id: z.string(),
-  });
+const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationMessageAcceptedResponse> = z.object({
+  conversation_id: z.string(),
+});
 
 const UpdateConversationRequestSchema = z.object({
   title: z.string().optional(),
@@ -104,23 +103,23 @@ export function parseCreateConversationTitle(body: Record<string, unknown>): str
   return typeof parsed.data.title === "string" ? parsed.data.title : "New chat";
 }
 
-export function parseUpdateConversationRequest(
-  body: Record<string, unknown>
-): { title?: string; group_id?: string | null; new_group_name?: string } {
+export function parseUpdateConversationRequest(body: Record<string, unknown>): {
+  title?: string;
+  group_id?: string | null;
+  new_group_name?: string;
+} {
   const parsed = UpdateConversationRequestSchema.safeParse(body);
   return parsed.success ? parsed.data : {};
 }
 
 export function toPostConversationMessageAcceptedResponse(
-  conversationId: string
+  conversationId: string,
 ): PostConversationMessageAcceptedResponse {
   return { conversation_id: conversationId };
 }
 
 function formatZodError(context: string, err: z.ZodError): Error {
-  const details = err.issues
-    .map((i) => `${context}.${i.path.join(".") || "<root>"}: ${i.message}`)
-    .join("; ");
+  const details = err.issues.map((i) => `${context}.${i.path.join(".") || "<root>"}: ${i.message}`).join("; ");
   return new Error(`${context} validation failed: ${details}`);
 }
 
@@ -133,9 +132,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
     if (role === "user") {
       const agentId = String(rec.agentId ?? rec.agent_id ?? "").trim();
       if (!agentId) {
-        throw new Error(
-          "GET /api/conversations/:id/messages validation failed: user role message missing agentId"
-        );
+        throw new Error("GET /api/conversations/:id/messages validation failed: user role message missing agentId");
       }
       return {
         type: "user-message",
@@ -201,17 +198,13 @@ export function validateGetConversationMessagesResponse(data: unknown): ChatMess
   return arr.data.map((row, i) => parseChatMessageEntry(row, i));
 }
 
-export function validatePostConversationMessageResponse(
-  data: unknown
-): PostConversationMessageAcceptedResponse {
+export function validatePostConversationMessageResponse(data: unknown): PostConversationMessageAcceptedResponse {
   const parsed = PostConversationMessageAcceptedResponseSchema.safeParse(data);
   if (!parsed.success) throw formatZodError("POST /api/conversations/:id/messages", parsed.error);
   return parsed.data;
 }
 
-export function validatePostConversationMessageRequest(
-  data: unknown
-): PostConversationMessageRequest {
+export function validatePostConversationMessageRequest(data: unknown): PostConversationMessageRequest {
   const parsed = PostConversationMessageRequestSchema.safeParse(data);
   if (!parsed.success) {
     throw formatZodError("POST /api/conversations/:id/messages request", parsed.error);

@@ -29,9 +29,7 @@ function summarizeEntry(entry: ChatEntry): string {
   if (entry.type === "user-message") {
     const attachments = entry.attachments ?? [];
     if (attachments.length === 0) return `USER: ${entry.text}`;
-    const attachmentSummary = attachments
-      .map((a) => `${a.name} (${a.mimeType}, ${a.sizeBytes}b)`)
-      .join(", ");
+    const attachmentSummary = attachments.map((a) => `${a.name} (${a.mimeType}, ${a.sizeBytes}b)`).join(", ");
     return `USER: ${entry.text}\nATTACHMENTS: ${attachmentSummary}`;
   }
   if (entry.type === "assistant-message") {
@@ -63,36 +61,26 @@ export function buildPlannerPrompt(input: {
     return `${idx + 1}. ${summarizeEntry(entry)}`;
   });
   const summary = summaryLines.join("\n");
-  const systemBlock = input.systemPrompt
-    ? `<SYSTEM_PROMPT>\n${input.systemPrompt}\n</SYSTEM_PROMPT>\n\n`
-    : "";
+  const systemBlock = input.systemPrompt ? `<SYSTEM_PROMPT>\n${input.systemPrompt}\n</SYSTEM_PROMPT>\n\n` : "";
   return (
     `${systemBlock}` +
     (input.toolIds.length > 0
       ? `<TOOLS>\n${input.toolIds
           .map((line, idx) => `${idx + 1}. ${line}`)
           .join(
-            "\n"
+            "\n",
           )}\n\nReturn ONLY valid JSON with this exact shape:\n{\"assistant_output\":\"string optional\",\"tool_calls\":[{\"toolId\":\"<tool_name>\",\"parameters\":{}}],\"followup\":\"finalize|continue_with_results|retry_with_adjustment\",\"state\":{}}\n\nRules:\n- Use tool IDs from <TOOLS> only.\n- If no tools are needed, return empty tool_calls and followup=\"finalize\".\n- If tools are needed, include all calls for this step in tool_calls.\n- If prior tool errors exist and you need another attempt, use followup=\"retry_with_adjustment\".\n- Keep assistant_output as user-facing text for this step.\n</TOOLS>\n\n`
       : "") +
     (input.priorToolResults.length > 0
       ? `<PRIOR_TOOL_RESULTS>\n${input.priorToolResults
           .map(
             (row, idx) =>
-              `${idx + 1}. tool=${row.toolId} ok=${
-                row.ok
-              } output=${stringify(row.output)} error=${row.error ?? ""}`
+              `${idx + 1}. tool=${row.toolId} ok=${row.ok} output=${stringify(row.output)} error=${row.error ?? ""}`,
           )
           .join("\n")}\n</PRIOR_TOOL_RESULTS>\n\n`
       : "") +
-    (Object.keys(input.loopState).length > 0
-      ? `<LOOP_STATE>\n${stringify(input.loopState)}\n</LOOP_STATE>\n\n`
-      : "") +
-    (input.triggerEntry
-      ? `<TRIGGER_ENTRY>\n${summarizeEntry(
-          input.triggerEntry
-        )}\n</TRIGGER_ENTRY>\n\n`
-      : "") +
+    (Object.keys(input.loopState).length > 0 ? `<LOOP_STATE>\n${stringify(input.loopState)}\n</LOOP_STATE>\n\n` : "") +
+    (input.triggerEntry ? `<TRIGGER_ENTRY>\n${summarizeEntry(input.triggerEntry)}\n</TRIGGER_ENTRY>\n\n` : "") +
     `<CONVERSATION_SUMMARY>\n${summary}\n</CONVERSATION_SUMMARY>\n\n` +
     `<ANCHOR_USER_MESSAGE>\n${input.anchorUserText}\n</ANCHOR_USER_MESSAGE>\n\n` +
     "Provide best possible answer to user's question. Use tools if necessary."
@@ -101,7 +89,7 @@ export function buildPlannerPrompt(input: {
 
 function parseLegacyDecision(
   reply: string,
-  isToolAvailable: (toolId: string) => boolean
+  isToolAvailable: (toolId: string) => boolean,
 ): LlmDecisionUserResponse | LlmDecisionTool {
   const cleaned = reply.trim();
   const withoutFence = cleaned
@@ -110,10 +98,7 @@ function parseLegacyDecision(
     .replace(/\s*```$/i, "")
     .trim();
   const assistantFallback = extractAssistantOutputFromJsonLike(reply).trim();
-  const parsed = parseFirstJsonObjectCandidate([
-    withoutFence,
-    extractLastBalancedJsonObject(withoutFence),
-  ]);
+  const parsed = parseFirstJsonObjectCandidate([withoutFence, extractLastBalancedJsonObject(withoutFence)]);
   if (parsed === null) {
     return {
       type: "user-response",
@@ -136,9 +121,7 @@ function parseLegacyDecision(
   }
   const toolId = typeof rec.toolId === "string" ? rec.toolId.trim() : "";
   const parameters =
-    rec.parameters &&
-    typeof rec.parameters === "object" &&
-    !Array.isArray(rec.parameters)
+    rec.parameters && typeof rec.parameters === "object" && !Array.isArray(rec.parameters)
       ? (rec.parameters as Record<string, unknown>)
       : {};
   if (!toolId || !isToolAvailable(toolId)) {
@@ -165,23 +148,15 @@ export function parseAgenticPlannerOutput(input: {
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
-  const parsed = parseFirstJsonObjectCandidate([
-    withoutFence,
-    extractLastBalancedJsonObject(withoutFence),
-  ]);
-  const assistantFallback =
-    input.streamedAnswer || extractAssistantOutputFromJsonLike(input.reply) || "";
+  const parsed = parseFirstJsonObjectCandidate([withoutFence, extractLastBalancedJsonObject(withoutFence)]);
+  const assistantFallback = input.streamedAnswer || extractAssistantOutputFromJsonLike(input.reply) || "";
   const parsedAgentic = AgenticPlannerOutputSchema.safeParse(parsed);
   if (parsedAgentic.success) {
-    const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) =>
-      input.isToolAvailable(call.toolId)
-    );
+    const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) => input.isToolAvailable(call.toolId));
     const output: AgenticPlannerOutput = {
       ...parsedAgentic.data,
       tool_calls: normalizedToolCalls,
-      ...(parsedAgentic.data.assistant_output == null
-        ? { assistant_output: assistantFallback }
-        : {}),
+      ...(parsedAgentic.data.assistant_output == null ? { assistant_output: assistantFallback } : {}),
     };
     const decision: LlmDecision =
       normalizedToolCalls.length > 0
@@ -198,10 +173,7 @@ export function parseAgenticPlannerOutput(input: {
   }
   const fallbackDecision = parseLegacyDecision(input.reply, input.isToolAvailable);
   const fallbackOutput: AgenticPlannerOutput = {
-    assistant_output:
-      fallbackDecision.type === "user-response"
-        ? fallbackDecision.text
-        : assistantFallback,
+    assistant_output: fallbackDecision.type === "user-response" ? fallbackDecision.text : assistantFallback,
     tool_calls:
       fallbackDecision.type === "tool-invocation"
         ? [
@@ -211,10 +183,7 @@ export function parseAgenticPlannerOutput(input: {
             },
           ]
         : [],
-    followup:
-      fallbackDecision.type === "tool-invocation"
-        ? "continue_with_results"
-        : "finalize",
+    followup: fallbackDecision.type === "tool-invocation" ? "continue_with_results" : "finalize",
   };
   return { output: fallbackOutput, decision: fallbackDecision };
 }

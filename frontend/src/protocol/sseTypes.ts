@@ -38,22 +38,8 @@ export type ConversationUpdatedSseEvent = Extract<
   SseConversationMetaEvent,
   { type: typeof SseType.CONVERSATION_UPDATED }
 >;
-export type PlannerResponseSseEvent = Extract<
-  SseConversationEvent,
-  { type: typeof SseType.PLANNER_RESPONSE }
->;
-export type ToolInvocationStartSseEvent = Extract<
-  SseConversationEvent,
-  { type: typeof SseType.TOOL_INVOCATION_START }
->;
-export type ToolInvocationEndSseEvent = Extract<
-  SseConversationEvent,
-  { type: typeof SseType.TOOL_INVOCATION_END }
->;
+export type PlannerResponseSseEvent = Extract<SseConversationEvent, { type: typeof SseType.PLANNER_RESPONSE }>;
+export type ToolInvocationStartSseEvent = Extract<SseConversationEvent, { type: typeof SseType.TOOL_INVOCATION_START }>;
+export type ToolInvocationEndSseEvent = Extract<SseConversationEvent, { type: typeof SseType.TOOL_INVOCATION_END }>;
 
-export {
-  isSseEvent,
-  parseSseEvent,
-  parseSseEventObject,
-  sseEventType,
-} from "./parseSseEventObject";
+export { isSseEvent, parseSseEvent, parseSseEventObject, sseEventType } from "./parseSseEventObject";

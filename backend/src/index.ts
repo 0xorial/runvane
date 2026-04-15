@@ -49,8 +49,6 @@ serve(
     port,
   },
   (info) => {
-    logger.info(
-      `[backend] Hono listening on http://localhost:${info.port}`,
-    );
+    logger.info(`[backend] Hono listening on http://localhost:${info.port}`);
   },
 );

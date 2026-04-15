@@ -48,12 +48,10 @@ export function createConversationsRouter(runtime: Runtime) {
     const rows = runtime.conversations.list({ deletedOnly: deletedMode });
     const groups = runtime.conversations.listGroups();
     const usageById = conversationUsageById();
-    return c.json(
-      {
-        conversations: rows.map((row) => toApiConversationRow(row, usageById.get(row.id) ?? [])),
-        groups,
-      },
-    );
+    return c.json({
+      conversations: rows.map((row) => toApiConversationRow(row, usageById.get(row.id) ?? [])),
+      groups,
+    });
   });
 
   r.post("/", async (c) => {
@@ -113,10 +111,7 @@ export function createConversationsRouter(runtime: Runtime) {
     }
 
     if (hasNewGroupNameUpdate) {
-      const groupUpdated = runtime.conversations.updateGroupName(
-        conversationId,
-        String(update.new_group_name || ""),
-      );
+      const groupUpdated = runtime.conversations.updateGroupName(conversationId, String(update.new_group_name || ""));
       if (!groupUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
       updated = groupUpdated;
     }

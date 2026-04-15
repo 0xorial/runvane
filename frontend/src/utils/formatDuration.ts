@@ -28,10 +28,7 @@ export type ThoughtMeta = {
 /**
  * Duration for a thinking segment: prefer wall-clock pair (UTC), then server `thoughtMs`.
  */
-export function thoughtDurationMs(
-  meta: ThoughtMeta | null | undefined,
-  messageCreatedAt?: string,
-): number {
+export function thoughtDurationMs(meta: ThoughtMeta | null | undefined, messageCreatedAt?: string): number {
   const raw = meta?.thoughtMs;
   const fromServer = typeof raw === "number" ? raw : Number(raw);
   if (Number.isFinite(fromServer) && fromServer > 0) return fromServer;
@@ -41,12 +38,7 @@ export function thoughtDurationMs(
   if (typeof end !== "string" || !end.trim()) {
     end = messageCreatedAt;
   }
-  if (
-    typeof start === "string" &&
-    start.trim() &&
-    typeof end === "string" &&
-    end.trim()
-  ) {
+  if (typeof start === "string" && start.trim() && typeof end === "string" && end.trim()) {
     const a = parseDbTimestampMs(start);
     const b = parseDbTimestampMs(end);
     if (Number.isFinite(a) && Number.isFinite(b) && b > a) {

@@ -44,25 +44,18 @@ type ChatAgentToolbarProps = {
 
 const toolbarLabelClass =
   "flex min-w-0 w-full flex-nowrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground";
-const toolbarLabelEmbeddedClass =
-  "flex min-w-0 shrink-0 items-center gap-1 text-xs text-muted-foreground";
+const toolbarLabelEmbeddedClass = "flex min-w-0 shrink-0 items-center gap-1 text-xs text-muted-foreground";
 const embeddedDropdownButtonClass =
   "min-h-[24px] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45 focus-visible:ring-1 focus-visible:ring-border";
 
-export function ChatAgentToolbar({
-  onSelectionChange,
-  showAgent = true,
-  embedded = false,
-}: ChatAgentToolbarProps) {
+export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded = false }: ChatAgentToolbarProps) {
   const [urlParams, setUrlParams] = useSearchParams();
   const [allAgents, setAllAgents] = useState<AgentListItemResponse[] | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [allLlms, setAllLlms] = useState<ModelGroup[]>([]);
   const [selectedLlm, setSelectedLlm] = useState<LlmSelection | null>(null);
   const [allPresets, setAllPresets] = useState<ModelPresetResponse[] | null>(null);
-  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(() =>
-    presetIdFromSearchParams(urlParams),
-  );
+  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(() => presetIdFromSearchParams(urlParams));
 
   useEffect(() => {
     getLlmSettings()
@@ -188,10 +181,7 @@ export function ChatAgentToolbar({
     () => (allAgents || []).find((a) => a.id === selectedAgentId),
     [allAgents, selectedAgentId],
   );
-  const agentDefaultLlm = useMemo(
-    () => getAgentLlm(currentAgent),
-    [currentAgent],
-  );
+  const agentDefaultLlm = useMemo(() => getAgentLlm(currentAgent), [currentAgent]);
   const firstAvailableLlm = useMemo<LlmSelection | null>(() => {
     for (const group of allLlms) {
       const first = group.models[0];
@@ -254,13 +244,7 @@ export function ChatAgentToolbar({
       llmModel: effectiveLlm.model,
       modelPresetId: selectedPresetId,
     });
-  }, [
-    selectedAgentId,
-    effectiveLlm.provider_id,
-    effectiveLlm.model,
-    selectedPresetId,
-    onSelectionChange,
-  ]);
+  }, [selectedAgentId, effectiveLlm.provider_id, effectiveLlm.model, selectedPresetId, onSelectionChange]);
 
   if (allAgents != null && allAgents.length === 0) {
     return (
@@ -298,10 +282,7 @@ export function ChatAgentToolbar({
                 searchPlaceholder="Search agent"
                 buttonClassName={embeddedDropdownButtonClass}
                 footer={
-                  <Link
-                    to="/settings/agents"
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
+                  <Link to="/settings/agents" className="text-primary underline-offset-4 hover:underline">
                     Configure agents ↗
                   </Link>
                 }
@@ -353,10 +334,7 @@ export function ChatAgentToolbar({
               searchPlaceholder="Search preset"
               buttonClassName={embeddedDropdownButtonClass}
               footer={
-                <Link
-                  to="/settings/model-presets"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
+                <Link to="/settings/model-presets" className="text-primary underline-offset-4 hover:underline">
                   Configure presets ↗
                 </Link>
               }
@@ -393,10 +371,7 @@ export function ChatAgentToolbar({
               placeholder="Select agent"
               searchPlaceholder="Search agent"
               footer={
-                <Link
-                  to="/settings/agents"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
+                <Link to="/settings/agents" className="text-primary underline-offset-4 hover:underline">
                   Configure agents ↗
                 </Link>
               }
@@ -404,12 +379,7 @@ export function ChatAgentToolbar({
           </div>
         </label>
       ) : null}
-      <label
-        className={cn(
-          embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass,
-          "min-w-0",
-        )}
-      >
+      <label className={cn(embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass, "min-w-0")}>
         Model
         <div className="min-w-0 flex-1">
           <ModelSelector
@@ -443,10 +413,7 @@ export function ChatAgentToolbar({
             placeholder="No preset"
             searchPlaceholder="Search preset"
             footer={
-              <Link
-                to="/settings/model-presets"
-                className="text-primary underline-offset-4 hover:underline"
-              >
+              <Link to="/settings/model-presets" className="text-primary underline-offset-4 hover:underline">
                 Configure presets ↗
               </Link>
             }
