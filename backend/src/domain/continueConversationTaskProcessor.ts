@@ -12,11 +12,6 @@ import { ToolRegistry } from "../tools/toolRegistry.js";
 import type { AgenticToolCall, AgenticToolRequest, ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
 import { type StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
-import {
-  clampToolCallsForTurn,
-  DEFAULT_MAX_TOOL_CALLS_PER_TURN,
-  shouldContinuePlannerLoop,
-} from "./agenticLoopGuards.js";
 import { usageByConversationId } from "./conversationUsage.js";
 import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
 import {
@@ -755,7 +750,7 @@ Return ONLY valid JSON object for tool parameters.`;
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
     const inputFiles = this.buildInputFiles(anchorUserMessage);
     const enabledToolIds = this.enabledToolIdsForAgent(anchorUserMessage.agentId);
-    const MAX_TOOL_CALLS_PER_TURN = DEFAULT_MAX_TOOL_CALLS_PER_TURN;
+    const maxToolRequestsPerPass = 4;
     throwIfCancelled(opts?.shouldCancel);
     const entries = this.chatEntries.listMessages(conversationId);
     const llmRequest = buildPlannerPrompt({
@@ -855,10 +850,7 @@ Return ONLY valid JSON object for tool parameters.`;
         : {}),
     });
     if (allToolCalls.length > 0) {
-      const selectedCount = clampToolCallsForTurn(
-        allToolCalls.map((row) => row.call),
-        MAX_TOOL_CALLS_PER_TURN,
-      ).length;
+      const selectedCount = Math.max(0, Math.trunc(maxToolRequestsPerPass));
       const selectedCalls = allToolCalls.slice(0, selectedCount);
       const batchId = crypto.randomUUID();
       this.hub.publish(conversationId, {
@@ -869,7 +861,7 @@ Return ONLY valid JSON object for tool parameters.`;
       for (let i = 0; i < selectedCalls.length; i += 1) {
         const call = selectedCalls[i].call;
         const toolCfg = this.agentToolConfigFor(anchorUserMessage.agentId, call.toolId);
-        const shouldResumeAfterBatch = shouldContinuePlannerLoop(agentic.followup) && i === selectedCalls.length - 1;
+        const shouldResumeAfterBatch = agentic.followup === "continue" && i === selectedCalls.length - 1;
         this.enqueueRunTool({
           conversationId,
           agentId: anchorUserMessage.agentId,
@@ -889,11 +881,11 @@ Return ONLY valid JSON object for tool parameters.`;
       return;
     }
 
-    if (!shouldContinuePlannerLoop(agentic.followup)) {
+    if (agentic.followup !== "continue") {
       logger.info({ conversationId }, "[task] continue_conversation completed");
       return;
     }
-    logger.info(
+    logger.warn(
       { conversationId, followup: agentic.followup },
       "[task] planner requested followup without tool call; waiting for next continuation trigger",
     );

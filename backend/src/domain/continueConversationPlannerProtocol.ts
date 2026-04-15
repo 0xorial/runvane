@@ -72,14 +72,14 @@ When you need a tool, specify:
 - request (plain-language intent that another tool-parameter LLM can convert into exact JSON args)
 
 Return ONLY valid JSON with this exact shape:
-{"assistant_output":"string optional","tool_requests":[{"tool_name":"<tool_name>","request":"what you need tool to do"}],"followup":"finalize|continue_with_results|retry_with_adjustment","state":{}}
+{"assistant_output":"string optional","tool_requests":[{"tool_name":"<tool_name>","request":"what you need tool to do"}],"followup":"finalize|continue"}
 
 Rules:
 - Use tool_name/toolId only from the allowed tool IDs listed above.
 - Planner MUST NOT output tool parameters.
 - If no tools are needed, return empty tool_requests and followup="finalize".
 - If tools are needed, use tool_requests with tool_name + natural-language request.
-- If prior tool errors exist and you need another attempt, use followup="retry_with_adjustment".
+- If tools should run and conversation should resume after results, use followup="continue".
 - Keep assistant_output as user-facing text for this step.
 </TOOLS>
 

@@ -25,7 +25,7 @@ export const LlmDecisionUserResponseSchema = z.object({
 export type LlmDecision = LlmDecisionTool | LlmDecisionUserResponse;
 export const LlmDecisionSchema = z.discriminatedUnion("type", [LlmDecisionToolSchema, LlmDecisionUserResponseSchema]);
 
-export const AgenticFollowupValues = ["finalize", "continue_with_results", "retry_with_adjustment"] as const;
+export const AgenticFollowupValues = ["finalize", "continue"] as const;
 export type AgenticFollowup = (typeof AgenticFollowupValues)[number];
 
 export type AgenticToolCall = {
@@ -51,14 +51,12 @@ export type AgenticPlannerOutput = {
   tool_calls: AgenticToolCall[];
   tool_requests: AgenticToolRequest[];
   followup: AgenticFollowup;
-  state?: Record<string, unknown>;
 };
 export const AgenticPlannerOutputSchema: z.ZodType<AgenticPlannerOutput> = z.object({
   assistant_output: z.string().optional(),
   tool_calls: z.array(AgenticToolCallSchema).default([]),
   tool_requests: z.array(AgenticToolRequestSchema).default([]),
   followup: z.enum(AgenticFollowupValues),
-  state: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type ChatEntryBase = {
