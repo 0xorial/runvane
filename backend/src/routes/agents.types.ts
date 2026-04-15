@@ -123,9 +123,7 @@ export function llmsFromAgent(
   modelRef: { provider_id: string; model_name: string } | null
 ): Array<Record<string, unknown>> {
   const provider_id = String(cfg?.provider_id ?? modelRef?.provider_id ?? "");
-  const model = String(
-    cfg?.model_name ?? cfg?.model ?? modelRef?.model_name ?? ""
-  );
+  const model = String(cfg?.model_name ?? modelRef?.model_name ?? "");
   if (!provider_id && !model) return [];
   return [{ role: "chat", provider_id, model }];
 }

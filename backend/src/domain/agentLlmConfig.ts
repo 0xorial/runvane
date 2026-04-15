@@ -14,7 +14,6 @@ export const AgentDefaultLlmConfigurationSchema = z
   .object({
     provider_id: z.string().optional(),
     model_name: z.string().optional(),
-    model: z.string().optional(),
     tools: z.record(z.string(), AgentToolConfigSchema).optional(),
   })
   .strict();

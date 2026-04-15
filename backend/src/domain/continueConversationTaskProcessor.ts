@@ -14,9 +14,7 @@ import type {
   ChatEntry,
   UserMessageEntry,
 } from "../types/chatEntry.js";
-import {
-  type StreamTextCompletionResult,
-} from "../llm_provider/provider.js";
+import { type StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
 import {
   clampToolCallsForTurn,
@@ -25,10 +23,7 @@ import {
   shouldContinuePlannerLoop,
 } from "./agenticLoopGuards.js";
 import { usageByConversationId } from "./conversationUsage.js";
-import {
-  isTaskCancelledError,
-  throwIfCancelled,
-} from "./taskCancellation.js";
+import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
 import {
   composeFailedPlannerResponse,
   extractAssistantOutputFromJsonLike,
@@ -111,20 +106,16 @@ export class ContinueConversationTaskProcessor {
     llmProviderId?: string;
     llmModel?: string;
   } {
-    const agentId = anchorUserMessage.agentId;
-    const agent = this.agents.get(agentId);
-    const cfg = agent?.default_llm_configuration;
-    const cfgProviderId = cfg?.provider_id;
-    const cfgModelName = cfg?.model_name ?? cfg?.model;
+    const agent = this.agents.get(anchorUserMessage.agentId);
 
     const llmProviderId =
       anchorUserMessage.llmProviderId ??
-      cfgProviderId ??
+      agent?.default_llm_configuration?.provider_id ??
       agent?.model_reference?.provider_id;
 
     const llmModel =
       anchorUserMessage.llmModel ??
-      cfgModelName ??
+      agent?.default_llm_configuration?.model_name ??
       agent?.model_reference?.model_name;
 
     return {
@@ -273,7 +264,9 @@ export class ContinueConversationTaskProcessor {
     );
     const anchorUserMessage = [...initialEntries]
       .reverse()
-      .find((entry): entry is UserMessageEntry => entry.type === "user-message");
+      .find(
+        (entry): entry is UserMessageEntry => entry.type === "user-message"
+      );
     if (!anchorUserMessage) {
       logger.warn(
         { conversationId, triggerEntryType: triggerEntry?.type ?? null },
@@ -292,17 +285,19 @@ export class ContinueConversationTaskProcessor {
       modelPresetId: effectiveModelPresetId,
     });
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
-    const inputFiles = (anchorUserMessage.attachments ?? []).map((attachment) => {
-      const content = this.uploads.readContentById(attachment.id);
-      if (!content) {
-        throw new Error(`attachment content not found: ${attachment.id}`);
+    const inputFiles = (anchorUserMessage.attachments ?? []).map(
+      (attachment) => {
+        const content = this.uploads.readContentById(attachment.id);
+        if (!content) {
+          throw new Error(`attachment content not found: ${attachment.id}`);
+        }
+        return {
+          filename: attachment.name,
+          mimeType: attachment.mimeType || "application/octet-stream",
+          base64Data: content.data.toString("base64"),
+        };
       }
-      return {
-        filename: attachment.name,
-        mimeType: attachment.mimeType || "application/octet-stream",
-        base64Data: content.data.toString("base64"),
-      };
-    });
+    );
     const enabledToolIds = this.tools
       .list()
       .filter(
@@ -464,7 +459,10 @@ export class ContinueConversationTaskProcessor {
               ? {
                   promptTokens: plannerTokenUsage.promptTokens,
                   ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                    ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
+                    ? {
+                        cachedPromptTokens:
+                          plannerTokenUsage.cachedPromptTokens,
+                      }
                     : {}),
                   completionTokens: plannerTokenUsage.completionTokens,
                 }
@@ -482,7 +480,10 @@ export class ContinueConversationTaskProcessor {
               ? {
                   prompt_tokens: plannerTokenUsage.promptTokens,
                   ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                    ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
+                    ? {
+                        cached_prompt_tokens:
+                          plannerTokenUsage.cachedPromptTokens,
+                      }
                     : {}),
                   completion_tokens: plannerTokenUsage.completionTokens,
                 }
@@ -522,7 +523,10 @@ export class ContinueConversationTaskProcessor {
             ? {
                 prompt_tokens: plannerTokenUsage.promptTokens,
                 ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                  ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
+                  ? {
+                      cached_prompt_tokens:
+                        plannerTokenUsage.cachedPromptTokens,
+                    }
                   : {}),
                 completion_tokens: plannerTokenUsage.completionTokens,
               }
