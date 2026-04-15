@@ -76,6 +76,7 @@ export function createRuntime(opts: {
   const continueConversationTaskProcessor =
     new ContinueConversationTaskProcessor(
       chatEntries,
+      conversations,
       hub,
       llmProviderSettings,
       modelPresets,

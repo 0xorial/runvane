@@ -10,6 +10,8 @@ export type EnqueueRunToolInput = {
   agentId: string | null;
   toolName: string;
   params: unknown;
+  batchId?: string;
+  resumeAfterTool?: boolean;
   toolInvocationEntryId?: string;
   approvalGranted?: boolean;
   agentToolConfig?: {
@@ -46,6 +48,11 @@ function taskFromRow(row: TaskRow): AgentTask {
       agentId,
       toolName,
       params: row.payload.params,
+      batchId:
+        typeof row.payload.batchId === "string" && row.payload.batchId.trim().length > 0
+          ? row.payload.batchId.trim()
+          : undefined,
+      resumeAfterTool: row.payload.resumeAfterTool !== false,
       toolInvocationEntryId:
         typeof row.payload.toolInvocationEntryId === "string" &&
         row.payload.toolInvocationEntryId.trim().length > 0
@@ -109,6 +116,8 @@ export function createTaskEnqueueHelpers(opts: {
         agentId: input.agentId,
         toolName: input.toolName,
         params: input.params,
+        batchId: input.batchId ?? null,
+        resumeAfterTool: input.resumeAfterTool !== false,
         toolInvocationEntryId: input.toolInvocationEntryId ?? null,
         approvalGranted: input.approvalGranted === true,
         agentToolConfig: input.agentToolConfig ?? null,

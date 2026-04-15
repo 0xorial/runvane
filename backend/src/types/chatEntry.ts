@@ -30,6 +30,35 @@ export const LlmDecisionSchema = z.discriminatedUnion(
   [LlmDecisionToolSchema, LlmDecisionUserResponseSchema]
 );
 
+export const AgenticFollowupValues = [
+  "finalize",
+  "continue_with_results",
+  "retry_with_adjustment",
+] as const;
+export type AgenticFollowup = (typeof AgenticFollowupValues)[number];
+
+export type AgenticToolCall = {
+  toolId: string;
+  parameters: Record<string, unknown>;
+};
+export const AgenticToolCallSchema = z.object({
+  toolId: z.string().min(1),
+  parameters: z.record(z.string(), z.unknown()),
+});
+
+export type AgenticPlannerOutput = {
+  assistant_output?: string;
+  tool_calls: AgenticToolCall[];
+  followup: AgenticFollowup;
+  state?: Record<string, unknown>;
+};
+export const AgenticPlannerOutputSchema: z.ZodType<AgenticPlannerOutput> = z.object({
+  assistant_output: z.string().optional(),
+  tool_calls: z.array(AgenticToolCallSchema).default([]),
+  followup: z.enum(AgenticFollowupValues),
+  state: z.record(z.string(), z.unknown()).optional(),
+});
+
 export type ChatEntryBase = {
   id: string;
   conversationIndex: number;
