@@ -7,7 +7,7 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { ResizableSidePanel } from "@/components/ui/ResizableSidePanel";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -75,6 +75,11 @@ export function App() {
   const settingsTab = location.pathname.startsWith("/settings");
   const playgroundTab = location.pathname.startsWith("/playground");
   const showTopHeader = !chatTab;
+  const sidebarDefaultSize = useMemo(() => {
+    if (typeof window === "undefined") return 14;
+    const rawPercent = (300 / Math.max(1, window.innerWidth)) * 100;
+    return Math.max(1, Math.min(95, rawPercent));
+  }, []);
   const appRoutes = (
     <Routes>
       <Route
@@ -167,9 +172,8 @@ export function App() {
             <ResizableSidePanel
               open={chatSidebarVisible}
               onOpenChange={setChatSidebarVisible}
-              defaultSize={14}
+              defaultSize={sidebarDefaultSize}
               minSize={10}
-              maxSize={22}
               side={
                 <div
                   className={cn(

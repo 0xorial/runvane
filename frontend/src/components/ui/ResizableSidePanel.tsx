@@ -27,7 +27,7 @@ export function ResizableSidePanel({
   children,
   defaultSize = 20,
   minSize = 14,
-  maxSize = 40,
+  maxSize,
   sideClassName,
   mainClassName,
 }: ResizableSidePanelProps) {
@@ -51,7 +51,7 @@ export function ResizableSidePanel({
         ref={sidePanelRef}
         defaultSize={defaultSize}
         minSize={minSize}
-        maxSize={maxSize}
+        {...(typeof maxSize === "number" ? { maxSize } : {})}
         collapsible
         collapsedSize={0}
         onExpand={() => onOpenChange(true)}
@@ -70,7 +70,7 @@ export function ResizableSidePanel({
       />
 
       <ResizablePanel
-        minSize={100 - maxSize}
+        minSize={typeof maxSize === "number" ? Math.max(0, 100 - maxSize) : 0}
         className={cn(
           "flex h-full min-h-0 min-w-0 flex-col overflow-hidden",
           mainClassName
