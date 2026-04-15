@@ -57,30 +57,65 @@ export function buildPlannerPrompt(input: {
   priorToolResults: PriorToolResult[];
   loopState: Record<string, unknown>;
 }): string {
-  const summaryLines = input.entries.map((entry, idx) => {
-    return `${idx + 1}. ${summarizeEntry(entry)}`;
-  });
+  const summaryLines = input.entries.map((entry, idx) => `${idx + 1}. ${summarizeEntry(entry)}`);
   const summary = summaryLines.join("\n");
-  const systemBlock = input.systemPrompt ? `<SYSTEM_PROMPT>\n${input.systemPrompt}\n</SYSTEM_PROMPT>\n\n` : "";
+  const systemBlock = input.systemPrompt
+    ? `<SYSTEM_PROMPT>\n${input.systemPrompt}\n</SYSTEM_PROMPT>\n\n`
+    : "";
+  const toolList = input.toolIds.map((line, idx) => `${idx + 1}. ${line}`).join("\n");
+  const toolsBlock =
+    input.toolIds.length > 0
+      ? `<TOOLS>
+${toolList}
+
+Return ONLY valid JSON with this exact shape:
+{"assistant_output":"string optional","tool_calls":[{"toolId":"<tool_name>","parameters":{}}],"followup":"finalize|continue_with_results|retry_with_adjustment","state":{}}
+
+Rules:
+- Use tool IDs from <TOOLS> only.
+- If no tools are needed, return empty tool_calls and followup="finalize".
+- If tools are needed, include all calls for this step in tool_calls.
+- If prior tool errors exist and you need another attempt, use followup="retry_with_adjustment".
+- Keep assistant_output as user-facing text for this step.
+</TOOLS>
+
+`
+      : "";
+  const priorToolResultsBlock =
+    input.priorToolResults.length > 0
+      ? `<PRIOR_TOOL_RESULTS>
+${input.priorToolResults
+  .map(
+    (row, idx) =>
+      `${idx + 1}. tool=${row.toolId} ok=${row.ok} output=${stringify(row.output)} error=${row.error ?? ""}`,
+  )
+  .join("\n")}
+</PRIOR_TOOL_RESULTS>
+
+`
+      : "";
+  const loopStateBlock =
+    Object.keys(input.loopState).length > 0
+      ? `<LOOP_STATE>
+${stringify(input.loopState)}
+</LOOP_STATE>
+
+`
+      : "";
+  const triggerEntryBlock = input.triggerEntry
+    ? `<TRIGGER_ENTRY>
+${summarizeEntry(input.triggerEntry)}
+</TRIGGER_ENTRY>
+
+`
+    : "";
+
   return (
     `${systemBlock}` +
-    (input.toolIds.length > 0
-      ? `<TOOLS>\n${input.toolIds
-          .map((line, idx) => `${idx + 1}. ${line}`)
-          .join(
-            "\n",
-          )}\n\nReturn ONLY valid JSON with this exact shape:\n{\"assistant_output\":\"string optional\",\"tool_calls\":[{\"toolId\":\"<tool_name>\",\"parameters\":{}}],\"followup\":\"finalize|continue_with_results|retry_with_adjustment\",\"state\":{}}\n\nRules:\n- Use tool IDs from <TOOLS> only.\n- If no tools are needed, return empty tool_calls and followup=\"finalize\".\n- If tools are needed, include all calls for this step in tool_calls.\n- If prior tool errors exist and you need another attempt, use followup=\"retry_with_adjustment\".\n- Keep assistant_output as user-facing text for this step.\n</TOOLS>\n\n`
-      : "") +
-    (input.priorToolResults.length > 0
-      ? `<PRIOR_TOOL_RESULTS>\n${input.priorToolResults
-          .map(
-            (row, idx) =>
-              `${idx + 1}. tool=${row.toolId} ok=${row.ok} output=${stringify(row.output)} error=${row.error ?? ""}`,
-          )
-          .join("\n")}\n</PRIOR_TOOL_RESULTS>\n\n`
-      : "") +
-    (Object.keys(input.loopState).length > 0 ? `<LOOP_STATE>\n${stringify(input.loopState)}\n</LOOP_STATE>\n\n` : "") +
-    (input.triggerEntry ? `<TRIGGER_ENTRY>\n${summarizeEntry(input.triggerEntry)}\n</TRIGGER_ENTRY>\n\n` : "") +
+    toolsBlock +
+    priorToolResultsBlock +
+    loopStateBlock +
+    triggerEntryBlock +
     `<CONVERSATION_SUMMARY>\n${summary}\n</CONVERSATION_SUMMARY>\n\n` +
     `<ANCHOR_USER_MESSAGE>\n${input.anchorUserText}\n</ANCHOR_USER_MESSAGE>\n\n` +
     "Provide best possible answer to user's question. Use tools if necessary."
