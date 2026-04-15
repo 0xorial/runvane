@@ -18,6 +18,11 @@ function asObject(v: unknown): Record<string, unknown> {
   return {};
 }
 
+function optionalNonEmptyString(value: unknown): string | undefined {
+  const out = String(value ?? "").trim();
+  return out.length > 0 ? out : undefined;
+}
+
 function parseJsonArrayOrDefault(raw: string): string[] {
   try {
     const arr = JSON.parse(raw) as unknown;
@@ -157,6 +162,12 @@ export class LlmProviderSettingsRepo {
     const llm_configuration: LlmConfiguration = {
       provider_id: String(cfgDoc.provider_id ?? "openai"),
       model_name: String(cfgDoc.model_name ?? "gpt-4o-mini"),
+      ...(optionalNonEmptyString(cfgDoc.tool_call_provider_id)
+        ? { tool_call_provider_id: optionalNonEmptyString(cfgDoc.tool_call_provider_id) }
+        : {}),
+      ...(optionalNonEmptyString(cfgDoc.tool_call_model_name)
+        ? { tool_call_model_name: optionalNonEmptyString(cfgDoc.tool_call_model_name) }
+        : {}),
       model_settings:
         cfgDoc.model_settings && typeof cfgDoc.model_settings === "object"
           ? (cfgDoc.model_settings as Record<string, unknown>)
@@ -206,6 +217,8 @@ export class LlmProviderSettingsRepo {
           JSON.stringify({
             provider_id: String(cfg.provider_id || "openai"),
             model_name: String(cfg.model_name || "gpt-4o-mini"),
+            tool_call_provider_id: optionalNonEmptyString(cfg.tool_call_provider_id) ?? null,
+            tool_call_model_name: optionalNonEmptyString(cfg.tool_call_model_name) ?? null,
             model_settings: asObject(cfg.model_settings),
           }),
           now,

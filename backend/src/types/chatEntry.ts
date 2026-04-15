@@ -37,15 +37,26 @@ export const AgenticToolCallSchema = z.object({
   parameters: z.record(z.string(), z.unknown()),
 });
 
+export type AgenticToolRequest = {
+  tool_name: string;
+  request: string;
+};
+export const AgenticToolRequestSchema = z.object({
+  tool_name: z.string().min(1),
+  request: z.string().min(1),
+});
+
 export type AgenticPlannerOutput = {
   assistant_output?: string;
   tool_calls: AgenticToolCall[];
+  tool_requests: AgenticToolRequest[];
   followup: AgenticFollowup;
   state?: Record<string, unknown>;
 };
 export const AgenticPlannerOutputSchema: z.ZodType<AgenticPlannerOutput> = z.object({
   assistant_output: z.string().optional(),
   tool_calls: z.array(AgenticToolCallSchema).default([]),
+  tool_requests: z.array(AgenticToolRequestSchema).default([]),
   followup: z.enum(AgenticFollowupValues),
   state: z.record(z.string(), z.unknown()).optional(),
 });

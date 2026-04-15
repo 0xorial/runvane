@@ -12,6 +12,8 @@ export type LlmProviderRow = {
 export type LlmConfiguration = {
   provider_id: string;
   model_name: string;
+  tool_call_provider_id?: string;
+  tool_call_model_name?: string;
   model_settings: Record<string, unknown>;
 };
 export type LlmProviderSettingsDocument = {
@@ -48,6 +50,8 @@ const LlmProviderRowSchema: z.ZodType<LlmProviderRow> = z.object({
 const LlmConfigurationSchema: z.ZodType<LlmConfiguration> = z.object({
   provider_id: z.string(),
   model_name: z.string(),
+  tool_call_provider_id: z.string().optional(),
+  tool_call_model_name: z.string().optional(),
   model_settings: z.record(z.string(), z.unknown()),
 });
 

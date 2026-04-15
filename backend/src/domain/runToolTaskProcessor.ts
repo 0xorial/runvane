@@ -45,15 +45,13 @@ export class RunToolTaskProcessor {
           result: null,
         });
 
-    if (!toolEntryId) {
-      this.hub.publish(conversationId, {
-        type: SseType.TOOL_INVOCATION_START,
-        chat_entry_id: toolEntry?.id ?? "",
-        tool_name: task.toolName,
-        approval_required: false,
-        ...(argsPreview ? { args_preview: argsPreview } : {}),
-      });
-    }
+    this.hub.publish(conversationId, {
+      type: SseType.TOOL_INVOCATION_START,
+      chat_entry_id: toolEntryId ?? toolEntry?.id ?? "",
+      tool_name: task.toolName,
+      approval_required: false,
+      ...(argsPreview ? { args_preview: argsPreview } : {}),
+    });
 
     this.toolExecutionLogs.append({
       taskId: taskId ?? null,
