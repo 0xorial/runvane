@@ -88,7 +88,8 @@ export class ContinueConversationTaskProcessor {
   private buildPrompt(input: {
     systemPrompt: string;
     entries: ChatEntry[];
-    latestUserText: string;
+    anchorUserText: string;
+    triggerEntry: ChatEntry | null;
     toolIds: string[];
     priorToolResults: Array<{
       toolId: string;
@@ -127,8 +128,13 @@ export class ContinueConversationTaskProcessor {
       (Object.keys(input.loopState).length > 0
         ? `<LOOP_STATE>\n${this.stringify(input.loopState)}\n</LOOP_STATE>\n\n`
         : "") +
+      (input.triggerEntry
+        ? `<TRIGGER_ENTRY>\n${this.summarizeEntry(
+            input.triggerEntry
+          )}\n</TRIGGER_ENTRY>\n\n`
+        : "") +
       `<CONVERSATION_SUMMARY>\n${summary}\n</CONVERSATION_SUMMARY>\n\n` +
-      `<LATEST_USER_MESSAGE>\n${input.latestUserText}\n</LATEST_USER_MESSAGE>\n\n` +
+      `<ANCHOR_USER_MESSAGE>\n${input.anchorUserText}\n</ANCHOR_USER_MESSAGE>\n\n` +
       "Provide best possible answer to user's question. Use tools if necessary."
     );
   }
@@ -147,12 +153,10 @@ export class ContinueConversationTaskProcessor {
       .trim();
     const parsed = parseFirstJsonObjectCandidate([
       withoutFence,
-      stripThoughtTagBlock(withoutFence),
       extractLastBalancedJsonObject(withoutFence),
-      extractLastBalancedJsonObject(stripThoughtTagBlock(withoutFence)),
     ]);
-    const tagged = extractTaggedContent(reply);
-    const assistantFallback = streamedAnswer || tagged.answer || "";
+    const assistantFallback =
+      streamedAnswer || extractAssistantOutputFromJsonLike(reply) || "";
     const parsedAgentic = AgenticPlannerOutputSchema.safeParse(parsed);
     if (parsedAgentic.success) {
       const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) =>
@@ -243,23 +247,23 @@ export class ContinueConversationTaskProcessor {
     return { enabled, policy, ...(rules ? { rules } : {}) };
   }
 
-  private resolveLlmOverrides(lastUserMessage: UserMessageEntry): {
+  private resolveLlmOverrides(anchorUserMessage: UserMessageEntry): {
     llmProviderId?: string;
     llmModel?: string;
   } {
-    const agentId = lastUserMessage.agentId;
+    const agentId = anchorUserMessage.agentId;
     const agent = this.agents.get(agentId);
     const cfg = agent?.default_llm_configuration;
     const cfgProviderId = cfg?.provider_id;
     const cfgModelName = cfg?.model_name ?? cfg?.model;
 
     const llmProviderId =
-      lastUserMessage.llmProviderId ??
+      anchorUserMessage.llmProviderId ??
       cfgProviderId ??
       agent?.model_reference?.provider_id;
 
     const llmModel =
-      lastUserMessage.llmModel ??
+      anchorUserMessage.llmModel ??
       cfgModelName ??
       agent?.model_reference?.model_name;
 
@@ -278,36 +282,30 @@ export class ContinueConversationTaskProcessor {
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
-    const tagged = extractTaggedContent(reply);
+    const assistantFallback = extractAssistantOutputFromJsonLike(reply).trim();
     const parsed = parseFirstJsonObjectCandidate([
       withoutFence,
-      stripThoughtTagBlock(withoutFence),
       extractLastBalancedJsonObject(withoutFence),
-      extractLastBalancedJsonObject(stripThoughtTagBlock(withoutFence)),
     ]);
     if (parsed === null) {
-      const tagged = extractTaggedContent(reply);
-      const answer = tagged.answer.trim();
       return {
         type: "user-response",
-        text: answer || reply,
+        text: assistantFallback || reply,
       };
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      const answer = tagged.answer.trim();
-      return { type: "user-response", text: answer || reply };
+      return { type: "user-response", text: assistantFallback || reply };
     }
     const rec = parsed as Record<string, unknown>;
     if (rec.type === "user-response") {
       const text = typeof rec.text === "string" ? rec.text.trim() : "";
       return {
         type: "user-response",
-        text: text || tagged.answer.trim() || reply,
+        text: text || assistantFallback || reply,
       };
     }
     if (rec.type !== "tool-invocation") {
-      const answer = tagged.answer.trim();
-      return { type: "user-response", text: answer || reply };
+      return { type: "user-response", text: assistantFallback || reply };
     }
     const toolId = typeof rec.toolId === "string" ? rec.toolId.trim() : "";
     const parameters =
@@ -317,9 +315,7 @@ export class ContinueConversationTaskProcessor {
         ? (rec.parameters as Record<string, unknown>)
         : {};
     if (!toolId || !this.tools.get(toolId)) {
-      const tagged = extractTaggedContent(reply);
-      const answer = tagged.answer.trim();
-      return { type: "user-response", text: answer || reply };
+      return { type: "user-response", text: assistantFallback || reply };
     }
     return {
       type: "tool-invocation",
@@ -456,27 +452,34 @@ export class ContinueConversationTaskProcessor {
 
   async process(task: ContinueConversationTask): Promise<void> {
     const conversationId = task.conversationId;
-    logger.info({ conversationId }, "[task] continue_conversation started");
-    const lastUserMessage = this.chatEntries.getLastUserMessage(conversationId);
-    if (!lastUserMessage) {
+    const initialEntries = this.chatEntries.listMessages(conversationId);
+    const triggerEntry = initialEntries.at(-1) ?? null;
+    logger.info(
+      { conversationId, triggerEntryType: triggerEntry?.type ?? null },
+      "[task] continue_conversation started"
+    );
+    const anchorUserMessage = [...initialEntries]
+      .reverse()
+      .find((entry): entry is UserMessageEntry => entry.type === "user-message");
+    if (!anchorUserMessage) {
       logger.warn(
-        { conversationId },
+        { conversationId, triggerEntryType: triggerEntry?.type ?? null },
         "[task] skipped continue_conversation: no user message"
       );
       return;
     }
-    const agent = this.agents.get(lastUserMessage.agentId);
-    const llmOverrides = this.resolveLlmOverrides(lastUserMessage);
-    const selectedAgent = this.agents.get(lastUserMessage.agentId);
+    const agent = this.agents.get(anchorUserMessage.agentId);
+    const llmOverrides = this.resolveLlmOverrides(anchorUserMessage);
+    const selectedAgent = this.agents.get(anchorUserMessage.agentId);
     const effectiveModelPresetId =
-      lastUserMessage.modelPresetId ??
+      anchorUserMessage.modelPresetId ??
       selectedAgent?.default_model_preset_id ??
       null;
     const requestParams = this.resolveRequestParams({
       modelPresetId: effectiveModelPresetId,
     });
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
-    const inputFiles = (lastUserMessage.attachments ?? []).map((attachment) => {
+    const inputFiles = (anchorUserMessage.attachments ?? []).map((attachment) => {
       const content = this.uploads.readContentById(attachment.id);
       if (!content) {
         throw new Error(`attachment content not found: ${attachment.id}`);
@@ -491,7 +494,7 @@ export class ContinueConversationTaskProcessor {
       .list()
       .filter(
         (tool) =>
-          this.agentToolConfigFor(lastUserMessage.agentId, tool.getName())
+          this.agentToolConfigFor(anchorUserMessage.agentId, tool.getName())
             .enabled
       )
       .map((tool) => tool.getName());
@@ -533,7 +536,8 @@ export class ContinueConversationTaskProcessor {
       const requestText = this.buildPrompt({
         systemPrompt: agent?.system_prompt ?? "",
         entries,
-        latestUserText: lastUserMessage.text,
+        anchorUserText: anchorUserMessage.text,
+        triggerEntry: entries.at(-1) ?? null,
         toolIds: enabledToolIds,
         priorToolResults,
         loopState,
@@ -590,8 +594,7 @@ export class ContinueConversationTaskProcessor {
               );
             }
             reconstructedReply += delta;
-            const tagged = extractTaggedContent(reconstructedReply);
-            const nextThought = trimPartialKnownTagSuffix(reconstructedReply);
+            const nextThought = reconstructedReply;
             const thoughtDelta = incrementalDelta(plannerText, nextThought);
             if (thoughtDelta) {
               this.hub.publish(conversationId, {
@@ -602,7 +605,12 @@ export class ContinueConversationTaskProcessor {
             }
             plannerText = nextThought;
 
-            const answerDelta = incrementalDelta(streamedAnswer, tagged.answer);
+            const streamedAssistantOutput =
+              extractAssistantOutputFromJsonLike(reconstructedReply);
+            const answerDelta = incrementalDelta(
+              streamedAnswer,
+              streamedAssistantOutput
+            );
             if (answerDelta) {
               if (!assistantEntryId) {
                 assistantEntryId = crypto.randomUUID();
@@ -616,7 +624,7 @@ export class ContinueConversationTaskProcessor {
                 delta: answerDelta,
               });
             }
-            streamedAnswer = tagged.answer;
+            streamedAnswer = streamedAssistantOutput;
           }
         );
         plannerTokenUsage = completion.usage;
@@ -737,7 +745,7 @@ export class ContinueConversationTaskProcessor {
         for (let i = 0; i < selectedCalls.length; i += 1) {
           const call = selectedCalls[i];
           const toolCfg = this.agentToolConfigFor(
-            lastUserMessage.agentId,
+            anchorUserMessage.agentId,
             call.toolId
           );
           const shouldResumeAfterBatch =
@@ -745,7 +753,7 @@ export class ContinueConversationTaskProcessor {
             i === selectedCalls.length - 1;
           this.enqueueRunTool({
             conversationId,
-            agentId: lastUserMessage.agentId,
+            agentId: anchorUserMessage.agentId,
             toolName: call.toolId,
             params: call.parameters,
             batchId,
@@ -783,82 +791,6 @@ export class ContinueConversationTaskProcessor {
   }
 }
 
-function extractTaggedContent(raw: string): {
-  hasAnyTag: boolean;
-  thought: string;
-  answer: string;
-} {
-  const text = String(raw ?? "");
-  const lower = text.toLowerCase();
-  const thoughtOpenTag = "<thought>";
-  const thoughtCloseTag = "</thought>";
-  const answerOpenTag = "<answer>";
-  const answerCloseTag = "</answer>";
-  const thoughtOpen = lower.indexOf(thoughtOpenTag);
-  const answerOpen = lower.indexOf(answerOpenTag);
-  const hasAnyTag = thoughtOpen >= 0 || answerOpen >= 0;
-  if (!hasAnyTag) return { hasAnyTag: false, thought: text, answer: "" };
-
-  let thought = "";
-  if (thoughtOpen >= 0) {
-    const start = thoughtOpen + thoughtOpenTag.length;
-    const close = lower.indexOf(thoughtCloseTag, start);
-    thought = close >= 0 ? text.slice(start, close) : text.slice(start);
-    const answerStart = lower.indexOf(answerOpenTag, start);
-    if (close < 0 && answerStart >= 0) {
-      thought = text.slice(start, answerStart);
-    }
-    thought = trimPartialKnownTagSuffix(sanitizeKnownTags(thought));
-  }
-
-  let answer = "";
-  if (answerOpen >= 0) {
-    const start = answerOpen + answerOpenTag.length;
-    const close = lower.indexOf(answerCloseTag, start);
-    if (close >= 0) {
-      const core = text.slice(start, close);
-      const tail = text.slice(close + answerCloseTag.length);
-      answer = trimPartialKnownTagSuffix(sanitizeKnownTags(`${core}${tail}`));
-    } else {
-      answer = trimPartialKnownTagSuffix(sanitizeKnownTags(text.slice(start)));
-    }
-  }
-  return { hasAnyTag: true, thought, answer };
-}
-
-function sanitizeKnownTags(text: string): string {
-  return text
-    .replace(/<\/?\s*(answer|thought)\s*>/gi, "")
-    .replace(/<\/?\s*(answer|thought)\b[^>]*>/gi, "");
-}
-
-function trimPartialKnownTagSuffix(text: string): string {
-  if (!text) return text;
-  const tags = ["<thought>", "</thought>", "<answer>", "</answer>"];
-  let out = text;
-  while (out.length > 0) {
-    const lower = out.toLowerCase();
-    let matched = false;
-    for (const tag of tags) {
-      const tagLower = tag.toLowerCase();
-      for (
-        let len = Math.min(tagLower.length - 1, lower.length);
-        len >= 1;
-        len -= 1
-      ) {
-        if (tagLower.startsWith(lower.slice(-len))) {
-          out = out.slice(0, -len);
-          matched = true;
-          break;
-        }
-      }
-      if (matched) break;
-    }
-    if (!matched) break;
-  }
-  return out;
-}
-
 function incrementalDelta(prev: string, next: string): string {
   if (!next) return "";
   if (!prev) return next;
@@ -874,10 +806,64 @@ function commonPrefixLen(a: string, b: string): number {
   return i;
 }
 
-function stripThoughtTagBlock(text: string): string {
-  return String(text ?? "")
-    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
-    .trim();
+function extractAssistantOutputFromJsonLike(text: string): string {
+  const source = String(text ?? "");
+  if (!source) return "";
+  const keyMatch = /"assistant_output"\s*:\s*"/.exec(source);
+  if (!keyMatch) return "";
+  let i = keyMatch.index + keyMatch[0].length;
+  let out = "";
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === '"') return out;
+    if (ch !== "\\") {
+      out += ch;
+      i += 1;
+      continue;
+    }
+    const esc = source[i + 1];
+    if (esc == null) return out;
+    if (esc === '"' || esc === "\\" || esc === "/") {
+      out += esc;
+      i += 2;
+      continue;
+    }
+    if (esc === "b") {
+      out += "\b";
+      i += 2;
+      continue;
+    }
+    if (esc === "f") {
+      out += "\f";
+      i += 2;
+      continue;
+    }
+    if (esc === "n") {
+      out += "\n";
+      i += 2;
+      continue;
+    }
+    if (esc === "r") {
+      out += "\r";
+      i += 2;
+      continue;
+    }
+    if (esc === "t") {
+      out += "\t";
+      i += 2;
+      continue;
+    }
+    if (esc === "u") {
+      const hex = source.slice(i + 2, i + 6);
+      if (hex.length < 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) return out;
+      out += String.fromCharCode(Number.parseInt(hex, 16));
+      i += 6;
+      continue;
+    }
+    out += esc;
+    i += 2;
+  }
+  return out;
 }
 
 function parseFirstJsonObjectCandidate(
