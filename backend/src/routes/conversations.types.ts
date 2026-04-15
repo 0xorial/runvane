@@ -11,6 +11,7 @@ export type ConversationRow = {
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
+  cached_prompt_tokens_total: number;
   completion_tokens_total: number;
   estimated_cost_usd?: number;
 };
@@ -48,6 +49,7 @@ const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),
+  cached_prompt_tokens_total: z.number().finite(),
   completion_tokens_total: z.number().finite(),
   estimated_cost_usd: z.number().finite().optional(),
 });

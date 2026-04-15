@@ -6,6 +6,7 @@ export type ConversationRow = {
   created_at?: string;
   updated_at?: string;
   prompt_tokens_total?: number;
+  cached_prompt_tokens_total?: number;
   completion_tokens_total?: number;
   estimated_cost_usd?: number;
 };

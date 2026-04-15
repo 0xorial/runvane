@@ -168,6 +168,7 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   failed?: boolean;
   llmModel?: string;
   promptTokens?: number;
+  cachedPromptTokens?: number;
   completionTokens?: number;
 };
 export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
@@ -179,6 +180,7 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     failed: z.boolean().optional(),
     llmModel: z.string().optional(),
     promptTokens: z.number().finite().optional(),
+    cachedPromptTokens: z.number().finite().optional(),
     completionTokens: z.number().finite().optional(),
   });
 
@@ -191,6 +193,7 @@ export type TitleLlmStreamEntry = ChatEntryBase & {
   failed?: boolean;
   llmModel?: string;
   promptTokens?: number;
+  cachedPromptTokens?: number;
   completionTokens?: number;
 };
 export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
@@ -202,6 +205,7 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     failed: z.boolean().optional(),
     llmModel: z.string().optional(),
     promptTokens: z.number().finite().optional(),
+    cachedPromptTokens: z.number().finite().optional(),
     completionTokens: z.number().finite().optional(),
   });
 

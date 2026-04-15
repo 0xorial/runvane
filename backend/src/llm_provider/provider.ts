@@ -28,6 +28,7 @@ export type StreamTextCompletionInput = {
 export type StreamTextCompletionUsage = {
   promptTokens: number;
   completionTokens: number;
+  cachedPromptTokens?: number;
 };
 
 export type StreamTextCompletionResult = {

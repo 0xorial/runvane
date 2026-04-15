@@ -10,6 +10,7 @@ type TitleGenerationResult = {
   fullResponse: string;
   cleanTitle: string | null;
   promptTokens?: number;
+  cachedPromptTokens?: number;
   completionTokens?: number;
 };
 
@@ -77,6 +78,9 @@ async function generateConversationTitleUsingSystemModel(
     ...(completion.usage
       ? {
           promptTokens: completion.usage.promptTokens,
+          ...(completion.usage.cachedPromptTokens !== undefined
+            ? { cachedPromptTokens: completion.usage.cachedPromptTokens }
+            : {}),
           completionTokens: completion.usage.completionTokens,
         }
       : {}),
@@ -149,6 +153,9 @@ export async function maybeAutoTitleConversation({
       ...(generated.promptTokens != null && generated.completionTokens != null
         ? {
             promptTokens: generated.promptTokens,
+            ...(generated.cachedPromptTokens != null
+              ? { cachedPromptTokens: generated.cachedPromptTokens }
+              : {}),
             completionTokens: generated.completionTokens,
           }
         : {}),
@@ -166,6 +173,9 @@ export async function maybeAutoTitleConversation({
       ...(generated.promptTokens != null && generated.completionTokens != null
         ? {
             prompt_tokens: generated.promptTokens,
+            ...(generated.cachedPromptTokens != null
+              ? { cached_prompt_tokens: generated.cachedPromptTokens }
+              : {}),
             completion_tokens: generated.completionTokens,
           }
         : {}),

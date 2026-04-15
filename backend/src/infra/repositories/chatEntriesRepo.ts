@@ -30,6 +30,7 @@ export type ConversationModelTokenUsageRow = {
   conversation_id: string;
   model_name: string;
   prompt_tokens: number;
+  cached_prompt_tokens: number;
   completion_tokens: number;
 };
 
@@ -65,6 +66,7 @@ export class ChatEntriesRepo {
            e.conversation_id AS conversation_id,
            TRIM(CAST(json_extract(e.payload_json, '$.llmModel') AS TEXT)) AS model_name,
            SUM(COALESCE(CAST(json_extract(e.payload_json, '$.promptTokens') AS INTEGER), 0)) AS prompt_tokens,
+           SUM(COALESCE(CAST(json_extract(e.payload_json, '$.cachedPromptTokens') AS INTEGER), 0)) AS cached_prompt_tokens,
            SUM(COALESCE(CAST(json_extract(e.payload_json, '$.completionTokens') AS INTEGER), 0)) AS completion_tokens
          FROM chat_entries e
          WHERE e.type IN ('planner_llm_stream', 'title_llm_stream')
@@ -74,6 +76,7 @@ export class ChatEntriesRepo {
       conversation_id: string;
       model_name: string | null;
       prompt_tokens: number | null;
+      cached_prompt_tokens: number | null;
       completion_tokens: number | null;
     }>;
     return rows
@@ -83,6 +86,11 @@ export class ChatEntriesRepo {
         prompt_tokens:
           typeof row.prompt_tokens === "number" && Number.isFinite(row.prompt_tokens)
             ? row.prompt_tokens
+            : 0,
+        cached_prompt_tokens:
+          typeof row.cached_prompt_tokens === "number" &&
+          Number.isFinite(row.cached_prompt_tokens)
+            ? row.cached_prompt_tokens
             : 0,
         completion_tokens:
           typeof row.completion_tokens === "number" &&
@@ -398,6 +406,7 @@ export class ChatEntriesRepo {
       failed?: boolean;
       llmModel?: string;
       promptTokens?: number;
+      cachedPromptTokens?: number;
       completionTokens?: number;
     },
   ): void {
@@ -413,6 +422,12 @@ export class ChatEntriesRepo {
     if (llmModel !== undefined) payload.llmModel = llmModel;
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
       payload.promptTokens = input.promptTokens;
+    }
+    if (
+      typeof input.cachedPromptTokens === "number" &&
+      Number.isFinite(input.cachedPromptTokens)
+    ) {
+      payload.cachedPromptTokens = input.cachedPromptTokens;
     }
     if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
       payload.completionTokens = input.completionTokens;
@@ -448,6 +463,7 @@ export class ChatEntriesRepo {
       failed?: boolean;
       llmModel?: string;
       promptTokens?: number;
+      cachedPromptTokens?: number;
       completionTokens?: number;
     },
   ): void {
@@ -463,6 +479,12 @@ export class ChatEntriesRepo {
     if (llmModel !== undefined) payload.llmModel = llmModel;
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
       payload.promptTokens = input.promptTokens;
+    }
+    if (
+      typeof input.cachedPromptTokens === "number" &&
+      Number.isFinite(input.cachedPromptTokens)
+    ) {
+      payload.cachedPromptTokens = input.cachedPromptTokens;
     }
     if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
       payload.completionTokens = input.completionTokens;
@@ -555,6 +577,11 @@ export class ChatEntriesRepo {
           typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
             ? payload.promptTokens
             : undefined;
+        const cachedPromptTokens =
+          typeof payload.cachedPromptTokens === "number" &&
+          Number.isFinite(payload.cachedPromptTokens)
+            ? payload.cachedPromptTokens
+            : undefined;
         const completionTokens =
           typeof payload.completionTokens === "number" &&
           Number.isFinite(payload.completionTokens)
@@ -578,6 +605,7 @@ export class ChatEntriesRepo {
           failed: payload.failed === true,
           ...(llmModel !== undefined ? { llmModel } : {}),
           ...(promptTokens !== undefined ? { promptTokens } : {}),
+          ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
           ...(completionTokens !== undefined ? { completionTokens } : {}),
         } satisfies PlannerLlmStreamEntry;
       }
@@ -589,6 +617,11 @@ export class ChatEntriesRepo {
         const promptTokens =
           typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
             ? payload.promptTokens
+            : undefined;
+        const cachedPromptTokens =
+          typeof payload.cachedPromptTokens === "number" &&
+          Number.isFinite(payload.cachedPromptTokens)
+            ? payload.cachedPromptTokens
             : undefined;
         const completionTokens =
           typeof payload.completionTokens === "number" &&
@@ -613,6 +646,7 @@ export class ChatEntriesRepo {
           failed: payload.failed === true,
           ...(llmModel !== undefined ? { llmModel } : {}),
           ...(promptTokens !== undefined ? { promptTokens } : {}),
+          ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
           ...(completionTokens !== undefined ? { completionTokens } : {}),
         } satisfies TitleLlmStreamEntry;
       }

@@ -531,6 +531,9 @@ export class ContinueConversationTaskProcessor {
       ...(plannerTokenUsage !== undefined
         ? {
             promptTokens: plannerTokenUsage.promptTokens,
+            ...(plannerTokenUsage.cachedPromptTokens !== undefined
+              ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
+              : {}),
             completionTokens: plannerTokenUsage.completionTokens,
           }
         : {}),
@@ -583,6 +586,9 @@ export class ContinueConversationTaskProcessor {
       ...(plannerTokenUsage !== undefined
         ? {
             prompt_tokens: plannerTokenUsage.promptTokens,
+            ...(plannerTokenUsage.cachedPromptTokens !== undefined
+              ? { cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens }
+              : {}),
             completion_tokens: plannerTokenUsage.completionTokens,
           }
         : {}),

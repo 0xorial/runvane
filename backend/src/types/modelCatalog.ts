@@ -8,8 +8,10 @@ export type ModelCapabilityRow = {
   max_context_tokens: number | null;
   max_output_tokens: number | null;
   usd_per_1m_tokens_in: number | null;
+  usd_per_1m_tokens_in_cached: number | null;
   usd_per_1m_tokens_out: number | null;
   input_cost_per_1m: number | null;
+  cached_input_cost_per_1m: number | null;
   output_cost_per_1m: number | null;
   currency: string;
   source: "seed" | "override";
@@ -24,8 +26,10 @@ export type SeedModelCapability = {
   max_context_tokens: number | null;
   max_output_tokens: number | null;
   usd_per_1m_tokens_in: number | null;
+  usd_per_1m_tokens_in_cached: number | null;
   usd_per_1m_tokens_out: number | null;
   input_cost_per_1m: number | null;
+  cached_input_cost_per_1m: number | null;
   output_cost_per_1m: number | null;
   currency: string;
 };
@@ -38,8 +42,10 @@ export type ModelCapabilityOverrideUpsert = {
   max_context_tokens?: number | null;
   max_output_tokens?: number | null;
   usd_per_1m_tokens_in?: number | null;
+  usd_per_1m_tokens_in_cached?: number | null;
   usd_per_1m_tokens_out?: number | null;
   input_cost_per_1m?: number | null;
+  cached_input_cost_per_1m?: number | null;
   output_cost_per_1m?: number | null;
   currency?: string | null;
   notes?: string | null;
@@ -64,8 +70,10 @@ export const SeedModelCapabilitySchema: z.ZodType<SeedModelCapability> = z
     max_context_tokens: NullableFiniteNumber,
     max_output_tokens: NullableFiniteNumber,
     usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
+    usd_per_1m_tokens_in_cached: NullableFiniteNumber.optional(),
     usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
     input_cost_per_1m: NullableFiniteNumber.optional(),
+    cached_input_cost_per_1m: NullableFiniteNumber.optional(),
     output_cost_per_1m: NullableFiniteNumber.optional(),
     currency: z
       .string()
@@ -74,12 +82,16 @@ export const SeedModelCapabilitySchema: z.ZodType<SeedModelCapability> = z
   })
   .transform((row) => {
     const inCost = row.usd_per_1m_tokens_in ?? row.input_cost_per_1m ?? null;
+    const cachedInCost =
+      row.usd_per_1m_tokens_in_cached ?? row.cached_input_cost_per_1m ?? null;
     const outCost = row.usd_per_1m_tokens_out ?? row.output_cost_per_1m ?? null;
     return {
       ...row,
       usd_per_1m_tokens_in: inCost,
+      usd_per_1m_tokens_in_cached: cachedInCost,
       usd_per_1m_tokens_out: outCost,
       input_cost_per_1m: inCost,
+      cached_input_cost_per_1m: cachedInCost,
       output_cost_per_1m: outCost,
     };
   });
@@ -93,8 +105,10 @@ export const ModelCapabilityOverrideUpsertSchema: z.ZodType<ModelCapabilityOverr
     max_context_tokens: NullableFiniteNumber.optional(),
     max_output_tokens: NullableFiniteNumber.optional(),
     usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
+    usd_per_1m_tokens_in_cached: NullableFiniteNumber.optional(),
     usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
     input_cost_per_1m: NullableFiniteNumber.optional(),
+    cached_input_cost_per_1m: NullableFiniteNumber.optional(),
     output_cost_per_1m: NullableFiniteNumber.optional(),
     currency: OptionalNullableString,
     notes: OptionalNullableString,

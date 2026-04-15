@@ -8,6 +8,7 @@ export type ConversationRow = {
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
+  cached_prompt_tokens_total: number;
   completion_tokens_total: number;
 };
 
@@ -72,6 +73,12 @@ export class ConversationsRepo {
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS prompt_tokens_total,
            COALESCE((
+             SELECT SUM(COALESCE(CAST(json_extract(e.payload_json, '$.cachedPromptTokens') AS INTEGER), 0))
+             FROM chat_entries e
+             WHERE e.conversation_id = c.id
+               AND e.type IN ('planner_llm_stream', 'title_llm_stream')
+           ), 0) AS cached_prompt_tokens_total,
+           COALESCE((
              SELECT SUM(COALESCE(CAST(json_extract(e.payload_json, '$.completionTokens') AS INTEGER), 0))
              FROM chat_entries e
              WHERE e.conversation_id = c.id
@@ -101,6 +108,12 @@ export class ConversationsRepo {
              WHERE e.conversation_id = c.id
                AND e.type IN ('planner_llm_stream', 'title_llm_stream')
            ), 0) AS prompt_tokens_total,
+           COALESCE((
+             SELECT SUM(COALESCE(CAST(json_extract(e.payload_json, '$.cachedPromptTokens') AS INTEGER), 0))
+             FROM chat_entries e
+             WHERE e.conversation_id = c.id
+               AND e.type IN ('planner_llm_stream', 'title_llm_stream')
+           ), 0) AS cached_prompt_tokens_total,
            COALESCE((
              SELECT SUM(COALESCE(CAST(json_extract(e.payload_json, '$.completionTokens') AS INTEGER), 0))
              FROM chat_entries e
@@ -155,6 +168,7 @@ export class ConversationsRepo {
       created_at: now,
       updated_at: now,
       prompt_tokens_total: 0,
+      cached_prompt_tokens_total: 0,
       completion_tokens_total: 0,
     };
 

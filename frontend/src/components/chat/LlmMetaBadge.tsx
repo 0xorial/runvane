@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 export type LlmMetaBadgeProps = {
   model?: string;
   promptTokens?: number;
+  cachedPromptTokens?: number;
   completionTokens?: number;
   durationMs?: number;
   showTokenBreakdown?: boolean;
@@ -36,6 +37,7 @@ function formatUsd(value: number): string {
 export function LlmMetaBadge({
   model,
   promptTokens = 0,
+  cachedPromptTokens = 0,
   completionTokens = 0,
   durationMs,
   showTokenBreakdown = false,
@@ -54,11 +56,15 @@ export function LlmMetaBadge({
   if (modelShort) segments.push(<span key="model">{modelShort}</span>);
   if (hasTokens) {
     const promptExact = promptTokens.toLocaleString();
+    const cachedPromptExact = cachedPromptTokens.toLocaleString();
     const completionExact = completionTokens.toLocaleString();
     const totalExact = totalTokens.toLocaleString();
     segments.push(
       showTokenBreakdown ? (
-        <span key="tok" title={`in ${promptExact} / out ${completionExact} tok`}>
+        <span
+          key="tok"
+          title={`in ${promptExact} / cached ${cachedPromptExact} / out ${completionExact} tok`}
+        >
           in {formatCompactNumber(promptTokens)} / out {formatCompactNumber(completionTokens)} tok
         </span>
       ) : (
@@ -67,6 +73,13 @@ export function LlmMetaBadge({
         </span>
       ),
     );
+    if (cachedPromptTokens > 0) {
+      segments.push(
+        <span key="cached" title={`${cachedPromptExact} cached input tok`}>
+          cached {formatCompactNumber(cachedPromptTokens)} tok
+        </span>,
+      );
+    }
   }
   if (hasDuration) segments.push(<span key="s">{(durationMs / 1000).toFixed(1)}s</span>);
   if (estimatedCostUsd != null) {

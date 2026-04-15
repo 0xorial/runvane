@@ -5,7 +5,9 @@
   "supports_file_input": true,
   "max_context_tokens": 1047576,
   "max_output_tokens": 32768,
+  "usd_per_1m_tokens_in_cached": 0.5,
   "input_cost_per_1m": 2,
+  "cached_input_cost_per_1m": 0.5,
   "output_cost_per_1m": 8,
   "currency": "USD"
 }

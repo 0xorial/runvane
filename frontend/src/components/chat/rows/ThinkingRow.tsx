@@ -34,9 +34,12 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   const hasDetails = requestText.length > 0 || responseText.length > 0;
   const modelLabel = String(entry.llmModel ?? "").trim();
   const pt = entry.promptTokens;
+  const cpt = entry.cachedPromptTokens;
   const ct = entry.completionTokens;
   const promptTokens =
     typeof pt === "number" && Number.isFinite(pt) ? pt : 0;
+  const cachedPromptTokens =
+    typeof cpt === "number" && Number.isFinite(cpt) ? cpt : 0;
   const completionTokens =
     typeof ct === "number" && Number.isFinite(ct) ? ct : 0;
 
@@ -123,6 +126,7 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
           <LlmMetaBadge
             model={modelLabel || undefined}
             promptTokens={promptTokens}
+            cachedPromptTokens={cachedPromptTokens}
             completionTokens={completionTokens}
             showTokenBreakdown
           />

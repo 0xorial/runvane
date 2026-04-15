@@ -26,7 +26,11 @@ export function ChatTitlePanel({
 }: ChatTitlePanelProps) {
   const [title, setTitle] = useState("New chat");
   const [streamRawTitle, setStreamRawTitle] = useState("");
-  const [tokenTotals, setTokenTotals] = useState({ prompt: 0, completion: 0 });
+  const [tokenTotals, setTokenTotals] = useState({
+    prompt: 0,
+    cachedPrompt: 0,
+    completion: 0,
+  });
   const [estimatedCostUsd, setEstimatedCostUsd] = useState(0);
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
 
@@ -36,6 +40,7 @@ export function ChatTitlePanel({
     if (!row) return;
     setTokenTotals({
       prompt: row.prompt_tokens_total,
+      cachedPrompt: row.cached_prompt_tokens_total ?? 0,
       completion: row.completion_tokens_total,
     });
     setEstimatedCostUsd(
@@ -46,7 +51,7 @@ export function ChatTitlePanel({
   function refreshTitle() {
     if (!conversationId) {
       setTitle("New chat");
-      setTokenTotals({ prompt: 0, completion: 0 });
+      setTokenTotals({ prompt: 0, cachedPrompt: 0, completion: 0 });
       setEstimatedCostUsd(0);
       return () => {};
     }
@@ -59,6 +64,7 @@ export function ChatTitlePanel({
         setTitle(String(row?.title || "Untitled"));
         setTokenTotals({
           prompt: row?.prompt_tokens_total ?? 0,
+          cachedPrompt: row?.cached_prompt_tokens_total ?? 0,
           completion: row?.completion_tokens_total ?? 0,
         });
         setEstimatedCostUsd(row?.estimated_cost_usd ?? 0);
@@ -74,7 +80,7 @@ export function ChatTitlePanel({
   }
 
   useEffect(() => {
-    setTokenTotals({ prompt: 0, completion: 0 });
+    setTokenTotals({ prompt: 0, cachedPrompt: 0, completion: 0 });
     setEstimatedCostUsd(0);
     setStreamRawTitle("");
     return refreshTitle();
@@ -99,6 +105,7 @@ export function ChatTitlePanel({
           setTitle(String(ev.conversation.title || "Untitled"));
           setTokenTotals({
             prompt: ev.conversation.prompt_tokens_total,
+            cachedPrompt: ev.conversation.cached_prompt_tokens_total ?? 0,
             completion: ev.conversation.completion_tokens_total,
           });
           setEstimatedCostUsd(ev.conversation.estimated_cost_usd ?? 0);
@@ -157,6 +164,7 @@ export function ChatTitlePanel({
           />
           <LlmMetaBadge
             promptTokens={tokenTotals.prompt}
+            cachedPromptTokens={tokenTotals.cachedPrompt}
             completionTokens={tokenTotals.completion}
             showTokenBreakdown
             estimatedCostUsd={estimatedCostUsd}

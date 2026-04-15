@@ -65,6 +65,7 @@ export function ConversationItem({
   const stamp = formatRelativeChatTime(timestampIso);
   const stampExact = formatExactChatTime(timestampIso);
   const promptTokens = Number(conversation.prompt_tokens_total ?? 0);
+  const cachedPromptTokens = Number(conversation.cached_prompt_tokens_total ?? 0);
   const completionTokens = Number(conversation.completion_tokens_total ?? 0);
   const estimatedCostUsd = Number(conversation.estimated_cost_usd ?? 0);
 
@@ -145,6 +146,7 @@ export function ConversationItem({
           ) : null}
           <LlmMetaBadge
             promptTokens={promptTokens}
+            cachedPromptTokens={cachedPromptTokens}
             completionTokens={completionTokens}
             showTokenBreakdown
             estimatedCostUsd={estimatedCostUsd}

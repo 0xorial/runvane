@@ -32,13 +32,29 @@ function usageFromPayload(usage: unknown): StreamTextCompletionUsage | undefined
   const rec = usage as Record<string, unknown>;
   const promptTokensRaw = rec.prompt_tokens;
   const completionTokensRaw = rec.completion_tokens;
+  const cachedPromptRaw = rec.cached_prompt_tokens ?? rec.cached_tokens;
+  const cachedPromptTokens =
+    typeof cachedPromptRaw === "number" && Number.isFinite(cachedPromptRaw)
+      ? Math.max(0, Math.trunc(cachedPromptRaw))
+      : undefined;
   if (
     typeof promptTokensRaw === "number" &&
     Number.isFinite(promptTokensRaw) &&
     typeof completionTokensRaw === "number" &&
     Number.isFinite(completionTokensRaw)
   ) {
-    return { promptTokens: promptTokensRaw, completionTokens: completionTokensRaw };
+    return {
+      promptTokens: promptTokensRaw,
+      completionTokens: completionTokensRaw,
+      ...(cachedPromptTokens !== undefined
+        ? {
+            cachedPromptTokens: Math.min(
+              cachedPromptTokens,
+              Math.max(0, Math.trunc(promptTokensRaw)),
+            ),
+          }
+        : {}),
+    };
   }
   const totalTokensRaw = rec.total_tokens;
   if (
@@ -50,6 +66,14 @@ function usageFromPayload(usage: unknown): StreamTextCompletionUsage | undefined
     return {
       promptTokens: promptTokensRaw,
       completionTokens: Math.max(0, totalTokensRaw - promptTokensRaw),
+      ...(cachedPromptTokens !== undefined
+        ? {
+            cachedPromptTokens: Math.min(
+              cachedPromptTokens,
+              Math.max(0, Math.trunc(promptTokensRaw)),
+            ),
+          }
+        : {}),
     };
   }
   return undefined;
@@ -60,13 +84,33 @@ function usageFromStats(stats: unknown): StreamTextCompletionUsage | undefined {
   const rec = stats as Record<string, unknown>;
   const promptTokensRaw = rec.input_tokens;
   const completionTokensRaw = rec.total_output_tokens;
+  const cachedPromptRaw =
+    rec.cached_input_tokens ??
+    rec.cache_read_input_tokens ??
+    rec.cached_prompt_tokens ??
+    rec.cached_tokens;
+  const cachedPromptTokens =
+    typeof cachedPromptRaw === "number" && Number.isFinite(cachedPromptRaw)
+      ? Math.max(0, Math.trunc(cachedPromptRaw))
+      : undefined;
   if (
     typeof promptTokensRaw === "number" &&
     Number.isFinite(promptTokensRaw) &&
     typeof completionTokensRaw === "number" &&
     Number.isFinite(completionTokensRaw)
   ) {
-    return { promptTokens: promptTokensRaw, completionTokens: completionTokensRaw };
+    return {
+      promptTokens: promptTokensRaw,
+      completionTokens: completionTokensRaw,
+      ...(cachedPromptTokens !== undefined
+        ? {
+            cachedPromptTokens: Math.min(
+              cachedPromptTokens,
+              Math.max(0, Math.trunc(promptTokensRaw)),
+            ),
+          }
+        : {}),
+    };
   }
   return undefined;
 }

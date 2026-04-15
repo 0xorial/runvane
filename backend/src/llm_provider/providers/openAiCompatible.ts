@@ -23,8 +23,31 @@ function usageFromOpenAiPayload(usage: unknown): StreamTextCompletionUsage | und
   const rec = usage as Record<string, unknown>;
   const pt = rec.prompt_tokens;
   const ct = rec.completion_tokens;
+  const promptDetails =
+    rec.prompt_tokens_details &&
+    typeof rec.prompt_tokens_details === "object" &&
+    !Array.isArray(rec.prompt_tokens_details)
+      ? (rec.prompt_tokens_details as Record<string, unknown>)
+      : null;
+  const inputDetails =
+    rec.input_tokens_details &&
+    typeof rec.input_tokens_details === "object" &&
+    !Array.isArray(rec.input_tokens_details)
+      ? (rec.input_tokens_details as Record<string, unknown>)
+      : null;
+  const cachedRaw = promptDetails?.cached_tokens ?? inputDetails?.cached_tokens;
+  const cachedPromptTokens =
+    typeof cachedRaw === "number" && Number.isFinite(cachedRaw)
+      ? Math.max(0, Math.trunc(cachedRaw))
+      : undefined;
   if (typeof pt === "number" && Number.isFinite(pt) && typeof ct === "number" && Number.isFinite(ct)) {
-    return { promptTokens: pt, completionTokens: ct };
+    return {
+      promptTokens: pt,
+      completionTokens: ct,
+      ...(cachedPromptTokens !== undefined
+        ? { cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(pt))) }
+        : {}),
+    };
   }
   const total = rec.total_tokens;
   if (
@@ -33,7 +56,13 @@ function usageFromOpenAiPayload(usage: unknown): StreamTextCompletionUsage | und
     typeof pt === "number" &&
     Number.isFinite(pt)
   ) {
-    return { promptTokens: pt, completionTokens: Math.max(0, total - pt) };
+    return {
+      promptTokens: pt,
+      completionTokens: Math.max(0, total - pt),
+      ...(cachedPromptTokens !== undefined
+        ? { cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(pt))) }
+        : {}),
+    };
   }
   return undefined;
 }

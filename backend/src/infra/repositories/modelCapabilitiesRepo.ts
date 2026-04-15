@@ -73,8 +73,10 @@ export class ModelCapabilitiesRepo {
         max_context_tokens: row.max_context_tokens,
         max_output_tokens: row.max_output_tokens,
         usd_per_1m_tokens_in: row.usd_per_1m_tokens_in,
+        usd_per_1m_tokens_in_cached: row.usd_per_1m_tokens_in_cached,
         usd_per_1m_tokens_out: row.usd_per_1m_tokens_out,
         input_cost_per_1m: row.input_cost_per_1m,
+        cached_input_cost_per_1m: row.cached_input_cost_per_1m,
         output_cost_per_1m: row.output_cost_per_1m,
         currency: row.currency || "USD",
         source: "seed",
@@ -92,6 +94,7 @@ export class ModelCapabilitiesRepo {
            max_context_tokens,
            max_output_tokens,
            input_cost_per_1m,
+           cached_input_cost_per_1m,
            output_cost_per_1m,
            currency
          FROM model_capability_overrides
@@ -105,6 +108,7 @@ export class ModelCapabilitiesRepo {
       max_context_tokens: number | null;
       max_output_tokens: number | null;
       input_cost_per_1m: number | null;
+      cached_input_cost_per_1m: number | null;
       output_cost_per_1m: number | null;
       currency: string | null;
     }>;
@@ -135,6 +139,10 @@ export class ModelCapabilitiesRepo {
           ov.input_cost_per_1m != null
             ? ov.input_cost_per_1m
             : (base?.usd_per_1m_tokens_in ?? null),
+        usd_per_1m_tokens_in_cached:
+          ov.cached_input_cost_per_1m != null
+            ? ov.cached_input_cost_per_1m
+            : (base?.usd_per_1m_tokens_in_cached ?? null),
         usd_per_1m_tokens_out:
           ov.output_cost_per_1m != null
             ? ov.output_cost_per_1m
@@ -143,6 +151,10 @@ export class ModelCapabilitiesRepo {
           ov.input_cost_per_1m != null
             ? ov.input_cost_per_1m
             : (base?.input_cost_per_1m ?? null),
+        cached_input_cost_per_1m:
+          ov.cached_input_cost_per_1m != null
+            ? ov.cached_input_cost_per_1m
+            : (base?.cached_input_cost_per_1m ?? null),
         output_cost_per_1m:
           ov.output_cost_per_1m != null
             ? ov.output_cost_per_1m
@@ -172,6 +184,7 @@ export class ModelCapabilitiesRepo {
            max_context_tokens,
            max_output_tokens,
            input_cost_per_1m,
+           cached_input_cost_per_1m,
            output_cost_per_1m,
            currency,
            notes,
@@ -186,6 +199,7 @@ export class ModelCapabilitiesRepo {
           max_context_tokens: number | null;
           max_output_tokens: number | null;
           input_cost_per_1m: number | null;
+          cached_input_cost_per_1m: number | null;
           output_cost_per_1m: number | null;
           currency: string | null;
           notes: string | null;
@@ -220,6 +234,12 @@ export class ModelCapabilitiesRepo {
           : input.input_cost_per_1m !== undefined
             ? input.input_cost_per_1m
             : (existing?.input_cost_per_1m ?? null),
+      cached_input_cost_per_1m:
+        input.usd_per_1m_tokens_in_cached !== undefined
+          ? input.usd_per_1m_tokens_in_cached
+          : input.cached_input_cost_per_1m !== undefined
+            ? input.cached_input_cost_per_1m
+            : (existing?.cached_input_cost_per_1m ?? null),
       output_cost_per_1m:
         input.usd_per_1m_tokens_out !== undefined
           ? input.usd_per_1m_tokens_out
@@ -239,6 +259,7 @@ export class ModelCapabilitiesRepo {
       next.max_context_tokens == null &&
       next.max_output_tokens == null &&
       next.input_cost_per_1m == null &&
+      next.cached_input_cost_per_1m == null &&
       next.output_cost_per_1m == null &&
       next.currency == null &&
       next.notes == null &&
@@ -264,6 +285,7 @@ export class ModelCapabilitiesRepo {
            max_context_tokens,
            max_output_tokens,
            input_cost_per_1m,
+           cached_input_cost_per_1m,
            output_cost_per_1m,
            currency,
            notes,
@@ -279,6 +301,7 @@ export class ModelCapabilitiesRepo {
         next.max_context_tokens,
         next.max_output_tokens,
         next.input_cost_per_1m,
+        next.cached_input_cost_per_1m,
         next.output_cost_per_1m,
         next.currency,
         next.notes,

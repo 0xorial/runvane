@@ -39,6 +39,7 @@ export type ConversationSseRow = {
   created_at: string;
   updated_at: string;
   prompt_tokens_total: number;
+  cached_prompt_tokens_total: number;
   completion_tokens_total: number;
   estimated_cost_usd?: number;
 };
@@ -50,6 +51,7 @@ export const ConversationSseRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   prompt_tokens_total: z.number().finite(),
+  cached_prompt_tokens_total: z.number().finite(),
   completion_tokens_total: z.number().finite(),
   estimated_cost_usd: z.number().finite().optional(),
 });
@@ -148,6 +150,7 @@ export type PlannerResponseSsePayload = {
   tool_name?: string;
   llm_model?: string;
   prompt_tokens?: number;
+  cached_prompt_tokens?: number;
   completion_tokens?: number;
 };
 export const PlannerResponseSsePayloadSchema = z.object({
@@ -159,6 +162,7 @@ export const PlannerResponseSsePayloadSchema = z.object({
   tool_name: z.string().optional(),
   llm_model: z.string().optional(),
   prompt_tokens: z.number().finite().optional(),
+  cached_prompt_tokens: z.number().finite().optional(),
   completion_tokens: z.number().finite().optional(),
 });
 
@@ -170,6 +174,7 @@ export type TitleResponseSsePayload = {
   action?: string;
   llm_model?: string;
   prompt_tokens?: number;
+  cached_prompt_tokens?: number;
   completion_tokens?: number;
 };
 export const TitleResponseSsePayloadSchema = z.object({
@@ -180,6 +185,7 @@ export const TitleResponseSsePayloadSchema = z.object({
   action: z.string().optional(),
   llm_model: z.string().optional(),
   prompt_tokens: z.number().finite().optional(),
+  cached_prompt_tokens: z.number().finite().optional(),
   completion_tokens: z.number().finite().optional(),
 });
 
@@ -311,6 +317,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     tool_name: z.string().optional(),
     llm_model: z.string().optional(),
     prompt_tokens: z.number().finite().optional(),
+    cached_prompt_tokens: z.number().finite().optional(),
     completion_tokens: z.number().finite().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
@@ -321,6 +328,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     action: z.string().optional(),
     llm_model: z.string().optional(),
     prompt_tokens: z.number().finite().optional(),
+    cached_prompt_tokens: z.number().finite().optional(),
     completion_tokens: z.number().finite().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({

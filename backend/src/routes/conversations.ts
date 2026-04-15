@@ -28,7 +28,10 @@ export function createConversationsRouter(runtime: Runtime) {
   function conversationCostsUsdById(): Map<string, number> {
     const usageRows = runtime.chatEntries.listConversationTokenUsageByModel();
     const capabilities = runtime.modelCapabilities.listEffective();
-    const pricingByModel = new Map<string, { inCost: number; outCost: number }>();
+    const pricingByModel = new Map<
+      string,
+      { inCost: number; cachedInCost: number; outCost: number }
+    >();
     for (const cap of capabilities) {
       const model = String(cap.model_name || "").trim();
       if (!model || pricingByModel.has(model)) continue;
@@ -48,16 +51,34 @@ export function createConversationsRouter(runtime: Runtime) {
               Number.isFinite(cap.output_cost_per_1m)
             ? cap.output_cost_per_1m
             : null;
-      if (inCost == null || outCost == null) continue;
-      pricingByModel.set(model, { inCost, outCost });
+      const cachedInCost =
+        typeof cap.usd_per_1m_tokens_in_cached === "number" &&
+        Number.isFinite(cap.usd_per_1m_tokens_in_cached)
+          ? cap.usd_per_1m_tokens_in_cached
+          : typeof cap.cached_input_cost_per_1m === "number" &&
+              Number.isFinite(cap.cached_input_cost_per_1m)
+            ? cap.cached_input_cost_per_1m
+            : inCost;
+      if (inCost == null || outCost == null || cachedInCost == null) continue;
+      pricingByModel.set(model, { inCost, cachedInCost, outCost });
     }
 
     const out = new Map<string, number>();
     for (const row of usageRows) {
       const prices = pricingByModel.get(row.model_name);
       if (!prices) continue;
+      const boundedPromptTokens = Math.max(0, row.prompt_tokens);
+      const boundedCachedTokens = Math.max(
+        0,
+        Math.min(row.cached_prompt_tokens, boundedPromptTokens),
+      );
+      const nonCachedPromptTokens = Math.max(
+        0,
+        boundedPromptTokens - boundedCachedTokens,
+      );
       const estimate =
-        (row.prompt_tokens / 1_000_000) * prices.inCost +
+        (nonCachedPromptTokens / 1_000_000) * prices.inCost +
+        (boundedCachedTokens / 1_000_000) * prices.cachedInCost +
         (row.completion_tokens / 1_000_000) * prices.outCost;
       out.set(row.conversation_id, (out.get(row.conversation_id) ?? 0) + estimate);
     }
