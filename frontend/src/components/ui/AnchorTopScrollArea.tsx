@@ -49,7 +49,13 @@ export function AnchorTopScrollArea({
   const contentRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const triesRef = useRef(0);
+  const lastAnchorIdRef = useRef<string | null>(null);
+  const bottomSpacerRef = useRef(0);
   const [bottomSpacerPx, setBottomSpacerPx] = useState(0);
+
+  useEffect(() => {
+    bottomSpacerRef.current = bottomSpacerPx;
+  }, [bottomSpacerPx]);
 
   const cancelAlignRaf = useCallback(() => {
     if (rafRef.current == null) return;
@@ -87,7 +93,6 @@ export function AnchorTopScrollArea({
       if (!scrollEl || !contentEl || !anchor) return false;
 
       const viewportHeight = scrollEl.clientHeight;
-      console.log("viewportHeight", viewportHeight);
       const anchorTopFromOffsets = offsetTopWithinAncestor(anchor, contentEl);
       const anchorTop =
         anchorTopFromOffsets != null
@@ -99,24 +104,17 @@ export function AnchorTopScrollArea({
                   scrollEl.getBoundingClientRect().top)
             );
       const anchorBottom = anchorTop + anchor.offsetHeight;
-      console.log("anchorTop", anchorTop);
-      console.log("anchorBottom", anchorBottom);
-      console.log("contentEl.scrollHeight", contentEl.scrollHeight);
       const totalContentHeight = Math.max(0, contentEl.scrollHeight);
-      console.log("totalContentHeight", totalContentHeight);
       const plan = calculateAnchorScrollPlan({
         anchorTop,
         anchorBottom,
         totalContentHeight,
         viewportHeight,
       });
-      console.log("remainingContentHeight", plan.remainingContentHeight);
-      console.log("requiredTailSpacer", plan.spacerHeight);
-      console.log("scrollTopTarget", plan.scrollTopTarget);
 
-      if (Math.abs(plan.spacerHeight - bottomSpacerPx) > 1) {
+      if (Math.abs(plan.spacerHeight - bottomSpacerRef.current) > 1) {
+        bottomSpacerRef.current = plan.spacerHeight;
         setBottomSpacerPx(plan.spacerHeight);
-        console.log("setting bottom spacer px", plan.spacerHeight);
         return false;
       }
       scrollEl.scrollTop = Math.max(0, plan.scrollTopTarget);
@@ -126,7 +124,7 @@ export function AnchorTopScrollArea({
       );
       return deltaToTop <= 1;
     },
-    [bottomSpacerPx, getAnchor]
+    [getAnchor]
   );
 
   const scheduleAlign = useCallback(
@@ -134,7 +132,7 @@ export function AnchorTopScrollArea({
       cancelAlignRaf();
       triesRef.current = 0;
       const run = () => {
-        if (!topAnchorEntryId || topAnchorEntryId !== entryId) return;
+        if (topAnchorEntryId !== entryId) return;
         const done = alignOnce(entryId);
         if (done) {
           rafRef.current = null;
@@ -155,36 +153,16 @@ export function AnchorTopScrollArea({
   useEffect(() => {
     if (!topAnchorEntryId) {
       cancelAlignRaf();
+      lastAnchorIdRef.current = null;
+      bottomSpacerRef.current = 0;
       setBottomSpacerPx(0);
       return;
     }
+    if (lastAnchorIdRef.current === topAnchorEntryId) return;
+    lastAnchorIdRef.current = topAnchorEntryId;
     scheduleAlign(topAnchorEntryId);
     return cancelAlignRaf;
   }, [cancelAlignRaf, scheduleAlign, topAnchorEntryId]);
-
-  useEffect(() => {
-    if (!topAnchorEntryId) return;
-    const contentEl = contentRef.current;
-    const scrollEl = scrollRef.current;
-    if (!contentEl || !scrollEl) return;
-    const ro = new ResizeObserver(() => {
-      scheduleAlign(topAnchorEntryId);
-    });
-    ro.observe(contentEl);
-    ro.observe(scrollEl);
-    const mo = new MutationObserver(() => {
-      scheduleAlign(topAnchorEntryId);
-    });
-    mo.observe(contentEl, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-    return () => {
-      ro.disconnect();
-      mo.disconnect();
-    };
-  }, [scheduleAlign, topAnchorEntryId]);
 
   return (
     <div ref={scrollRef} className={className}>
