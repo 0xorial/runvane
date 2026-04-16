@@ -46,7 +46,7 @@ export class TasksRepo {
     const inserted = this.db
       .prepare(
         `INSERT INTO tasks (task_type, payload_json, is_done, created_at)
-         VALUES (@task_type, @payload_json, 0, @created_at)`,
+         VALUES (@task_type, @payload_json, 0, @created_at)`
       )
       .run({
         task_type: input.task_type,
@@ -64,7 +64,7 @@ export class TasksRepo {
       .prepare(
         `SELECT id, task_type, payload_json, is_done, created_at, started_at, finished_at, last_error
          FROM tasks
-         WHERE id = ?`,
+         WHERE id = ?`
       )
       .get(id) as TaskDbRow | undefined;
     return row ? toRow(row) : null;
@@ -76,7 +76,7 @@ export class TasksRepo {
       .prepare(
         `UPDATE tasks
          SET started_at = @started_at, last_error = NULL
-         WHERE id = @id AND is_done = 0 AND started_at IS NULL`,
+         WHERE id = @id AND is_done = 0 AND started_at IS NULL`
       )
       .run({ id, started_at: now });
     return result.changes > 0;
@@ -88,7 +88,7 @@ export class TasksRepo {
       .prepare(
         `UPDATE tasks
          SET is_done = 1, finished_at = @finished_at, last_error = NULL
-         WHERE id = @id AND is_done = 0`,
+         WHERE id = @id AND is_done = 0`
       )
       .run({ id, finished_at: now });
   }
@@ -99,7 +99,7 @@ export class TasksRepo {
       .prepare(
         `UPDATE tasks
          SET finished_at = @finished_at, last_error = @last_error
-         WHERE id = @id AND is_done = 0`,
+         WHERE id = @id AND is_done = 0`
       )
       .run({ id, finished_at: now, last_error: detail });
   }
@@ -120,7 +120,7 @@ export class TasksRepo {
            AND finished_at IS NULL
            AND json_extract(payload_json, '$.batchId') = @batch_id
            AND (@exclude_id IS NULL OR id != @exclude_id)
-         LIMIT 1`,
+         LIMIT 1`
       )
       .get({
         batch_id: normalizedBatchId,
@@ -138,7 +138,7 @@ export class TasksRepo {
              finished_at = @finished_at,
              last_error = @last_error
          WHERE is_done = 0
-           AND json_extract(payload_json, '$.conversationId') = @conversation_id`,
+           AND json_extract(payload_json, '$.conversationId') = @conversation_id`
       )
       .run({
         finished_at: now,

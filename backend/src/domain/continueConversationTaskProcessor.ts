@@ -9,7 +9,7 @@ import { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import type { ContinueConversationTask } from "./agentTask.js";
 import type { ToolPermission } from "../tools/baseTool.js";
 import { ToolRegistry } from "../tools/toolRegistry.js";
-import type { AgenticToolCall, AgenticToolRequest, ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
+import type { AgenticToolRequest, ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
 import { type StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
 import { usageByConversationId } from "./conversationUsage.js";
@@ -37,14 +37,14 @@ export class ContinueConversationTaskProcessor {
       agentId: string | null;
       toolName: string;
       params: unknown;
-      toolInvocationEntryId?: string;
+      toolRequest?: string;
       batchId?: string;
       agentToolConfig?: {
         enabled?: boolean;
         policy?: ToolPermission;
         rules?: Record<string, unknown>;
       };
-    }) => { taskId: number },
+    }) => { taskId: number }
   ) {}
 
   private publishConversationUpdated(conversationId: string): void {
@@ -65,7 +65,7 @@ export class ContinueConversationTaskProcessor {
 
   private agentToolConfigFor(
     agentId: string,
-    toolName: string,
+    toolName: string
   ): {
     enabled: boolean;
     policy: ToolPermission;
@@ -109,21 +109,6 @@ export class ContinueConversationTaskProcessor {
     return String(overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini");
   }
 
-  private resolveToolResolverOverrides(overrides: {
-    llmProviderId?: string;
-    llmModel?: string;
-  }): { llmProviderId?: string; llmModel?: string } {
-    const cfg = this.llmProviderSettings.getDocument().llm_configuration;
-    const resolverProviderId = String(cfg.tool_call_provider_id ?? "").trim();
-    const resolverModel = String(cfg.tool_call_model_name ?? "").trim();
-    return {
-      ...(resolverProviderId ? { llmProviderId: resolverProviderId } : {}),
-      ...(resolverModel
-        ? { llmModel: resolverModel }
-        : { ...(overrides.llmModel ? { llmModel: overrides.llmModel } : {}) }),
-      ...(resolverProviderId ? {} : { ...(overrides.llmProviderId ? { llmProviderId: overrides.llmProviderId } : {}) }),
-    };
-  }
 
   private parseStructuredParamValue(key: string, value: unknown): unknown {
     if (typeof value !== "string") return value;
@@ -163,15 +148,6 @@ export class ContinueConversationTaskProcessor {
     return out;
   }
 
-  private sanitizeRequestParamsForToolResolver(requestParams: Record<string, unknown>): Record<string, unknown> {
-    const out = { ...requestParams };
-    delete out.response_format;
-    delete out.json_schema;
-    delete out.schema;
-    delete out.structured_output;
-    return out;
-  }
-
   private async callLlmStreaming(
     prompt: string,
     overrides: { llmProviderId?: string; llmModel?: string },
@@ -181,7 +157,7 @@ export class ContinueConversationTaskProcessor {
       mimeType: string;
       base64Data: string;
     }>,
-    onDelta: (delta: string) => void,
+    onDelta: (delta: string) => void
   ): Promise<StreamTextCompletionResult> {
     const doc = this.llmProviderSettings.getDocument();
     const providerId = String(overrides.llmProviderId || doc.llm_configuration.provider_id || "openai");
@@ -197,7 +173,7 @@ export class ContinueConversationTaskProcessor {
         model,
         promptChars: prompt.length,
       },
-      "[llm] request formatted",
+      "[llm] request formatted"
     );
     logger.info({ providerId, model }, "[llm] sending request");
     const requestSentAtMs = Date.now();
@@ -220,11 +196,11 @@ export class ContinueConversationTaskProcessor {
               model,
               firstTokenLatencyMs: Math.max(0, Date.now() - requestSentAtMs),
             },
-            "[llm] first token received",
+            "[llm] first token received"
           );
         }
         onDelta(delta);
-      },
+      }
     );
     logger.info(
       {
@@ -233,239 +209,26 @@ export class ContinueConversationTaskProcessor {
         responseChars: result.text.length,
         usage: result.usage ?? null,
       },
-      "[llm] completion finished",
+      "[llm] completion finished"
     );
     return result;
   }
 
-  private async resolveToolRequestsWithLlm(input: {
-    conversationId: string;
+  private parseRequestedToolCalls(input: {
     requests: AgenticToolRequest[];
     enabledToolIds: string[];
-    llmOverrides: { llmProviderId?: string; llmModel?: string };
-    requestParams: Record<string, unknown>;
-    files: Array<{ filename: string; mimeType: string; base64Data: string }>;
-    shouldCancel?: () => boolean;
-  }): Promise<Array<{ call: AgenticToolCall; toolInvocationEntryId: string }>> {
+  }): Array<{ toolName: string; toolRequest: string }> {
     if (input.requests.length === 0) return [];
-    const out: Array<{ call: AgenticToolCall; toolInvocationEntryId: string }> = [];
+    const out: Array<{ toolName: string; toolRequest: string }> = [];
     const allowedTools = new Set(input.enabledToolIds);
-    const resolverOverrides = this.resolveToolResolverOverrides(input.llmOverrides);
-    const resolverModel = this.resolvePlannerModel(resolverOverrides);
-    const resolverRequestParams = this.sanitizeRequestParamsForToolResolver(input.requestParams);
     for (const request of input.requests) {
-      throwIfCancelled(input.shouldCancel);
       const toolName = String(request.tool_name ?? "").trim();
       const toolRequest = String(request.request ?? "").trim();
       if (!toolName || !toolRequest) continue;
       if (!allowedTools.has(toolName)) {
         throw new Error(`tool request references disabled or unknown tool: ${toolName}`);
       }
-      const tool = this.tools.get(toolName);
-      if (!tool) {
-        throw new Error(`tool request references unknown tool: ${toolName}`);
-      }
-      const toolInvocationEntry = this.chatEntries.appendToolInvocation(input.conversationId, {
-        toolId: toolName,
-        state: "requested",
-        parameters: {
-          tool_request: toolRequest,
-          source: "planner_tool_request",
-        },
-        result: null,
-      });
-      this.hub.publish(input.conversationId, {
-        type: SseType.TOOL_INVOCATION_START,
-        chat_entry_id: toolInvocationEntry.id,
-        tool_name: toolName,
-        approval_required: true,
-        args_preview: toolRequest,
-      });
-      const toolParamPrompt = `You produce ONLY JSON object parameters for one tool.
-
-Tool name: ${tool.getName()}
-Tool AI description: ${tool.getAiDescription()}
-Tool parameter JSON schema:
-${JSON.stringify(tool.getParamsSchema(), null, 2)}
-
-Tool request:
-${toolRequest}
-
-Return ONLY valid JSON object for tool parameters.`;
-      const resolverEntryId = crypto.randomUUID();
-      const resolverCreatedAt = new Date().toISOString();
-      const resolverStartedAtMs = Date.now();
-      const resolverEntry = this.chatEntries.appendPlannerLlmStreamEntry(input.conversationId, {
-        id: resolverEntryId,
-        createdAt: resolverCreatedAt,
-        llmRequest: toolParamPrompt,
-        llmResponse: "",
-        thoughtMs: null,
-        decision: null,
-        status: "running",
-        llmModel: resolverModel,
-      });
-      this.hub.publish(input.conversationId, {
-        type: SseType.PLANNER_STARTING,
-        chat_entry_id: resolverEntryId,
-        conversationIndex: resolverEntry.conversationIndex,
-        createdAt: resolverEntry.createdAt,
-        request_text: toolParamPrompt,
-        llm_model: resolverModel,
-      });
-
-      let reconstructedReply = "";
-      let resolverTokenUsage: StreamTextCompletionResult["usage"];
-      let completionText = "";
-      try {
-        const completion = await this.callLlmStreaming(
-          toolParamPrompt,
-          resolverOverrides,
-          resolverRequestParams,
-          input.files,
-          (delta) => {
-            throwIfCancelled(input.shouldCancel);
-            reconstructedReply += delta;
-            this.hub.publish(input.conversationId, {
-              type: SseType.PLANNER_LLM_STREAM,
-              chat_entry_id: resolverEntryId,
-              delta,
-            });
-          },
-        );
-        resolverTokenUsage = completion.usage;
-        completionText = reconstructedReply || completion.text || "";
-      } catch (e) {
-        const partialUsage = usageFromStreamingError(e);
-        if (partialUsage) {
-          resolverTokenUsage = partialUsage;
-        }
-        const detail = e instanceof Error ? e.message : String(e);
-        const cancelled = isTaskCancelledError(e);
-        this.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
-          id: resolverEntryId,
-          llmRequest: toolParamPrompt,
-          llmResponse: composeFailedPlannerResponse(reconstructedReply),
-          thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
-          decision: null,
-          status: cancelled ? "cancelled" : "failed",
-          error: detail,
-          llmModel: resolverModel,
-          ...(resolverTokenUsage !== undefined
-            ? {
-                promptTokens: resolverTokenUsage.promptTokens,
-                ...(resolverTokenUsage.cachedPromptTokens !== undefined
-                  ? { cachedPromptTokens: resolverTokenUsage.cachedPromptTokens }
-                  : {}),
-                completionTokens: resolverTokenUsage.completionTokens,
-              }
-            : {}),
-        });
-        this.publishConversationUpdated(input.conversationId);
-        this.hub.publish(input.conversationId, {
-          type: SseType.PLANNER_RESPONSE,
-          chat_entry_id: resolverEntryId,
-          summary: cancelled ? "Cancelled" : detail,
-          finished: true,
-          action: cancelled ? "cancelled" : "failed",
-          llm_model: resolverModel,
-          ...(resolverTokenUsage !== undefined
-            ? {
-                prompt_tokens: resolverTokenUsage.promptTokens,
-                ...(resolverTokenUsage.cachedPromptTokens !== undefined
-                  ? { cached_prompt_tokens: resolverTokenUsage.cachedPromptTokens }
-                  : {}),
-                completion_tokens: resolverTokenUsage.completionTokens,
-              }
-            : {}),
-        });
-        this.chatEntries.updateToolInvocation(input.conversationId, {
-          id: toolInvocationEntry.id,
-          state: "error",
-          result: {
-            ok: false,
-            toolId: toolName,
-            output: null,
-            error: detail,
-            stage: "tool_request_resolution",
-          },
-        });
-        this.hub.publish(input.conversationId, {
-          type: SseType.TOOL_INVOCATION_END,
-          tool_name: toolName,
-          output: detail,
-          ok: false,
-        });
-        throw e;
-      }
-
-      const raw = String(completionText)
-        .trim()
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/i, "")
-        .trim();
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch (e) {
-        throw new Error(`tool resolver returned invalid JSON for ${toolName}`, { cause: e });
-      }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error(`tool resolver did not return object params for ${toolName}`);
-      }
-      const validatedParams = tool.parseParams(parsed) as unknown;
-      if (!validatedParams || typeof validatedParams !== "object" || Array.isArray(validatedParams)) {
-        throw new Error(`tool.parseParams produced invalid object for ${toolName}`);
-      }
-      this.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
-        id: resolverEntryId,
-        llmRequest: toolParamPrompt,
-        llmResponse: completionText,
-        thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
-        decision: {
-          type: "tool-invocation",
-          toolId: toolName,
-          parameters: {},
-        },
-        status: "completed",
-        llmModel: resolverModel,
-        ...(resolverTokenUsage !== undefined
-          ? {
-              promptTokens: resolverTokenUsage.promptTokens,
-              ...(resolverTokenUsage.cachedPromptTokens !== undefined
-                ? { cachedPromptTokens: resolverTokenUsage.cachedPromptTokens }
-                : {}),
-              completionTokens: resolverTokenUsage.completionTokens,
-            }
-          : {}),
-      });
-      this.publishConversationUpdated(input.conversationId);
-      this.hub.publish(input.conversationId, {
-        type: SseType.PLANNER_RESPONSE,
-        chat_entry_id: resolverEntryId,
-        summary: `Resolved parameters for ${toolName}`,
-        finished: true,
-        action: "tool_call",
-        tool_name: toolName,
-        llm_model: resolverModel,
-        ...(resolverTokenUsage !== undefined
-          ? {
-              prompt_tokens: resolverTokenUsage.promptTokens,
-              ...(resolverTokenUsage.cachedPromptTokens !== undefined
-                ? { cached_prompt_tokens: resolverTokenUsage.cachedPromptTokens }
-                : {}),
-              completion_tokens: resolverTokenUsage.completionTokens,
-            }
-          : {}),
-      });
-      out.push({
-        toolInvocationEntryId: toolInvocationEntry.id,
-        call: {
-          toolId: toolName,
-          parameters: validatedParams as Record<string, unknown>,
-        },
-      });
+      out.push({ toolName, toolRequest });
     }
     return out;
   }
@@ -583,7 +346,7 @@ Return ONLY valid JSON object for tool parameters.`;
                 plannerEntryId,
                 firstStreamLatencyMs: Math.max(0, Date.now() - requestStartedMs),
               },
-              "[sse] first llm token streamed",
+              "[sse] first llm token streamed"
             );
           }
           reconstructedReply += delta;
@@ -614,7 +377,7 @@ Return ONLY valid JSON object for tool parameters.`;
             });
           }
           streamedAnswer = streamedAssistantOutput;
-        },
+        }
       );
       plannerTokenUsage = completion.usage;
       reply = reconstructedReply || completion.text || "";
@@ -729,7 +492,7 @@ Return ONLY valid JSON object for tool parameters.`;
     const triggerEntry = initialEntries.at(-1) ?? null;
     logger.info(
       { conversationId, triggerEntryType: triggerEntry?.type ?? null },
-      "[task] continue_conversation started",
+      "[task] continue_conversation started"
     );
     const anchorUserMessage = [...initialEntries]
       .reverse()
@@ -737,7 +500,7 @@ Return ONLY valid JSON object for tool parameters.`;
     if (!anchorUserMessage) {
       logger.warn(
         { conversationId, triggerEntryType: triggerEntry?.type ?? null },
-        "[task] skipped continue_conversation: no user message",
+        "[task] skipped continue_conversation: no user message"
       );
       return;
     }
@@ -749,7 +512,6 @@ Return ONLY valid JSON object for tool parameters.`;
     const plannerLlmModel = this.resolvePlannerModel(llmOverrides);
     const inputFiles = this.buildInputFiles(anchorUserMessage);
     const enabledToolIds = this.enabledToolIdsForAgent(anchorUserMessage.agentId);
-    const maxToolRequestsPerPass = 4;
     throwIfCancelled(opts?.shouldCancel);
     const entries = this.chatEntries.listMessages(conversationId);
     const llmRequest = buildPlannerPrompt({
@@ -779,16 +541,10 @@ Return ONLY valid JSON object for tool parameters.`;
     throwIfCancelled(opts?.shouldCancel);
     const decision = parsedLlmResponse.decision;
     const agentic = parsedLlmResponse.output;
-    const queuedToolRequests = await this.resolveToolRequestsWithLlm({
-      conversationId,
+    const requestedToolCalls = this.parseRequestedToolCalls({
       requests: agentic.tool_requests,
       enabledToolIds,
-      llmOverrides,
-      requestParams,
-      files: inputFiles,
-      shouldCancel: opts?.shouldCancel,
     });
-    const allToolCalls = queuedToolRequests;
     this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
       id: llmResponse.plannerEntryId,
       llmRequest: llmRequest,
@@ -831,12 +587,12 @@ Return ONLY valid JSON object for tool parameters.`;
       type: SseType.PLANNER_RESPONSE,
       chat_entry_id: llmResponse.plannerEntryId,
       summary:
-        allToolCalls.length > 0
-          ? `Queued ${allToolCalls.length} tool call(s)`
+        requestedToolCalls.length > 0
+          ? `Queued ${requestedToolCalls.length} tool call(s)`
           : assistantText || "planner step completed",
       finished: true,
-      action: allToolCalls.length > 0 ? "tool_call" : "final_answer",
-      ...(allToolCalls.length > 0 ? { tool_name: allToolCalls[0].call.toolId } : {}),
+      action: requestedToolCalls.length > 0 ? "tool_call" : "final_answer",
+      ...(requestedToolCalls.length > 0 ? { tool_name: requestedToolCalls[0].toolName } : {}),
       llm_model: plannerLlmModel,
       ...(llmResponse.plannerTokenUsage !== undefined
         ? {
@@ -848,33 +604,20 @@ Return ONLY valid JSON object for tool parameters.`;
           }
         : {}),
     });
-    if (allToolCalls.length > 0) {
-      const selectedCount = Math.max(0, Math.trunc(maxToolRequestsPerPass));
-      const selectedCalls = allToolCalls.slice(0, selectedCount);
+    if (requestedToolCalls.length > 0) {
       const batchId = crypto.randomUUID();
-      this.hub.publish(conversationId, {
-        type: SseType.TOOL_BATCH_STARTED,
-        batch_id: batchId,
-        total_calls: selectedCalls.length,
-      });
-      for (let i = 0; i < selectedCalls.length; i += 1) {
-        const call = selectedCalls[i].call;
-        const toolCfg = this.agentToolConfigFor(anchorUserMessage.agentId, call.toolId);
+      for (const requestedCall of requestedToolCalls) {
+        const toolCfg = this.agentToolConfigFor(anchorUserMessage.agentId, requestedCall.toolName);
         this.enqueueRunTool({
           conversationId,
           agentId: anchorUserMessage.agentId,
-          toolName: call.toolId,
-          params: call.parameters,
-          toolInvocationEntryId: selectedCalls[i].toolInvocationEntryId,
+          toolName: requestedCall.toolName,
+          params: {},
+          toolRequest: requestedCall.toolRequest,
           batchId,
           agentToolConfig: toolCfg,
         });
       }
-      this.hub.publish(conversationId, {
-        type: SseType.TOOL_BATCH_COMPLETED,
-        batch_id: batchId,
-        total_calls: selectedCalls.length,
-      });
       return;
     }
 
@@ -884,7 +627,7 @@ Return ONLY valid JSON object for tool parameters.`;
     }
     logger.warn(
       { conversationId, followup: agentic.followup },
-      "[task] planner requested followup without tool call; waiting for next continuation trigger",
+      "[task] planner requested followup without tool call; waiting for next continuation trigger"
     );
   }
 }

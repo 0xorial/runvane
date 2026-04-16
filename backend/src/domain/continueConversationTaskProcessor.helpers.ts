@@ -169,3 +169,25 @@ export function extractLastBalancedJsonObject(text: string): string | null {
   }
   return null;
 }
+
+export function parseJsonObjectFromCompletionText(input: {
+  text: string;
+  context: string;
+}): Record<string, unknown> {
+  const raw = String(input.text ?? "")
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`${input.context}: invalid JSON`, { cause: e });
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${input.context}: expected JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}

@@ -14,8 +14,8 @@ export type RunToolTask = {
   agentId: string | null;
   toolName: string;
   params: unknown;
+  toolRequest?: string;
   batchId?: string;
-  toolInvocationEntryId?: string;
   approvalGranted?: boolean;
   agentToolConfig?: {
     enabled?: boolean;

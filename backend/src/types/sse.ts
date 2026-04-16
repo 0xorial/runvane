@@ -15,8 +15,6 @@ export const SseType = {
   TITLE_RESPONSE: "title_response",
   TOOL_INVOCATION_START: "tool_invocation_start",
   TOOL_INVOCATION_END: "tool_invocation_end",
-  TOOL_BATCH_STARTED: "tool_batch_started",
-  TOOL_BATCH_COMPLETED: "tool_batch_completed",
 } as const;
 
 export type SseEventType = (typeof SseType)[keyof typeof SseType];
@@ -237,28 +235,6 @@ export const ToolInvocationEndSsePayloadSchema = z.object({
   run_continues: z.boolean().optional(),
 });
 
-export type ToolBatchStartedSsePayload = {
-  type: typeof SseType.TOOL_BATCH_STARTED;
-  batch_id: string;
-  total_calls: number;
-};
-export const ToolBatchStartedSsePayloadSchema = z.object({
-  type: z.literal(SseType.TOOL_BATCH_STARTED),
-  batch_id: z.string(),
-  total_calls: z.number().finite(),
-});
-
-export type ToolBatchCompletedSsePayload = {
-  type: typeof SseType.TOOL_BATCH_COMPLETED;
-  batch_id: string;
-  total_calls: number;
-};
-export const ToolBatchCompletedSsePayloadSchema = z.object({
-  type: z.literal(SseType.TOOL_BATCH_COMPLETED),
-  batch_id: z.string(),
-  total_calls: z.number().finite(),
-});
-
 export type SsePayload =
   | UserMessageSsePayload
   | ConversationCreatedSsePayload
@@ -271,9 +247,7 @@ export type SsePayload =
   | PlannerResponseSsePayload
   | TitleResponseSsePayload
   | ToolInvocationStartSsePayload
-  | ToolInvocationEndSsePayload
-  | ToolBatchStartedSsePayload
-  | ToolBatchCompletedSsePayload;
+  | ToolInvocationEndSsePayload;
 export const SsePayloadSchema = z.discriminatedUnion("type", [
   UserMessageSsePayloadSchema,
   ConversationCreatedSsePayloadSchema,
@@ -287,8 +261,6 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   TitleResponseSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
-  ToolBatchStartedSsePayloadSchema,
-  ToolBatchCompletedSsePayloadSchema,
 ]);
 
 /** Wire event sent over SSE. */
@@ -379,16 +351,6 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     output: z.string(),
     ok: z.boolean(),
     run_continues: z.boolean().optional(),
-  }),
-  SseRuntimeEnvelopeSchema.extend({
-    type: z.literal(SseType.TOOL_BATCH_STARTED),
-    batch_id: z.string(),
-    total_calls: z.number().finite(),
-  }),
-  SseRuntimeEnvelopeSchema.extend({
-    type: z.literal(SseType.TOOL_BATCH_COMPLETED),
-    batch_id: z.string(),
-    total_calls: z.number().finite(),
   }),
 ]);
 

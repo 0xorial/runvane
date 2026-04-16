@@ -90,6 +90,7 @@ export function createRuntime(opts: {
     tools,
     toolExecutionLogs,
     tasks,
+    llmProviderSettings,
     enqueueContinueConversation,
   );
   registerTaskQueueHandler({
@@ -206,8 +207,8 @@ export function createRuntime(opts: {
       conversationId,
       agentId,
       toolName: row.toolId,
-      params: row.parameters ?? {},
-      toolInvocationEntryId: row.id,
+      params: {},
+      toolRequest: String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim() || undefined,
       approvalGranted: true,
       agentToolConfig: {
         enabled: true,

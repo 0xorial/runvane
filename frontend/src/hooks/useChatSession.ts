@@ -290,8 +290,6 @@ export function useChatSession(conversationId: string | null | undefined) {
             next.state = ev.ok ? "done" : "error";
             next.result = ev.output;
           });
-        } else if (ev.type === SseType.TOOL_BATCH_STARTED || ev.type === SseType.TOOL_BATCH_COMPLETED) {
-          return;
         } else assertNever(ev);
       },
     });

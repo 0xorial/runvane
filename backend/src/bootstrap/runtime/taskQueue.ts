@@ -11,8 +11,8 @@ export type EnqueueRunToolInput = {
   agentId: string | null;
   toolName: string;
   params: unknown;
+  toolRequest?: string;
   batchId?: string;
-  toolInvocationEntryId?: string;
   approvalGranted?: boolean;
   agentToolConfig?: {
     enabled?: boolean;
@@ -45,13 +45,13 @@ function taskFromRow(row: TaskRow): AgentTask {
       agentId,
       toolName,
       params: row.payload.params,
+      toolRequest:
+        typeof row.payload.toolRequest === "string" && row.payload.toolRequest.trim().length > 0
+          ? row.payload.toolRequest.trim()
+          : undefined,
       batchId:
         typeof row.payload.batchId === "string" && row.payload.batchId.trim().length > 0
           ? row.payload.batchId.trim()
-          : undefined,
-      toolInvocationEntryId:
-        typeof row.payload.toolInvocationEntryId === "string" && row.payload.toolInvocationEntryId.trim().length > 0
-          ? row.payload.toolInvocationEntryId.trim()
           : undefined,
       approvalGranted: row.payload.approvalGranted === true,
       agentToolConfig:
@@ -102,8 +102,8 @@ export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemo
         agentId: input.agentId,
         toolName: input.toolName,
         params: input.params,
+        toolRequest: input.toolRequest ?? null,
         batchId: input.batchId ?? null,
-        toolInvocationEntryId: input.toolInvocationEntryId ?? null,
         approvalGranted: input.approvalGranted === true,
         agentToolConfig: input.agentToolConfig ?? null,
       },
