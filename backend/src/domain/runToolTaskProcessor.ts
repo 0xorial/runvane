@@ -12,9 +12,9 @@ import { mostPermissivePermission } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
 import {
   composeFailedPlannerResponse,
-  parseJsonObjectFromCompletionText,
   usageFromStreamingError,
-} from "./continueConversationTaskProcessor.helpers.js";
+} from "./continueConversationTaskProcessorV2/plannerStreamUtils.js";
+import { parseJsonObjectFromCompletionText } from "./continueConversationTaskProcessorV2/plannerTextParsing.js";
 import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
 
 type ToolExecutionEnvelope = {

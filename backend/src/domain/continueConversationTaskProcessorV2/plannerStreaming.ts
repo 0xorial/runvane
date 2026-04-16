@@ -4,11 +4,11 @@ import { SseType } from "../../types/sse.js";
 import { TokenUsageMapper } from "../../types/tokenUsage.js";
 import { isTaskCancelledError, throwIfCancelled } from "../taskCancellation.js";
 import {
-  composeFailedPlannerResponse,
-  extractAssistantOutputFromJsonLike,
   incrementalDelta,
+  composeFailedPlannerResponse,
   usageFromStreamingError,
-} from "../continueConversationTaskProcessor.helpers.js";
+} from "./plannerStreamUtils.js";
+import { extractAssistantOutputFromJsonLike } from "./plannerTextParsing.js";
 import type { ContinueConversationProcessorDeps, LlmOverrides, PlannerLlmResult } from "./types.js";
 import { publishConversationUpdated, resolvePlannerModel } from "./context.js";
 
