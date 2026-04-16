@@ -19,6 +19,7 @@ import { LlmMetaBadge } from "../chat/LlmMetaBadge";
 import { NewGroupDialog } from "./NewGroupDialog";
 import type { ConversationGroupRow, ConversationRow } from "./types";
 import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
+import { TokenUsageMapper } from "../../../../backend/src/types/tokenUsage";
 
 type ConversationItemProps = {
   conversation: ConversationRow;
@@ -61,13 +62,11 @@ export function ConversationItem({
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [streamedTitle, setStreamedTitle] = useState("");
-  const timestampIso = conversation.updated_at || conversation.created_at;
+  const timestampIso = conversation.updatedAt || conversation.createdAt;
   const stamp = formatRelativeChatTime(timestampIso);
   const stampExact = formatExactChatTime(timestampIso);
-  const promptTokens = Number(conversation.prompt_tokens_total ?? 0);
-  const cachedPromptTokens = Number(conversation.cached_prompt_tokens_total ?? 0);
-  const completionTokens = Number(conversation.completion_tokens_total ?? 0);
-  const estimatedCostUsd = estimateConversationCostUsd(conversation.token_usage_by_model ?? [], pricingByModel);
+  const usage = TokenUsageMapper.fromConversationTotals(conversation);
+  const estimatedCostUsd = estimateConversationCostUsd(conversation.tokenUsageByModel ?? [], pricingByModel);
 
   async function submitNewGroupDialog() {
     const groupName = newGroupName.trim();
@@ -80,11 +79,11 @@ export function ConversationItem({
   useEffect(() => {
     const dispose = subscribeGlobalLive({
       onSseEvent: (ev) => {
-        if (ev.type === SseType.TITLE_STARTING && ev.conversation_id === conversation.id) {
+        if (ev.type === SseType.TITLE_STARTING && ev.conversationId === conversation.id) {
           setStreamedTitle("");
           return;
         }
-        if (ev.type === SseType.TITLE_LLM_STREAM && ev.conversation_id === conversation.id) {
+        if (ev.type === SseType.TITLE_LLM_STREAM && ev.conversationId === conversation.id) {
           setStreamedTitle((prev) => `${prev}${ev.delta}`);
           return;
         }
@@ -140,9 +139,7 @@ export function ConversationItem({
             </span>
           ) : null}
           <LlmMetaBadge
-            promptTokens={promptTokens}
-            cachedPromptTokens={cachedPromptTokens}
-            completionTokens={completionTokens}
+            usage={usage}
             showTokenBreakdown
             estimatedCostUsd={estimatedCostUsd}
             className="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
@@ -168,7 +165,7 @@ export function ConversationItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              {deletedMode || conversation.is_deleted ? (
+              {deletedMode || conversation.isDeleted ? (
                 <>
                   <DropdownMenuItem onSelect={() => void onUndeleteConversation(conversation)}>
                     Undelete

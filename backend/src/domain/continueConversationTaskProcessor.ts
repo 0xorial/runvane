@@ -12,6 +12,7 @@ import { ToolRegistry } from "../tools/toolRegistry.js";
 import type { AgenticToolRequest, ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
 import { type StreamTextCompletionResult } from "../llm_provider/provider.js";
 import { SseType } from "../types/sse.js";
+import { TokenUsageMapper } from "../types/tokenUsage.js";
 import { usageByConversationId } from "./conversationUsage.js";
 import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
 import {
@@ -55,9 +56,16 @@ export class ContinueConversationTaskProcessor {
     this.hub.publish(conversationId, {
       type: SseType.CONVERSATION_UPDATED,
       conversation: {
-        ...conversation,
-        is_deleted: Number(conversation.is_deleted ?? 0) === 1,
-        token_usage_by_model:
+        id: conversation.id,
+        title: conversation.title,
+        groupId: conversation.group_id,
+        isDeleted: Number(conversation.is_deleted ?? 0) === 1,
+        createdAt: conversation.created_at,
+        updatedAt: conversation.updated_at,
+        promptTokensTotal: conversation.prompt_tokens_total,
+        cachedPromptTokensTotal: conversation.cached_prompt_tokens_total,
+        completionTokensTotal: conversation.completion_tokens_total,
+        tokenUsageByModel:
           usageByConversationId(this.chatEntries.listConversationTokenUsageByModel()).get(conversationId) ?? [],
       },
     });
@@ -316,11 +324,11 @@ export class ContinueConversationTaskProcessor {
     });
     this.hub.publish(input.conversationId, {
       type: SseType.PLANNER_STARTING,
-      chat_entry_id: plannerEntryId,
+      chatEntryId: plannerEntryId,
       conversationIndex: plannerEntry.conversationIndex,
       createdAt: plannerEntry.createdAt,
-      request_text: input.requestText,
-      llm_model: input.plannerLlmModel,
+      requestText: input.requestText,
+      llmModel: input.plannerLlmModel,
     });
 
     let reply = "";
@@ -355,7 +363,7 @@ export class ContinueConversationTaskProcessor {
           if (thoughtDelta) {
             this.hub.publish(input.conversationId, {
               type: SseType.PLANNER_LLM_STREAM,
-              chat_entry_id: plannerEntryId,
+              chatEntryId: plannerEntryId,
               delta: thoughtDelta,
             });
           }
@@ -372,7 +380,7 @@ export class ContinueConversationTaskProcessor {
             }
             this.hub.publish(input.conversationId, {
               type: SseType.ASSISTANT_STREAM,
-              chat_entry_id: assistantEntryId,
+              chatEntryId: assistantEntryId,
               delta: answerDelta,
             });
           }
@@ -397,37 +405,17 @@ export class ContinueConversationTaskProcessor {
           status: "cancelled",
           error: detail,
           llmModel: input.plannerLlmModel,
-          ...(plannerTokenUsage !== undefined
-            ? {
-                promptTokens: plannerTokenUsage.promptTokens,
-                ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                  ? {
-                      cachedPromptTokens: plannerTokenUsage.cachedPromptTokens,
-                    }
-                  : {}),
-                completionTokens: plannerTokenUsage.completionTokens,
-              }
-            : {}),
+          ...TokenUsageMapper.toEntryFields(plannerTokenUsage),
         });
         this.publishConversationUpdated(input.conversationId);
         this.hub.publish(input.conversationId, {
           type: SseType.PLANNER_RESPONSE,
-          chat_entry_id: plannerEntryId,
+          chatEntryId: plannerEntryId,
           summary: "Cancelled",
           finished: true,
           action: "cancelled",
-          llm_model: input.plannerLlmModel,
-          ...(plannerTokenUsage !== undefined
-            ? {
-                prompt_tokens: plannerTokenUsage.promptTokens,
-                ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                  ? {
-                      cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens,
-                    }
-                  : {}),
-                completion_tokens: plannerTokenUsage.completionTokens,
-              }
-            : {}),
+          llmModel: input.plannerLlmModel,
+          ...TokenUsageMapper.toSseFields(plannerTokenUsage),
         });
         return { kind: "cancelled" };
       }
@@ -441,35 +429,17 @@ export class ContinueConversationTaskProcessor {
         status: "failed",
         error: detail,
         llmModel: input.plannerLlmModel,
-        ...(plannerTokenUsage !== undefined
-          ? {
-              promptTokens: plannerTokenUsage.promptTokens,
-              ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                ? { cachedPromptTokens: plannerTokenUsage.cachedPromptTokens }
-                : {}),
-              completionTokens: plannerTokenUsage.completionTokens,
-            }
-          : {}),
+        ...TokenUsageMapper.toEntryFields(plannerTokenUsage),
       });
       this.publishConversationUpdated(input.conversationId);
       this.hub.publish(input.conversationId, {
         type: SseType.PLANNER_RESPONSE,
-        chat_entry_id: plannerEntryId,
+        chatEntryId: plannerEntryId,
         summary: detail,
         finished: true,
         action: "failed",
-        llm_model: input.plannerLlmModel,
-        ...(plannerTokenUsage !== undefined
-          ? {
-              prompt_tokens: plannerTokenUsage.promptTokens,
-              ...(plannerTokenUsage.cachedPromptTokens !== undefined
-                ? {
-                    cached_prompt_tokens: plannerTokenUsage.cachedPromptTokens,
-                  }
-                : {}),
-              completion_tokens: plannerTokenUsage.completionTokens,
-            }
-          : {}),
+        llmModel: input.plannerLlmModel,
+        ...TokenUsageMapper.toSseFields(plannerTokenUsage),
       });
       throw e;
     }
@@ -553,15 +523,7 @@ export class ContinueConversationTaskProcessor {
       decision,
       status: "completed",
       llmModel: plannerLlmModel,
-      ...(llmResponse.plannerTokenUsage !== undefined
-        ? {
-            promptTokens: llmResponse.plannerTokenUsage.promptTokens,
-            ...(llmResponse.plannerTokenUsage.cachedPromptTokens !== undefined
-              ? { cachedPromptTokens: llmResponse.plannerTokenUsage.cachedPromptTokens }
-              : {}),
-            completionTokens: llmResponse.plannerTokenUsage.completionTokens,
-          }
-        : {}),
+      ...TokenUsageMapper.toEntryFields(llmResponse.plannerTokenUsage),
     });
     const assistantText = String(agentic.assistant_output ?? "").trim();
     if (assistantText) {
@@ -573,7 +535,7 @@ export class ContinueConversationTaskProcessor {
         });
         this.hub.publish(conversationId, {
           type: SseType.ASSISTANT_STREAM,
-          chat_entry_id: assistantEntryId,
+          chatEntryId: assistantEntryId,
           delta: assistantText,
         });
       }
@@ -585,24 +547,16 @@ export class ContinueConversationTaskProcessor {
     this.publishConversationUpdated(conversationId);
     this.hub.publish(conversationId, {
       type: SseType.PLANNER_RESPONSE,
-      chat_entry_id: llmResponse.plannerEntryId,
+      chatEntryId: llmResponse.plannerEntryId,
       summary:
         requestedToolCalls.length > 0
           ? `Queued ${requestedToolCalls.length} tool call(s)`
           : assistantText || "planner step completed",
       finished: true,
       action: requestedToolCalls.length > 0 ? "tool_call" : "final_answer",
-      ...(requestedToolCalls.length > 0 ? { tool_name: requestedToolCalls[0].toolName } : {}),
-      llm_model: plannerLlmModel,
-      ...(llmResponse.plannerTokenUsage !== undefined
-        ? {
-            prompt_tokens: llmResponse.plannerTokenUsage.promptTokens,
-            ...(llmResponse.plannerTokenUsage.cachedPromptTokens !== undefined
-              ? { cached_prompt_tokens: llmResponse.plannerTokenUsage.cachedPromptTokens }
-              : {}),
-            completion_tokens: llmResponse.plannerTokenUsage.completionTokens,
-          }
-        : {}),
+      ...(requestedToolCalls.length > 0 ? { toolName: requestedToolCalls[0].toolName } : {}),
+      llmModel: plannerLlmModel,
+      ...TokenUsageMapper.toSseFields(llmResponse.plannerTokenUsage),
     });
     if (requestedToolCalls.length > 0) {
       const batchId = crypto.randomUUID();

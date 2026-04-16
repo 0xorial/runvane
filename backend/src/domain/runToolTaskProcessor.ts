@@ -5,6 +5,7 @@ import type { TasksRepo } from "../infra/repositories/tasksRepo.js";
 import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
 import type { ToolInvocationEntry } from "../types/chatEntry.js";
+import { TokenUsageMapper } from "../types/tokenUsage.js";
 import type { RunToolTask } from "./agentTask.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
 import { mostPermissivePermission } from "../tools/baseTool.js";
@@ -60,10 +61,10 @@ export class RunToolTaskProcessor {
       toolEntryId = created.id;
       this.hub.publish(conversationId, {
         type: SseType.TOOL_INVOCATION_START,
-        chat_entry_id: toolEntryId,
-        tool_name: task.toolName,
-        approval_required: false,
-        ...(argsPreview ? { args_preview: argsPreview } : {}),
+        chatEntryId: toolEntryId,
+        toolName: task.toolName,
+        approvalRequired: false,
+        ...(argsPreview ? { argsPreview: argsPreview } : {}),
       });
     }
 
@@ -96,10 +97,10 @@ export class RunToolTaskProcessor {
       };
       this.hub.publish(conversationId, {
         type: SseType.TOOL_INVOCATION_END,
-        tool_name: task.toolName,
+        toolName: task.toolName,
         output,
         ok: false,
-        run_continues: hasPendingBatchTools(),
+        runContinues: hasPendingBatchTools(),
       });
       if (!toolEntryId) {
         const created = this.chatEntries.appendToolInvocation(conversationId, {
@@ -176,10 +177,10 @@ export class RunToolTaskProcessor {
       });
       this.hub.publish(conversationId, {
         type: SseType.TOOL_INVOCATION_END,
-        tool_name: task.toolName,
+        toolName: task.toolName,
         output: detail,
         ok: false,
-        run_continues: hasPendingBatchTools(),
+        runContinues: hasPendingBatchTools(),
       });
       throw e;
     }
@@ -248,15 +249,15 @@ export class RunToolTaskProcessor {
       if (effectivePermission === "ask_user") {
         this.hub.publish(conversationId, {
           type: SseType.TOOL_INVOCATION_START,
-          chat_entry_id: toolEntryId,
-          tool_name: task.toolName,
-          approval_required: true,
-          ...(task.toolRequest ? { args_preview: task.toolRequest } : argsPreview ? { args_preview: argsPreview } : {}),
+          chatEntryId: toolEntryId,
+          toolName: task.toolName,
+          approvalRequired: true,
+          ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
         });
       } else {
         this.hub.publish(conversationId, {
           type: SseType.TOOL_INVOCATION_END,
-          tool_name: task.toolName,
+          toolName: task.toolName,
           output: reason,
           ok: false,
         });
@@ -297,10 +298,10 @@ export class RunToolTaskProcessor {
     }
     this.hub.publish(conversationId, {
       type: SseType.TOOL_INVOCATION_START,
-      chat_entry_id: toolEntryId,
-      tool_name: task.toolName,
-      approval_required: false,
-      ...(task.toolRequest ? { args_preview: task.toolRequest } : argsPreview ? { args_preview: argsPreview } : {}),
+      chatEntryId: toolEntryId,
+      toolName: task.toolName,
+      approvalRequired: false,
+      ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
     });
 
     throwIfCancelled(opts?.shouldCancel);
@@ -327,10 +328,10 @@ export class RunToolTaskProcessor {
 
     this.hub.publish(conversationId, {
       type: SseType.TOOL_INVOCATION_END,
-      tool_name: task.toolName,
+      toolName: task.toolName,
       output: safeStringify(outputValue),
       ok: true,
-      run_continues: hasPendingBatchTools(),
+      runContinues: hasPendingBatchTools(),
     });
     this.chatEntries.updateToolInvocation(conversationId, {
       id: toolEntryId,
@@ -414,11 +415,11 @@ Return ONLY valid JSON object for tool parameters.`;
     });
     this.hub.publish(task.conversationId, {
       type: SseType.PLANNER_STARTING,
-      chat_entry_id: resolverEntryId,
+      chatEntryId: resolverEntryId,
       conversationIndex: resolverEntry.conversationIndex,
       createdAt: resolverEntry.createdAt,
-      request_text: toolParamPrompt,
-      llm_model: model,
+      requestText: toolParamPrompt,
+      llmModel: model,
     });
 
     let reconstructedReply = "";
@@ -437,7 +438,7 @@ Return ONLY valid JSON object for tool parameters.`;
           reconstructedReply += delta;
           this.hub.publish(task.conversationId, {
             type: SseType.PLANNER_LLM_STREAM,
-            chat_entry_id: resolverEntryId,
+            chatEntryId: resolverEntryId,
             delta,
           });
         }
@@ -460,32 +461,16 @@ Return ONLY valid JSON object for tool parameters.`;
         status: cancelled ? "cancelled" : "failed",
         error: detail,
         llmModel: model,
-        ...(resolverTokenUsage !== undefined
-          ? {
-              promptTokens: resolverTokenUsage.promptTokens,
-              ...(resolverTokenUsage.cachedPromptTokens !== undefined
-                ? { cachedPromptTokens: resolverTokenUsage.cachedPromptTokens }
-                : {}),
-              completionTokens: resolverTokenUsage.completionTokens,
-            }
-          : {}),
+        ...TokenUsageMapper.toEntryFields(resolverTokenUsage),
       });
       this.hub.publish(task.conversationId, {
         type: SseType.PLANNER_RESPONSE,
-        chat_entry_id: resolverEntryId,
+        chatEntryId: resolverEntryId,
         summary: cancelled ? "Cancelled" : detail,
         finished: true,
         action: cancelled ? "cancelled" : "failed",
-        llm_model: model,
-        ...(resolverTokenUsage !== undefined
-          ? {
-              prompt_tokens: resolverTokenUsage.promptTokens,
-              ...(resolverTokenUsage.cachedPromptTokens !== undefined
-                ? { cached_prompt_tokens: resolverTokenUsage.cachedPromptTokens }
-                : {}),
-              completion_tokens: resolverTokenUsage.completionTokens,
-            }
-          : {}),
+        llmModel: model,
+        ...TokenUsageMapper.toSseFields(resolverTokenUsage),
       });
       throw e;
     }
@@ -505,33 +490,17 @@ Return ONLY valid JSON object for tool parameters.`;
       },
       status: "completed",
       llmModel: model,
-      ...(resolverTokenUsage !== undefined
-        ? {
-            promptTokens: resolverTokenUsage.promptTokens,
-            ...(resolverTokenUsage.cachedPromptTokens !== undefined
-              ? { cachedPromptTokens: resolverTokenUsage.cachedPromptTokens }
-              : {}),
-            completionTokens: resolverTokenUsage.completionTokens,
-          }
-        : {}),
+      ...TokenUsageMapper.toEntryFields(resolverTokenUsage),
     });
     this.hub.publish(task.conversationId, {
       type: SseType.PLANNER_RESPONSE,
-      chat_entry_id: resolverEntryId,
+      chatEntryId: resolverEntryId,
       summary: `Resolved parameters for ${task.toolName}`,
       finished: true,
       action: "tool_call",
-      tool_name: task.toolName,
-      llm_model: model,
-      ...(resolverTokenUsage !== undefined
-        ? {
-            prompt_tokens: resolverTokenUsage.promptTokens,
-            ...(resolverTokenUsage.cachedPromptTokens !== undefined
-              ? { cached_prompt_tokens: resolverTokenUsage.cachedPromptTokens }
-              : {}),
-            completion_tokens: resolverTokenUsage.completionTokens,
-          }
-        : {}),
+      toolName: task.toolName,
+      llmModel: model,
+      ...TokenUsageMapper.toSseFields(resolverTokenUsage),
     });
     return parsed;
   }

@@ -88,7 +88,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     const dispose = subscribeGlobalLive({
       onSseEvent: (ev) => {
         if (ev.type === SseType.CONVERSATION_CREATED) {
-          if (showDeletedOnly || ev.conversation.is_deleted) return;
+          if (showDeletedOnly || ev.conversation.isDeleted) return;
           setConversations((prev) => {
             if (prev.some((item) => item.id === ev.conversation.id)) return prev;
             return [ev.conversation, ...prev];
@@ -96,7 +96,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
-          const shouldShow = showDeletedOnly ? ev.conversation.is_deleted : !ev.conversation.is_deleted;
+          const shouldShow = showDeletedOnly ? ev.conversation.isDeleted : !ev.conversation.isDeleted;
           setConversations((prev) =>
             (() => {
               const index = prev.findIndex((item) => item.id === ev.conversation.id);
@@ -108,8 +108,8 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
               }
               if (index === -1) return [ev.conversation, ...prev];
               const next = prev.slice();
-              const currentMs = timestampMs(next[index].updated_at);
-              const incomingMs = timestampMs(ev.conversation.updated_at);
+              const currentMs = timestampMs(next[index].updatedAt);
+              const incomingMs = timestampMs(ev.conversation.updatedAt);
               if (currentMs != null && incomingMs != null && incomingMs < currentMs) {
                 return prev;
               }
@@ -144,7 +144,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
 
       await postConversationMessage(id, {
         message: PROBE_MESSAGE,
-        agent_id: agentId,
+        agentId,
       });
 
       void loadConversations();
@@ -179,8 +179,8 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   ) {
     try {
       await renameConversation(conversation.id, {
-        group_id: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
-        new_group_name: Object.prototype.hasOwnProperty.call(target, "newGroupName")
+        groupId: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
+        newGroupName: Object.prototype.hasOwnProperty.call(target, "newGroupName")
           ? String(target.newGroupName ?? "")
           : undefined,
       });
@@ -287,7 +287,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   } {
     return rows.reduce(
       (best, row) => {
-        const raw = String(row.updated_at || row.created_at || "").trim();
+        const raw = String(row.updatedAt || row.createdAt || "").trim();
         const ms = parseTimestampMs(raw);
         return ms > best.ms ? { ms, raw } : best;
       },
@@ -305,7 +305,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       groupById.set(id, group);
     }
     for (const row of conversations) {
-      const groupId = String(row.group_id || "").trim();
+      const groupId = String(row.groupId || "").trim();
       if (!groupId) {
         ungrouped.push(row);
         continue;
@@ -328,7 +328,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       ...ungrouped.map((row) => ({
         kind: "conversation" as const,
         row,
-        latestMs: parseTimestampMs(String(row.updated_at || row.created_at || "")),
+        latestMs: parseTimestampMs(String(row.updatedAt || row.createdAt || "")),
       })),
       ...groupIds.map((groupId) => {
         const rows = byGroupId.get(groupId) ?? [];

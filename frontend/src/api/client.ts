@@ -101,11 +101,11 @@ export async function postJsonAccepted(path: string, body: unknown): Promise<Pos
 
 export type PostConversationMessageInput = {
   message: string;
-  agent_id: string;
-  llm_provider_id?: string;
-  llm_model?: string;
-  model_preset_id?: number;
-  attachment_ids?: string[];
+  agentId: string;
+  llmProviderId?: string;
+  llmModel?: string;
+  modelPresetId?: number;
+  attachmentIds?: string[];
 };
 
 export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
@@ -120,7 +120,7 @@ export function createConversation(body: { title?: string } = {}): Promise<Conve
 
 export function renameConversation(
   conversationId: string,
-  body: { title?: string; group_id?: string | null; new_group_name?: string },
+  body: { title?: string; groupId?: string | null; newGroupName?: string },
 ): Promise<ConversationRow> {
   return sendJson(`/api/conversations/${encodeURIComponent(conversationId)}`, "PUT", body).then((data) =>
     validateConversationRowResponse(data, "PUT /api/conversations/:id"),
@@ -171,8 +171,8 @@ export async function approveToolInvocation(
 }
 
 export function cancelConversationProcessing(conversationId: string): Promise<{
-  conversation_id: string;
-  cancelled_tasks: number;
+  conversationId: string;
+  cancelledTasks: number;
 }> {
   return postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/cancel-processing`, {}).then(
     (result) => {
@@ -181,20 +181,20 @@ export function cancelConversationProcessing(conversationId: string): Promise<{
         throw new Error("POST /api/conversations/:id/cancel-processing: invalid response envelope");
       }
       const row = data as {
-        conversation_id?: unknown;
-        cancelled_tasks?: unknown;
+        conversationId?: unknown;
+        cancelledTasks?: unknown;
       };
-      const conversationIdOut = String(row.conversation_id ?? "").trim();
+      const conversationIdOut = String(row.conversationId ?? "").trim();
       const cancelledTasks =
-        typeof row.cancelled_tasks === "number" && Number.isFinite(row.cancelled_tasks)
-          ? Math.max(0, Math.trunc(row.cancelled_tasks))
+        typeof row.cancelledTasks === "number" && Number.isFinite(row.cancelledTasks)
+          ? Math.max(0, Math.trunc(row.cancelledTasks))
           : NaN;
       if (!conversationIdOut || Number.isNaN(cancelledTasks)) {
         throw new Error("POST /api/conversations/:id/cancel-processing: invalid response fields");
       }
       return {
-        conversation_id: conversationIdOut,
-        cancelled_tasks: cancelledTasks,
+        conversationId: conversationIdOut,
+        cancelledTasks,
       };
     },
   );

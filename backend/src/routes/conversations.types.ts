@@ -6,25 +6,25 @@ import { ChatEntrySchema } from "../types/chatEntry.js";
 export type ConversationRow = {
   id: string;
   title: string;
-  group_id: string | null;
-  is_deleted: boolean;
-  created_at: string;
-  updated_at: string;
-  prompt_tokens_total: number;
-  cached_prompt_tokens_total: number;
-  completion_tokens_total: number;
-  token_usage_by_model: Array<{
-    model_name: string;
-    prompt_tokens: number;
-    cached_prompt_tokens: number;
-    completion_tokens: number;
+  groupId: string | null;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  promptTokensTotal: number;
+  cachedPromptTokensTotal: number;
+  completionTokensTotal: number;
+  tokenUsageByModel: Array<{
+    modelName: string;
+    promptTokens: number;
+    cachedPromptTokens: number;
+    completionTokens: number;
   }>;
 };
 export type ConversationGroupRow = {
   id: string;
   name: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 };
 export type GetConversationsResponse = {
   conversations: ConversationRow[];
@@ -36,40 +36,40 @@ export type CreateConversationRequest = {
 export type ChatMessageEntry = ChatEntry;
 export type PostConversationMessageRequest = {
   message: string;
-  agent_id: string;
-  llm_provider_id?: string;
-  llm_model?: string;
-  model_preset_id?: number;
-  attachment_ids?: string[];
+  agentId: string;
+  llmProviderId?: string;
+  llmModel?: string;
+  modelPresetId?: number;
+  attachmentIds?: string[];
 };
 export type PostConversationMessageAcceptedResponse = {
-  conversation_id: string;
+  conversationId: string;
 };
 
 const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   id: z.string(),
   title: z.string(),
-  group_id: z.string().nullable(),
-  is_deleted: z.boolean(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  prompt_tokens_total: z.number().finite(),
-  cached_prompt_tokens_total: z.number().finite(),
-  completion_tokens_total: z.number().finite(),
-  token_usage_by_model: z.array(
+  groupId: z.string().nullable(),
+  isDeleted: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  promptTokensTotal: z.number().finite(),
+  cachedPromptTokensTotal: z.number().finite(),
+  completionTokensTotal: z.number().finite(),
+  tokenUsageByModel: z.array(
     z.object({
-      model_name: z.string(),
-      prompt_tokens: z.number().finite(),
-      cached_prompt_tokens: z.number().finite(),
-      completion_tokens: z.number().finite(),
+      modelName: z.string(),
+      promptTokens: z.number().finite(),
+      cachedPromptTokens: z.number().finite(),
+      completionTokens: z.number().finite(),
     }),
   ),
 });
 const ConversationGroupRowSchema: z.ZodType<ConversationGroupRow> = z.object({
   id: z.string(),
   name: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 const GetConversationsResponseSchema: z.ZodType<GetConversationsResponse> = z.object({
   conversations: z.array(ConversationRowSchema),
@@ -81,20 +81,20 @@ const CreateConversationRequestSchema: z.ZodType<CreateConversationRequest> = z.
 });
 const PostConversationMessageRequestSchema: z.ZodType<PostConversationMessageRequest> = z.object({
   message: z.string(),
-  agent_id: z.string(),
-  llm_provider_id: z.string().optional(),
-  llm_model: z.string().optional(),
-  model_preset_id: z.number().finite().optional(),
-  attachment_ids: z.array(z.string()).optional(),
+  agentId: z.string(),
+  llmProviderId: z.string().optional(),
+  llmModel: z.string().optional(),
+  modelPresetId: z.number().finite().optional(),
+  attachmentIds: z.array(z.string()).optional(),
 });
 const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationMessageAcceptedResponse> = z.object({
-  conversation_id: z.string(),
+  conversationId: z.string(),
 });
 
 const UpdateConversationRequestSchema = z.object({
   title: z.string().optional(),
-  group_id: z.string().nullable().optional(),
-  new_group_name: z.string().optional(),
+  groupId: z.string().nullable().optional(),
+  newGroupName: z.string().optional(),
 });
 
 export function parseCreateConversationTitle(body: Record<string, unknown>): string {
@@ -105,8 +105,8 @@ export function parseCreateConversationTitle(body: Record<string, unknown>): str
 
 export function parseUpdateConversationRequest(body: Record<string, unknown>): {
   title?: string;
-  group_id?: string | null;
-  new_group_name?: string;
+  groupId?: string | null;
+  newGroupName?: string;
 } {
   const parsed = UpdateConversationRequestSchema.safeParse(body);
   return parsed.success ? parsed.data : {};
@@ -115,7 +115,7 @@ export function parseUpdateConversationRequest(body: Record<string, unknown>): {
 export function toPostConversationMessageAcceptedResponse(
   conversationId: string,
 ): PostConversationMessageAcceptedResponse {
-  return { conversation_id: conversationId };
+  return { conversationId };
 }
 
 function formatZodError(context: string, err: z.ZodError): Error {
@@ -130,7 +130,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
     const rec = value as Record<string, unknown>;
     const role = rec.role;
     if (role === "user") {
-      const agentId = String(rec.agentId ?? rec.agent_id ?? "").trim();
+      const agentId = String(rec.agentId ?? "").trim();
       if (!agentId) {
         throw new Error("GET /api/conversations/:id/messages validation failed: user role message missing agentId");
       }
@@ -146,9 +146,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
         createdAt:
           typeof rec.createdAt === "string"
             ? rec.createdAt
-            : typeof rec.created_at === "string"
-              ? rec.created_at
-              : new Date().toISOString(),
+            : new Date().toISOString(),
       };
     }
     if (role === "assistant") {
@@ -163,9 +161,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
         createdAt:
           typeof rec.createdAt === "string"
             ? rec.createdAt
-            : typeof rec.created_at === "string"
-              ? rec.created_at
-              : new Date().toISOString(),
+            : new Date().toISOString(),
       };
     }
   }

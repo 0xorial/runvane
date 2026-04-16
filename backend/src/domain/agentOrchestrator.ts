@@ -29,10 +29,10 @@ export class AgentOrchestrator {
 
     this.hub.publish(conversationId, {
       type: SseType.PLANNER_STARTING,
-      chat_entry_id: plannerEntryId,
+      chatEntryId: plannerEntryId,
       conversationIndex,
       createdAt,
-      request_text: job.message,
+      requestText: job.message,
     });
 
     const reply = fakeAssistantReply(job.message);
@@ -42,7 +42,7 @@ export class AgentOrchestrator {
       await sleep(120);
       this.hub.publish(conversationId, {
         type: SseType.PLANNER_LLM_STREAM,
-        chat_entry_id: plannerEntryId,
+        chatEntryId: plannerEntryId,
         delta,
       });
     }
@@ -51,7 +51,7 @@ export class AgentOrchestrator {
 
     this.hub.publish(conversationId, {
       type: SseType.PLANNER_RESPONSE,
-      chat_entry_id: plannerEntryId,
+      chatEntryId: plannerEntryId,
       summary: reply,
       finished: true,
       action: "final_answer",

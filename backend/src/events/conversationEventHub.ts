@@ -13,7 +13,7 @@ export class ConversationEventHub {
     if (!conversationId) return;
     const ev: SseEvent = {
       ...payload,
-      conversation_id: conversationId,
+      conversationId,
       seq: this.nextSeq++,
     };
     this.replay.push(ev);

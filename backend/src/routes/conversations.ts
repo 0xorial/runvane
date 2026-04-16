@@ -18,26 +18,33 @@ export function createConversationsRouter(runtime: Runtime) {
   function toApiConversationRow(
     row: ReturnType<Runtime["conversations"]["get"]> extends infer T ? Exclude<T, null> : never,
     usageByModel: Array<{
-      model_name: string;
-      prompt_tokens: number;
-      cached_prompt_tokens: number;
-      completion_tokens: number;
+      modelName: string;
+      promptTokens: number;
+      cachedPromptTokens: number;
+      completionTokens: number;
     }>,
   ) {
     return {
-      ...row,
-      is_deleted: Number(row.is_deleted ?? 0) === 1,
-      token_usage_by_model: usageByModel,
+      id: row.id,
+      title: row.title,
+      groupId: row.group_id,
+      isDeleted: Number(row.is_deleted ?? 0) === 1,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      promptTokensTotal: row.prompt_tokens_total,
+      cachedPromptTokensTotal: row.cached_prompt_tokens_total,
+      completionTokensTotal: row.completion_tokens_total,
+      tokenUsageByModel: usageByModel,
     };
   }
 
   function conversationUsageById(): Map<
     string,
     Array<{
-      model_name: string;
-      prompt_tokens: number;
-      cached_prompt_tokens: number;
-      completion_tokens: number;
+      modelName: string;
+      promptTokens: number;
+      cachedPromptTokens: number;
+      completionTokens: number;
     }>
   > {
     return usageByConversationId(runtime.chatEntries.listConversationTokenUsageByModel());
@@ -46,7 +53,12 @@ export function createConversationsRouter(runtime: Runtime) {
   r.get("/", (c) => {
     const deletedMode = c.req.query("deleted") === "only";
     const rows = runtime.conversations.list({ deletedOnly: deletedMode });
-    const groups = runtime.conversations.listGroups();
+    const groups = runtime.conversations.listGroups().map((group) => ({
+      id: group.id,
+      name: group.name,
+      createdAt: group.created_at,
+      updatedAt: group.updated_at,
+    }));
     const usageById = conversationUsageById();
     return c.json({
       conversations: rows.map((row) => toApiConversationRow(row, usageById.get(row.id) ?? [])),
@@ -76,13 +88,13 @@ export function createConversationsRouter(runtime: Runtime) {
       return c.json({ detail: "conversation not found" }, 404);
     }
     const hasTitleUpdate = Object.prototype.hasOwnProperty.call(update, "title");
-    const hasGroupIdUpdate = Object.prototype.hasOwnProperty.call(update, "group_id");
-    const hasNewGroupNameUpdate = Object.prototype.hasOwnProperty.call(update, "new_group_name");
+    const hasGroupIdUpdate = Object.prototype.hasOwnProperty.call(update, "groupId");
+    const hasNewGroupNameUpdate = Object.prototype.hasOwnProperty.call(update, "newGroupName");
     if (!hasTitleUpdate && !hasGroupIdUpdate && !hasNewGroupNameUpdate) {
       return c.json({ detail: "title or group update is required" }, 400);
     }
     if (hasGroupIdUpdate && hasNewGroupNameUpdate) {
-      return c.json({ detail: "provide either group_id or new_group_name, not both" }, 400);
+      return c.json({ detail: "provide either groupId or newGroupName, not both" }, 400);
     }
 
     let updated = runtime.conversations.get(conversationId, { includeDeleted: true });
@@ -101,9 +113,9 @@ export function createConversationsRouter(runtime: Runtime) {
     if (hasGroupIdUpdate) {
       let groupUpdated;
       try {
-        groupUpdated = runtime.conversations.updateGroupId(conversationId, update.group_id ?? null);
+        groupUpdated = runtime.conversations.updateGroupId(conversationId, update.groupId ?? null);
       } catch (e) {
-        const detail = e instanceof Error ? e.message : "invalid group_id";
+        const detail = e instanceof Error ? e.message : "invalid groupId";
         return c.json({ detail }, 400);
       }
       if (!groupUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
@@ -111,7 +123,7 @@ export function createConversationsRouter(runtime: Runtime) {
     }
 
     if (hasNewGroupNameUpdate) {
-      const groupUpdated = runtime.conversations.updateGroupName(conversationId, String(update.new_group_name || ""));
+      const groupUpdated = runtime.conversations.updateGroupName(conversationId, String(update.newGroupName || ""));
       if (!groupUpdated) return c.json({ detail: "conversation not found or deleted" }, 404);
       updated = groupUpdated;
     }
@@ -151,7 +163,7 @@ export function createConversationsRouter(runtime: Runtime) {
     const conversationId = c.req.param("conversationId");
     const removed = runtime.conversations.hardDelete(conversationId);
     if (!removed) return c.json({ detail: "conversation not found or not deleted" }, 404);
-    return c.json({ conversation_id: conversationId, deleted: true });
+    return c.json({ conversationId, deleted: true });
   });
 
   r.get("/:conversationId/messages", (c) => {
@@ -207,7 +219,7 @@ export function createConversationsRouter(runtime: Runtime) {
     if (result.kind === "tool_invocation_not_requested") {
       return c.json({ detail: "tool invocation is not in requested state" }, 400);
     }
-    return c.json({ conversation_id: conversationId, task_id: result.taskId }, 202);
+    return c.json({ conversationId, taskId: result.taskId }, 202);
   });
 
   r.post("/:conversationId/cancel-processing", (c) => {
@@ -217,8 +229,8 @@ export function createConversationsRouter(runtime: Runtime) {
       return c.json({ detail: "conversation not found" }, 404);
     }
     return c.json({
-      conversation_id: conversationId,
-      cancelled_tasks: result.cancelledTaskCount,
+      conversationId,
+      cancelledTasks: result.cancelledTaskCount,
     });
   });
 

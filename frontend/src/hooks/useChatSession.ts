@@ -6,6 +6,19 @@ import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
 import { createObservableItemCollection } from "../utils/observableCollection";
+import { TokenUsageMapper } from "../../../backend/src/types/tokenUsage";
+
+function plannerResponseUsageFromEvent(ev: {
+  promptTokens?: number;
+  cachedPromptTokens?: number;
+  completionTokens?: number;
+}) {
+  return TokenUsageMapper.fromEntryFields({
+    promptTokens: ev.promptTokens,
+    cachedPromptTokens: ev.cachedPromptTokens,
+    completionTokens: ev.completionTokens,
+  });
+}
 
 export function useChatSession(conversationId: string | null | undefined) {
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
@@ -95,7 +108,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     const cid = String(conversationId);
     liveDisposeRef.current = subscribeGlobalLive({
       onSseEvent: (ev) => {
-        if (ev.conversation_id !== cid) return;
+        if (ev.conversationId !== cid) return;
         if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
           return;
         }
@@ -107,15 +120,15 @@ export function useChatSession(conversationId: string | null | undefined) {
         } else if (ev.type === SseType.PLANNER_STARTING || ev.type === SseType.TITLE_STARTING) {
           const store = storeRef.current;
           const thinkingType = ev.type === SseType.TITLE_STARTING ? "title_llm_stream" : "planner_llm_stream";
-          if (!store.getById(ev.chat_entry_id)) {
+          if (!store.getById(ev.chatEntryId)) {
             const llmModel =
-              typeof ev.llm_model === "string" && ev.llm_model.trim() !== "" ? ev.llm_model.trim() : undefined;
+              typeof ev.llmModel === "string" && ev.llmModel.trim() !== "" ? ev.llmModel.trim() : undefined;
             store.append({
               type: thinkingType,
-              id: ev.chat_entry_id,
+              id: ev.chatEntryId,
               conversationIndex: ev.conversationIndex,
               createdAt: ev.createdAt,
-              llmRequest: ev.request_text,
+              llmRequest: ev.requestText,
               status: "running",
               ...(llmModel !== undefined ? { llmModel } : {}),
             });
@@ -123,14 +136,14 @@ export function useChatSession(conversationId: string | null | undefined) {
           return;
         } else if (ev.type === SseType.PLANNER_LLM_STREAM || ev.type === SseType.TITLE_LLM_STREAM) {
           const store = storeRef.current;
-          const row$ = store.getById(ev.chat_entry_id);
+          const row$ = store.getById(ev.chatEntryId);
           const thinkingType = ev.type === SseType.TITLE_LLM_STREAM ? "title_llm_stream" : "planner_llm_stream";
           if (!row$) {
-            console.warn("Planner entry not found for id:", ev.chat_entry_id);
+            console.warn("Planner entry not found for id:", ev.chatEntryId);
             console.warn(" Creating a new one...");
             store.append({
               type: thinkingType,
-              id: ev.chat_entry_id,
+              id: ev.chatEntryId,
               conversationIndex: store.getRows().length,
               createdAt: new Date().toISOString(),
               llmRequest: "",
@@ -151,11 +164,11 @@ export function useChatSession(conversationId: string | null | undefined) {
           return;
         } else if (ev.type === SseType.ASSISTANT_STREAM) {
           const store = storeRef.current;
-          const row$ = store.getById(ev.chat_entry_id);
+          const row$ = store.getById(ev.chatEntryId);
           if (!row$) {
             store.append({
               type: "assistant-message",
-              id: ev.chat_entry_id,
+              id: ev.chatEntryId,
               conversationIndex: store.getRows().length,
               createdAt: new Date().toISOString(),
               text: ev.delta,
@@ -169,7 +182,7 @@ export function useChatSession(conversationId: string | null | undefined) {
           return;
         } else if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
           const store = storeRef.current;
-          const row$ = store.getById(ev.chat_entry_id);
+          const row$ = store.getById(ev.chatEntryId);
           const thinkingType = ev.type === SseType.TITLE_RESPONSE ? "title_llm_stream" : "planner_llm_stream";
 
           if (row$) {
@@ -179,10 +192,10 @@ export function useChatSession(conversationId: string | null | undefined) {
                 return;
               }
               next.decision =
-                ev.type === SseType.PLANNER_RESPONSE && ev.action === "tool_call" && ev.tool_name
+                ev.type === SseType.PLANNER_RESPONSE && ev.action === "tool_call" && ev.toolName
                   ? {
                       type: "tool-invocation",
-                      toolId: ev.tool_name,
+                      toolId: ev.toolName,
                       parameters: {},
                     }
                   : ev.summary.trim()
@@ -206,20 +219,23 @@ export function useChatSession(conversationId: string | null | undefined) {
                 next.status = "completed";
                 delete next.error;
               }
-              const modelWire = typeof ev.llm_model === "string" ? ev.llm_model.trim() : "";
+              const modelWire = typeof ev.llmModel === "string" ? ev.llmModel.trim() : "";
               if (modelWire) next.llmModel = modelWire;
-              if (typeof ev.prompt_tokens === "number" && Number.isFinite(ev.prompt_tokens)) {
-                next.promptTokens = ev.prompt_tokens;
-              }
-              if (typeof ev.completion_tokens === "number" && Number.isFinite(ev.completion_tokens)) {
-                next.completionTokens = ev.completion_tokens;
+              const usage = plannerResponseUsageFromEvent(ev);
+              if (usage) {
+                next.promptTokens = usage.promptTokens;
+                next.completionTokens = usage.completionTokens;
+                if (usage.cachedPromptTokens !== undefined) {
+                  next.cachedPromptTokens = usage.cachedPromptTokens;
+                }
               }
             });
           } else {
-            const modelWire = typeof ev.llm_model === "string" ? ev.llm_model.trim() : "";
+            const modelWire = typeof ev.llmModel === "string" ? ev.llmModel.trim() : "";
+            const usage = plannerResponseUsageFromEvent(ev);
             store.append({
               type: thinkingType,
-              id: ev.chat_entry_id,
+              id: ev.chatEntryId,
               conversationIndex: store.getRows().length,
               createdAt: new Date().toISOString(),
               llmRequest: "",
@@ -227,10 +243,10 @@ export function useChatSession(conversationId: string | null | undefined) {
               status: ev.action === "failed" ? "failed" : ev.action === "cancelled" ? "cancelled" : "completed",
               ...(ev.action === "failed" || ev.action === "cancelled" ? { error: ev.summary } : {}),
               decision:
-                ev.type === SseType.PLANNER_RESPONSE && ev.action === "tool_call" && ev.tool_name
+                ev.type === SseType.PLANNER_RESPONSE && ev.action === "tool_call" && ev.toolName
                   ? {
                       type: "tool-invocation",
-                      toolId: ev.tool_name,
+                      toolId: ev.toolName,
                       parameters: {},
                     }
                   : ev.summary.trim()
@@ -240,35 +256,30 @@ export function useChatSession(conversationId: string | null | undefined) {
                       }
                     : null,
               ...(modelWire ? { llmModel: modelWire } : {}),
-              ...(typeof ev.prompt_tokens === "number" && Number.isFinite(ev.prompt_tokens)
-                ? { promptTokens: ev.prompt_tokens }
-                : {}),
-              ...(typeof ev.completion_tokens === "number" && Number.isFinite(ev.completion_tokens)
-                ? { completionTokens: ev.completion_tokens }
-                : {}),
+              ...TokenUsageMapper.toEntryFields(usage),
             });
           }
           return;
         } else if (ev.type === SseType.TOOL_INVOCATION_START) {
           const store = storeRef.current;
-          const existing = store.getById(ev.chat_entry_id);
+          const existing = store.getById(ev.chatEntryId);
           if (existing) {
             existing.mutate((next) => {
               if (next.type !== "tool-invocation") return;
-              next.toolId = ev.tool_name;
-              next.state = ev.approval_required ? "requested" : "running";
-              next.parameters = ev.args_preview ? { args_preview: ev.args_preview } : next.parameters;
+              next.toolId = ev.toolName;
+              next.state = ev.approvalRequired ? "requested" : "running";
+              next.parameters = ev.argsPreview ? { argsPreview: ev.argsPreview } : next.parameters;
             });
             return;
           }
           store.append({
             type: "tool-invocation",
-            id: ev.chat_entry_id,
+            id: ev.chatEntryId,
             conversationIndex: store.getRows().length,
             createdAt: new Date().toISOString(),
-            toolId: ev.tool_name,
-            state: ev.approval_required ? "requested" : "running",
-            parameters: ev.args_preview ? { args_preview: ev.args_preview } : {},
+            toolId: ev.toolName,
+            state: ev.approvalRequired ? "requested" : "running",
+            parameters: ev.argsPreview ? { argsPreview: ev.argsPreview } : {},
             result: null,
           });
           return;
@@ -278,7 +289,7 @@ export function useChatSession(conversationId: string | null | undefined) {
           const idx = store.findLastIndex(
             (e) =>
               e.type === "tool-invocation" &&
-              e.toolId === ev.tool_name &&
+              e.toolId === ev.toolName &&
               (e.state === "requested" || e.state === "running"),
           );
           if (idx < 0) return;

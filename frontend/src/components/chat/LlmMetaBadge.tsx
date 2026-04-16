@@ -1,12 +1,11 @@
 import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { TokenUsageMapper, type EntryTokenUsage } from "../../../../backend/src/types/tokenUsage";
 
 /** frontend2/src/components/chat/LLMRequestBadge.tsx — only renders when there is something to show */
 export type LlmMetaBadgeProps = {
   model?: string;
-  promptTokens?: number;
-  cachedPromptTokens?: number;
-  completionTokens?: number;
+  usage?: EntryTokenUsage;
   durationMs?: number;
   showTokenBreakdown?: boolean;
   estimatedCostUsd?: number;
@@ -36,9 +35,7 @@ function formatUsd(value: number): string {
 
 export function LlmMetaBadge({
   model,
-  promptTokens = 0,
-  cachedPromptTokens = 0,
-  completionTokens = 0,
+  usage,
   durationMs,
   showTokenBreakdown = false,
   estimatedCostUsd,
@@ -46,21 +43,25 @@ export function LlmMetaBadge({
 }: LlmMetaBadgeProps) {
   const m = String(model ?? "").trim();
   const modelShort = m.includes("/") ? (m.split("/").pop() ?? m) : m;
-  const hasTokens = Number.isFinite(promptTokens) && Number.isFinite(completionTokens);
-  const totalTokens = hasTokens ? promptTokens + completionTokens : 0;
+  const normalizedUsage = TokenUsageMapper.fromEntryFields(usage ?? {});
+  const hasTokens = normalizedUsage !== undefined;
+  const totalTokens = TokenUsageMapper.totalDisplayedTokens(normalizedUsage);
   const hasDuration = typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0;
 
   const segments: ReactNode[] = [];
   if (modelShort) segments.push(<span key="model">{modelShort}</span>);
   if (hasTokens) {
-    const promptExact = promptTokens.toLocaleString();
-    const cachedPromptExact = cachedPromptTokens.toLocaleString();
-    const completionExact = completionTokens.toLocaleString();
+    const prompt = normalizedUsage.promptTokens;
+    const cachedPrompt = normalizedUsage.cachedPromptTokens ?? 0;
+    const completion = normalizedUsage.completionTokens;
+    const promptExact = prompt.toLocaleString();
+    const cachedPromptExact = cachedPrompt.toLocaleString();
+    const completionExact = completion.toLocaleString();
     const totalExact = totalTokens.toLocaleString();
     segments.push(
       showTokenBreakdown ? (
         <span key="tok" title={`in ${promptExact} / cached ${cachedPromptExact} / out ${completionExact} tok`}>
-          in {formatCompactNumber(promptTokens)} / out {formatCompactNumber(completionTokens)} tok
+          in {formatCompactNumber(prompt)} / out {formatCompactNumber(completion)} tok
         </span>
       ) : (
         <span key="tok" title={`${totalExact} tok`}>
@@ -68,10 +69,10 @@ export function LlmMetaBadge({
         </span>
       ),
     );
-    if (cachedPromptTokens > 0) {
+    if (cachedPrompt > 0) {
       segments.push(
         <span key="cached" title={`${cachedPromptExact} cached input tok`}>
-          cached {formatCompactNumber(cachedPromptTokens)} tok
+          cached {formatCompactNumber(cachedPrompt)} tok
         </span>,
       );
     }

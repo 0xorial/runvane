@@ -13,6 +13,8 @@ import { Button } from "../../ui/button";
 import { ThemeToggle } from "../../ThemeToggle";
 import { LlmMetaBadge } from "../LlmMetaBadge";
 import { EditableConversationTitle } from "./EditableConversationTitle";
+import type { EntryTokenUsage } from "../../../../../backend/src/types/tokenUsage";
+import { TokenUsageMapper } from "../../../../../backend/src/types/tokenUsage";
 import {
   buildModelPricingByName,
   estimateConversationCostUsd,
@@ -44,10 +46,10 @@ export function ChatTitlePanel({
 }: ChatTitlePanelProps) {
   const [title, setTitle] = useState("New chat");
   const [streamRawTitle, setStreamRawTitle] = useState("");
-  const [tokenTotals, setTokenTotals] = useState({
-    prompt: 0,
-    cachedPrompt: 0,
-    completion: 0,
+  const [tokenTotals, setTokenTotals] = useState<EntryTokenUsage>({
+    promptTokens: 0,
+    cachedPromptTokens: 0,
+    completionTokens: 0,
   });
   const [tokenUsageByModel, setTokenUsageByModel] = useState<TokenUsageByModelRow[]>([]);
   const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(() => new Map());
@@ -63,19 +65,15 @@ export function ChatTitlePanel({
     const payload = await getConversations();
     const row = payload.conversations.find((x) => x.id === targetConversationId);
     if (!row) return;
-    setTokenTotals({
-      prompt: row.prompt_tokens_total,
-      cachedPrompt: row.cached_prompt_tokens_total ?? 0,
-      completion: row.completion_tokens_total,
-    });
-    setTokenUsageByModel(row.token_usage_by_model ?? []);
-    setConversationUpdatedAt(String(row.updated_at ?? ""));
+    setTokenTotals(TokenUsageMapper.fromConversationTotals(row));
+    setTokenUsageByModel(row.tokenUsageByModel ?? []);
+    setConversationUpdatedAt(String(row.updatedAt ?? ""));
   }
 
   function refreshTitle() {
     if (!conversationId) {
       setTitle("New chat");
-      setTokenTotals({ prompt: 0, cachedPrompt: 0, completion: 0 });
+      setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
       setTokenUsageByModel([]);
       setConversationUpdatedAt("");
       return () => {};
@@ -87,13 +85,9 @@ export function ChatTitlePanel({
         if (cancelled) return;
         const row = rows.conversations.find((x) => x.id === conversationId);
         setTitle(String(row?.title || "Untitled"));
-        setTokenTotals({
-          prompt: row?.prompt_tokens_total ?? 0,
-          cachedPrompt: row?.cached_prompt_tokens_total ?? 0,
-          completion: row?.completion_tokens_total ?? 0,
-        });
-        setTokenUsageByModel(row?.token_usage_by_model ?? []);
-        setConversationUpdatedAt(String(row?.updated_at ?? ""));
+        setTokenTotals(TokenUsageMapper.fromConversationTotals(row ?? {}));
+        setTokenUsageByModel(row?.tokenUsageByModel ?? []);
+        setConversationUpdatedAt(String(row?.updatedAt ?? ""));
       } catch (e) {
         if (cancelled) return;
         const detail = e instanceof Error ? e.message : String(e);
@@ -106,7 +100,7 @@ export function ChatTitlePanel({
   }
 
   useEffect(() => {
-    setTokenTotals({ prompt: 0, cachedPrompt: 0, completion: 0 });
+    setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
     setTokenUsageByModel([]);
     setConversationUpdatedAt("");
     setStreamRawTitle("");
@@ -136,7 +130,7 @@ export function ChatTitlePanel({
     if (!cid) return () => {};
     const dispose = subscribeGlobalLive({
       onSseEvent: (ev) => {
-        if (ev.conversation_id !== cid) return;
+        if (ev.conversationId !== cid) return;
         if (ev.type === SseType.TITLE_STARTING) {
           setStreamRawTitle("");
           return;
@@ -147,19 +141,15 @@ export function ChatTitlePanel({
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
           const currentMs = timestampMs(conversationUpdatedAt);
-          const incomingMs = timestampMs(ev.conversation.updated_at);
+          const incomingMs = timestampMs(ev.conversation.updatedAt);
           if (currentMs != null && incomingMs != null && incomingMs < currentMs) {
             return;
           }
           setStreamRawTitle("");
           setTitle(String(ev.conversation.title || "Untitled"));
-          setTokenTotals({
-            prompt: ev.conversation.prompt_tokens_total,
-            cachedPrompt: ev.conversation.cached_prompt_tokens_total ?? 0,
-            completion: ev.conversation.completion_tokens_total,
-          });
-          setTokenUsageByModel(ev.conversation.token_usage_by_model ?? []);
-          setConversationUpdatedAt(String(ev.conversation.updated_at ?? ""));
+          setTokenTotals(TokenUsageMapper.fromConversationTotals(ev.conversation));
+          setTokenUsageByModel(ev.conversation.tokenUsageByModel ?? []);
+          setConversationUpdatedAt(String(ev.conversation.updatedAt ?? ""));
           return;
         }
         if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
@@ -217,13 +207,7 @@ export function ChatTitlePanel({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <EditableConversationTitle title={streamRawTitle || title} disabled={!conversationId} onCommit={onCommit} />
-          <LlmMetaBadge
-            promptTokens={tokenTotals.prompt}
-            cachedPromptTokens={tokenTotals.cachedPrompt}
-            completionTokens={tokenTotals.completion}
-            showTokenBreakdown
-            estimatedCostUsd={estimatedCostUsd}
-          />
+          <LlmMetaBadge usage={tokenTotals} showTokenBreakdown estimatedCostUsd={estimatedCostUsd} />
         </div>
       </div>
       <div className="flex items-center gap-0.5">

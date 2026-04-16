@@ -44,8 +44,8 @@ export function MoveSelectedToGroupControl({
     try {
       if (selectedConversationIds.length === 0) return;
       const requestBody = {
-        group_id: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
-        new_group_name: Object.prototype.hasOwnProperty.call(target, "newGroupName")
+        groupId: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
+        newGroupName: Object.prototype.hasOwnProperty.call(target, "newGroupName")
           ? String(target.newGroupName ?? "")
           : undefined,
       };

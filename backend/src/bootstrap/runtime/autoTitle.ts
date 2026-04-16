@@ -4,15 +4,15 @@ import { ConversationsRepo } from "../../infra/repositories/conversationsRepo.js
 import { LlmProviderSettingsRepo } from "../../infra/repositories/llmProviderSettingsRepo.js";
 import { ConversationEventHub } from "../../events/conversationEventHub.js";
 import { SseType } from "../../types/sse.js";
+import type { StreamTextCompletionUsage } from "../../llm_provider/provider.js";
+import { TokenUsageMapper } from "../../types/tokenUsage.js";
 import { normalizeConversationTokenUsageRow } from "../../domain/conversationUsage.js";
 
 type TitleGenerationResult = {
   model: string;
   fullResponse: string;
   cleanTitle: string | null;
-  promptTokens?: number;
-  cachedPromptTokens?: number;
-  completionTokens?: number;
+  usage?: StreamTextCompletionUsage;
 };
 
 type AutoTitleInput = {
@@ -72,15 +72,7 @@ async function generateConversationTitleUsingSystemModel(
     model,
     fullResponse,
     cleanTitle: clean,
-    ...(completion.usage
-      ? {
-          promptTokens: completion.usage.promptTokens,
-          ...(completion.usage.cachedPromptTokens !== undefined
-            ? { cachedPromptTokens: completion.usage.cachedPromptTokens }
-            : {}),
-          completionTokens: completion.usage.completionTokens,
-        }
-      : {}),
+    ...(completion.usage ? { usage: completion.usage } : {}),
   };
 }
 
@@ -111,10 +103,10 @@ export async function maybeAutoTitleConversation({
   });
   hub.publish(conversationId, {
     type: SseType.TITLE_STARTING,
-    chat_entry_id: plannerEntry.id,
+    chatEntryId: plannerEntry.id,
     conversationIndex: plannerEntry.conversationIndex,
     createdAt: plannerEntry.createdAt,
-    request_text: titlePrompt,
+    requestText: titlePrompt,
   });
   let streamedResponse = "";
   try {
@@ -122,7 +114,7 @@ export async function maybeAutoTitleConversation({
       streamedResponse += delta;
       hub.publish(conversationId, {
         type: SseType.TITLE_LLM_STREAM,
-        chat_entry_id: plannerEntry.id,
+        chatEntryId: plannerEntry.id,
         delta,
       });
     });
@@ -143,31 +135,19 @@ export async function maybeAutoTitleConversation({
       status: titleOutcomeFailed ? "failed" : "completed",
       ...(titleOutcomeFailed ? { error: titleOutcomeError } : {}),
       llmModel: generated.model,
-      ...(generated.promptTokens != null && generated.completionTokens != null
-        ? {
-            promptTokens: generated.promptTokens,
-            ...(generated.cachedPromptTokens != null ? { cachedPromptTokens: generated.cachedPromptTokens } : {}),
-            completionTokens: generated.completionTokens,
-          }
-        : {}),
+      ...TokenUsageMapper.toEntryFields(generated.usage),
     });
     hub.publish(conversationId, {
       type: SseType.TITLE_RESPONSE,
-      chat_entry_id: plannerEntry.id,
+      chatEntryId: plannerEntry.id,
       summary:
         generated.cleanTitle != null
           ? `Generated title: ${generated.cleanTitle}`
           : "Generated title was empty, fallback used",
       finished: true,
       action: generated.cleanTitle != null ? "final_answer" : "failed",
-      llm_model: generated.model,
-      ...(generated.promptTokens != null && generated.completionTokens != null
-        ? {
-            prompt_tokens: generated.promptTokens,
-            ...(generated.cachedPromptTokens != null ? { cached_prompt_tokens: generated.cachedPromptTokens } : {}),
-            completion_tokens: generated.completionTokens,
-          }
-        : {}),
+      llmModel: generated.model,
+      ...TokenUsageMapper.toSseFields(generated.usage),
     });
   } else if (!generationError) {
     // No provider/model configured for title generation; close the thought row explicitly.
@@ -183,7 +163,7 @@ export async function maybeAutoTitleConversation({
     });
     hub.publish(conversationId, {
       type: SseType.TITLE_RESPONSE,
-      chat_entry_id: plannerEntry.id,
+      chatEntryId: plannerEntry.id,
       summary: detail,
       finished: true,
       action: "failed",
@@ -204,9 +184,16 @@ export async function maybeAutoTitleConversation({
   hub.publish(conversationId, {
     type: SseType.CONVERSATION_UPDATED,
     conversation: {
-      ...updated,
-      is_deleted: Number(updated.is_deleted ?? 0) === 1,
-      token_usage_by_model: tokenUsageByModel,
+      id: updated.id,
+      title: updated.title,
+      groupId: updated.group_id,
+      isDeleted: Number(updated.is_deleted ?? 0) === 1,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+      promptTokensTotal: updated.prompt_tokens_total,
+      cachedPromptTokensTotal: updated.cached_prompt_tokens_total,
+      completionTokensTotal: updated.completion_tokens_total,
+      tokenUsageByModel,
     },
   });
 
@@ -223,7 +210,7 @@ export async function maybeAutoTitleConversation({
     });
     hub.publish(conversationId, {
       type: SseType.TITLE_RESPONSE,
-      chat_entry_id: plannerEntry.id,
+      chatEntryId: plannerEntry.id,
       summary: "Title generation failed, fallback used",
       finished: true,
       action: "failed",

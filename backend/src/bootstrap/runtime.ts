@@ -103,8 +103,8 @@ export function createRuntime(opts: {
   function enqueueUserMessage(conversationId: string, body: PostConversationMessageRequest): EnqueueUserMessageResult {
     const entriesBefore = chatEntries.countEntries(conversationId);
     const text = String(body.message ?? "").trim();
-    const attachmentIds = Array.isArray(body.attachment_ids)
-      ? body.attachment_ids.map((x) => String(x || "").trim()).filter(Boolean)
+    const attachmentIds = Array.isArray(body.attachmentIds)
+      ? body.attachmentIds.map((x) => String(x || "").trim()).filter(Boolean)
       : [];
     const attachments = attachmentIds
       .map((id) => ({ id, attachment: uploads.getById(id) }))
@@ -125,7 +125,7 @@ export function createRuntime(opts: {
       logger.warn({ conversationId }, "[chat] rejected user message: conversation not found");
       return { kind: "conversation_not_found" };
     }
-    const agentId = String(body.agent_id ?? "").trim();
+    const agentId = String(body.agentId ?? "").trim();
     if (!agentId || !agents.get(agentId)) {
       logger.warn({ conversationId, agentId: agentId || null }, "[chat] rejected user message: agent not found");
       return { kind: "agent_not_found" };
@@ -136,18 +136,18 @@ export function createRuntime(opts: {
         conversationId,
         agentId,
         messageChars: text.length,
-        llmProviderId: body.llm_provider_id ?? null,
-        llmModel: body.llm_model ?? null,
-        modelPresetId: body.model_preset_id ?? null,
+        llmProviderId: body.llmProviderId ?? null,
+        llmModel: body.llmModel ?? null,
+        modelPresetId: body.modelPresetId ?? null,
         attachmentCount: resolvedAttachments.length,
       },
       "[chat] enqueue user message",
     );
     const user = chatEntries.appendUserMessage(conversationId, text, {
       agentId,
-      llmProviderId: body.llm_provider_id,
-      llmModel: body.llm_model,
-      modelPresetId: body.model_preset_id ?? null,
+      llmProviderId: body.llmProviderId,
+      llmModel: body.llmModel,
+      modelPresetId: body.modelPresetId ?? null,
       attachments: resolvedAttachments,
     });
     const userEntry: UserMessageEntry = {

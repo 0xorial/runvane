@@ -1,11 +1,9 @@
 import type { ModelCapabilityRow } from "../../../backend/src/types/modelCatalog";
+import { TokenUsageMapper, type EntryTokenUsage } from "../../../backend/src/types/tokenUsage";
 
 export type TokenUsageByModelRow = {
-  model_name: string;
-  prompt_tokens: number;
-  cached_prompt_tokens: number;
-  completion_tokens: number;
-};
+  modelName: string;
+} & Required<Pick<EntryTokenUsage, "promptTokens" | "cachedPromptTokens" | "completionTokens">>;
 
 export type ModelPricing = {
   inCostPer1m: number;
@@ -42,15 +40,19 @@ export function estimateConversationCostUsd(
 ): number {
   let total = 0;
   for (const usage of usageRows) {
-    const prices = pricingByModel.get(String(usage.model_name || "").trim());
+    const prices = pricingByModel.get(String(usage.modelName || "").trim());
     if (!prices) continue;
-    const boundedPrompt = Math.max(0, Math.trunc(usage.prompt_tokens));
-    const boundedCached = Math.max(0, Math.min(Math.trunc(usage.cached_prompt_tokens), boundedPrompt));
-    const boundedCompletion = Math.max(0, Math.trunc(usage.completion_tokens));
-    const nonCachedPrompt = Math.max(0, boundedPrompt - boundedCached);
+    const normalized = TokenUsageMapper.fromEntryFields({
+      promptTokens: usage.promptTokens,
+      cachedPromptTokens: usage.cachedPromptTokens,
+      completionTokens: usage.completionTokens,
+    });
+    if (!normalized) continue;
+    const promptSplit = TokenUsageMapper.promptUsageBreakdown(normalized);
+    const boundedCompletion = normalized.completionTokens;
     total +=
-      (nonCachedPrompt / 1_000_000) * prices.inCostPer1m +
-      (boundedCached / 1_000_000) * prices.cachedInCostPer1m +
+      (promptSplit.nonCachedPrompt / 1_000_000) * prices.inCostPer1m +
+      (promptSplit.cachedPrompt / 1_000_000) * prices.cachedInCostPer1m +
       (boundedCompletion / 1_000_000) * prices.outCostPer1m;
   }
   return Number(total.toFixed(8));

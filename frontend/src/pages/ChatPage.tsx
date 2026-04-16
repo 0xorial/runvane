@@ -27,11 +27,11 @@ async function sendMessageToConversation(
 ): Promise<AsyncResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
-    agent_id: agentId,
-    ...(llmProviderId.trim() ? { llm_provider_id: llmProviderId.trim() } : {}),
-    ...(llmModel.trim() ? { llm_model: llmModel.trim() } : {}),
-    ...(modelPresetId != null ? { model_preset_id: modelPresetId } : {}),
-    ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+    agentId,
+    ...(llmProviderId.trim() ? { llmProviderId: llmProviderId.trim() } : {}),
+    ...(llmModel.trim() ? { llmModel: llmModel.trim() } : {}),
+    ...(modelPresetId != null ? { modelPresetId } : {}),
+    ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
   });
   return { ok: status === 200 || status === 202 };
 }
