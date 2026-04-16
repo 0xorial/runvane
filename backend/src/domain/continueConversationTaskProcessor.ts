@@ -35,6 +35,7 @@ export class ContinueConversationTaskProcessor {
     private readonly tools: ToolRegistry,
     private readonly enqueueRunTool: (input: {
       conversationId: string;
+      sourceEntryId?: string;
       agentId: string | null;
       toolName: string;
       params: unknown;
@@ -290,6 +291,242 @@ export class ContinueConversationTaskProcessor {
       });
   }
 
+  private lineageEntries(entries: ChatEntry[], leafEntryId: string): ChatEntry[] {
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    const out: ChatEntry[] = [];
+    let cursor: ChatEntry | undefined = byId.get(leafEntryId);
+    while (cursor) {
+      out.push(cursor);
+      const parentId = cursor.parentId;
+      cursor = parentId ? byId.get(parentId) : undefined;
+    }
+    return out.reverse();
+  }
+
+  private persistPlannerParseFailure(input: {
+    conversationId: string;
+    plannerEntryId: string;
+    llmRequest: string;
+    llmResponse: string;
+    plannerLlmModel?: string;
+    requestStartedMs: number;
+    detail: string;
+    plannerTokenUsage?: StreamTextCompletionResult["usage"];
+  }): void {
+    this.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
+      id: input.plannerEntryId,
+      llmRequest: input.llmRequest,
+      llmResponse: input.llmResponse,
+      thoughtMs: Math.max(0, Date.now() - input.requestStartedMs),
+      decision: null,
+      status: "failed",
+      error: input.detail,
+      llmModel: input.plannerLlmModel,
+      parseResult: {
+        status: "error",
+        error: input.detail,
+      },
+      ...TokenUsageMapper.toEntryFields(input.plannerTokenUsage),
+    });
+    this.publishConversationUpdated(input.conversationId);
+    this.hub.publish(input.conversationId, {
+      type: SseType.PLANNER_RESPONSE,
+      chatEntryId: input.plannerEntryId,
+      summary: input.detail,
+      finished: true,
+      action: "failed",
+      llmModel: input.plannerLlmModel,
+      ...TokenUsageMapper.toSseFields(input.plannerTokenUsage),
+    });
+  }
+
+  private upsertAssistantMessageFromPlanner(input: {
+    conversationId: string;
+    assistantText: string;
+    assistantEntryId?: string | null;
+  }): void {
+    const assistantText = input.assistantText;
+    if (!assistantText) return;
+    if (input.assistantEntryId) {
+      this.chatEntries.updateAssistantMessage(input.conversationId, {
+        id: input.assistantEntryId,
+        text: assistantText,
+      });
+      return;
+    }
+    const assistantEntry = this.chatEntries.appendAssistantMessage(input.conversationId, assistantText);
+    this.hub.publish(input.conversationId, {
+      type: SseType.ASSISTANT_STREAM,
+      chatEntryId: assistantEntry.id,
+      delta: assistantText,
+    });
+  }
+
+  private finalizeParsedPlannerResult(input: {
+    conversationId: string;
+    plannerEntryId: string;
+    llmRequest: string;
+    llmResponse: string;
+    plannerLlmModel?: string;
+    requestStartedMs: number;
+    parsedLlmResponse: ReturnType<typeof parseAgenticPlannerOutput>;
+    anchorUserMessage: UserMessageEntry;
+    assistantEntryId?: string | null;
+    plannerTokenUsage?: StreamTextCompletionResult["usage"];
+    completionSummaryFallback: string;
+  }): { queuedToolCalls: number; followup: ReturnType<typeof parseAgenticPlannerOutput>["output"]["followup"] } {
+    const decision = input.parsedLlmResponse.decision;
+    const agentic = input.parsedLlmResponse.output;
+    const enabledToolIds = this.enabledToolIdsForAgent(input.anchorUserMessage.agentId);
+    const requestedToolCalls = this.parseRequestedToolCalls({
+      requests: agentic.tool_requests,
+      enabledToolIds,
+    });
+
+    this.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
+      id: input.plannerEntryId,
+      llmRequest: input.llmRequest,
+      llmResponse: input.llmResponse,
+      thoughtMs: Math.max(0, Date.now() - input.requestStartedMs),
+      decision,
+      status: "completed",
+      llmModel: input.plannerLlmModel,
+      parseResult: {
+        status: "ok",
+        parsed: agentic,
+      },
+      ...TokenUsageMapper.toEntryFields(input.plannerTokenUsage),
+    });
+
+    const assistantText = String(agentic.assistant_output ?? "").trim();
+    this.upsertAssistantMessageFromPlanner({
+      conversationId: input.conversationId,
+      assistantText,
+      assistantEntryId: input.assistantEntryId,
+    });
+
+    this.publishConversationUpdated(input.conversationId);
+    this.hub.publish(input.conversationId, {
+      type: SseType.PLANNER_RESPONSE,
+      chatEntryId: input.plannerEntryId,
+      summary:
+        requestedToolCalls.length > 0
+          ? `Queued ${requestedToolCalls.length} tool call(s)`
+          : assistantText || input.completionSummaryFallback,
+      finished: true,
+      action: requestedToolCalls.length > 0 ? "tool_call" : "final_answer",
+      ...(requestedToolCalls.length > 0 ? { toolName: requestedToolCalls[0].toolName } : {}),
+      llmModel: input.plannerLlmModel,
+      ...TokenUsageMapper.toSseFields(input.plannerTokenUsage),
+    });
+
+    if (requestedToolCalls.length > 0) {
+      const batchId = crypto.randomUUID();
+      for (const requestedCall of requestedToolCalls) {
+        const toolCfg = this.agentToolConfigFor(input.anchorUserMessage.agentId, requestedCall.toolName);
+        this.enqueueRunTool({
+          conversationId: input.conversationId,
+          sourceEntryId: input.plannerEntryId,
+          agentId: input.anchorUserMessage.agentId,
+          toolName: requestedCall.toolName,
+          params: {},
+          toolRequest: requestedCall.toolRequest,
+          batchId,
+          agentToolConfig: toolCfg,
+        });
+      }
+    }
+
+    return {
+      queuedToolCalls: requestedToolCalls.length,
+      followup: agentic.followup,
+    };
+  }
+
+  async reprocessPlannerThought(input: {
+    conversationId: string;
+    sourceEntryId: string;
+    editedResponse: string;
+  }): Promise<{ plannerEntryId: string; queuedToolCalls: number }> {
+    const conversationId = input.conversationId;
+    const sourceEntry = this.chatEntries.getMessage(conversationId, input.sourceEntryId);
+    if (!sourceEntry || sourceEntry.type !== "planner_llm_stream") {
+      throw new Error(`planner thought not found: ${input.sourceEntryId}`);
+    }
+
+    const entries = this.chatEntries.listMessages(conversationId, { activePathOnly: false });
+    const lineage = this.lineageEntries(entries, sourceEntry.id);
+    const anchorUserMessage = [...lineage]
+      .reverse()
+      .find((entry): entry is UserMessageEntry => entry.type === "user-message");
+    if (!anchorUserMessage) {
+      throw new Error(`cannot reprocess thought without ancestor user-message: ${input.sourceEntryId}`);
+    }
+
+    const plannerEntryId = crypto.randomUUID();
+    const plannerEntry = this.chatEntries.appendPlannerLlmStreamEntry(conversationId, {
+      id: plannerEntryId,
+      createdAt: new Date().toISOString(),
+      parentId: sourceEntry.parentId,
+      llmRequest: sourceEntry.llmRequest,
+      llmResponse: "",
+      thoughtMs: null,
+      decision: null,
+      status: "running",
+      llmModel: sourceEntry.llmModel,
+    });
+    this.hub.publish(conversationId, {
+      type: SseType.PLANNER_STARTING,
+      chatEntryId: plannerEntry.id,
+      conversationIndex: plannerEntry.conversationIndex,
+      createdAt: plannerEntry.createdAt,
+      requestText: plannerEntry.llmRequest,
+      llmModel: plannerEntry.llmModel,
+    });
+    if (input.editedResponse.trim()) {
+      this.hub.publish(conversationId, {
+        type: SseType.PLANNER_LLM_STREAM,
+        chatEntryId: plannerEntryId,
+        delta: input.editedResponse,
+      });
+    }
+
+    const enabledToolIds = this.enabledToolIdsForAgent(anchorUserMessage.agentId);
+    let parsed: ReturnType<typeof parseAgenticPlannerOutput>;
+    try {
+      parsed = parseAgenticPlannerOutput({
+        reply: input.editedResponse,
+        streamedAnswer: input.editedResponse,
+        isToolAvailable: (toolId) => enabledToolIds.includes(toolId),
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      this.persistPlannerParseFailure({
+        conversationId,
+        plannerEntryId,
+        llmRequest: plannerEntry.llmRequest,
+        llmResponse: input.editedResponse,
+        plannerLlmModel: plannerEntry.llmModel,
+        requestStartedMs: Date.parse(plannerEntry.createdAt),
+        detail,
+      });
+      throw new Error(`failed to parse edited planner response: ${detail}`, { cause: e });
+    }
+    const finalized = this.finalizeParsedPlannerResult({
+      conversationId,
+      plannerEntryId,
+      llmRequest: plannerEntry.llmRequest,
+      llmResponse: input.editedResponse,
+      plannerLlmModel: plannerEntry.llmModel,
+      requestStartedMs: Date.parse(plannerEntry.createdAt),
+      parsedLlmResponse: parsed,
+      anchorUserMessage,
+      completionSummaryFallback: "reprocessed planner step completed",
+    });
+
+    return { plannerEntryId, queuedToolCalls: finalized.queuedToolCalls };
+  }
+
   private async getPlannerLlmResponse(input: {
     conversationId: string;
     requestText: string;
@@ -458,6 +695,16 @@ export class ContinueConversationTaskProcessor {
 
   async process(task: ContinueConversationTask, opts?: { shouldCancel?: () => boolean }): Promise<void> {
     const conversationId = task.conversationId;
+    if (task.sourceEntryId && !this.chatEntries.isEntryOnActiveLineage(conversationId, task.sourceEntryId)) {
+      logger.info(
+        {
+          conversationId,
+          sourceEntryId: task.sourceEntryId,
+        },
+        "[task] skipped continue_conversation: source entry not on active lineage",
+      );
+      return;
+    }
     throwIfCancelled(opts?.shouldCancel);
     const initialEntries = this.chatEntries.listMessages(conversationId);
     const triggerEntry = initialEntries.at(-1) ?? null;
@@ -504,84 +751,51 @@ export class ContinueConversationTaskProcessor {
     });
     if (llmResponse.kind === "cancelled") return;
 
-    const parsedLlmResponse = parseAgenticPlannerOutput({
-      reply: llmResponse.reply,
-      streamedAnswer: llmResponse.streamedAnswer,
-      isToolAvailable: (toolId) => enabledToolIds.includes(toolId),
-    });
+    let parsedLlmResponse: ReturnType<typeof parseAgenticPlannerOutput>;
+    try {
+      parsedLlmResponse = parseAgenticPlannerOutput({
+        reply: llmResponse.reply,
+        streamedAnswer: llmResponse.streamedAnswer,
+        isToolAvailable: (toolId) => enabledToolIds.includes(toolId),
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      this.persistPlannerParseFailure({
+        conversationId,
+        plannerEntryId: llmResponse.plannerEntryId,
+        llmRequest: llmRequest,
+        llmResponse: llmResponse.reply,
+        plannerLlmModel,
+        requestStartedMs: llmResponse.requestStartedMs,
+        detail,
+        plannerTokenUsage: llmResponse.plannerTokenUsage,
+      });
+      throw new Error(`failed to parse planner response: ${detail}`, { cause: e });
+    }
     throwIfCancelled(opts?.shouldCancel);
-    const decision = parsedLlmResponse.decision;
-    const agentic = parsedLlmResponse.output;
-    const requestedToolCalls = this.parseRequestedToolCalls({
-      requests: agentic.tool_requests,
-      enabledToolIds,
-    });
-    this.chatEntries.updatePlannerLlmStreamEntry(conversationId, {
-      id: llmResponse.plannerEntryId,
+    const finalized = this.finalizeParsedPlannerResult({
+      conversationId,
+      plannerEntryId: llmResponse.plannerEntryId,
       llmRequest: llmRequest,
       llmResponse: llmResponse.reply,
-      thoughtMs: Math.max(0, Date.now() - llmResponse.requestStartedMs),
-      decision,
-      status: "completed",
-      llmModel: plannerLlmModel,
-      ...TokenUsageMapper.toEntryFields(llmResponse.plannerTokenUsage),
+      plannerLlmModel,
+      requestStartedMs: llmResponse.requestStartedMs,
+      parsedLlmResponse,
+      anchorUserMessage,
+      assistantEntryId: llmResponse.assistantEntryId,
+      plannerTokenUsage: llmResponse.plannerTokenUsage,
+      completionSummaryFallback: "planner step completed",
     });
-    const assistantText = String(agentic.assistant_output ?? "").trim();
-    if (assistantText) {
-      let assistantEntryId = llmResponse.assistantEntryId;
-      if (!assistantEntryId) {
-        assistantEntryId = crypto.randomUUID();
-        this.chatEntries.appendAssistantMessage(conversationId, "", {
-          id: assistantEntryId,
-        });
-        this.hub.publish(conversationId, {
-          type: SseType.ASSISTANT_STREAM,
-          chatEntryId: assistantEntryId,
-          delta: assistantText,
-        });
-      }
-      this.chatEntries.updateAssistantMessage(conversationId, {
-        id: assistantEntryId,
-        text: assistantText,
-      });
-    }
-    this.publishConversationUpdated(conversationId);
-    this.hub.publish(conversationId, {
-      type: SseType.PLANNER_RESPONSE,
-      chatEntryId: llmResponse.plannerEntryId,
-      summary:
-        requestedToolCalls.length > 0
-          ? `Queued ${requestedToolCalls.length} tool call(s)`
-          : assistantText || "planner step completed",
-      finished: true,
-      action: requestedToolCalls.length > 0 ? "tool_call" : "final_answer",
-      ...(requestedToolCalls.length > 0 ? { toolName: requestedToolCalls[0].toolName } : {}),
-      llmModel: plannerLlmModel,
-      ...TokenUsageMapper.toSseFields(llmResponse.plannerTokenUsage),
-    });
-    if (requestedToolCalls.length > 0) {
-      const batchId = crypto.randomUUID();
-      for (const requestedCall of requestedToolCalls) {
-        const toolCfg = this.agentToolConfigFor(anchorUserMessage.agentId, requestedCall.toolName);
-        this.enqueueRunTool({
-          conversationId,
-          agentId: anchorUserMessage.agentId,
-          toolName: requestedCall.toolName,
-          params: {},
-          toolRequest: requestedCall.toolRequest,
-          batchId,
-          agentToolConfig: toolCfg,
-        });
-      }
+    if (finalized.queuedToolCalls > 0) {
       return;
     }
 
-    if (agentic.followup !== "continue") {
+    if (finalized.followup !== "continue") {
       logger.info({ conversationId }, "[task] continue_conversation completed");
       return;
     }
     logger.warn(
-      { conversationId, followup: agentic.followup },
+      { conversationId, followup: finalized.followup },
       "[task] planner requested followup without tool call; waiting for next continuation trigger"
     );
   }

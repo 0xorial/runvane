@@ -1,0 +1,18 @@
+---
+description: Trust internal data; validate only direct user input
+alwaysApply: true
+---
+
+# Internal Data Trust Policy
+
+- Assume internal data is clean:
+  - database rows
+  - persisted task payloads
+  - repo/runtime-owned objects
+  - internal service outputs
+- Do not add defensive trimming/sanitization/shape-guards for internal data.
+- If internal data is invalid, let it fail loudly (throw/error), do not silently recover.
+- Validate and sanitize only at true external boundaries:
+  - direct user input (HTTP body/query/params, UI text fields, uploads)
+  - third-party/webhook input
+- Keep normalization at boundaries; avoid re-validating the same data deeper in the stack.

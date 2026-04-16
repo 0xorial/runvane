@@ -6,11 +6,13 @@ export const AgentTaskType = {
 export type ContinueConversationTask = {
   type: typeof AgentTaskType.CONTINUE_CONVERSATION;
   conversationId: string;
+  sourceEntryId?: string;
 };
 
 export type RunToolTask = {
   type: typeof AgentTaskType.RUN_TOOL;
   conversationId: string;
+  sourceEntryId?: string;
   agentId: string | null;
   toolName: string;
   params: unknown;

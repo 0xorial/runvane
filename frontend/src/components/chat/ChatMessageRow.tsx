@@ -8,6 +8,7 @@ import { UserMessageRow } from "./rows/UserMessageRow";
 
 type ChatMessageRowProps = {
   entry$: ObservableItem<ChatEntry>;
+  conversationId: string | null;
 };
 
 export function messageRowKey(entry$: ObservableItem<ChatEntry>): string {
@@ -15,13 +16,13 @@ export function messageRowKey(entry$: ObservableItem<ChatEntry>): string {
 }
 
 /** Renders one ChatEntry row by `entry.type`. */
-export function ChatMessageRow({ entry$ }: ChatMessageRowProps) {
+export function ChatMessageRow({ entry$, conversationId }: ChatMessageRowProps) {
   const entry = useObservableValue(entry$);
   if (entry.type === "user-message") {
     return <UserMessageRow entry={entry} />;
   }
   if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
-    return <ThinkingRow entry={entry} />;
+    return <ThinkingRow entry={entry} conversationId={conversationId} />;
   }
   if (entry.type === "tool-invocation") {
     return <ToolRunRow entry={entry} />;

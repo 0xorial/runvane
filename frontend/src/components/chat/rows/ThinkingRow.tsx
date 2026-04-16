@@ -5,9 +5,11 @@ import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "../../../protoc
 import { cn } from "@/lib/utils";
 import { ChatThreadIndent } from "../ChatMessageShell";
 import { LlmMetaBadge } from "../LlmMetaBadge";
+import { reprocessThought } from "../../../api/client";
 
 type ThinkingRowProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+  conversationId: string | null;
 };
 
 function startTimestampMs(messageCreatedAt: string): number {
@@ -23,7 +25,7 @@ function isDone(entry: PlannerLlmStreamEntry | TitleLlmStreamEntry): boolean {
   return typeof entry.thoughtMs === "number" && Number.isFinite(entry.thoughtMs);
 }
 
-export function ThinkingRow({ entry }: ThinkingRowProps) {
+export function ThinkingRow({ entry, conversationId }: ThinkingRowProps) {
   const done = isDone(entry);
   const status = entry.status ?? "running";
   const failed = status === "failed";
@@ -32,12 +34,20 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
   const [tick, setTick] = useState(0);
   const detailsWrapRef = useRef<HTMLDivElement | null>(null);
   const [autoscrollEnabled, setAutoscrollEnabled] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editedResponse, setEditedResponse] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const startedAt = useMemo(() => startTimestampMs(entry.createdAt), [entry.createdAt]);
   const requestText = String(entry.llmRequest || "").trim();
   const responseText = String(entry.llmResponse || "").trim();
   const errorText = String(entry.error ?? "").trim();
-  const hasDetails = requestText.length > 0 || responseText.length > 0;
+  const parseResultText =
+    entry.type === "planner_llm_stream" && entry.parseResult
+      ? JSON.stringify(entry.parseResult, null, 2)
+      : "";
+  const hasDetails = requestText.length > 0 || responseText.length > 0 || parseResultText.length > 0 || editing;
   const modelLabel = String(entry.llmModel ?? "").trim();
   useEffect(() => {
     if (done) return undefined;
@@ -163,7 +173,63 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
               ) : null}
               {responseText ? (
                 <>
-                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Response</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Response
+                    </div>
+                    {entry.type === "planner_llm_stream" && done && conversationId ? (
+                      <div className="flex items-center gap-1">
+                        {editing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="rounded border border-border px-2 py-0.5 text-[10px] text-foreground disabled:opacity-60"
+                              disabled={isSubmitting}
+                              onClick={() => {
+                                setEditing(false);
+                                setEditedResponse(String(entry.llmResponse ?? ""));
+                                setSubmitError(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded border border-border bg-muted px-2 py-0.5 text-[10px] text-foreground disabled:opacity-60"
+                              disabled={isSubmitting || editedResponse.trim().length === 0}
+                              onClick={async () => {
+                                setSubmitError(null);
+                                setIsSubmitting(true);
+                                try {
+                                  await reprocessThought(conversationId, entry.id, editedResponse);
+                                  setEditing(false);
+                                  window.dispatchEvent(new Event("runvane:refresh-chat"));
+                                } catch (e) {
+                                  setSubmitError(e instanceof Error ? e.message : String(e));
+                                } finally {
+                                  setIsSubmitting(false);
+                                }
+                              }}
+                            >
+                              {isSubmitting ? "Reprocessing..." : "Reprocess"}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="rounded border border-border bg-muted px-2 py-0.5 text-[10px] text-foreground"
+                            onClick={() => {
+                              setEditing(true);
+                              setEditedResponse(String(entry.llmResponse ?? ""));
+                              setSubmitError(null);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                   <pre
                     className={cn(
                       "m-0 mt-1 max-h-none overflow-visible whitespace-pre-wrap break-words rounded-md border p-2 font-mono text-xs leading-snug first:mt-0",
@@ -171,6 +237,29 @@ export function ThinkingRow({ entry }: ThinkingRowProps) {
                     )}
                   >
                     {responseText}
+                  </pre>
+                </>
+              ) : null}
+              {editing ? (
+                <>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Edited response
+                  </div>
+                  <textarea
+                    className="min-h-[120px] w-full resize-y rounded-md border border-border/60 bg-muted/40 p-2 font-mono text-xs leading-snug text-foreground"
+                    value={editedResponse}
+                    onChange={(e) => setEditedResponse(e.target.value)}
+                  />
+                  {submitError ? <div className="text-[10px] text-destructive">{submitError}</div> : null}
+                </>
+              ) : null}
+              {parseResultText ? (
+                <>
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Parse result
+                  </div>
+                  <pre className="m-0 mt-1 whitespace-pre-wrap break-words rounded-md border border-border/60 bg-muted/40 p-2 font-mono text-xs leading-snug text-foreground first:mt-0">
+                    {parseResultText}
                   </pre>
                 </>
               ) : null}

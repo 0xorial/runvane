@@ -21,6 +21,7 @@ type ChatEntryDbRow = {
   id: string;
   conversation_id: string;
   conversation_index: number;
+  parent_id: string | null;
   type: string;
   payload_json: string;
   created_at: string;
@@ -36,6 +37,71 @@ export type ConversationModelTokenUsageRow = {
 
 export class ChatEntriesRepo {
   constructor(private readonly db: SqliteDb) {}
+
+  private getActiveLeafEntryId(conversationId: string): string | null {
+    const row = this.db
+      .prepare(
+        `SELECT active_leaf_entry_id
+         FROM conversations
+         WHERE id = ?`,
+      )
+      .get(conversationId) as { active_leaf_entry_id?: string | null } | undefined;
+    return typeof row?.active_leaf_entry_id === "string" && row.active_leaf_entry_id.trim() !== ""
+      ? row.active_leaf_entry_id
+      : null;
+  }
+
+  private setActiveLeafEntryId(conversationId: string, entryId: string | null): void {
+    const result = this.db
+      .prepare(
+        `UPDATE conversations
+         SET active_leaf_entry_id = @entry_id
+         WHERE id = @conversation_id`,
+      )
+      .run({
+        conversation_id: conversationId,
+        entry_id: entryId,
+      });
+    if (Number(result.changes ?? 0) !== 1) {
+      throw new Error(`conversation not found when setting active leaf: ${conversationId}`);
+    }
+  }
+
+  private resolveParentId(conversationId: string, parentId?: string | null): string | null {
+    if (typeof parentId === "string" && parentId.trim() !== "") {
+      return parentId.trim();
+    }
+    return this.getActiveLeafEntryId(conversationId);
+  }
+
+  private insertEntry(input: {
+    id: string;
+    conversationId: string;
+    conversationIndex: number;
+    parentId: string | null;
+    type: string;
+    payloadJson: string;
+    createdAt: string;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO chat_entries (
+           id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+         ) VALUES (
+           @id, @conversation_id, @conversation_index, @parent_id, @type, @payload_json, @created_at
+         )`,
+      )
+      .run({
+        id: input.id,
+        conversation_id: input.conversationId,
+        conversation_index: input.conversationIndex,
+        parent_id: input.parentId,
+        type: input.type,
+        payload_json: input.payloadJson,
+        created_at: input.createdAt,
+      });
+    this.setActiveLeafEntryId(input.conversationId, input.id);
+  }
 
   private nextConversationIndex(conversationId: string): number {
     const row = this.db
@@ -100,72 +166,62 @@ export class ChatEntriesRepo {
   appendUserMessage(
     conversationId: string,
     text: string,
-    opts: UserMessageSelection & { attachments?: ChatAttachment[] },
+    opts: UserMessageSelection & { attachments?: ChatAttachment[]; parentId?: string | null },
   ): UserMessageEntry {
     const createDbEntryPayload = normalizeUserMessageSelection(opts);
     const attachments = Array.isArray(opts?.attachments) ? opts.attachments : [];
     const createdAt = new Date().toISOString();
+    const parentId = this.resolveParentId(conversationId, opts.parentId);
     const entry: UserMessageEntry = {
       type: "user-message",
       id: crypto.randomUUID(),
       conversationIndex: this.nextConversationIndex(conversationId),
       createdAt,
+      parentId,
       text,
       ...createDbEntryPayload,
       ...(attachments.length > 0 ? { attachments } : {}),
     };
-    this.db
-      .prepare(
-        `INSERT INTO chat_entries (
-           id, conversation_id, conversation_index, type, payload_json, created_at
-         ) VALUES (
-           @id, @conversation_id, @conversation_index, @type, @payload_json, @created_at
-         )`,
-      )
-      .run({
-        id: entry.id,
-        conversation_id: conversationId,
-        conversation_index: entry.conversationIndex,
-        type: entry.type,
-        payload_json: JSON.stringify({
-          text: entry.text,
-          ...createDbEntryPayload,
-          ...(attachments.length > 0 ? { attachments } : {}),
-        }),
-        created_at: entry.createdAt,
-      });
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: entry.type,
+      payloadJson: JSON.stringify({
+        text: entry.text,
+        ...createDbEntryPayload,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      }),
+      createdAt: entry.createdAt,
+    });
     return entry;
   }
 
   appendAssistantMessage(
     conversationId: string,
     text: string,
-    opts?: { id?: string; createdAt?: string },
+    opts?: { id?: string; createdAt?: string; parentId?: string | null },
   ): AssistantMessageEntry {
     const createdAt = opts?.createdAt ?? new Date().toISOString();
+    const parentId = this.resolveParentId(conversationId, opts?.parentId);
     const entry: AssistantMessageEntry = {
       type: "assistant-message",
       id: opts?.id ?? crypto.randomUUID(),
       conversationIndex: this.nextConversationIndex(conversationId),
       createdAt,
+      parentId,
       text,
     };
-    this.db
-      .prepare(
-        `INSERT INTO chat_entries (
-           id, conversation_id, conversation_index, type, payload_json, created_at
-         ) VALUES (
-           @id, @conversation_id, @conversation_index, @type, @payload_json, @created_at
-         )`,
-      )
-      .run({
-        id: entry.id,
-        conversation_id: conversationId,
-        conversation_index: entry.conversationIndex,
-        type: entry.type,
-        payload_json: JSON.stringify({ text: entry.text }),
-        created_at: entry.createdAt,
-      });
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: entry.type,
+      payloadJson: JSON.stringify({ text: entry.text }),
+      createdAt: entry.createdAt,
+    });
     return entry;
   }
 
@@ -193,6 +249,7 @@ export class ChatEntriesRepo {
     input: {
       id?: string;
       createdAt?: string;
+      parentId?: string | null;
       toolId: string;
       state: ToolInvocationEntry["state"];
       parameters?: Record<string, unknown>;
@@ -200,37 +257,32 @@ export class ChatEntriesRepo {
     },
   ): ToolInvocationEntry {
     const createdAt = input.createdAt ?? new Date().toISOString();
+    const parentId = this.resolveParentId(conversationId, input.parentId);
     const entry: ToolInvocationEntry = {
       type: "tool-invocation",
       id: input.id ?? crypto.randomUUID(),
       conversationIndex: this.nextConversationIndex(conversationId),
       createdAt,
+      parentId,
       toolId: input.toolId,
       state: input.state,
       parameters: input.parameters ?? {},
       result: input.result ?? null,
     };
-    this.db
-      .prepare(
-        `INSERT INTO chat_entries (
-           id, conversation_id, conversation_index, type, payload_json, created_at
-         ) VALUES (
-           @id, @conversation_id, @conversation_index, @type, @payload_json, @created_at
-         )`,
-      )
-      .run({
-        id: entry.id,
-        conversation_id: conversationId,
-        conversation_index: entry.conversationIndex,
-        type: entry.type,
-        payload_json: JSON.stringify({
-          toolId: entry.toolId,
-          state: entry.state,
-          parameters: entry.parameters,
-          result: entry.result,
-        }),
-        created_at: entry.createdAt,
-      });
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: entry.type,
+      payloadJson: JSON.stringify({
+        toolId: entry.toolId,
+        state: entry.state,
+        parameters: entry.parameters,
+        result: entry.result,
+      }),
+      createdAt: entry.createdAt,
+    });
     return entry;
   }
 
@@ -278,6 +330,7 @@ export class ChatEntriesRepo {
     input: {
       id: string;
       createdAt: string;
+      parentId?: string | null;
       llmRequest: string;
       llmResponse?: string;
       thoughtMs?: number | null;
@@ -288,6 +341,7 @@ export class ChatEntriesRepo {
     },
   ): PlannerLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
+    const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const entry: PlannerLlmStreamEntry = {
@@ -295,6 +349,7 @@ export class ChatEntriesRepo {
       id: input.id,
       conversationIndex,
       createdAt: input.createdAt,
+      parentId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
@@ -312,21 +367,15 @@ export class ChatEntriesRepo {
       ...(entry.error ? { error: entry.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
-    this.db
-      .prepare(
-        `INSERT INTO chat_entries (
-           id, conversation_id, conversation_index, type, payload_json, created_at
-         ) VALUES (
-           @id, @conversation_id, @conversation_index, 'planner_llm_stream', @payload_json, @created_at
-         )`,
-      )
-      .run({
-        id: entry.id,
-        conversation_id: conversationId,
-        conversation_index: entry.conversationIndex,
-        payload_json: JSON.stringify(payload),
-        created_at: entry.createdAt,
-      });
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: "planner_llm_stream",
+      payloadJson: JSON.stringify(payload),
+      createdAt: entry.createdAt,
+    });
     return entry;
   }
 
@@ -335,6 +384,7 @@ export class ChatEntriesRepo {
     input: {
       id: string;
       createdAt: string;
+      parentId?: string | null;
       llmRequest: string;
       llmResponse?: string;
       thoughtMs?: number | null;
@@ -345,6 +395,7 @@ export class ChatEntriesRepo {
     },
   ): TitleLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
+    const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const entry: TitleLlmStreamEntry = {
@@ -352,6 +403,7 @@ export class ChatEntriesRepo {
       id: input.id,
       conversationIndex,
       createdAt: input.createdAt,
+      parentId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
@@ -369,21 +421,15 @@ export class ChatEntriesRepo {
       ...(entry.error ? { error: entry.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
-    this.db
-      .prepare(
-        `INSERT INTO chat_entries (
-           id, conversation_id, conversation_index, type, payload_json, created_at
-         ) VALUES (
-           @id, @conversation_id, @conversation_index, 'title_llm_stream', @payload_json, @created_at
-         )`,
-      )
-      .run({
-        id: entry.id,
-        conversation_id: conversationId,
-        conversation_index: entry.conversationIndex,
-        payload_json: JSON.stringify(payload),
-        created_at: entry.createdAt,
-      });
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: "title_llm_stream",
+      payloadJson: JSON.stringify(payload),
+      createdAt: entry.createdAt,
+    });
     return entry;
   }
 
@@ -401,6 +447,7 @@ export class ChatEntriesRepo {
       promptTokens?: number;
       cachedPromptTokens?: number;
       completionTokens?: number;
+      parseResult?: PlannerLlmStreamEntry["parseResult"];
     },
   ): void {
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
@@ -422,6 +469,9 @@ export class ChatEntriesRepo {
     }
     if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
       payload.completionTokens = input.completionTokens;
+    }
+    if (input.parseResult && typeof input.parseResult === "object") {
+      payload.parseResult = input.parseResult;
     }
     const result = this.db
       .prepare(
@@ -498,7 +548,7 @@ export class ChatEntriesRepo {
   getLastUserMessage(conversationId: string): UserMessageEntry | null {
     const row = this.db
       .prepare(
-        `SELECT id, conversation_id, conversation_index, type, payload_json, created_at
+        `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
          FROM chat_entries
          WHERE conversation_id = ? AND type = 'user-message'
          ORDER BY conversation_index DESC
@@ -514,24 +564,102 @@ export class ChatEntriesRepo {
       id: row.id,
       conversationIndex: row.conversation_index,
       createdAt: row.created_at,
+      parentId: row.parent_id,
       text: String(payload.text ?? ""),
       ...selection,
       ...(attachments.length > 0 ? { attachments } : {}),
     };
   }
 
-  listMessages(conversationId: string): ChatEntry[] {
+  listMessages(conversationId: string, options?: { activePathOnly?: boolean }): ChatEntry[] {
+    const activePathOnly = options?.activePathOnly !== false;
+    if (activePathOnly) {
+      const activeLeafEntryId = this.getActiveLeafEntryId(conversationId);
+      if (!activeLeafEntryId) {
+        return this.listMessages(conversationId, { activePathOnly: false });
+      }
+      const rows = this.db
+        .prepare(
+          `WITH RECURSIVE lineage AS (
+             SELECT id, parent_id
+             FROM chat_entries
+             WHERE conversation_id = @conversation_id
+               AND id = @leaf_id
+             UNION ALL
+             SELECT e.id, e.parent_id
+             FROM chat_entries e
+             JOIN lineage l ON l.parent_id = e.id
+             WHERE e.conversation_id = @conversation_id
+           )
+           SELECT e.id, e.conversation_id, e.conversation_index, e.parent_id, e.type, e.payload_json, e.created_at
+           FROM chat_entries e
+           JOIN lineage l ON l.id = e.id
+           WHERE e.conversation_id = @conversation_id
+           ORDER BY e.conversation_index ASC`,
+        )
+        .all({
+          conversation_id: conversationId,
+          leaf_id: activeLeafEntryId,
+        }) as ChatEntryDbRow[];
+      if (rows.length === 0) {
+        return this.listMessages(conversationId, { activePathOnly: false });
+      }
+      return rows.map((row) => this.toEntry(row));
+    }
     const rows = this.db
       .prepare(
-        `SELECT id, conversation_id, conversation_index, type, payload_json, created_at
+        `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
          FROM chat_entries
          WHERE conversation_id = ?
          ORDER BY conversation_index ASC`,
       )
       .all(conversationId) as ChatEntryDbRow[];
 
-    return rows.map((row) => {
-      const payload = parseJsonObject(row.payload_json);
+    return rows.map((row) => this.toEntry(row));
+  }
+
+  getMessage(conversationId: string, entryId: string): ChatEntry | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+         FROM chat_entries
+         WHERE conversation_id = ? AND id = ?`,
+      )
+      .get(conversationId, entryId) as ChatEntryDbRow | undefined;
+    return row ? this.toEntry(row) : null;
+  }
+
+  isEntryOnActiveLineage(conversationId: string, entryId: string): boolean {
+    const activeLeafEntryId = this.getActiveLeafEntryId(conversationId);
+    if (!activeLeafEntryId) return false;
+    const row = this.db
+      .prepare(
+        `WITH RECURSIVE lineage AS (
+           SELECT id, parent_id
+           FROM chat_entries
+           WHERE conversation_id = @conversation_id
+             AND id = @leaf_id
+           UNION ALL
+           SELECT e.id, e.parent_id
+           FROM chat_entries e
+           JOIN lineage l ON l.parent_id = e.id
+           WHERE e.conversation_id = @conversation_id
+         )
+         SELECT 1 AS is_present
+         FROM lineage
+         WHERE id = @entry_id
+         LIMIT 1`,
+      )
+      .get({
+        conversation_id: conversationId,
+        leaf_id: activeLeafEntryId,
+        entry_id: entryId,
+      }) as { is_present?: number } | undefined;
+    return row?.is_present === 1;
+  }
+
+  private toEntry(row: ChatEntryDbRow): ChatEntry {
+    const payload = parseJsonObject(row.payload_json);
       if (row.type === "user-message") {
         const selection = userMessageSelectionFromPayload(payload);
         const attachments = userMessageAttachmentsFromPayload(payload);
@@ -540,6 +668,7 @@ export class ChatEntriesRepo {
           id: row.id,
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
+          parentId: row.parent_id,
           text: String(payload.text ?? ""),
           ...selection,
           ...(attachments.length > 0 ? { attachments } : {}),
@@ -551,6 +680,7 @@ export class ChatEntriesRepo {
           id: row.id,
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
+          parentId: row.parent_id,
           text: String(payload.text ?? ""),
         } satisfies AssistantMessageEntry;
       }
@@ -581,11 +711,22 @@ export class ChatEntriesRepo {
                 ? "completed"
                 : "running";
         const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
+        const parseResult =
+          payload.parseResult &&
+          typeof payload.parseResult === "object" &&
+          (((payload.parseResult as Record<string, unknown>).status === "ok" &&
+            (payload.parseResult as Record<string, unknown>).parsed &&
+            typeof (payload.parseResult as Record<string, unknown>).parsed === "object") ||
+            ((payload.parseResult as Record<string, unknown>).status === "error" &&
+              typeof (payload.parseResult as Record<string, unknown>).error === "string"))
+            ? (payload.parseResult as PlannerLlmStreamEntry["parseResult"])
+            : undefined;
         return {
           type: "planner_llm_stream",
           id: row.id,
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
+          parentId: row.parent_id,
           llmRequest: String(payload.llmRequest ?? ""),
           llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
           thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
@@ -596,6 +737,7 @@ export class ChatEntriesRepo {
           ...(promptTokens !== undefined ? { promptTokens } : {}),
           ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
           ...(completionTokens !== undefined ? { completionTokens } : {}),
+          ...(parseResult !== undefined ? { parseResult } : {}),
         } satisfies PlannerLlmStreamEntry;
       }
       if (row.type === "title_llm_stream") {
@@ -630,6 +772,7 @@ export class ChatEntriesRepo {
           id: row.id,
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
+          parentId: row.parent_id,
           llmRequest: String(payload.llmRequest ?? ""),
           llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
           thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
@@ -647,6 +790,7 @@ export class ChatEntriesRepo {
         id: row.id,
         conversationIndex: row.conversation_index,
         createdAt: row.created_at,
+        parentId: row.parent_id,
         toolId: String(payload.toolId ?? ""),
         state:
           payload.state === "requested" ||
@@ -661,6 +805,5 @@ export class ChatEntriesRepo {
             : {},
         result: payload.result ?? null,
       } satisfies ToolInvocationEntry;
-    });
   }
 }

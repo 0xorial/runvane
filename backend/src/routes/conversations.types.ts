@@ -93,6 +93,10 @@ const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationM
   conversationId: z.string(),
 });
 
+const ReprocessThoughtRequestSchema = z.object({
+  editedResponse: z.string().min(1),
+});
+
 const UpdateConversationRequestSchema = z.object({
   title: z.string().optional(),
   groupId: z.string().nullable().optional(),
@@ -140,6 +144,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
         type: "user-message",
         id: typeof rec.id === "string" ? rec.id : "",
         text: typeof rec.text === "string" ? rec.text : "",
+        parentId: typeof rec.parentId === "string" ? rec.parentId : null,
         agentId,
         conversationIndex:
           typeof rec.conversationIndex === "number" && Number.isFinite(rec.conversationIndex)
@@ -156,6 +161,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
         type: "assistant-message",
         id: typeof rec.id === "string" ? rec.id : "",
         text: typeof rec.text === "string" ? rec.text : "",
+        parentId: typeof rec.parentId === "string" ? rec.parentId : null,
         conversationIndex:
           typeof rec.conversationIndex === "number" && Number.isFinite(rec.conversationIndex)
             ? rec.conversationIndex
@@ -206,6 +212,14 @@ export function validatePostConversationMessageRequest(data: unknown): PostConve
   const parsed = PostConversationMessageRequestSchema.safeParse(data);
   if (!parsed.success) {
     throw formatZodError("POST /api/conversations/:id/messages request", parsed.error);
+  }
+  return parsed.data;
+}
+
+export function validateReprocessThoughtRequest(data: unknown): { editedResponse: string } {
+  const parsed = ReprocessThoughtRequestSchema.safeParse(data);
+  if (!parsed.success) {
+    throw formatZodError("POST /api/conversations/:id/thoughts/:entryId/reprocess request", parsed.error);
   }
   return parsed.data;
 }

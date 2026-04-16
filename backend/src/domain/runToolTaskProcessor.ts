@@ -34,11 +34,22 @@ export class RunToolTaskProcessor {
     private readonly toolExecutionLogs: ToolExecutionLogsRepo,
     private readonly tasks: TasksRepo,
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
-    private readonly enqueueContinueConversation: (conversationId: string) => { taskId: number },
+    private readonly enqueueContinueConversation: (conversationId: string, sourceEntryId?: string) => { taskId: number },
   ) {}
 
   async process(task: RunToolTask, taskId?: number, opts?: { shouldCancel?: () => boolean }): Promise<void> {
     const conversationId = task.conversationId;
+    if (task.sourceEntryId && !this.chatEntries.isEntryOnActiveLineage(conversationId, task.sourceEntryId)) {
+      logger.info(
+        {
+          conversationId,
+          sourceEntryId: task.sourceEntryId,
+          toolName: task.toolName,
+        },
+        "[tool] skipped run_tool: source entry not on active lineage",
+      );
+      return;
+    }
     throwIfCancelled(opts?.shouldCancel);
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
@@ -346,7 +357,7 @@ export class RunToolTaskProcessor {
       payload: { ...envelope, rules },
     });
     if (!hasPendingBatchTools()) {
-      this.enqueueContinueConversation(conversationId);
+      this.enqueueContinueConversation(conversationId, toolEntryId);
     }
     logger.info({ conversationId, toolName: task.toolName }, "[tool] run_tool completed");
   }

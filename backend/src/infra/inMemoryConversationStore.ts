@@ -20,6 +20,7 @@ export class InMemoryConversationStore {
       type: "user-message",
       id: crypto.randomUUID(),
       conversationIndex: this.ensure(conversationId).messages.length,
+      parentId: null,
       text,
       agentId,
       createdAt: new Date().toISOString(),
@@ -33,6 +34,7 @@ export class InMemoryConversationStore {
       type: "assistant-message",
       id: crypto.randomUUID(),
       conversationIndex: this.ensure(conversationId).messages.length,
+      parentId: null,
       text,
       createdAt: new Date().toISOString(),
     };

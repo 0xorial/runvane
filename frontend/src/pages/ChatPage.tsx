@@ -127,7 +127,7 @@ export function ChatPage({
               const entry = entry$.get();
               return (
                 <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                  <ChatMessageRow entry$={entry$} />
+                  <ChatMessageRow entry$={entry$} conversationId={conversationId} />
                 </div>
               );
             })}

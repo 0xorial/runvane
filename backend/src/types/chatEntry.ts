@@ -63,11 +63,13 @@ export type ChatEntryBase = {
   id: string;
   conversationIndex: number;
   createdAt: string;
+  parentId: string | null;
 };
 export const ChatEntryBaseSchema = z.object({
   id: z.string(),
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
+  parentId: z.string().nullable(),
 });
 
 export type ChatAttachment = {
@@ -196,6 +198,15 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   promptTokens?: number;
   cachedPromptTokens?: number;
   completionTokens?: number;
+  parseResult?:
+    | {
+        status: "ok";
+        parsed: AgenticPlannerOutput;
+      }
+    | {
+        status: "error";
+        error: string;
+      };
 };
 export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("planner_llm_stream"),
@@ -209,6 +220,18 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   promptTokens: z.number().finite().optional(),
   cachedPromptTokens: z.number().finite().optional(),
   completionTokens: z.number().finite().optional(),
+  parseResult: z
+    .union([
+      z.object({
+        status: z.literal("ok"),
+        parsed: AgenticPlannerOutputSchema,
+      }),
+      z.object({
+        status: z.literal("error"),
+        error: z.string(),
+      }),
+    ])
+    .optional(),
 });
 
 export type TitleLlmStreamEntry = ChatEntryBase & {

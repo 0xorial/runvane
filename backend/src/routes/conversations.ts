@@ -10,6 +10,7 @@ import {
   parseUpdateConversationRequest,
   toPostConversationMessageAcceptedResponse,
   validatePostConversationMessageRequest,
+  validateReprocessThoughtRequest,
 } from "./conversations.types.js";
 
 export function createConversationsRouter(runtime: Runtime) {
@@ -233,6 +234,40 @@ export function createConversationsRouter(runtime: Runtime) {
       conversationId,
       cancelledTasks: result.cancelledTaskCount,
     });
+  });
+
+  r.post("/:conversationId/thoughts/:entryId/reprocess", async (c) => {
+    const conversationId = c.req.param("conversationId");
+    const entryId = c.req.param("entryId");
+    const parsed = await parseJsonObjectOr400(c);
+    if (!parsed.ok) return parsed.response;
+    let body;
+    try {
+      body = validateReprocessThoughtRequest(parsed.value);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "invalid request body";
+      return c.json({ detail }, 400);
+    }
+    try {
+      const result = await runtime.reprocessThought(conversationId, {
+        sourceEntryId: entryId,
+        editedResponse: body.editedResponse,
+      });
+      if (result.kind === "conversation_not_found") {
+        return c.json({ detail: "conversation not found" }, 404);
+      }
+      return c.json(
+        {
+          conversationId,
+          plannerEntryId: result.plannerEntryId,
+          queuedToolCalls: result.queuedToolCalls,
+        },
+        202,
+      );
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "failed to reprocess thought";
+      return c.json({ detail }, 400);
+    }
   });
 
   return r;

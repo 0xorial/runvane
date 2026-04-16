@@ -39,6 +39,10 @@ export type CancelConversationProcessingResult =
   | { kind: "ok"; cancelledTaskCount: number }
   | { kind: "conversation_not_found" };
 
+export type ReprocessThoughtResult =
+  | { kind: "ok"; plannerEntryId: string; queuedToolCalls: number }
+  | { kind: "conversation_not_found" };
+
 export type Runtime = ReturnType<typeof createRuntime>;
 
 export function createRuntime(opts: {
@@ -154,6 +158,7 @@ export function createRuntime(opts: {
       id: user.id,
       conversationIndex: user.conversationIndex,
       createdAt: user.createdAt,
+      parentId: user.parentId,
       type: "user-message",
       text: user.text,
       agentId: user.agentId,
@@ -169,7 +174,8 @@ export function createRuntime(opts: {
 
     const task = tasks.create({
       task_type: AgentTaskType.CONTINUE_CONVERSATION,
-      payload: { conversationId },
+      payload: { conversationId, sourceEntryId: user.id },
+      sourceEntryId: user.id,
     });
     logger.info({ conversationId, taskId: task.id }, "[chat] continue_conversation task created");
     queue.enqueue({ taskId: task.id });
@@ -205,6 +211,7 @@ export function createRuntime(opts: {
 
     const { taskId } = enqueueRunTool({
       conversationId,
+      sourceEntryId: row.id,
       agentId,
       toolName: row.toolId,
       params: {},
@@ -228,6 +235,25 @@ export function createRuntime(opts: {
     return { kind: "ok", cancelledTaskCount };
   }
 
+  async function reprocessThought(
+    conversationId: string,
+    input: { sourceEntryId: string; editedResponse: string },
+  ): Promise<ReprocessThoughtResult> {
+    if (!conversations.exists(conversationId)) {
+      return { kind: "conversation_not_found" };
+    }
+    const out = await continueConversationTaskProcessor.reprocessPlannerThought({
+      conversationId,
+      sourceEntryId: input.sourceEntryId,
+      editedResponse: input.editedResponse,
+    });
+    return {
+      kind: "ok",
+      plannerEntryId: out.plannerEntryId,
+      queuedToolCalls: out.queuedToolCalls,
+    };
+  }
+
   return {
     agents,
     conversations,
@@ -244,6 +270,7 @@ export function createRuntime(opts: {
     enqueueUserMessage,
     approveToolInvocation,
     cancelConversationProcessing,
+    reprocessThought,
     enqueueRunTool,
   };
 }

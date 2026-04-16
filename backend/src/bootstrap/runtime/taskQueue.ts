@@ -8,6 +8,7 @@ import { TasksRepo, type TaskRow } from "../../infra/repositories/tasksRepo.js";
 
 export type EnqueueRunToolInput = {
   conversationId: string;
+  sourceEntryId?: string;
   agentId: string | null;
   toolName: string;
   params: unknown;
@@ -30,6 +31,7 @@ function taskFromRow(row: TaskRow): AgentTask {
     return {
       type: AgentTaskType.CONTINUE_CONVERSATION,
       conversationId,
+      sourceEntryId: typeof row.payload.sourceEntryId === "string" ? row.payload.sourceEntryId : undefined,
     };
   }
   if (row.task_type === AgentTaskType.RUN_TOOL) {
@@ -42,6 +44,7 @@ function taskFromRow(row: TaskRow): AgentTask {
     return {
       type: AgentTaskType.RUN_TOOL,
       conversationId,
+      sourceEntryId: typeof row.payload.sourceEntryId === "string" ? row.payload.sourceEntryId : undefined,
       agentId,
       toolName,
       params: row.payload.params,
@@ -81,14 +84,15 @@ function taskFromRow(row: TaskRow): AgentTask {
 }
 
 export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemoryJobQueue }): {
-  enqueueContinueConversation: (conversationId: string) => { taskId: number };
+  enqueueContinueConversation: (conversationId: string, sourceEntryId?: string) => { taskId: number };
   enqueueRunTool: (input: EnqueueRunToolInput) => { taskId: number };
 } {
   const { tasks, queue } = opts;
-  function enqueueContinueConversation(conversationId: string): { taskId: number } {
+  function enqueueContinueConversation(conversationId: string, sourceEntryId?: string): { taskId: number } {
     const task = tasks.create({
       task_type: AgentTaskType.CONTINUE_CONVERSATION,
-      payload: { conversationId },
+      payload: { conversationId, sourceEntryId: sourceEntryId ?? null },
+      sourceEntryId,
     });
     queue.enqueue({ taskId: task.id });
     return { taskId: task.id };
@@ -99,6 +103,7 @@ export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemo
       task_type: AgentTaskType.RUN_TOOL,
       payload: {
         conversationId: input.conversationId,
+        sourceEntryId: input.sourceEntryId ?? null,
         agentId: input.agentId,
         toolName: input.toolName,
         params: input.params,
@@ -107,6 +112,7 @@ export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemo
         approvalGranted: input.approvalGranted === true,
         agentToolConfig: input.agentToolConfig ?? null,
       },
+      sourceEntryId: input.sourceEntryId,
     });
     queue.enqueue({ taskId: task.id });
     return { taskId: task.id };

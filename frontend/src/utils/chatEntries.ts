@@ -14,6 +14,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
       id: crypto.randomUUID(),
       conversationIndex: index,
       createdAt: new Date().toISOString(),
+      parentId: null,
       text: "",
     };
   }
@@ -45,6 +46,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
       id,
       conversationIndex: index,
       createdAt,
+      parentId: typeof raw.parentId === "string" ? raw.parentId : null,
       text,
       agentId,
     };
@@ -55,6 +57,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
     id,
     conversationIndex: index,
     createdAt,
+    parentId: typeof raw.parentId === "string" ? raw.parentId : null,
     text,
   };
 }

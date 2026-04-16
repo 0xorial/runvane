@@ -5,6 +5,7 @@ export type TaskRow = {
   id: number;
   task_type: string;
   payload: Record<string, unknown>;
+  source_entry_id: string | null;
   is_done: boolean;
   created_at: string;
   started_at: string | null;
@@ -18,6 +19,7 @@ type TaskDbRow = {
   id: number;
   task_type: string;
   payload_json: string;
+  source_entry_id: string | null;
   is_done: number;
   created_at: string;
   started_at: string | null;
@@ -30,6 +32,7 @@ function toRow(row: TaskDbRow): TaskRow {
     id: row.id,
     task_type: row.task_type,
     payload: parseJsonObject(row.payload_json),
+    source_entry_id: row.source_entry_id,
     is_done: row.is_done === 1,
     created_at: row.created_at,
     started_at: row.started_at,
@@ -41,16 +44,20 @@ function toRow(row: TaskDbRow): TaskRow {
 export class TasksRepo {
   constructor(private readonly db: SqliteDb) {}
 
-  create(input: { task_type: string; payload: Record<string, unknown> }): TaskRow {
+  create(input: { task_type: string; payload: Record<string, unknown>; sourceEntryId?: string }): TaskRow {
     const now = new Date().toISOString();
     const inserted = this.db
       .prepare(
-        `INSERT INTO tasks (task_type, payload_json, is_done, created_at)
-         VALUES (@task_type, @payload_json, 0, @created_at)`
+        `INSERT INTO tasks (task_type, payload_json, source_entry_id, is_done, created_at)
+         VALUES (@task_type, @payload_json, @source_entry_id, 0, @created_at)`
       )
       .run({
         task_type: input.task_type,
         payload_json: JSON.stringify(input.payload),
+        source_entry_id:
+          typeof input.sourceEntryId === "string" && input.sourceEntryId.trim().length > 0
+            ? input.sourceEntryId.trim()
+            : null,
         created_at: now,
       });
     const id = Number(inserted.lastInsertRowid);
@@ -63,6 +70,7 @@ export class TasksRepo {
     const row = this.db
       .prepare(
         `SELECT id, task_type, payload_json, is_done, created_at, started_at, finished_at, last_error
+         , source_entry_id
          FROM tasks
          WHERE id = ?`
       )
