@@ -31,6 +31,7 @@ export function createConversationsRouter(runtime: Runtime) {
       isDeleted: Number(row.is_deleted ?? 0) === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      lastMessageAt: row.last_message_at || row.created_at,
       promptTokensTotal: row.prompt_tokens_total,
       cachedPromptTokensTotal: row.cached_prompt_tokens_total,
       completionTokensTotal: row.completion_tokens_total,

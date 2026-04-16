@@ -190,6 +190,7 @@ export async function maybeAutoTitleConversation({
       isDeleted: Number(updated.is_deleted ?? 0) === 1,
       createdAt: updated.created_at,
       updatedAt: updated.updated_at,
+      lastMessageAt: updated.last_message_at || updated.created_at,
       promptTokensTotal: updated.prompt_tokens_total,
       cachedPromptTokensTotal: updated.cached_prompt_tokens_total,
       completionTokensTotal: updated.completion_tokens_total,

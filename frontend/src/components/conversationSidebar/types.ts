@@ -5,6 +5,7 @@ export type ConversationRow = {
   isDeleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  lastMessageAt?: string;
   promptTokensTotal?: number;
   cachedPromptTokensTotal?: number;
   completionTokensTotal?: number;

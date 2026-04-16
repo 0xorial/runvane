@@ -10,6 +10,7 @@ export type ConversationRow = {
   isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
+  lastMessageAt: string;
   promptTokensTotal: number;
   cachedPromptTokensTotal: number;
   completionTokensTotal: number;
@@ -53,6 +54,7 @@ const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   isDeleted: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  lastMessageAt: z.string(),
   promptTokensTotal: z.number().finite(),
   cachedPromptTokensTotal: z.number().finite(),
   completionTokensTotal: z.number().finite(),

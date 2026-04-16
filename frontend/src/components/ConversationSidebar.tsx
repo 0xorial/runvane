@@ -287,7 +287,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   } {
     return rows.reduce(
       (best, row) => {
-        const raw = String(row.updatedAt || row.createdAt || "").trim();
+        const raw = String(row.lastMessageAt || row.createdAt || row.updatedAt || "").trim();
         const ms = parseTimestampMs(raw);
         return ms > best.ms ? { ms, raw } : best;
       },
@@ -328,7 +328,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       ...ungrouped.map((row) => ({
         kind: "conversation" as const,
         row,
-        latestMs: parseTimestampMs(String(row.updatedAt || row.createdAt || "")),
+        latestMs: parseTimestampMs(String(row.lastMessageAt || row.createdAt || row.updatedAt || "")),
       })),
       ...groupIds.map((groupId) => {
         const rows = byGroupId.get(groupId) ?? [];

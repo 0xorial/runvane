@@ -7,6 +7,7 @@ export type ConversationRow = {
   is_deleted: number;
   created_at: string;
   updated_at: string;
+  last_message_at: string;
   prompt_tokens_total: number;
   cached_prompt_tokens_total: number;
   completion_tokens_total: number;
@@ -66,6 +67,7 @@ export class ConversationsRepo {
            c.is_deleted,
            c.created_at,
            c.updated_at,
+           c.last_message_at,
            COALESCE((
              SELECT SUM(COALESCE(CAST(json_extract(e.payload_json, '$.promptTokens') AS INTEGER), 0))
              FROM chat_entries e
@@ -86,7 +88,7 @@ export class ConversationsRepo {
            ), 0) AS completion_tokens_total
          FROM conversations c
          WHERE c.is_deleted = @deleted_only
-         ORDER BY c.updated_at DESC`,
+         ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC`,
       )
       .all({ deleted_only: deletedOnly }) as ConversationRow[];
   }
@@ -102,6 +104,7 @@ export class ConversationsRepo {
            c.is_deleted,
            c.created_at,
            c.updated_at,
+           c.last_message_at,
            COALESCE((
              SELECT SUM(COALESCE(CAST(json_extract(e.payload_json, '$.promptTokens') AS INTEGER), 0))
              FROM chat_entries e
@@ -167,6 +170,7 @@ export class ConversationsRepo {
       is_deleted: 0,
       created_at: now,
       updated_at: now,
+      last_message_at: now,
       prompt_tokens_total: 0,
       cached_prompt_tokens_total: 0,
       completion_tokens_total: 0,
@@ -174,8 +178,8 @@ export class ConversationsRepo {
 
     this.db
       .prepare(
-        `INSERT INTO conversations (id, title, group_id, is_deleted, created_at, updated_at)
-         VALUES (@id, @title, NULL, 0, @created_at, @updated_at)`,
+        `INSERT INTO conversations (id, title, group_id, is_deleted, created_at, updated_at, last_message_at)
+         VALUES (@id, @title, NULL, 0, @created_at, @updated_at, @last_message_at)`,
       )
       .run(row);
 

@@ -62,6 +62,7 @@ export class ContinueConversationTaskProcessor {
         isDeleted: Number(conversation.is_deleted ?? 0) === 1,
         createdAt: conversation.created_at,
         updatedAt: conversation.updated_at,
+        lastMessageAt: conversation.last_message_at || conversation.created_at,
         promptTokensTotal: conversation.prompt_tokens_total,
         cachedPromptTokensTotal: conversation.cached_prompt_tokens_total,
         completionTokensTotal: conversation.completion_tokens_total,

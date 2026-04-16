@@ -62,7 +62,7 @@ export function ConversationItem({
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [streamedTitle, setStreamedTitle] = useState("");
-  const timestampIso = conversation.updatedAt || conversation.createdAt;
+  const timestampIso = conversation.lastMessageAt || conversation.createdAt || conversation.updatedAt;
   const stamp = formatRelativeChatTime(timestampIso);
   const stampExact = formatExactChatTime(timestampIso);
   const usage = TokenUsageMapper.fromConversationTotals(conversation);
