@@ -281,7 +281,7 @@ export class ContinueConversationTaskProcessor {
       });
   }
 
-  private async getLlmResponseForTurn(input: {
+  private async getPlannerLlmResponse(input: {
     conversationId: string;
     requestText: string;
     plannerLlmModel: string;
@@ -522,7 +522,7 @@ export class ContinueConversationTaskProcessor {
       toolIds: enabledToolIds,
       priorToolResults: this.priorToolResultsFromEntries(entries),
     });
-    const llmResponse = await this.getLlmResponseForTurn({
+    const llmResponse = await this.getPlannerLlmResponse({
       conversationId,
       requestText: llmRequest,
       plannerLlmModel,

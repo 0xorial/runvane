@@ -62,7 +62,7 @@ export const ConversationSseRowSchema = z.object({
       prompt_tokens: z.number().finite(),
       cached_prompt_tokens: z.number().finite(),
       completion_tokens: z.number().finite(),
-    }),
+    })
   ),
 });
 
