@@ -1,6 +1,6 @@
 import type { PostConversationMessageRequest } from "../routes/conversations.types.js";
 import { AgentTaskType } from "../domain/agentTask.js";
-import { ContinueConversationTaskProcessor } from "../domain/continueConversationTaskProcessor.js";
+import { ContinueConversationTaskProcessorV2 } from "../domain/continueConversationTaskProcessor.v2.js";
 import { RunToolTaskProcessor } from "../domain/runToolTaskProcessor.js";
 import { ConversationEventHub } from "../events/conversationEventHub.js";
 import { InMemoryJobQueue } from "../infra/inMemoryJobQueue.js";
@@ -77,7 +77,7 @@ export function createRuntime(opts: {
     queue,
   });
 
-  const continueConversationTaskProcessor = new ContinueConversationTaskProcessor(
+  const continueConversationTaskProcessor = new ContinueConversationTaskProcessorV2(
     chatEntries,
     conversations,
     hub,

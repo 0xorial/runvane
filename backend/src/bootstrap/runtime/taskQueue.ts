@@ -1,5 +1,5 @@
 import { AgentTaskType, type AgentTask } from "../../domain/agentTask.js";
-import { ContinueConversationTaskProcessor } from "../../domain/continueConversationTaskProcessor.js";
+import { ContinueConversationTaskProcessorV2 } from "../../domain/continueConversationTaskProcessor.v2.js";
 import { RunToolTaskProcessor } from "../../domain/runToolTaskProcessor.js";
 import { isTaskCancelledError } from "../../domain/taskCancellation.js";
 import { InMemoryJobQueue } from "../../infra/inMemoryJobQueue.js";
@@ -123,7 +123,7 @@ export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemo
 export function registerTaskQueueHandler(opts: {
   queue: InMemoryJobQueue;
   tasks: TasksRepo;
-  continueConversationTaskProcessor: ContinueConversationTaskProcessor;
+  continueConversationTaskProcessor: ContinueConversationTaskProcessorV2;
   runToolTaskProcessor: RunToolTaskProcessor;
 }): void {
   const { queue, tasks, continueConversationTaskProcessor, runToolTaskProcessor } = opts;
