@@ -46,6 +46,9 @@ export type PostConversationMessageRequest = {
 export type PostConversationMessageAcceptedResponse = {
   conversationId: string;
 };
+export type SetConversationActiveLeafRequest = {
+  entryId: string;
+};
 
 const ConversationRowSchema: z.ZodType<ConversationRow> = z.object({
   id: z.string(),
@@ -91,6 +94,9 @@ const PostConversationMessageRequestSchema: z.ZodType<PostConversationMessageReq
 });
 const PostConversationMessageAcceptedResponseSchema: z.ZodType<PostConversationMessageAcceptedResponse> = z.object({
   conversationId: z.string(),
+});
+const SetConversationActiveLeafRequestSchema: z.ZodType<SetConversationActiveLeafRequest> = z.object({
+  entryId: z.string().min(1),
 });
 
 const ReprocessThoughtRequestSchema = z.object({
@@ -220,6 +226,14 @@ export function validateReprocessThoughtRequest(data: unknown): { editedResponse
   const parsed = ReprocessThoughtRequestSchema.safeParse(data);
   if (!parsed.success) {
     throw formatZodError("POST /api/conversations/:id/thoughts/:entryId/reprocess request", parsed.error);
+  }
+  return parsed.data;
+}
+
+export function validateSetConversationActiveLeafRequest(data: unknown): SetConversationActiveLeafRequest {
+  const parsed = SetConversationActiveLeafRequestSchema.safeParse(data);
+  if (!parsed.success) {
+    throw formatZodError("POST /api/conversations/:id/active-leaf request", parsed.error);
   }
   return parsed.data;
 }

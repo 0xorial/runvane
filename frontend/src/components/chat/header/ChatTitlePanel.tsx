@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Settings, Square } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings, Square } from "lucide-react";
 import {
   cancelConversationProcessing,
   getConversations,
@@ -26,6 +26,8 @@ type ChatTitlePanelProps = {
   conversationId: string | null;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
+  rightSidebarVisible: boolean;
+  onToggleRightSidebar: () => void;
   onOpenSettings: () => void;
   settingsPressed?: boolean;
 };
@@ -41,6 +43,8 @@ export function ChatTitlePanel({
   conversationId,
   sidebarVisible,
   onToggleSidebar,
+  rightSidebarVisible,
+  onToggleRightSidebar,
   onOpenSettings,
   settingsPressed = false,
 }: ChatTitlePanelProps) {
@@ -211,6 +215,17 @@ export function ChatTitlePanel({
         </div>
       </div>
       <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={onToggleRightSidebar}
+          aria-label={rightSidebarVisible ? "Hide branches sidebar" : "Show branches sidebar"}
+          title={rightSidebarVisible ? "Hide branches" : "Show branches"}
+        >
+          {rightSidebarVisible ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+        </Button>
         <Button
           type="button"
           variant="ghost"

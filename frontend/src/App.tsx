@@ -36,11 +36,15 @@ function chatActiveIdFromPath(pathname: string): string | null {
 function ChatPageShell({
   sidebarVisible,
   onToggleSidebar,
+  rightSidebarVisible,
+  onToggleRightSidebar,
   onOpenSettings,
   settingsPressed,
 }: {
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
+  rightSidebarVisible: boolean;
+  onToggleRightSidebar: () => void;
   onOpenSettings: () => void;
   settingsPressed: boolean;
 }) {
@@ -51,6 +55,8 @@ function ChatPageShell({
       conversationId={cid}
       sidebarVisible={sidebarVisible}
       onToggleSidebar={onToggleSidebar}
+      rightSidebarVisible={rightSidebarVisible}
+      onToggleRightSidebar={onToggleRightSidebar}
       onOpenSettings={onOpenSettings}
       settingsPressed={settingsPressed}
     />
@@ -61,6 +67,7 @@ export function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
+  const [chatRightSidebarVisible, setChatRightSidebarVisible] = useState(true);
   const activeConversationId = chatActiveIdFromPath(location.pathname);
   const showConversationSidebar = location.pathname.startsWith("/chat");
   const chatTab = location.pathname.startsWith("/chat");
@@ -80,6 +87,8 @@ export function App() {
           <ChatPageShell
             sidebarVisible={chatSidebarVisible}
             onToggleSidebar={() => setChatSidebarVisible((v) => !v)}
+            rightSidebarVisible={chatRightSidebarVisible}
+            onToggleRightSidebar={() => setChatRightSidebarVisible((v) => !v)}
             onOpenSettings={() => navigate(settingsLinkTo(location))}
             settingsPressed={settingsTab}
           />

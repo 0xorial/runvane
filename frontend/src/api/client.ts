@@ -143,10 +143,42 @@ export function permanentlyDeleteConversation(conversationId: string): Promise<u
   return deleteJson(`/api/conversations/${encodeURIComponent(conversationId)}/permanent`);
 }
 
-export function getConversationMessages(conversationId: string): Promise<ChatMessageEntry[]> {
-  return getJson(`/api/conversations/${encodeURIComponent(conversationId)}/messages`).then(
+export function getConversationMessages(
+  conversationId: string,
+  options?: {
+    all?: boolean;
+  },
+): Promise<ChatMessageEntry[]> {
+  const allQuery = options?.all === true ? "?all=1" : "";
+  return getJson(`/api/conversations/${encodeURIComponent(conversationId)}/messages${allQuery}`).then(
     validateGetConversationMessagesResponse,
   );
+}
+
+export async function setConversationActiveLeaf(
+  conversationId: string,
+  entryId: string,
+): Promise<{ conversationId: string; activeLeafEntryId: string }> {
+  const result = await postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/active-leaf`, {
+    entryId,
+  });
+  const data = result.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("POST /api/conversations/:id/active-leaf: invalid response envelope");
+  }
+  const row = data as {
+    conversationId?: unknown;
+    activeLeafEntryId?: unknown;
+  };
+  const nextConversationId = String(row.conversationId ?? "").trim();
+  const activeLeafEntryId = String(row.activeLeafEntryId ?? "").trim();
+  if (!nextConversationId || !activeLeafEntryId) {
+    throw new Error("POST /api/conversations/:id/active-leaf: invalid response fields");
+  }
+  return {
+    conversationId: nextConversationId,
+    activeLeafEntryId,
+  };
 }
 
 export async function postConversationMessage(

@@ -67,6 +67,26 @@ export class ChatEntriesRepo {
     }
   }
 
+  setActiveLeafEntry(conversationId: string, entryId: string): void {
+    const normalizedEntryId = String(entryId || "").trim();
+    if (!normalizedEntryId) {
+      throw new Error("entryId is required");
+    }
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS is_present
+         FROM chat_entries
+         WHERE conversation_id = ?
+           AND id = ?
+         LIMIT 1`,
+      )
+      .get(conversationId, normalizedEntryId) as { is_present?: number } | undefined;
+    if (row?.is_present !== 1) {
+      throw new Error(`entry not found in conversation: ${normalizedEntryId}`);
+    }
+    this.setActiveLeafEntryId(conversationId, normalizedEntryId);
+  }
+
   private resolveParentId(conversationId: string, parentId?: string | null): string | null {
     if (typeof parentId === "string" && parentId.trim() !== "") {
       return parentId.trim();

@@ -8,10 +8,12 @@ import {
   type ChatAgentSelection,
 } from "../components/chat/ChatAgentToolbar";
 import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
+import { ConversationBranchesPanel } from "../components/chat/ConversationBranchesPanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
 import { ChatMessageRow, messageRowKey } from "../components/chat/ChatMessageRow";
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import type { ChatAttachment } from "../protocol/chatEntry";
@@ -40,6 +42,8 @@ type ChatPageProps = {
   conversationId: string | null;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
+  rightSidebarVisible: boolean;
+  onToggleRightSidebar: () => void;
   onOpenSettings: () => void;
   settingsPressed?: boolean;
 };
@@ -48,6 +52,8 @@ export function ChatPage({
   conversationId,
   sidebarVisible,
   onToggleSidebar,
+  rightSidebarVisible,
+  onToggleRightSidebar,
   onOpenSettings,
   settingsPressed = false,
 }: ChatPageProps) {
@@ -73,6 +79,7 @@ export function ChatPage({
   }, []);
 
   const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
+  const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
@@ -113,10 +120,39 @@ export function ChatPage({
         conversationId={conversationId}
         sidebarVisible={sidebarVisible}
         onToggleSidebar={onToggleSidebar}
+        rightSidebarVisible={rightSidebarVisible}
+        onToggleRightSidebar={onToggleRightSidebar}
         onOpenSettings={onOpenSettings}
         settingsPressed={settingsPressed}
       />
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-1">
+      {rightSidebarVisible ? (
+        <ResizablePanelGroup direction="horizontal" autoSaveId="chat-right-branches-layout" className="min-h-0 min-w-0 flex-1">
+          <ResizablePanel minSize={40} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {/* important to not add any padding to the content here */}
+              <AnchorTopScrollArea
+                className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
+                topAnchorEntryId={topAnchorEntryId}
+              >
+                {chatEntries.map((entry$) => {
+                  const entry = entry$.get();
+                  return (
+                    <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                      <ChatMessageRow entry$={entry$} conversationId={conversationId} />
+                    </div>
+                  );
+                })}
+              </AnchorTopScrollArea>
+            </main>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={26} minSize={16} maxSize={45} className="min-h-0 min-w-0 overflow-hidden">
+            <aside className="min-h-0 min-w-0 h-full overflow-y-auto border-l border-border bg-sidebar">
+              <ConversationBranchesPanel conversationId={conversationId} activePathEntries={activePathEntries} />
+            </aside>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* important to not add any padding to the content here */}
           <AnchorTopScrollArea
@@ -133,7 +169,7 @@ export function ChatPage({
             })}
           </AnchorTopScrollArea>
         </main>
-      </div>
+      )}
       <MessageComposer
         textareaRef={composerTextareaRef}
         sendButtonRef={sendButtonRef}

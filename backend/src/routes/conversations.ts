@@ -11,6 +11,7 @@ import {
   toPostConversationMessageAcceptedResponse,
   validatePostConversationMessageRequest,
   validateReprocessThoughtRequest,
+  validateSetConversationActiveLeafRequest,
 } from "./conversations.types.js";
 
 export function createConversationsRouter(runtime: Runtime) {
@@ -173,7 +174,34 @@ export function createConversationsRouter(runtime: Runtime) {
     if (!runtime.conversations.exists(conversationId)) {
       return c.json({ detail: "conversation not found" }, 404);
     }
-    return c.json(runtime.chatEntries.listMessages(conversationId));
+    const includeAll = c.req.query("all") === "1";
+    return c.json(runtime.chatEntries.listMessages(conversationId, { activePathOnly: !includeAll }));
+  });
+
+  r.post("/:conversationId/active-leaf", async (c) => {
+    const conversationId = c.req.param("conversationId");
+    if (!runtime.conversations.exists(conversationId)) {
+      return c.json({ detail: "conversation not found" }, 404);
+    }
+    const parsed = await parseJsonObjectOr400(c);
+    if (!parsed.ok) return parsed.response;
+    let body;
+    try {
+      body = validateSetConversationActiveLeafRequest(parsed.value);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "invalid request body";
+      return c.json({ detail }, 400);
+    }
+    try {
+      runtime.chatEntries.setActiveLeafEntry(conversationId, body.entryId);
+      return c.json({
+        conversationId,
+        activeLeafEntryId: body.entryId,
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "entry not found";
+      return c.json({ detail }, 404);
+    }
   });
 
   r.post("/:conversationId/messages", async (c) => {
