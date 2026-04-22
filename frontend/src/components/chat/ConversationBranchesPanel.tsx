@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 type ConversationBranchesPanelProps = {
   conversationId: string | null;
   activePathEntries: ChatEntry[];
+  onAnchorEntrySelected?: (entryId: string) => void;
 };
 
 function entryPreview(entry: ChatEntry): string {
@@ -55,7 +56,11 @@ function deepestDescendantId(entryId: string, childrenByParent: Map<string | nul
   }
 }
 
-export function ConversationBranchesPanel({ conversationId, activePathEntries }: ConversationBranchesPanelProps) {
+export function ConversationBranchesPanel({
+  conversationId,
+  activePathEntries,
+  onAnchorEntrySelected,
+}: ConversationBranchesPanelProps) {
   const [allEntries, setAllEntries] = useState<ChatEntry[]>([]);
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
 
@@ -111,6 +116,7 @@ export function ConversationBranchesPanel({ conversationId, activePathEntries }:
     setSwitchingToEntryId(targetLeafId);
     try {
       await setConversationActiveLeaf(conversationId, targetLeafId);
+      onAnchorEntrySelected?.(entryId);
       window.dispatchEvent(new Event("runvane:refresh-chat"));
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);

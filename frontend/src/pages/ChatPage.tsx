@@ -67,6 +67,7 @@ export function ChatPage({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [topAnchorEntryId, setTopAnchorEntryId] = useState<string | null>(null);
+  const [selectedBranchAnchorEntryId, setSelectedBranchAnchorEntryId] = useState<string | null>(null);
   const [agentSelection, setAgentSelection] = useState<ChatAgentSelection>(() => ({
     agentId: agentIdFromSearchParams(searchParams) || "",
     llmProviderId: "",
@@ -102,7 +103,16 @@ export function ChatPage({
   useEffect(() => {
     if (!conversationId || chatEntries.length === 0) {
       setTopAnchorEntryId(null);
+      setSelectedBranchAnchorEntryId(null);
       return;
+    }
+    if (selectedBranchAnchorEntryId) {
+      const existsInActivePath = chatEntries.some((row$) => row$.id === selectedBranchAnchorEntryId);
+      if (existsInActivePath) {
+        setTopAnchorEntryId(selectedBranchAnchorEntryId);
+        return;
+      }
+      setSelectedBranchAnchorEntryId(null);
     }
     for (let i = chatEntries.length - 1; i >= 0; i -= 1) {
       const row = chatEntries[i].get();
@@ -112,7 +122,7 @@ export function ChatPage({
       }
     }
     setTopAnchorEntryId(null);
-  }, [conversationId, chatEntries]);
+  }, [conversationId, chatEntries, selectedBranchAnchorEntryId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -148,7 +158,14 @@ export function ChatPage({
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={26} minSize={16} maxSize={45} className="min-h-0 min-w-0 overflow-hidden">
             <aside className="min-h-0 min-w-0 h-full overflow-y-auto border-l border-border bg-sidebar">
-              <ConversationBranchesPanel conversationId={conversationId} activePathEntries={activePathEntries} />
+              <ConversationBranchesPanel
+                conversationId={conversationId}
+                activePathEntries={activePathEntries}
+                onAnchorEntrySelected={(entryId) => {
+                  setSelectedBranchAnchorEntryId(entryId);
+                  setTopAnchorEntryId(entryId);
+                }}
+              />
             </aside>
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -253,6 +270,7 @@ export function ChatPage({
                 modelPresetId: agentSelection.modelPresetId,
                 attachments: uploadedAttachments,
               });
+              setSelectedBranchAnchorEntryId(null);
               setTopAnchorEntryId(rowId);
               const q = searchParams.toString();
               navigate(
@@ -272,6 +290,7 @@ export function ChatPage({
                 modelPresetId: agentSelection.modelPresetId,
                 attachments: uploadedAttachments,
               });
+              setSelectedBranchAnchorEntryId(null);
               setTopAnchorEntryId(rowId);
             }
             setInput("");
