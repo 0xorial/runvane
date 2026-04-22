@@ -18,12 +18,20 @@ function entryPreview(entry: ChatEntry): string {
   if (entry.type === "tool-invocation") {
     return `Tool: ${entry.toolId || "unknown"}`;
   }
-  const text = (entry.llmResponse || entry.llmRequest || "").trim();
-  return text.length > 0 ? text : "(thinking)";
+  const status = String(entry.status || "running").trim();
+  const promptTokens = typeof entry.promptTokens === "number" && Number.isFinite(entry.promptTokens) ? entry.promptTokens : 0;
+  const cachedPromptTokens =
+    typeof entry.cachedPromptTokens === "number" && Number.isFinite(entry.cachedPromptTokens) ? entry.cachedPromptTokens : 0;
+  const completionTokens =
+    typeof entry.completionTokens === "number" && Number.isFinite(entry.completionTokens) ? entry.completionTokens : 0;
+  const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
+  const tokenLabel = totalTokens > 0 ? `${totalTokens} tok` : "";
+  const model = String(entry.llmModel || "").trim();
+  const meta = [model, tokenLabel].filter((x) => x.length > 0).join(" · ");
+  return meta ? `${status} · ${meta}` : status;
 }
 
-function entryIcon(entry: ChatEntry, hasSiblings: boolean) {
-  if (hasSiblings) return <GitBranch className="mt-0.5 h-3 w-3 shrink-0" />;
+function entryIcon(entry: ChatEntry) {
   if (entry.type === "user-message") return <User className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "assistant-message") return <Bot className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "tool-invocation") return <Wrench className="mt-0.5 h-3 w-3 shrink-0" />;
@@ -186,7 +194,7 @@ function BranchNode({
         )}
         style={{ paddingLeft: `${branchDepth * 12 + 6}px` }}
       >
-        <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry, hasSiblings)}</span>
+        <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry)}</span>
         <span className="flex-1 truncate">{entryPreview(entry)}</span>
         {isLeaf && activeLeafId === entry.id ? (
           <span className="text-[9px] font-semibold uppercase tracking-wider text-primary">head</span>
