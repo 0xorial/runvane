@@ -26,7 +26,7 @@ export type EnqueueRunToolInput = {
   };
 };
 
-export type ContinueConversationProcessorDeps = {
+export type DecisionProcessorDeps = {
   chatEntries: ChatEntriesRepo;
   conversations: ConversationsRepo;
   hub: ConversationEventHub;
@@ -43,8 +43,8 @@ export type LlmOverrides = {
   llmModel?: string;
 };
 
-export type ParsedPlannerResponse = ReturnType<typeof parseAgenticPlannerOutput>;
-export type PlannerFollowup = ParsedPlannerResponse["output"]["followup"];
+export type ParsedDecisionResponse = ReturnType<typeof parseAgenticPlannerOutput>;
+export type DecisionFollowup = ParsedDecisionResponse["output"]["followup"];
 
 export type ToolConfig = {
   enabled: boolean;
@@ -52,7 +52,7 @@ export type ToolConfig = {
   rules?: Record<string, unknown>;
 };
 
-export type PlannerLlmSuccess = {
+export type DecisionLlmSuccess = {
   kind: "ok";
   plannerEntryId: string;
   assistantEntryId: string | null;
@@ -62,13 +62,13 @@ export type PlannerLlmSuccess = {
   requestStartedMs: number;
 };
 
-export type PlannerLlmCancelled = {
+export type DecisionLlmCancelled = {
   kind: "cancelled";
 };
 
-export type PlannerLlmResult = PlannerLlmSuccess | PlannerLlmCancelled;
+export type DecisionLlmResult = DecisionLlmSuccess | DecisionLlmCancelled;
 
-export type FinalizePlannerResultInput = {
+export type FinalizeDecisionResultInput = {
   conversationId: string;
   plannerEntryId: string;
   llmRequest: string;
@@ -76,14 +76,14 @@ export type FinalizePlannerResultInput = {
   enabledToolIds: string[];
   plannerLlmModel?: string;
   requestStartedMs: number;
-  parsedLlmResponse: ParsedPlannerResponse;
+  parsedLlmResponse: ParsedDecisionResponse;
   anchorUserMessage: UserMessageEntry;
   assistantEntryId?: string | null;
   plannerTokenUsage?: StreamTextCompletionResult["usage"];
   completionSummaryFallback: string;
 };
 
-export type FinalizePlannerResultOutput = {
+export type FinalizeDecisionResultOutput = {
   queuedToolCalls: number;
-  followup: PlannerFollowup;
+  followup: DecisionFollowup;
 };

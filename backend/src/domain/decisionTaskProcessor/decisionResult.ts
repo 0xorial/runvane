@@ -2,9 +2,9 @@ import { SseType } from "../../types/sse.js";
 import { TokenUsageMapper } from "../../types/tokenUsage.js";
 import type { AgenticToolRequest } from "../../types/chatEntry.js";
 import type {
-  ContinueConversationProcessorDeps,
-  FinalizePlannerResultInput,
-  FinalizePlannerResultOutput,
+  DecisionProcessorDeps,
+  FinalizeDecisionResultInput,
+  FinalizeDecisionResultOutput,
 } from "./types.js";
 import { agentToolConfigFor, publishConversationUpdated } from "./context.js";
 
@@ -27,8 +27,8 @@ export function parseRequestedToolCalls(input: {
   return out;
 }
 
-export function persistPlannerParseFailure(
-  deps: ContinueConversationProcessorDeps,
+export function persistDecisionParseFailure(
+  deps: DecisionProcessorDeps,
   input: {
     conversationId: string;
     plannerEntryId: string;
@@ -67,8 +67,8 @@ export function persistPlannerParseFailure(
   });
 }
 
-export function upsertAssistantMessageFromPlanner(
-  deps: ContinueConversationProcessorDeps,
+export function upsertAssistantMessageFromDecision(
+  deps: DecisionProcessorDeps,
   input: {
     conversationId: string;
     assistantText: string;
@@ -91,10 +91,10 @@ export function upsertAssistantMessageFromPlanner(
   });
 }
 
-export function finalizeParsedPlannerResult(
-  deps: ContinueConversationProcessorDeps,
-  input: FinalizePlannerResultInput,
-): FinalizePlannerResultOutput {
+export function finalizeParsedDecisionResult(
+  deps: DecisionProcessorDeps,
+  input: FinalizeDecisionResultInput,
+): FinalizeDecisionResultOutput {
   const decision = input.parsedLlmResponse.decision;
   const agentic = input.parsedLlmResponse.output;
   const requestedToolCalls = parseRequestedToolCalls({
@@ -118,7 +118,7 @@ export function finalizeParsedPlannerResult(
   });
 
   const assistantText = String(agentic.assistant_output ?? "").trim();
-  upsertAssistantMessageFromPlanner(deps, {
+  upsertAssistantMessageFromDecision(deps, {
     conversationId: input.conversationId,
     assistantText,
     assistantEntryId: input.assistantEntryId,

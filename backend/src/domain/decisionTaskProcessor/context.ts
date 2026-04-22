@@ -1,8 +1,8 @@
 import type { ChatEntry, UserMessageEntry } from "../../types/chatEntry.js";
 import { usageByConversationId } from "../conversationUsage.js";
-import type { ContinueConversationProcessorDeps, LlmOverrides, ToolConfig } from "./types.js";
+import type { DecisionProcessorDeps, LlmOverrides, ToolConfig } from "./types.js";
 
-export function publishConversationUpdated(deps: ContinueConversationProcessorDeps, conversationId: string): void {
+export function publishConversationUpdated(deps: DecisionProcessorDeps, conversationId: string): void {
   const conversation = deps.conversations.get(conversationId, { includeDeleted: true });
   if (!conversation) return;
   deps.hub.publish(conversationId, {
@@ -24,7 +24,7 @@ export function publishConversationUpdated(deps: ContinueConversationProcessorDe
 }
 
 export function agentToolConfigFor(
-  deps: ContinueConversationProcessorDeps,
+  deps: DecisionProcessorDeps,
   agentId: string,
   toolName: string,
 ): ToolConfig {
@@ -42,7 +42,7 @@ export function agentToolConfigFor(
 }
 
 export function resolveLlmOverrides(
-  deps: ContinueConversationProcessorDeps,
+  deps: DecisionProcessorDeps,
   anchorUserMessage: UserMessageEntry,
 ): LlmOverrides {
   const agent = deps.agents.get(anchorUserMessage.agentId);
@@ -56,7 +56,7 @@ export function resolveLlmOverrides(
   };
 }
 
-export function resolvePlannerModel(deps: ContinueConversationProcessorDeps, overrides: { llmModel?: string }): string {
+export function resolvePlannerModel(deps: DecisionProcessorDeps, overrides: { llmModel?: string }): string {
   const doc = deps.llmProviderSettings.getDocument();
   return String(overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini");
 }
@@ -72,7 +72,7 @@ function parseStructuredParamValue(key: string, value: unknown): unknown {
 }
 
 export function resolveRequestParams(
-  deps: ContinueConversationProcessorDeps,
+  deps: DecisionProcessorDeps,
   input: { modelPresetId?: number | null },
 ): Record<string, unknown> {
   const doc = deps.llmProviderSettings.getDocument();
@@ -96,7 +96,7 @@ export function resolveRequestParams(
 }
 
 export function buildInputFiles(
-  deps: ContinueConversationProcessorDeps,
+  deps: DecisionProcessorDeps,
   anchorUserMessage: UserMessageEntry,
 ): Array<{ filename: string; mimeType: string; base64Data: string }> {
   return (anchorUserMessage.attachments ?? []).map((attachment) => {
@@ -110,7 +110,7 @@ export function buildInputFiles(
   });
 }
 
-export function enabledToolIdsForAgent(deps: ContinueConversationProcessorDeps, agentId: string): string[] {
+export function enabledToolIdsForAgent(deps: DecisionProcessorDeps, agentId: string): string[] {
   return deps.tools
     .list()
     .filter((tool) => agentToolConfigFor(deps, agentId, tool.getName()).enabled)

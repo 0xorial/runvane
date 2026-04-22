@@ -2,15 +2,15 @@ import { logger } from "../infra/logger.js";
 import type { ContinueConversationTask } from "./agentTask.js";
 import { buildPlannerPrompt, parseAgenticPlannerOutput } from "./continueConversationPlannerProtocol.js";
 import { throwIfCancelled } from "./taskCancellation.js";
-import { getPlannerLlmResponse } from "./continueConversationTaskProcessorV2/plannerStreaming.js";
 import {
-  appendPlannerEntryAndPublishStart,
-  publishPlannerThoughtDelta,
-} from "./continueConversationTaskProcessorV2/plannerStreaming.js";
+  appendDecisionEntryAndPublishStart,
+  getDecisionLlmResponse,
+  publishDecisionThoughtDelta,
+} from "./decisionTaskProcessor/decisionStreaming.js";
 import {
-  finalizeParsedPlannerResult,
-  persistPlannerParseFailure,
-} from "./continueConversationTaskProcessorV2/plannerResult.js";
+  finalizeParsedDecisionResult,
+  persistDecisionParseFailure,
+} from "./decisionTaskProcessor/decisionResult.js";
 import {
   buildInputFiles,
   enabledToolIdsForAgent,
@@ -19,8 +19,8 @@ import {
   resolveLlmOverrides,
   resolvePlannerModel,
   resolveRequestParams,
-} from "./continueConversationTaskProcessorV2/context.js";
-import type { ContinueConversationProcessorDeps, ParsedPlannerResponse } from "./continueConversationTaskProcessorV2/types.js";
+} from "./decisionTaskProcessor/context.js";
+import type { DecisionProcessorDeps, ParsedDecisionResponse } from "./decisionTaskProcessor/types.js";
 import type { ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
 import type { AgentsRepo } from "../infra/repositories/agentsRepo.js";
 import type { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
@@ -31,8 +31,8 @@ import type { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
 
-export class ContinueConversationTaskProcessorV2 {
-  private readonly deps: ContinueConversationProcessorDeps;
+export class DecisionTaskProcessor {
+  private readonly deps: DecisionProcessorDeps;
 
   constructor(
     chatEntries: ChatEntriesRepo,
@@ -43,7 +43,7 @@ export class ContinueConversationTaskProcessorV2 {
     agents: AgentsRepo,
     uploads: UploadsRepo,
     tools: ToolRegistry,
-    enqueueRunTool: ContinueConversationProcessorDeps["enqueueRunTool"],
+    enqueueRunTool: DecisionProcessorDeps["enqueueRunTool"],
   ) {
     this.deps = {
       chatEntries,
@@ -75,7 +75,7 @@ export class ContinueConversationTaskProcessorV2 {
       throw new Error(`cannot reprocess thought without ancestor user-message: ${input.sourceEntryId}`);
     }
 
-    const plannerEntry = appendPlannerEntryAndPublishStart(this.deps, {
+    const plannerEntry = appendDecisionEntryAndPublishStart(this.deps, {
       conversationId: input.conversationId,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
@@ -83,13 +83,13 @@ export class ContinueConversationTaskProcessorV2 {
       llmRequest: sourceEntry.llmRequest,
       llmModel: sourceEntry.llmModel,
     });
-    publishPlannerThoughtDelta(this.deps, {
+    publishDecisionThoughtDelta(this.deps, {
       conversationId: input.conversationId,
       plannerEntryId: plannerEntry.id,
       delta: input.editedResponse.trim() ? input.editedResponse : "",
     });
 
-    const finalized = this.parseAndFinalizePlannerResult({
+    const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: input.conversationId,
       plannerEntryId: plannerEntry.id,
       llmRequest: plannerEntry.llmRequest,
@@ -144,7 +144,7 @@ export class ContinueConversationTaskProcessorV2 {
       priorToolResults: priorToolResultsFromEntries(entries),
     });
 
-    const llmResponse = await getPlannerLlmResponse(this.deps, {
+    const llmResponse = await getDecisionLlmResponse(this.deps, {
       conversationId: task.conversationId,
       requestText: llmRequest,
       plannerLlmModel,
@@ -155,7 +155,7 @@ export class ContinueConversationTaskProcessorV2 {
     });
     if (llmResponse.kind === "cancelled") return;
 
-    const finalized = this.parseAndFinalizePlannerResult({
+    const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: task.conversationId,
       plannerEntryId: llmResponse.plannerEntryId,
       llmRequest,
@@ -186,7 +186,7 @@ export class ContinueConversationTaskProcessorV2 {
     return [...entries].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message") ?? null;
   }
 
-  private parseAndFinalizePlannerResult(input: {
+  private parseAndFinalizeDecisionResult(input: {
     conversationId: string;
     plannerEntryId: string;
     llmRequest: string;
@@ -201,7 +201,7 @@ export class ContinueConversationTaskProcessorV2 {
     completionSummaryFallback: string;
     parseErrorPrefix: string;
   }) {
-    let parsedLlmResponse: ParsedPlannerResponse;
+    let parsedLlmResponse: ParsedDecisionResponse;
     try {
       parsedLlmResponse = parseAgenticPlannerOutput({
         reply: input.llmResponse,
@@ -210,7 +210,7 @@ export class ContinueConversationTaskProcessorV2 {
       });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      persistPlannerParseFailure(this.deps, {
+      persistDecisionParseFailure(this.deps, {
         conversationId: input.conversationId,
         plannerEntryId: input.plannerEntryId,
         llmRequest: input.llmRequest,
@@ -222,7 +222,7 @@ export class ContinueConversationTaskProcessorV2 {
       });
       throw new Error(`${input.parseErrorPrefix}: ${detail}`, { cause: e });
     }
-    return finalizeParsedPlannerResult(this.deps, {
+    return finalizeParsedDecisionResult(this.deps, {
       conversationId: input.conversationId,
       plannerEntryId: input.plannerEntryId,
       llmRequest: input.llmRequest,

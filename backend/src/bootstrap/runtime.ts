@@ -1,6 +1,6 @@
 import type { PostConversationMessageRequest } from "../routes/conversations.types.js";
 import { AgentTaskType } from "../domain/agentTask.js";
-import { ContinueConversationTaskProcessorV2 } from "../domain/continueConversationTaskProcessor.v2.js";
+import { DecisionTaskProcessor } from "../domain/decisionTaskProcessor.js";
 import { RunToolTaskProcessor } from "../domain/runToolTaskProcessor.js";
 import { ConversationEventHub } from "../events/conversationEventHub.js";
 import { InMemoryJobQueue } from "../infra/inMemoryJobQueue.js";
@@ -77,7 +77,7 @@ export function createRuntime(opts: {
     queue,
   });
 
-  const continueConversationTaskProcessor = new ContinueConversationTaskProcessorV2(
+  const decisionTaskProcessor = new DecisionTaskProcessor(
     chatEntries,
     conversations,
     hub,
@@ -100,7 +100,7 @@ export function createRuntime(opts: {
   registerTaskQueueHandler({
     queue,
     tasks,
-    continueConversationTaskProcessor,
+    decisionTaskProcessor,
     runToolTaskProcessor,
   });
 
@@ -242,7 +242,7 @@ export function createRuntime(opts: {
     if (!conversations.exists(conversationId)) {
       return { kind: "conversation_not_found" };
     }
-    const out = await continueConversationTaskProcessor.reprocessPlannerThought({
+    const out = await decisionTaskProcessor.reprocessPlannerThought({
       conversationId,
       sourceEntryId: input.sourceEntryId,
       editedResponse: input.editedResponse,
@@ -266,7 +266,7 @@ export function createRuntime(opts: {
     hub,
     queue,
     tools,
-    continueConversationTaskProcessor,
+    decisionTaskProcessor,
     enqueueUserMessage,
     approveToolInvocation,
     cancelConversationProcessing,

@@ -13,8 +13,8 @@ import type { ToolRegistry } from "../tools/toolRegistry.js";
 import {
   composeFailedPlannerResponse,
   usageFromStreamingError,
-} from "./continueConversationTaskProcessorV2/plannerStreamUtils.js";
-import { parseJsonObjectFromCompletionText } from "./continueConversationTaskProcessorV2/plannerTextParsing.js";
+} from "./decisionTaskProcessor/plannerStreamUtils.js";
+import { parseJsonObjectFromCompletionText } from "./decisionTaskProcessor/plannerTextParsing.js";
 import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
 
 type ToolExecutionEnvelope = {

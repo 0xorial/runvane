@@ -9,7 +9,7 @@ import {
   extractAssistantOutputFromJsonLike,
   extractLastBalancedJsonObject,
   parseFirstJsonObjectCandidate,
-} from "./continueConversationTaskProcessorV2/plannerTextParsing.js";
+} from "./decisionTaskProcessor/plannerTextParsing.js";
 
 export type PriorToolResult = {
   toolId: string;

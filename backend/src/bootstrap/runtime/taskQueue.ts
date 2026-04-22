@@ -1,5 +1,5 @@
 import { AgentTaskType, type AgentTask } from "../../domain/agentTask.js";
-import { ContinueConversationTaskProcessorV2 } from "../../domain/continueConversationTaskProcessor.v2.js";
+import { DecisionTaskProcessor } from "../../domain/decisionTaskProcessor.js";
 import { RunToolTaskProcessor } from "../../domain/runToolTaskProcessor.js";
 import { isTaskCancelledError } from "../../domain/taskCancellation.js";
 import { InMemoryJobQueue } from "../../infra/inMemoryJobQueue.js";
@@ -123,10 +123,10 @@ export function createTaskEnqueueHelpers(opts: { tasks: TasksRepo; queue: InMemo
 export function registerTaskQueueHandler(opts: {
   queue: InMemoryJobQueue;
   tasks: TasksRepo;
-  continueConversationTaskProcessor: ContinueConversationTaskProcessorV2;
+  decisionTaskProcessor: DecisionTaskProcessor;
   runToolTaskProcessor: RunToolTaskProcessor;
 }): void {
-  const { queue, tasks, continueConversationTaskProcessor, runToolTaskProcessor } = opts;
+  const { queue, tasks, decisionTaskProcessor, runToolTaskProcessor } = opts;
   queue.setHandler(async (task) => {
     logger.info({ taskId: task.taskId }, "[queue] task dequeued");
     const row = tasks.getById(task.taskId);
@@ -152,7 +152,7 @@ export function registerTaskQueueHandler(opts: {
           { taskId: row.id, conversationId: parsed.conversationId },
           "[queue] processing continue_conversation",
         );
-        await continueConversationTaskProcessor.process(parsed, { shouldCancel });
+        await decisionTaskProcessor.process(parsed, { shouldCancel });
       } else if (parsed.type === AgentTaskType.RUN_TOOL) {
         logger.info(
           { taskId: row.id, conversationId: parsed.conversationId, toolName: parsed.toolName },

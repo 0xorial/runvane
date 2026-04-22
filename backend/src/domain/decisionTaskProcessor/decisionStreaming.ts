@@ -3,17 +3,13 @@ import type { StreamTextCompletionResult } from "../../llm_provider/provider.js"
 import { SseType } from "../../types/sse.js";
 import { TokenUsageMapper } from "../../types/tokenUsage.js";
 import { isTaskCancelledError, throwIfCancelled } from "../taskCancellation.js";
-import {
-  incrementalDelta,
-  composeFailedPlannerResponse,
-  usageFromStreamingError,
-} from "./plannerStreamUtils.js";
+import { composeFailedPlannerResponse, incrementalDelta, usageFromStreamingError } from "./plannerStreamUtils.js";
 import { extractAssistantOutputFromJsonLike } from "./plannerTextParsing.js";
-import type { ContinueConversationProcessorDeps, LlmOverrides, PlannerLlmResult } from "./types.js";
+import type { DecisionLlmResult, DecisionProcessorDeps, LlmOverrides } from "./types.js";
 import { publishConversationUpdated, resolvePlannerModel } from "./context.js";
 
-export function appendPlannerEntryAndPublishStart(
-  deps: ContinueConversationProcessorDeps,
+export function appendDecisionEntryAndPublishStart(
+  deps: DecisionProcessorDeps,
   input: {
     conversationId: string;
     id: string;
@@ -45,8 +41,8 @@ export function appendPlannerEntryAndPublishStart(
   return entry;
 }
 
-export function publishPlannerThoughtDelta(
-  deps: ContinueConversationProcessorDeps,
+export function publishDecisionThoughtDelta(
+  deps: DecisionProcessorDeps,
   input: { conversationId: string; plannerEntryId: string; delta: string },
 ): void {
   if (!input.delta) return;
@@ -58,7 +54,7 @@ export function publishPlannerThoughtDelta(
 }
 
 export async function callLlmStreaming(
-  deps: ContinueConversationProcessorDeps,
+  deps: DecisionProcessorDeps,
   prompt: string,
   overrides: LlmOverrides,
   requestParams: Record<string, unknown>,
@@ -98,8 +94,8 @@ export async function callLlmStreaming(
   return result;
 }
 
-export async function getPlannerLlmResponse(
-  deps: ContinueConversationProcessorDeps,
+export async function getDecisionLlmResponse(
+  deps: DecisionProcessorDeps,
   input: {
     conversationId: string;
     requestText: string;
@@ -109,11 +105,11 @@ export async function getPlannerLlmResponse(
     files: Array<{ filename: string; mimeType: string; base64Data: string }>;
     shouldCancel?: () => boolean;
   },
-): Promise<PlannerLlmResult> {
+): Promise<DecisionLlmResult> {
   const plannerEntryId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const requestStartedMs = Date.now();
-  appendPlannerEntryAndPublishStart(deps, {
+  appendDecisionEntryAndPublishStart(deps, {
     conversationId: input.conversationId,
     id: plannerEntryId,
     createdAt,
@@ -150,7 +146,7 @@ export async function getPlannerLlmResponse(
         }
         reconstructedReply += delta;
         const thoughtDelta = incrementalDelta(plannerText, reconstructedReply);
-        publishPlannerThoughtDelta(deps, {
+        publishDecisionThoughtDelta(deps, {
           conversationId: input.conversationId,
           plannerEntryId,
           delta: thoughtDelta,
