@@ -124,6 +124,125 @@ export function ChatPage({
     setTopAnchorEntryId(null);
   }, [conversationId, chatEntries, selectedBranchAnchorEntryId]);
 
+  const composer = (
+    <MessageComposer
+      textareaRef={composerTextareaRef}
+      sendButtonRef={sendButtonRef}
+      value={input}
+      onValueChange={setInput}
+      onPaste={(e) => {
+        const items = Array.from(e.clipboardData?.items ?? []);
+        const images: File[] = [];
+        for (const item of items) {
+          if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+          const file = item.getAsFile();
+          if (file) images.push(file);
+        }
+        if (images.length > 0) {
+          setSelectedFiles((prev) => [...prev, ...images]);
+        }
+      }}
+      fileInputRef={fileInputRef}
+      onFileInputChange={(e) => {
+        const files = Array.from(e.currentTarget.files ?? []);
+        if (files.length === 0) return;
+        setSelectedFiles((prev) => [...prev, ...files]);
+        e.currentTarget.value = "";
+      }}
+      onPickFiles={() => fileInputRef.current?.click()}
+      canSend={canSend}
+      placeholder="Send a message…"
+      selectionSlot={<ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />}
+      attachmentsSlot={
+        selectedFiles.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {selectedFiles.map((file, idx) => (
+              <button
+                key={`${file.name}-${file.size}-${idx}`}
+                type="button"
+                className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
+                onClick={() => setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))}
+                title="Remove file"
+              >
+                {previewUrls[idx] ? (
+                  file.type === "application/pdf" ? (
+                    <iframe className="h-[76px] w-full rounded-md border-0 bg-muted" src={previewUrls[idx]} title={file.name} />
+                  ) : (
+                    <img className="h-[76px] w-full rounded-md object-cover" src={previewUrls[idx]} alt={file.name} />
+                  )
+                ) : (
+                  <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
+                    FILE
+                  </div>
+                )}
+                <div className="break-words text-xs leading-tight">{file.name}</div>
+                <div className="text-[11px] text-muted-foreground">Remove</div>
+              </button>
+            ))}
+          </div>
+        ) : undefined
+      }
+      onSendAsync={() => {
+        return (async () => {
+          const text = input.trim();
+          if (!text && selectedFiles.length === 0) return { ok: false };
+          const uploadedAttachments: ChatAttachment[] = [];
+          for (const file of selectedFiles) {
+            const uploaded = await uploadFile(file);
+            uploadedAttachments.push(uploaded.attachment);
+          }
+          let cid = conversationId;
+          if (!cid) {
+            const created = await createConversation();
+            cid = created.id;
+            const rowId = appendOptimisticUserMessage({
+              conversationId: cid,
+              text,
+              agentId: agentSelection.agentId,
+              llmProviderId: agentSelection.llmProviderId,
+              llmModel: agentSelection.llmModel,
+              modelPresetId: agentSelection.modelPresetId,
+              attachments: uploadedAttachments,
+            });
+            setSelectedBranchAnchorEntryId(null);
+            setTopAnchorEntryId(rowId);
+            const q = searchParams.toString();
+            navigate(
+              {
+                pathname: `/chat/${encodeURIComponent(cid)}`,
+                search: q ? `?${q}` : "",
+              },
+              { replace: true },
+            );
+          } else {
+            const rowId = appendOptimisticUserMessage({
+              conversationId: cid,
+              text,
+              agentId: agentSelection.agentId,
+              llmProviderId: agentSelection.llmProviderId,
+              llmModel: agentSelection.llmModel,
+              modelPresetId: agentSelection.modelPresetId,
+              attachments: uploadedAttachments,
+            });
+            setSelectedBranchAnchorEntryId(null);
+            setTopAnchorEntryId(rowId);
+          }
+          setInput("");
+          setSelectedFiles([]);
+          return sendMessageToConversation(
+            cid,
+            text,
+            agentSelection.agentId,
+            agentSelection.llmProviderId,
+            agentSelection.llmModel,
+            agentSelection.modelPresetId,
+            uploadedAttachments.map((x) => x.id),
+          );
+        })();
+      }}
+    />
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ChatTitlePanel
@@ -154,6 +273,7 @@ export function ChatPage({
                 })}
               </AnchorTopScrollArea>
             </main>
+            {composer}
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={26} minSize={16} maxSize={45} className="min-h-0 min-w-0 overflow-hidden">
@@ -170,143 +290,26 @@ export function ChatPage({
           </ResizablePanel>
         </ResizablePanelGroup>
       ) : (
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {/* important to not add any padding to the content here */}
-          <AnchorTopScrollArea
-            className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
-            topAnchorEntryId={topAnchorEntryId}
-          >
-            {chatEntries.map((entry$) => {
-              const entry = entry$.get();
-              return (
-                <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                  <ChatMessageRow entry$={entry$} conversationId={conversationId} />
-                </div>
-              );
-            })}
-          </AnchorTopScrollArea>
-        </main>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {/* important to not add any padding to the content here */}
+            <AnchorTopScrollArea
+              className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
+              topAnchorEntryId={topAnchorEntryId}
+            >
+              {chatEntries.map((entry$) => {
+                const entry = entry$.get();
+                return (
+                  <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                    <ChatMessageRow entry$={entry$} conversationId={conversationId} />
+                  </div>
+                );
+              })}
+            </AnchorTopScrollArea>
+          </main>
+          {composer}
+        </div>
       )}
-      <MessageComposer
-        textareaRef={composerTextareaRef}
-        sendButtonRef={sendButtonRef}
-        value={input}
-        onValueChange={setInput}
-        onPaste={(e) => {
-          const items = Array.from(e.clipboardData?.items ?? []);
-          const images: File[] = [];
-          for (const item of items) {
-            if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-            const file = item.getAsFile();
-            if (file) images.push(file);
-          }
-          if (images.length > 0) {
-            setSelectedFiles((prev) => [...prev, ...images]);
-          }
-        }}
-        fileInputRef={fileInputRef}
-        onFileInputChange={(e) => {
-          const files = Array.from(e.currentTarget.files ?? []);
-          if (files.length === 0) return;
-          setSelectedFiles((prev) => [...prev, ...files]);
-          e.currentTarget.value = "";
-        }}
-        onPickFiles={() => fileInputRef.current?.click()}
-        canSend={canSend}
-        placeholder="Send a message…"
-        selectionSlot={<ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />}
-        attachmentsSlot={
-          selectedFiles.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {selectedFiles.map((file, idx) => (
-                <button
-                  key={`${file.name}-${file.size}-${idx}`}
-                  type="button"
-                  className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
-                  onClick={() => setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))}
-                  title="Remove file"
-                >
-                  {previewUrls[idx] ? (
-                    file.type === "application/pdf" ? (
-                      <iframe
-                        className="h-[76px] w-full rounded-md border-0 bg-muted"
-                        src={previewUrls[idx]}
-                        title={file.name}
-                      />
-                    ) : (
-                      <img className="h-[76px] w-full rounded-md object-cover" src={previewUrls[idx]} alt={file.name} />
-                    )
-                  ) : (
-                    <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
-                      FILE
-                    </div>
-                  )}
-                  <div className="break-words text-xs leading-tight">{file.name}</div>
-                  <div className="text-[11px] text-muted-foreground">Remove</div>
-                </button>
-              ))}
-            </div>
-          ) : undefined
-        }
-        onSendAsync={() => {
-          return (async () => {
-            const text = input.trim();
-            if (!text && selectedFiles.length === 0) return { ok: false };
-            const uploadedAttachments: ChatAttachment[] = [];
-            for (const file of selectedFiles) {
-              const uploaded = await uploadFile(file);
-              uploadedAttachments.push(uploaded.attachment);
-            }
-            let cid = conversationId;
-            if (!cid) {
-              const created = await createConversation();
-              cid = created.id;
-              const rowId = appendOptimisticUserMessage({
-                conversationId: cid,
-                text,
-                agentId: agentSelection.agentId,
-                llmProviderId: agentSelection.llmProviderId,
-                llmModel: agentSelection.llmModel,
-                modelPresetId: agentSelection.modelPresetId,
-                attachments: uploadedAttachments,
-              });
-              setSelectedBranchAnchorEntryId(null);
-              setTopAnchorEntryId(rowId);
-              const q = searchParams.toString();
-              navigate(
-                {
-                  pathname: `/chat/${encodeURIComponent(cid)}`,
-                  search: q ? `?${q}` : "",
-                },
-                { replace: true },
-              );
-            } else {
-              const rowId = appendOptimisticUserMessage({
-                conversationId: cid,
-                text,
-                agentId: agentSelection.agentId,
-                llmProviderId: agentSelection.llmProviderId,
-                llmModel: agentSelection.llmModel,
-                modelPresetId: agentSelection.modelPresetId,
-                attachments: uploadedAttachments,
-              });
-              setSelectedBranchAnchorEntryId(null);
-              setTopAnchorEntryId(rowId);
-            }
-            setInput("");
-            setSelectedFiles([]);
-            return sendMessageToConversation(
-              cid,
-              text,
-              agentSelection.agentId,
-              agentSelection.llmProviderId,
-              agentSelection.llmModel,
-              agentSelection.modelPresetId,
-              uploadedAttachments.map((x) => x.id),
-            );
-          })();
-        }}
-      />
     </div>
   );
 }

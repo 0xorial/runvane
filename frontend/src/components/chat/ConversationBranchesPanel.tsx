@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Brain, Dot, GitBranch, User, Wrench } from "lucide-react";
+import { Activity, Bot, Brain, Dot, User, Wrench } from "lucide-react";
 import { getConversationMessages, setConversationActiveLeaf } from "@/api/client";
 import type { ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
@@ -137,8 +137,8 @@ export function ConversationBranchesPanel({
   return (
     <div className="space-y-3 p-3">
       <div className="flex items-center gap-2 px-1">
-        <GitBranch className="h-4 w-4 text-primary" />
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Branches</h3>
+        <Activity className="h-4 w-4 text-primary" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Activity</h3>
       </div>
       <div className="text-[11px]">
         {rootNodes.map((entry) => (

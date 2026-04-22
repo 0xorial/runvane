@@ -221,8 +221,8 @@ export function ChatTitlePanel({
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={onToggleRightSidebar}
-          aria-label={rightSidebarVisible ? "Hide branches sidebar" : "Show branches sidebar"}
-          title={rightSidebarVisible ? "Hide branches" : "Show branches"}
+          aria-label={rightSidebarVisible ? "Hide activity sidebar" : "Show activity sidebar"}
+          title={rightSidebarVisible ? "Hide activity" : "Show activity"}
         >
           {rightSidebarVisible ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
         </Button>
