@@ -234,6 +234,19 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     .optional(),
 });
 
+export type ThoughtPrepareEntry = ChatEntryBase & {
+  type: "thought-prepare";
+  requestText: string;
+  llmModel?: string;
+  status?: "completed";
+};
+export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
+  type: z.literal("thought-prepare"),
+  requestText: z.string(),
+  llmModel: z.string().optional(),
+  status: z.literal("completed").optional(),
+});
+
 export type TitleLlmStreamEntry = ChatEntryBase & {
   type: "title_llm_stream";
   llmRequest: string;
@@ -259,6 +272,44 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   promptTokens: z.number().finite().optional(),
   cachedPromptTokens: z.number().finite().optional(),
   completionTokens: z.number().finite().optional(),
+});
+
+export type ThoughtActionEntry = ChatEntryBase & {
+  type: "thought-action";
+  status: "running" | "completed" | "failed" | "cancelled";
+  summary?: string;
+  action?: string;
+  toolName?: string;
+  error?: string;
+  parseResult?:
+    | {
+        status: "ok";
+        parsed: AgenticPlannerOutput;
+      }
+    | {
+        status: "error";
+        error: string;
+      };
+};
+export const ThoughtActionEntrySchema = ChatEntryBaseSchema.extend({
+  type: z.literal("thought-action"),
+  status: z.enum(["running", "completed", "failed", "cancelled"]),
+  summary: z.string().optional(),
+  action: z.string().optional(),
+  toolName: z.string().optional(),
+  error: z.string().optional(),
+  parseResult: z
+    .union([
+      z.object({
+        status: z.literal("ok"),
+        parsed: AgenticPlannerOutputSchema,
+      }),
+      z.object({
+        status: z.literal("error"),
+        error: z.string(),
+      }),
+    ])
+    .optional(),
 });
 
 export type ToolInvocationEntry = ChatEntryBase & {
@@ -287,13 +338,17 @@ export const AssistantMessageEntrySchema = ChatEntryBaseSchema.extend({
 
 export type ChatEntry =
   | UserMessageEntry
+  | ThoughtPrepareEntry
   | PlannerLlmStreamEntry
+  | ThoughtActionEntry
   | TitleLlmStreamEntry
   | ToolInvocationEntry
   | AssistantMessageEntry;
 export const ChatEntrySchema = z.discriminatedUnion("type", [
   UserMessageEntrySchema,
+  ThoughtPrepareEntrySchema,
   PlannerLlmStreamEntrySchema,
+  ThoughtActionEntrySchema,
   TitleLlmStreamEntrySchema,
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,

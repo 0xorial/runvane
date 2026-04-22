@@ -4,6 +4,8 @@ import { buildPlannerPrompt, parseAgenticPlannerOutput } from "./continueConvers
 import { throwIfCancelled } from "./taskCancellation.js";
 import {
   appendDecisionEntryAndPublishStart,
+  appendThoughtActionEntryAndPublish,
+  appendThoughtPrepareEntryAndPublish,
   getDecisionLlmResponse,
   publishDecisionThoughtDelta,
 } from "./decisionTaskProcessor/decisionStreaming.js";
@@ -75,13 +77,29 @@ export class DecisionTaskProcessor {
       throw new Error(`cannot reprocess thought without ancestor user-message: ${input.sourceEntryId}`);
     }
 
-    const plannerEntry = appendDecisionEntryAndPublishStart(this.deps, {
+    const prepareEntry = appendThoughtPrepareEntryAndPublish(this.deps, {
       conversationId: input.conversationId,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       parentId: sourceEntry.parentId,
+      requestText: sourceEntry.llmRequest,
+      llmModel: sourceEntry.llmModel,
+    });
+    const plannerEntry = appendDecisionEntryAndPublishStart(this.deps, {
+      conversationId: input.conversationId,
+      id: crypto.randomUUID(),
+      createdAt: prepareEntry.createdAt,
+      parentId: prepareEntry.id,
       llmRequest: sourceEntry.llmRequest,
       llmModel: sourceEntry.llmModel,
+    });
+    const thoughtActionEntry = appendThoughtActionEntryAndPublish(this.deps, {
+      conversationId: input.conversationId,
+      id: crypto.randomUUID(),
+      createdAt: plannerEntry.createdAt,
+      parentId: plannerEntry.id,
+      status: "running",
+      summary: "Waiting for planner output",
     });
     publishDecisionThoughtDelta(this.deps, {
       conversationId: input.conversationId,
@@ -92,6 +110,7 @@ export class DecisionTaskProcessor {
     const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: input.conversationId,
       plannerEntryId: plannerEntry.id,
+      thoughtActionEntryId: thoughtActionEntry.id,
       llmRequest: plannerEntry.llmRequest,
       llmResponse: input.editedResponse,
       streamedAnswer: input.editedResponse,
@@ -143,11 +162,20 @@ export class DecisionTaskProcessor {
       toolIds: enabledToolIds,
       priorToolResults: priorToolResultsFromEntries(entries),
     });
+    const prepareEntry = appendThoughtPrepareEntryAndPublish(this.deps, {
+      conversationId: task.conversationId,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      parentId: triggerEntry?.id ?? null,
+      requestText: llmRequest,
+      llmModel: plannerLlmModel,
+    });
 
     const llmResponse = await getDecisionLlmResponse(this.deps, {
       conversationId: task.conversationId,
       requestText: llmRequest,
       plannerLlmModel,
+      parentId: prepareEntry.id,
       llmOverrides,
       requestParams,
       files: inputFiles,
@@ -158,6 +186,7 @@ export class DecisionTaskProcessor {
     const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: task.conversationId,
       plannerEntryId: llmResponse.plannerEntryId,
+      thoughtActionEntryId: llmResponse.thoughtActionEntryId,
       llmRequest,
       llmResponse: llmResponse.reply,
       streamedAnswer: llmResponse.streamedAnswer,
@@ -195,6 +224,7 @@ export class DecisionTaskProcessor {
     enabledToolIds: string[];
     plannerLlmModel?: string;
     requestStartedMs: number;
+    thoughtActionEntryId?: string | null;
     anchorUserMessage: UserMessageEntry;
     assistantEntryId?: string | null;
     plannerTokenUsage?: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number };
@@ -216,6 +246,7 @@ export class DecisionTaskProcessor {
         llmRequest: input.llmRequest,
         llmResponse: input.llmResponse,
         plannerLlmModel: input.plannerLlmModel,
+        thoughtActionEntryId: input.thoughtActionEntryId,
         requestStartedMs: input.requestStartedMs,
         detail,
         plannerTokenUsage: input.plannerTokenUsage,
@@ -225,6 +256,7 @@ export class DecisionTaskProcessor {
     return finalizeParsedDecisionResult(this.deps, {
       conversationId: input.conversationId,
       plannerEntryId: input.plannerEntryId,
+      thoughtActionEntryId: input.thoughtActionEntryId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse,
       enabledToolIds: input.enabledToolIds,

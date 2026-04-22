@@ -42,9 +42,19 @@ function summarizeEntry(entry: ChatEntry): string {
     const response = entry.llmResponse ?? "";
     return `TITLE_THINKING: ${response}`;
   }
-  const parameters = stringify(entry.parameters);
-  const result = stringify(entry.result);
-  return `TOOL: id=${entry.toolId} state=${entry.state} parameters=${parameters} result=${result}`;
+  if (entry.type === "thought-prepare") {
+    return `PREPARE_REQUEST: ${entry.requestText}`;
+  }
+  if (entry.type === "thought-action") {
+    return `TAKE_ACTION: status=${entry.status} action=${entry.action ?? ""} summary=${entry.summary ?? ""} error=${entry.error ?? ""}`;
+  }
+  if (entry.type === "tool-invocation") {
+    const parameters = stringify(entry.parameters);
+    const result = stringify(entry.result);
+    return `TOOL: id=${entry.toolId} state=${entry.state} parameters=${parameters} result=${result}`;
+  }
+  const _exhaustive: never = entry;
+  return stringify(_exhaustive);
 }
 
 export function buildPlannerPrompt(input: {

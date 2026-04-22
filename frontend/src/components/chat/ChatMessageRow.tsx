@@ -3,6 +3,8 @@ import type { ObservableItem } from "../../utils/observableCollection";
 import { useObservableValue } from "../../hooks/useObservable";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
 import { ThinkingRow } from "./rows/ThinkingRow";
+import { PreparedContextStep } from "./steps/PreparedContextStep";
+import { ActionStep } from "./steps/ActionStep";
 import { ToolRunRow } from "./rows/ToolRunRow";
 import { UserMessageRow } from "./rows/UserMessageRow";
 
@@ -23,6 +25,12 @@ export function ChatMessageRow({ entry$, conversationId }: ChatMessageRowProps) 
   }
   if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
     return <ThinkingRow entry={entry} conversationId={conversationId} />;
+  }
+  if (entry.type === "thought-prepare") {
+    return <PreparedContextStep entry={entry} />;
+  }
+  if (entry.type === "thought-action") {
+    return <ActionStep entry={entry} />;
   }
   if (entry.type === "tool-invocation") {
     return <ToolRunRow entry={entry} />;

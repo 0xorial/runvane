@@ -19,6 +19,17 @@ function entryPreview(entry: ChatEntry): string {
   if (entry.type === "tool-invocation") {
     return `Tool: ${entry.toolId || "unknown"}`;
   }
+  if (entry.type === "thought-prepare") {
+    const model = String(entry.llmModel || "").trim();
+    return model ? `prepare · ${model}` : "prepare";
+  }
+  if (entry.type === "thought-action") {
+    const status = String(entry.status || "running").trim();
+    const action = String(entry.action || "").trim();
+    const toolName = String(entry.toolName || "").trim();
+    const meta = [action, toolName].filter((x) => x.length > 0).join(" · ");
+    return meta ? `${status} · ${meta}` : status;
+  }
   const status = String(entry.status || "running").trim();
   const promptTokens = typeof entry.promptTokens === "number" && Number.isFinite(entry.promptTokens) ? entry.promptTokens : 0;
   const cachedPromptTokens =
@@ -36,7 +47,12 @@ function entryIcon(entry: ChatEntry) {
   if (entry.type === "user-message") return <User className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "assistant-message") return <Bot className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "tool-invocation") return <Wrench className="mt-0.5 h-3 w-3 shrink-0" />;
-  if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
+  if (
+    entry.type === "planner_llm_stream" ||
+    entry.type === "title_llm_stream" ||
+    entry.type === "thought-prepare" ||
+    entry.type === "thought-action"
+  ) {
     return <Brain className="mt-0.5 h-3 w-3 shrink-0" />;
   }
   return <Dot className="mt-0.5 h-3 w-3 shrink-0" />;

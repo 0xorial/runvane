@@ -1,6 +1,5 @@
 import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "../../../protocol/chatEntry";
-import { ChatThreadIndent } from "../ChatMessageShell";
-import { ThinkingItem } from "../ThinkingItem";
+import { QueriedModelStep } from "../steps/QueriedModelStep";
 
 type ThinkingRowProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
@@ -8,9 +7,5 @@ type ThinkingRowProps = {
 };
 
 export function ThinkingRow({ entry, conversationId }: ThinkingRowProps) {
-  return (
-    <ChatThreadIndent>
-      <ThinkingItem entry={entry} conversationId={conversationId} />
-    </ChatThreadIndent>
-  );
+  return <QueriedModelStep entry={entry} conversationId={conversationId} />;
 }

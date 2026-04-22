@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Brain, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import { ChevronLeft, ChevronRight, Pencil, Sparkles } from "lucide-react";
+import type { ChatEntry, PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { parseDbTimestampMs } from "@/utils/formatDuration";
 import { getConversationMessages, reprocessThought, setConversationActiveLeaf } from "@/api/client";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
+import { ChatThreadIndent } from "../ChatMessageShell";
 
-type ThinkingItemProps = {
+type QueriedModelStepProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
   conversationId: string | null;
 };
@@ -37,7 +37,7 @@ function formatDurationMs(ms: number): string {
   return `${min}m ${remSec}s`;
 }
 
-export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
+export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProps) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editedResponse, setEditedResponse] = useState("");
@@ -63,12 +63,11 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
     typeof entry.completionTokens === "number" && Number.isFinite(entry.completionTokens) ? entry.completionTokens : 0;
   const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
   const modelLabel = String(entry.llmModel || "").trim();
-  const requestText = String(entry.llmRequest || "").trim();
   const responseText = String(entry.llmResponse || "").trim();
   const errorText = String(entry.error || "").trim();
-  const parseResultText = entry.type === "planner_llm_stream" && entry.parseResult ? JSON.stringify(entry.parseResult, null, 2) : "";
   const canEditResponse = entry.type === "planner_llm_stream" && done && Boolean(conversationId);
   const hasSiblingBranches = siblings.length > 1 && activeSiblingIndex >= 0;
+  const meta = `${modelLabel || "unknown model"} · ${completionTokens} out tok · ${formatDurationMs(durationMs)}`;
 
   useEffect(() => {
     if (done) return undefined;
@@ -96,11 +95,11 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
       setChildrenByParent(new Map());
       return;
     }
-    let cancelled = false;
+    let cancelledLocal = false;
     void (async () => {
       try {
         const rows = await getConversationMessages(conversationId, { all: true });
-        if (cancelled) return;
+        if (cancelledLocal) return;
         rows.sort((a, b) =>
           a.conversationIndex !== b.conversationIndex
             ? a.conversationIndex - b.conversationIndex
@@ -117,12 +116,12 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
         setSiblings(sameParent);
         setActiveSiblingIndex(sameParent.findIndex((row) => row.id === entry.id));
       } catch (e) {
-        if (cancelled) return;
+        if (cancelledLocal) return;
         notifyError(`Failed to load sibling branches: ${e instanceof Error ? e.message : String(e)}`);
       }
     })();
     return () => {
-      cancelled = true;
+      cancelledLocal = true;
     };
   }, [conversationId, entry.id, entry.parentId]);
 
@@ -153,17 +152,10 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
   }
 
   void tick;
-  const title = done
-    ? failed
-      ? "Thought failed"
-      : cancelled
-        ? "Thought cancelled"
-        : "Thought"
-    : "Thinking";
 
   return (
-    <div className="max-w-3xl px-0">
-      <div className="group/think my-1.5 border-l-2 border-border/60 pl-3">
+    <ChatThreadIndent className="py-0">
+      <div className="my-0 border-l-2 border-border/60 pl-3">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -174,14 +166,9 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
             )}
           >
             <ChevronRight className={cn("h-3 w-3 transition-transform", open ? "rotate-90" : "")} />
-            <Brain className="h-3 w-3" />
-            <span className="font-medium">{title}</span>
-            <span className="opacity-70">
-              · {status}
-              {modelLabel ? ` · ${modelLabel}` : ""}
-              {totalTokens > 0 ? ` · ${totalTokens} tok` : ""}
-              · {formatDurationMs(durationMs)}
-            </span>
+            <Sparkles className="h-3 w-3" />
+            <span className="font-medium">Queried model</span>
+            <span className="opacity-60">· {meta}</span>
           </button>
           {hasSiblingBranches ? (
             <div className="ml-1 inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground">
@@ -215,13 +202,12 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
         </div>
 
         {open ? (
-          <div className="mt-2 space-y-2 text-xs">
-            {requestText ? <ReadOnlySection label="Request" value={requestText} /> : null}
+          <div className="mt-1.5 ml-4 space-y-2 text-xs">
             {responseText || editing ? (
               <div className="space-y-0.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    {editing ? "Edited response" : "Response"}
+                    {editing ? "Edited response" : "Raw response"}
                   </div>
                   {canEditResponse ? (
                     <div className="flex items-center gap-1">
@@ -292,12 +278,18 @@ export function ThinkingItem({ entry, conversationId }: ThinkingItemProps) {
                 {submitError ? <div className="text-[11px] text-destructive">{submitError}</div> : null}
               </div>
             ) : null}
-            {parseResultText ? <ReadOnlySection label="Parse result" value={parseResultText} /> : null}
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+              <span>status: {status}</span>
+              <span>prompt: {promptTokens}t</span>
+              <span>cached: {cachedPromptTokens}t</span>
+              <span>completion: {completionTokens}t</span>
+              <span>total: {totalTokens}t</span>
+            </div>
             {failed && errorText ? <ReadOnlySection label="Error" value={errorText} danger /> : null}
           </div>
         ) : null}
       </div>
-    </div>
+    </ChatThreadIndent>
   );
 }
 

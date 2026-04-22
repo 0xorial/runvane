@@ -1,6 +1,8 @@
 import type {
   ChatAttachment,
   ChatEntry,
+  ThoughtActionEntry,
+  ThoughtPrepareEntry,
   PlannerLlmStreamEntry,
   TitleLlmStreamEntry,
   ToolInvocationEntry,
@@ -399,6 +401,138 @@ export class ChatEntriesRepo {
     return entry;
   }
 
+  appendThoughtPrepareEntry(
+    conversationId: string,
+    input: {
+      id: string;
+      createdAt: string;
+      parentId?: string | null;
+      requestText: string;
+      llmModel?: string;
+    },
+  ): ThoughtPrepareEntry {
+    const conversationIndex = this.nextConversationIndex(conversationId);
+    const parentId = this.resolveParentId(conversationId, input.parentId);
+    const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
+    const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const entry: ThoughtPrepareEntry = {
+      type: "thought-prepare",
+      id: input.id,
+      conversationIndex,
+      createdAt: input.createdAt,
+      parentId,
+      requestText: input.requestText,
+      status: "completed",
+      ...(llmModel !== undefined ? { llmModel } : {}),
+    };
+    const payload: Record<string, unknown> = {
+      requestText: entry.requestText,
+      status: "completed",
+    };
+    if (llmModel !== undefined) payload.llmModel = llmModel;
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: "thought-prepare",
+      payloadJson: JSON.stringify(payload),
+      createdAt: entry.createdAt,
+    });
+    return entry;
+  }
+
+  appendThoughtActionEntry(
+    conversationId: string,
+    input: {
+      id: string;
+      createdAt: string;
+      parentId?: string | null;
+      status: ThoughtActionEntry["status"];
+      summary?: string;
+      action?: string;
+      toolName?: string;
+      error?: string;
+      parseResult?: ThoughtActionEntry["parseResult"];
+    },
+  ): ThoughtActionEntry {
+    const conversationIndex = this.nextConversationIndex(conversationId);
+    const parentId = this.resolveParentId(conversationId, input.parentId);
+    const summary = typeof input.summary === "string" ? input.summary : undefined;
+    const action = typeof input.action === "string" ? input.action : undefined;
+    const toolName = typeof input.toolName === "string" ? input.toolName : undefined;
+    const error = typeof input.error === "string" ? input.error : undefined;
+    const parseResult = input.parseResult && typeof input.parseResult === "object" ? input.parseResult : undefined;
+    const entry: ThoughtActionEntry = {
+      type: "thought-action",
+      id: input.id,
+      conversationIndex,
+      createdAt: input.createdAt,
+      parentId,
+      status: input.status,
+      ...(summary ? { summary } : {}),
+      ...(action ? { action } : {}),
+      ...(toolName ? { toolName } : {}),
+      ...(error ? { error } : {}),
+      ...(parseResult ? { parseResult } : {}),
+    };
+    this.insertEntry({
+      id: entry.id,
+      conversationId,
+      conversationIndex: entry.conversationIndex,
+      parentId: entry.parentId,
+      type: "thought-action",
+      payloadJson: JSON.stringify({
+        status: entry.status,
+        ...(summary ? { summary } : {}),
+        ...(action ? { action } : {}),
+        ...(toolName ? { toolName } : {}),
+        ...(error ? { error } : {}),
+        ...(parseResult ? { parseResult } : {}),
+      }),
+      createdAt: entry.createdAt,
+    });
+    return entry;
+  }
+
+  updateThoughtActionEntry(
+    conversationId: string,
+    input: {
+      id: string;
+      status: ThoughtActionEntry["status"];
+      summary?: string;
+      action?: string;
+      toolName?: string;
+      error?: string;
+      parseResult?: ThoughtActionEntry["parseResult"];
+    },
+  ): void {
+    const payload: Record<string, unknown> = {
+      status: input.status,
+      ...(typeof input.summary === "string" ? { summary: input.summary } : {}),
+      ...(typeof input.action === "string" ? { action: input.action } : {}),
+      ...(typeof input.toolName === "string" ? { toolName: input.toolName } : {}),
+      ...(typeof input.error === "string" ? { error: input.error } : {}),
+      ...(input.parseResult && typeof input.parseResult === "object" ? { parseResult: input.parseResult } : {}),
+    };
+    const result = this.db
+      .prepare(
+        `UPDATE chat_entries
+         SET payload_json = @payload_json
+         WHERE id = @id
+           AND conversation_id = @conversation_id
+           AND type = 'thought-action'`,
+      )
+      .run({
+        id: input.id,
+        conversation_id: conversationId,
+        payload_json: JSON.stringify(payload),
+      });
+    if (Number(result.changes ?? 0) !== 1) {
+      throw new Error(`thought-action entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+  }
+
   appendTitleLlmStreamEntry(
     conversationId: string,
     input: {
@@ -759,6 +893,56 @@ export class ChatEntriesRepo {
           ...(completionTokens !== undefined ? { completionTokens } : {}),
           ...(parseResult !== undefined ? { parseResult } : {}),
         } satisfies PlannerLlmStreamEntry;
+      }
+      if (row.type === "thought-prepare") {
+        const llmModel =
+          typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
+        return {
+          type: "thought-prepare",
+          id: row.id,
+          conversationIndex: row.conversation_index,
+          createdAt: row.created_at,
+          parentId: row.parent_id,
+          requestText: String(payload.requestText ?? ""),
+          status: "completed",
+          ...(llmModel !== undefined ? { llmModel } : {}),
+        } satisfies ThoughtPrepareEntry;
+      }
+      if (row.type === "thought-action") {
+        const status =
+          payload.status === "running" ||
+          payload.status === "completed" ||
+          payload.status === "failed" ||
+          payload.status === "cancelled"
+            ? payload.status
+            : "running";
+        const summary = typeof payload.summary === "string" ? payload.summary : undefined;
+        const action = typeof payload.action === "string" ? payload.action : undefined;
+        const toolName = typeof payload.toolName === "string" ? payload.toolName : undefined;
+        const error = typeof payload.error === "string" ? payload.error : undefined;
+        const parseResult =
+          payload.parseResult &&
+          typeof payload.parseResult === "object" &&
+          (((payload.parseResult as Record<string, unknown>).status === "ok" &&
+            (payload.parseResult as Record<string, unknown>).parsed &&
+            typeof (payload.parseResult as Record<string, unknown>).parsed === "object") ||
+            ((payload.parseResult as Record<string, unknown>).status === "error" &&
+              typeof (payload.parseResult as Record<string, unknown>).error === "string"))
+            ? (payload.parseResult as ThoughtActionEntry["parseResult"])
+            : undefined;
+        return {
+          type: "thought-action",
+          id: row.id,
+          conversationIndex: row.conversation_index,
+          createdAt: row.created_at,
+          parentId: row.parent_id,
+          status,
+          ...(summary ? { summary } : {}),
+          ...(action ? { action } : {}),
+          ...(toolName ? { toolName } : {}),
+          ...(error ? { error } : {}),
+          ...(parseResult ? { parseResult } : {}),
+        } satisfies ThoughtActionEntry;
       }
       if (row.type === "title_llm_stream") {
         const llmModel =

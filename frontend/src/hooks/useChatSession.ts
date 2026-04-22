@@ -117,6 +117,20 @@ export function useChatSession(conversationId: string | null | undefined) {
           if (reconcileIncomingUserMessage(cid, ev.entry)) return;
           store.append(ev.entry);
           return;
+        } else if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
+          const store = storeRef.current;
+          const row$ = store.getById(ev.entry.id);
+          if (row$) {
+            row$.mutate((next) => {
+              Object.keys(next as Record<string, unknown>).forEach((key) => {
+                delete (next as Record<string, unknown>)[key];
+              });
+              Object.assign(next as Record<string, unknown>, ev.entry as Record<string, unknown>);
+            });
+            return;
+          }
+          store.append(ev.entry);
+          return;
         } else if (ev.type === SseType.PLANNER_STARTING || ev.type === SseType.TITLE_STARTING) {
           const store = storeRef.current;
           const thinkingType = ev.type === SseType.TITLE_STARTING ? "title_llm_stream" : "planner_llm_stream";

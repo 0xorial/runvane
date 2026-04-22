@@ -1,5 +1,5 @@
-import type { UserMessageEntry } from "./chatEntry.js";
-import { UserMessageEntrySchema } from "./chatEntry.js";
+import type { ChatEntry, UserMessageEntry } from "./chatEntry.js";
+import { ChatEntrySchema, UserMessageEntrySchema } from "./chatEntry.js";
 import { z } from "zod";
 
 export const SseType = {
@@ -15,6 +15,7 @@ export const SseType = {
   TITLE_RESPONSE: "title_response",
   TOOL_INVOCATION_START: "tool_invocation_start",
   TOOL_INVOCATION_END: "tool_invocation_end",
+  CHAT_ENTRY_UPSERT: "chat_entry_upsert",
 } as const;
 
 export type SseEventType = (typeof SseType)[keyof typeof SseType];
@@ -237,6 +238,15 @@ export const ToolInvocationEndSsePayloadSchema = z.object({
   runContinues: z.boolean().optional(),
 });
 
+export type ChatEntryUpsertSsePayload = {
+  type: typeof SseType.CHAT_ENTRY_UPSERT;
+  entry: ChatEntry;
+};
+export const ChatEntryUpsertSsePayloadSchema = z.object({
+  type: z.literal(SseType.CHAT_ENTRY_UPSERT),
+  entry: ChatEntrySchema,
+});
+
 export type SsePayload =
   | UserMessageSsePayload
   | ConversationCreatedSsePayload
@@ -249,7 +259,8 @@ export type SsePayload =
   | PlannerResponseSsePayload
   | TitleResponseSsePayload
   | ToolInvocationStartSsePayload
-  | ToolInvocationEndSsePayload;
+  | ToolInvocationEndSsePayload
+  | ChatEntryUpsertSsePayload;
 export const SsePayloadSchema = z.discriminatedUnion("type", [
   UserMessageSsePayloadSchema,
   ConversationCreatedSsePayloadSchema,
@@ -263,6 +274,7 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   TitleResponseSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
+  ChatEntryUpsertSsePayloadSchema,
 ]);
 
 /** Wire event sent over SSE. */
@@ -353,6 +365,10 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     output: z.string(),
     ok: z.boolean(),
     runContinues: z.boolean().optional(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.CHAT_ENTRY_UPSERT),
+    entry: ChatEntrySchema,
   }),
 ]);
 

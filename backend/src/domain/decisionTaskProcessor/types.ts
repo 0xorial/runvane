@@ -55,6 +55,7 @@ export type ToolConfig = {
 export type DecisionLlmSuccess = {
   kind: "ok";
   plannerEntryId: string;
+  thoughtActionEntryId: string;
   assistantEntryId: string | null;
   reply: string;
   streamedAnswer: string;
@@ -71,6 +72,7 @@ export type DecisionLlmResult = DecisionLlmSuccess | DecisionLlmCancelled;
 export type FinalizeDecisionResultInput = {
   conversationId: string;
   plannerEntryId: string;
+  thoughtActionEntryId?: string | null;
   llmRequest: string;
   llmResponse: string;
   enabledToolIds: string[];

@@ -7,6 +7,7 @@ import type {
   FinalizeDecisionResultOutput,
 } from "./types.js";
 import { agentToolConfigFor, publishConversationUpdated } from "./context.js";
+import { updateThoughtActionEntryAndPublish } from "./decisionStreaming.js";
 
 export function parseRequestedToolCalls(input: {
   requests: AgenticToolRequest[];
@@ -35,6 +36,7 @@ export function persistDecisionParseFailure(
     llmRequest: string;
     llmResponse: string;
     plannerLlmModel?: string;
+    thoughtActionEntryId?: string | null;
     requestStartedMs: number;
     detail: string;
     plannerTokenUsage?: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number };
@@ -65,6 +67,20 @@ export function persistDecisionParseFailure(
     llmModel: input.plannerLlmModel,
     ...TokenUsageMapper.toSseFields(input.plannerTokenUsage),
   });
+  if (input.thoughtActionEntryId) {
+    updateThoughtActionEntryAndPublish(deps, {
+      conversationId: input.conversationId,
+      id: input.thoughtActionEntryId,
+      status: "failed",
+      summary: input.detail,
+      action: "failed",
+      error: input.detail,
+      parseResult: {
+        status: "error",
+        error: input.detail,
+      },
+    });
+  }
 }
 
 export function upsertAssistantMessageFromDecision(
@@ -136,6 +152,22 @@ export function finalizeParsedDecisionResult(
     llmModel: input.plannerLlmModel,
     ...TokenUsageMapper.toSseFields(input.plannerTokenUsage),
   });
+  if (input.thoughtActionEntryId) {
+    const summary =
+      requestedToolCalls.length > 0 ? `Queued ${requestedToolCalls.length} tool call(s)` : assistantText || input.completionSummaryFallback;
+    updateThoughtActionEntryAndPublish(deps, {
+      conversationId: input.conversationId,
+      id: input.thoughtActionEntryId,
+      status: "completed",
+      summary,
+      action: requestedToolCalls.length > 0 ? "tool_call" : "final_answer",
+      ...(requestedToolCalls.length > 0 ? { toolName: requestedToolCalls[0].toolName } : {}),
+      parseResult: {
+        status: "ok",
+        parsed: agentic,
+      },
+    });
+  }
 
   if (requestedToolCalls.length > 0) {
     const batchId = crypto.randomUUID();
