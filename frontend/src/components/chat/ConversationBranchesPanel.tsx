@@ -131,7 +131,7 @@ export function ConversationBranchesPanel({ conversationId, activePathEntries }:
           <BranchNode
             key={entry.id}
             entry={entry}
-            depth={0}
+            branchDepth={0}
             childrenByParent={childrenByParent}
             activePathIds={activePathIds}
             activeLeafId={activeLeafId}
@@ -146,7 +146,7 @@ export function ConversationBranchesPanel({ conversationId, activePathEntries }:
 
 function BranchNode({
   entry,
-  depth,
+  branchDepth,
   childrenByParent,
   activePathIds,
   activeLeafId,
@@ -154,7 +154,7 @@ function BranchNode({
   onSelectEntry,
 }: {
   entry: ChatEntry;
-  depth: number;
+  branchDepth: number;
   childrenByParent: Map<string | null, ChatEntry[]>;
   activePathIds: Set<string>;
   activeLeafId: string | null;
@@ -164,6 +164,7 @@ function BranchNode({
   const children = childrenByParent.get(entry.id) ?? [];
   const siblings = childrenByParent.get(entry.parentId) ?? [];
   const hasSiblings = siblings.length > 1;
+  const nextBranchDepth = branchDepth + (hasSiblings ? 1 : 0);
   const isActive = activePathIds.has(entry.id);
   const isLeaf = children.length === 0;
   const isSwitching = switchingToEntryId === entry.id;
@@ -183,7 +184,7 @@ function BranchNode({
             : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
           isSwitching && "cursor-wait opacity-60",
         )}
-        style={{ paddingLeft: `${depth * 12 + 6}px` }}
+        style={{ paddingLeft: `${branchDepth * 12 + 6}px` }}
       >
         <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry, hasSiblings)}</span>
         <span className="flex-1 truncate">{entryPreview(entry)}</span>
@@ -195,7 +196,7 @@ function BranchNode({
         <BranchNode
           key={child.id}
           entry={child}
-          depth={depth + 1}
+          branchDepth={nextBranchDepth}
           childrenByParent={childrenByParent}
           activePathIds={activePathIds}
           activeLeafId={activeLeafId}
