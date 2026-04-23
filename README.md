@@ -23,6 +23,10 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - token and cost visibility
 - configurable model/tool behavior
 
+## Shared Definitions
+
+- [`definitions.md`](definitions.md): canonical glossary for naming across code, docs, and agent prompts.
+
 ## Development/usage
 
 ```bash
