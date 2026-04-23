@@ -82,7 +82,7 @@ export class DecisionTaskProcessor {
       llmModel: sourceEntry.llmModel,
       kind: "planner",
       includeAction: true,
-      runningSummary: "Waiting for planner output",
+      summary: "Call preparation",
     });
     publishDecisionThoughtDelta(this.deps, {
       conversationId: input.conversationId,
@@ -152,7 +152,7 @@ export class DecisionTaskProcessor {
       llmModel: plannerLlmModel,
       kind: "planner",
       includeAction: true,
-      runningSummary: "Waiting for planner output",
+      summary: "Call preparation",
     });
     const requestStartedMs = Date.parse(thought.streamEntry.createdAt);
 

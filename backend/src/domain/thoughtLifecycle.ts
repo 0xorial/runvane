@@ -41,7 +41,7 @@ type StartThoughtInput<TKind extends ThoughtStreamKind, TIncludeAction extends b
   llmModel?: string;
   kind: TKind;
   includeAction: TIncludeAction;
-  runningSummary?: string;
+  summary?: string;
 };
 
 export function startThoughtLifecycle<TKind extends ThoughtStreamKind>(
@@ -58,11 +58,13 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
 ): StartedThought<TKind, TIncludeAction> {
   const createdAt = new Date().toISOString();
   const thoughtId = crypto.randomUUID();
+  const summary = typeof input.summary === "string" && input.summary.trim() ? input.summary.trim() : undefined;
   const prepareEntry = deps.chatEntries.appendThoughtPrepareEntry(input.conversationId, {
     id: crypto.randomUUID(),
     thoughtId,
     createdAt,
     parentId: input.parentId,
+    ...(summary ? { title: summary } : {}),
     requestText: input.llmRequest,
     llmModel: input.llmModel,
   });
@@ -100,6 +102,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
   deps.hub.publish(input.conversationId, {
     type: input.kind === "planner" ? SseType.PLANNER_STARTING : SseType.TITLE_STARTING,
     chatEntryId: streamEntry.id,
+    thoughtId: streamEntry.thoughtId,
     conversationIndex: streamEntry.conversationIndex,
     createdAt: streamEntry.createdAt,
     requestText: streamEntry.llmRequest,
@@ -114,7 +117,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
       createdAt,
       parentId: streamEntry.id,
       status: "running",
-      summary: input.runningSummary ?? "Waiting for LLM output",
+      summary: summary ?? "Waiting for LLM output",
     });
     deps.hub.publish(input.conversationId, {
       type: SseType.CHAT_ENTRY_UPSERT,

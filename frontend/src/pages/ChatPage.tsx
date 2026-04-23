@@ -10,7 +10,7 @@ import {
 import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
 import { ConversationBranchesPanel } from "../components/chat/ConversationBranchesPanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
-import { ChatMessageRow, messageRowKey } from "../components/chat/ChatMessageRow";
+import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
@@ -81,6 +81,24 @@ export function ChatPage({
 
   const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
+  const thoughtTripletsById = new Map<string, ThoughtTripletRefs>();
+  for (const entry$ of chatEntries) {
+    const entry = entry$.get();
+    if (entry.type !== "planner_llm_stream" && entry.type !== "title_llm_stream" && entry.type !== "thought-prepare" && entry.type !== "thought-action") {
+      continue;
+    }
+    const current = thoughtTripletsById.get(entry.thoughtId) ?? {};
+    if (entry.type === "thought-prepare") {
+      current.prepareEntry = entry;
+    } else if (entry.type === "thought-action") {
+      current.actionEntry = entry;
+    }
+    thoughtTripletsById.set(entry.thoughtId, current);
+  }
+  const visibleEntries = chatEntries.filter((entry$) => {
+    const entry = entry$.get();
+    return entry.type !== "thought-prepare" && entry.type !== "thought-action";
+  });
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
@@ -263,11 +281,11 @@ export function ChatPage({
                 className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
                 topAnchorEntryId={topAnchorEntryId}
               >
-                {chatEntries.map((entry$) => {
+                {visibleEntries.map((entry$) => {
                   const entry = entry$.get();
                   return (
                     <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                      <ChatMessageRow entry$={entry$} conversationId={conversationId} />
+                      <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
                     </div>
                   );
                 })}
@@ -297,11 +315,11 @@ export function ChatPage({
               className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
               topAnchorEntryId={topAnchorEntryId}
             >
-              {chatEntries.map((entry$) => {
+              {visibleEntries.map((entry$) => {
                 const entry = entry$.get();
                 return (
                   <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                    <ChatMessageRow entry$={entry$} conversationId={conversationId} />
+                    <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
                   </div>
                 );
               })}

@@ -97,7 +97,7 @@ export async function maybeAutoTitleConversation({
       llmRequest: titlePrompt,
       kind: "title",
       includeAction: true,
-      runningSummary: "Generating title",
+      summary: "Title generation",
     },
   );
   const startedAtMs = Date.parse(thought.streamEntry.createdAt);

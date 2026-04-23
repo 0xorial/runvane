@@ -420,6 +420,7 @@ export class ChatEntriesRepo {
       thoughtId: string;
       createdAt: string;
       parentId?: string | null;
+      title?: string;
       requestText: string;
       llmModel?: string;
     },
@@ -428,6 +429,8 @@ export class ChatEntriesRepo {
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const titleRaw = typeof input.title === "string" ? input.title.trim() : "";
+    const title = titleRaw.length > 0 ? titleRaw : undefined;
     const thoughtId = this.requireThoughtId(input.thoughtId, `append thought-prepare ${input.id}`);
     const entry: ThoughtPrepareEntry = {
       type: "thought-prepare",
@@ -436,6 +439,7 @@ export class ChatEntriesRepo {
       createdAt: input.createdAt,
       parentId,
       thoughtId,
+      ...(title !== undefined ? { title } : {}),
       requestText: input.requestText,
       status: "completed",
       ...(llmModel !== undefined ? { llmModel } : {}),
@@ -445,6 +449,7 @@ export class ChatEntriesRepo {
       thoughtId,
       status: "completed",
     };
+    if (title !== undefined) payload.title = title;
     if (llmModel !== undefined) payload.llmModel = llmModel;
     this.insertEntry({
       id: entry.id,
@@ -955,6 +960,7 @@ export class ChatEntriesRepo {
       }
       if (row.type === "thought-prepare") {
         const thoughtId = this.requireThoughtId(payload.thoughtId, `read thought-prepare ${row.id}`);
+        const title = typeof payload.title === "string" && payload.title.trim() !== "" ? payload.title.trim() : undefined;
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         return {
@@ -964,6 +970,7 @@ export class ChatEntriesRepo {
           createdAt: row.created_at,
           parentId: row.parent_id,
           thoughtId,
+          ...(title !== undefined ? { title } : {}),
           requestText: String(payload.requestText ?? ""),
           status: "completed",
           ...(llmModel !== undefined ? { llmModel } : {}),

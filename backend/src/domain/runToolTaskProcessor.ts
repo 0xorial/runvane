@@ -417,7 +417,7 @@ Return ONLY valid JSON object for tool parameters.`;
         llmModel: model,
         kind: "planner",
         includeAction: true,
-        runningSummary: `Resolving ${task.toolName} parameters`,
+        summary: `Resolving ${task.toolName} parameters`,
       },
     );
     const resolverStartedAtMs = Date.parse(thought.streamEntry.createdAt);

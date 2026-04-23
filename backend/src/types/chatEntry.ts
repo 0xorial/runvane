@@ -239,6 +239,7 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
 export type ThoughtPrepareEntry = ChatEntryBase & {
   type: "thought-prepare";
   thoughtId: string;
+  title?: string;
   requestText: string;
   llmModel?: string;
   status?: "completed";
@@ -246,6 +247,7 @@ export type ThoughtPrepareEntry = ChatEntryBase & {
 export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("thought-prepare"),
   thoughtId: z.string(),
+  title: z.string().optional(),
   requestText: z.string(),
   llmModel: z.string().optional(),
   status: z.literal("completed").optional(),

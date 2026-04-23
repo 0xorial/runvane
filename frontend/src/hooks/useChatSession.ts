@@ -140,6 +140,7 @@ export function useChatSession(conversationId: string | null | undefined) {
             store.append({
               type: thinkingType,
               id: ev.chatEntryId,
+              thoughtId: ev.thoughtId,
               conversationIndex: ev.conversationIndex,
               createdAt: ev.createdAt,
               parentId: null,
@@ -152,20 +153,8 @@ export function useChatSession(conversationId: string | null | undefined) {
         } else if (ev.type === SseType.PLANNER_LLM_STREAM || ev.type === SseType.TITLE_LLM_STREAM) {
           const store = storeRef.current;
           const row$ = store.getById(ev.chatEntryId);
-          const thinkingType = ev.type === SseType.TITLE_LLM_STREAM ? "title_llm_stream" : "planner_llm_stream";
           if (!row$) {
-            console.warn("Planner entry not found for id:", ev.chatEntryId);
-            console.warn(" Creating a new one...");
-            store.append({
-              type: thinkingType,
-              id: ev.chatEntryId,
-              conversationIndex: store.getRows().length,
-              createdAt: new Date().toISOString(),
-              parentId: null,
-              llmRequest: "",
-              llmResponse: ev.delta,
-              status: "running",
-            });
+            void reloadMessages(cid);
             return;
           }
           row$.mutate((next) => {
@@ -200,7 +189,6 @@ export function useChatSession(conversationId: string | null | undefined) {
         } else if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
           const store = storeRef.current;
           const row$ = store.getById(ev.chatEntryId);
-          const thinkingType = ev.type === SseType.TITLE_RESPONSE ? "title_llm_stream" : "planner_llm_stream";
 
           if (row$) {
             row$.mutate((next) => {
@@ -247,36 +235,7 @@ export function useChatSession(conversationId: string | null | undefined) {
                 }
               }
             });
-          } else {
-            const modelWire = typeof ev.llmModel === "string" ? ev.llmModel.trim() : "";
-            const usage = plannerResponseUsageFromEvent(ev);
-            store.append({
-              type: thinkingType,
-              id: ev.chatEntryId,
-              conversationIndex: store.getRows().length,
-              createdAt: new Date().toISOString(),
-              parentId: null,
-              llmRequest: "",
-              thoughtMs: null,
-              status: ev.action === "failed" ? "failed" : ev.action === "cancelled" ? "cancelled" : "completed",
-              ...(ev.action === "failed" || ev.action === "cancelled" ? { error: ev.summary } : {}),
-              decision:
-                ev.type === SseType.PLANNER_RESPONSE && ev.action === "tool_call" && ev.toolName
-                  ? {
-                      type: "tool-invocation",
-                      toolId: ev.toolName,
-                      parameters: {},
-                    }
-                  : ev.summary.trim()
-                    ? {
-                        type: "user-response",
-                        text: ev.summary.trim(),
-                      }
-                    : null,
-              ...(modelWire ? { llmModel: modelWire } : {}),
-              ...TokenUsageMapper.toEntryFields(usage),
-            });
-          }
+          } else void reloadMessages(cid);
           return;
         } else if (ev.type === SseType.TOOL_INVOCATION_START) {
           const store = storeRef.current;
