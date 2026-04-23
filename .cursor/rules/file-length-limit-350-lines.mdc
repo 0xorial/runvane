@@ -1,0 +1,17 @@
+---
+description: Keep files under 350 lines
+alwaysApply: true
+---
+
+# File Length Limit
+
+Keep source files under **350 lines**.
+
+When a file grows near or above the limit:
+
+- Extract cohesive pieces into new files.
+- Prefer small focused modules/components.
+- Avoid adding more logic to oversized files unless unavoidable.
+
+If a requested change must touch an oversized file, complete the request and add a `*.todo.md` note with a suggested split plan.
+

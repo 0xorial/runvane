@@ -1,0 +1,20 @@
+---
+description: Create TODO note when spotting rule violations
+alwaysApply: true
+---
+
+# Metarule: Record Rule Violations
+
+If you notice an existing file is not compliant with one or more active rules while you are working:
+
+- Create a nearby `*.todo.md` file documenting the issue(s).
+- Keep the current task moving; do not derail the requested work.
+- Preserve local style consistency in touched files.
+- Do not silently rewrite unrelated files just to chase compliance.
+
+Use concise TODO entries with:
+
+- what is non-compliant
+- why it matters
+- suggested fix direction
+

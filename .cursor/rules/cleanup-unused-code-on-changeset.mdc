@@ -1,0 +1,15 @@
+---
+description: On each changeset, remove unused code
+alwaysApply: true
+---
+
+# Cleanup Unused Code Every Changeset
+
+For every requested code changeset, perform cleanup in touched areas:
+
+- Remove dead code made obsolete by the change.
+- Delete unused imports, variables, functions, components, and files.
+- Remove bypass-only compatibility paths UNLESS explicitly instructed to keep backward compatible.
+- Keep cleanup scoped to the changed feature area; do not refactor unrelated code.
+
+Before finishing, verify the changed files do not retain obvious unused artifacts.
