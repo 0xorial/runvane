@@ -9,6 +9,59 @@ import { extractAssistantOutputFromJsonLike } from "./plannerTextParsing.js";
 import type { DecisionLlmResult, DecisionProcessorDeps, LlmOverrides } from "./types.js";
 import { publishConversationUpdated, resolvePlannerModel } from "./context.js";
 
+function extractErrorCauseDetail(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause == null) return null;
+  if (cause instanceof Error) return cause.message.trim() || null;
+  if (typeof cause === "string") {
+    const trimmed = cause.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof cause === "object" && !Array.isArray(cause)) {
+    const rec = cause as {
+      code?: unknown;
+      errno?: unknown;
+      syscall?: unknown;
+      address?: unknown;
+      port?: unknown;
+      message?: unknown;
+    };
+    const parts: string[] = [];
+    if (typeof rec.code === "string" && rec.code.trim()) parts.push(rec.code.trim());
+    if (typeof rec.errno === "number" && Number.isFinite(rec.errno)) parts.push(`errno=${Math.trunc(rec.errno)}`);
+    if (typeof rec.syscall === "string" && rec.syscall.trim()) parts.push(`syscall=${rec.syscall.trim()}`);
+    if (typeof rec.address === "string" && rec.address.trim()) parts.push(`address=${rec.address.trim()}`);
+    if (typeof rec.port === "number" && Number.isFinite(rec.port)) parts.push(`port=${Math.trunc(rec.port)}`);
+    if (typeof rec.message === "string" && rec.message.trim()) parts.push(rec.message.trim());
+    if (parts.length > 0) return parts.join(" ");
+  }
+  const fallback = String(cause).trim();
+  return fallback.length > 0 ? fallback : null;
+}
+
+function formatPlannerErrorDetail(
+  deps: DecisionProcessorDeps,
+  input: { llmOverrides: LlmOverrides; plannerLlmModel: string },
+  error: unknown,
+): string {
+  const rawDetail = error instanceof Error ? error.message : String(error);
+  const causeDetail = extractErrorCauseDetail(error);
+  if (rawDetail !== "fetch failed") {
+    if (causeDetail && !rawDetail.includes(causeDetail)) return `${rawDetail} (cause: ${causeDetail})`;
+    return rawDetail;
+  }
+  const doc = deps.llmProviderSettings.getDocument();
+  const providerId = String(input.llmOverrides.llmProviderId || doc.llm_configuration.provider_id || "openai");
+  const provider = deps.llmProviderSettings.getProvider(providerId);
+  const providerLabel = provider?.label || providerId;
+  const providerSettings = deps.llmProviderSettings.getProviderSettings(providerId);
+  const baseUrl = String(providerSettings?.base_url ?? "").trim();
+  const baseUrlPart = baseUrl ? ` base_url=${baseUrl}.` : "";
+  const causePart = causeDetail ? ` cause=${causeDetail}.` : "";
+  return `LLM request failed to reach provider ${providerLabel} (${providerId}) using model ${input.plannerLlmModel}.${baseUrlPart}${causePart}`.trim();
+}
+
 export function publishDecisionThoughtDelta(
   deps: DecisionProcessorDeps,
   input: { conversationId: string; plannerEntryId: string; delta: string },
@@ -169,7 +222,11 @@ export async function getDecisionLlmResponse(
       });
       return { kind: "cancelled" };
     }
-    const detail = e instanceof Error ? e.message : String(e);
+    const detail = formatPlannerErrorDetail(
+      deps,
+      { llmOverrides: input.llmOverrides, plannerLlmModel: input.plannerLlmModel },
+      e,
+    );
     deps.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
       id: input.plannerEntryId,
       llmRequest: input.requestText,
