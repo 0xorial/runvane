@@ -33,6 +33,7 @@ export class AgentOrchestrator {
       conversationIndex,
       createdAt,
       requestText: job.message,
+      thoughtId: plannerEntryId,
     });
 
     const reply = fakeAssistantReply(job.message);

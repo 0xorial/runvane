@@ -93,6 +93,7 @@ export type PlannerStartingSsePayload = {
   conversationIndex: number;
   createdAt: string;
   requestText: string;
+  thoughtId: string;
   llmModel?: string;
 };
 export const PlannerStartingSsePayloadSchema = z.object({
@@ -101,6 +102,7 @@ export const PlannerStartingSsePayloadSchema = z.object({
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
   requestText: z.string(),
+  thoughtId: z.string(),
   llmModel: z.string().optional(),
 });
 
@@ -121,6 +123,7 @@ export type TitleStartingSsePayload = {
   conversationIndex: number;
   createdAt: string;
   requestText: string;
+  thoughtId: string;
   llmModel?: string;
 };
 export const TitleStartingSsePayloadSchema = z.object({
@@ -129,6 +132,7 @@ export const TitleStartingSsePayloadSchema = z.object({
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
   requestText: z.string(),
+  thoughtId: z.string(),
   llmModel: z.string().optional(),
 });
 
@@ -301,6 +305,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
     requestText: z.string(),
+    thoughtId: z.string(),
     llmModel: z.string().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
@@ -314,6 +319,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
     requestText: z.string(),
+    thoughtId: z.string(),
     llmModel: z.string().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({

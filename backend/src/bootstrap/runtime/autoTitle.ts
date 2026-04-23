@@ -7,6 +7,10 @@ import { SseType } from "../../types/sse.js";
 import type { StreamTextCompletionUsage } from "../../llm_provider/provider.js";
 import { TokenUsageMapper } from "../../types/tokenUsage.js";
 import { normalizeConversationTokenUsageRow } from "../../domain/conversationUsage.js";
+import {
+  startThreeStepLlmFlowAndPublish,
+  updateThoughtActionEntryAndPublish,
+} from "../../domain/decisionTaskProcessor/decisionStreaming.js";
 
 type TitleGenerationResult = {
   model: string;
@@ -91,23 +95,20 @@ export async function maybeAutoTitleConversation({
   let generationError: unknown = null;
   const startedAtMs = Date.now();
   const titlePrompt = buildTitlePrompt(firstMessage);
-  const plannerEntryId = crypto.randomUUID();
-  const plannerEntry = chatEntries.appendTitleLlmStreamEntry(conversationId, {
-    id: plannerEntryId,
-    createdAt: new Date().toISOString(),
-    llmRequest: titlePrompt,
-    llmResponse: "",
-    thoughtMs: null,
-    decision: null,
-    status: "running",
-  });
-  hub.publish(conversationId, {
-    type: SseType.TITLE_STARTING,
-    chatEntryId: plannerEntry.id,
-    conversationIndex: plannerEntry.conversationIndex,
-    createdAt: plannerEntry.createdAt,
-    requestText: titlePrompt,
-  });
+  const configuredModel = String(llmProviderSettings.getDocument().llm_configuration.model_name || "").trim() || undefined;
+  const flow = startThreeStepLlmFlowAndPublish(
+    { chatEntries, hub },
+    {
+      conversationId,
+      requestText: titlePrompt,
+      llmModel: configuredModel,
+      queriedKind: "title",
+      actionSummary: "Waiting for title generation output",
+    },
+  );
+  const plannerEntryId = flow.queriedEntry.id;
+  const plannerEntry = flow.queriedEntry;
+  const thoughtActionEntry = flow.actionEntry;
   let streamedResponse = "";
   try {
     generated = await generateConversationTitleUsingSystemModel(llmProviderSettings, titlePrompt, (delta) => {
@@ -149,6 +150,28 @@ export async function maybeAutoTitleConversation({
       llmModel: generated.model,
       ...TokenUsageMapper.toSseFields(generated.usage),
     });
+    updateThoughtActionEntryAndPublish(
+      { chatEntries, hub },
+      {
+        conversationId,
+        id: thoughtActionEntry.id,
+        status: titleOutcomeFailed ? "failed" : "completed",
+        summary: generated.cleanTitle != null ? `Generated title: ${generated.cleanTitle}` : titleOutcomeError,
+        action: generated.cleanTitle != null ? "final_answer" : "failed",
+        ...(titleOutcomeFailed ? { error: titleOutcomeError } : {}),
+        parseResult: titleOutcomeFailed
+          ? {
+              status: "error",
+              error: titleOutcomeError,
+            }
+          : {
+              status: "ok",
+              parsed: {
+                generatedTitle: generated.cleanTitle,
+              },
+            },
+      },
+    );
   } else if (!generationError) {
     // No provider/model configured for title generation; close the thought row explicitly.
     const detail = "Title generation skipped, fallback used";
@@ -168,6 +191,21 @@ export async function maybeAutoTitleConversation({
       finished: true,
       action: "failed",
     });
+    updateThoughtActionEntryAndPublish(
+      { chatEntries, hub },
+      {
+        conversationId,
+        id: thoughtActionEntry.id,
+        status: "failed",
+        summary: detail,
+        action: "failed",
+        error: detail,
+        parseResult: {
+          status: "error",
+          error: detail,
+        },
+      },
+    );
   }
 
   const byModel = generated?.cleanTitle ?? null;
@@ -216,5 +254,20 @@ export async function maybeAutoTitleConversation({
       finished: true,
       action: "failed",
     });
+    updateThoughtActionEntryAndPublish(
+      { chatEntries, hub },
+      {
+        conversationId,
+        id: thoughtActionEntry.id,
+        status: "failed",
+        summary: detail,
+        action: "failed",
+        error: detail,
+        parseResult: {
+          status: "error",
+          error: detail,
+        },
+      },
+    );
   }
 }

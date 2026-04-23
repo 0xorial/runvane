@@ -45,7 +45,7 @@ export class ChatEntriesRepo {
       .prepare(
         `SELECT active_leaf_entry_id
          FROM conversations
-         WHERE id = ?`,
+         WHERE id = ?`
       )
       .get(conversationId) as { active_leaf_entry_id?: string | null } | undefined;
     return typeof row?.active_leaf_entry_id === "string" && row.active_leaf_entry_id.trim() !== ""
@@ -58,7 +58,7 @@ export class ChatEntriesRepo {
       .prepare(
         `UPDATE conversations
          SET active_leaf_entry_id = @entry_id
-         WHERE id = @conversation_id`,
+         WHERE id = @conversation_id`
       )
       .run({
         conversation_id: conversationId,
@@ -80,7 +80,7 @@ export class ChatEntriesRepo {
          FROM chat_entries
          WHERE conversation_id = ?
            AND id = ?
-         LIMIT 1`,
+         LIMIT 1`
       )
       .get(conversationId, normalizedEntryId) as { is_present?: number } | undefined;
     if (row?.is_present !== 1) {
@@ -111,7 +111,7 @@ export class ChatEntriesRepo {
            id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
          ) VALUES (
            @id, @conversation_id, @conversation_index, @parent_id, @type, @payload_json, @created_at
-         )`,
+         )`
       )
       .run({
         id: input.id,
@@ -130,7 +130,7 @@ export class ChatEntriesRepo {
       .prepare(
         `SELECT COALESCE(MAX(conversation_index), -1) AS max_idx
          FROM chat_entries
-         WHERE conversation_id = ?`,
+         WHERE conversation_id = ?`
       )
       .get(conversationId) as { max_idx?: number } | undefined;
     return Number(row?.max_idx ?? -1) + 1;
@@ -141,7 +141,7 @@ export class ChatEntriesRepo {
       .prepare(
         `SELECT COUNT(1) AS cnt
          FROM chat_entries
-         WHERE conversation_id = ?`,
+         WHERE conversation_id = ?`
       )
       .get(conversationId) as { cnt?: number } | undefined;
     return Number(row?.cnt ?? 0);
@@ -158,7 +158,7 @@ export class ChatEntriesRepo {
            SUM(COALESCE(CAST(json_extract(e.payload_json, '$.completionTokens') AS INTEGER), 0)) AS completion_tokens
          FROM chat_entries e
          WHERE e.type IN ('planner_llm_stream', 'title_llm_stream')
-         GROUP BY e.conversation_id, model_name`,
+         GROUP BY e.conversation_id, model_name`
       )
       .all() as Array<{
       conversation_id: string;
@@ -188,7 +188,7 @@ export class ChatEntriesRepo {
   appendUserMessage(
     conversationId: string,
     text: string,
-    opts: UserMessageSelection & { attachments?: ChatAttachment[]; parentId?: string | null },
+    opts: UserMessageSelection & { attachments?: ChatAttachment[]; parentId?: string | null }
   ): UserMessageEntry {
     const createDbEntryPayload = normalizeUserMessageSelection(opts);
     const attachments = Array.isArray(opts?.attachments) ? opts.attachments : [];
@@ -223,7 +223,7 @@ export class ChatEntriesRepo {
   appendAssistantMessage(
     conversationId: string,
     text: string,
-    opts?: { id?: string; createdAt?: string; parentId?: string | null },
+    opts?: { id?: string; createdAt?: string; parentId?: string | null }
   ): AssistantMessageEntry {
     const createdAt = opts?.createdAt ?? new Date().toISOString();
     const parentId = this.resolveParentId(conversationId, opts?.parentId);
@@ -254,7 +254,7 @@ export class ChatEntriesRepo {
          SET payload_json = @payload_json
          WHERE id = @id
            AND conversation_id = @conversation_id
-           AND type = 'assistant-message'`,
+           AND type = 'assistant-message'`
       )
       .run({
         id: input.id,
@@ -276,7 +276,7 @@ export class ChatEntriesRepo {
       state: ToolInvocationEntry["state"];
       parameters?: Record<string, unknown>;
       result?: unknown;
-    },
+    }
   ): ToolInvocationEntry {
     const createdAt = input.createdAt ?? new Date().toISOString();
     const parentId = this.resolveParentId(conversationId, input.parentId);
@@ -314,13 +314,13 @@ export class ChatEntriesRepo {
       id: string;
       state: ToolInvocationEntry["state"];
       result: unknown;
-    },
+    }
   ): void {
     const row = this.db
       .prepare(
         `SELECT payload_json
          FROM chat_entries
-         WHERE id = ? AND conversation_id = ? AND type = 'tool-invocation'`,
+         WHERE id = ? AND conversation_id = ? AND type = 'tool-invocation'`
       )
       .get(input.id, conversationId) as { payload_json?: string } | undefined;
     if (!row?.payload_json) {
@@ -333,7 +333,7 @@ export class ChatEntriesRepo {
          SET payload_json = @payload_json
          WHERE id = @id
            AND conversation_id = @conversation_id
-           AND type = 'tool-invocation'`,
+           AND type = 'tool-invocation'`
       )
       .run({
         id: input.id,
@@ -360,12 +360,15 @@ export class ChatEntriesRepo {
       status?: "running" | "completed" | "failed" | "cancelled";
       error?: string;
       llmModel?: string;
-    },
+      thoughtId: string;
+    }
   ): PlannerLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtIdRaw = String(input.thoughtId || "").trim();
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : input.id;
     const entry: PlannerLlmStreamEntry = {
       type: "planner_llm_stream",
       id: input.id,
@@ -379,6 +382,7 @@ export class ChatEntriesRepo {
       status: input.status ?? "running",
       ...(input.error ? { error: input.error } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
+      thoughtId,
     };
     const payload: Record<string, unknown> = {
       llmRequest: entry.llmRequest,
@@ -389,6 +393,7 @@ export class ChatEntriesRepo {
       ...(entry.error ? { error: entry.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
+    payload.thoughtId = thoughtId;
     this.insertEntry({
       id: entry.id,
       conversationId,
@@ -409,12 +414,15 @@ export class ChatEntriesRepo {
       parentId?: string | null;
       requestText: string;
       llmModel?: string;
-    },
+      thoughtId: string;
+    }
   ): ThoughtPrepareEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtIdRaw = String(input.thoughtId || "").trim();
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : input.id;
     const entry: ThoughtPrepareEntry = {
       type: "thought-prepare",
       id: input.id,
@@ -424,12 +432,14 @@ export class ChatEntriesRepo {
       requestText: input.requestText,
       status: "completed",
       ...(llmModel !== undefined ? { llmModel } : {}),
+      thoughtId,
     };
     const payload: Record<string, unknown> = {
       requestText: entry.requestText,
       status: "completed",
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
+    payload.thoughtId = thoughtId;
     this.insertEntry({
       id: entry.id,
       conversationId,
@@ -454,7 +464,8 @@ export class ChatEntriesRepo {
       toolName?: string;
       error?: string;
       parseResult?: ThoughtActionEntry["parseResult"];
-    },
+      thoughtId: string;
+    }
   ): ThoughtActionEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
@@ -463,6 +474,8 @@ export class ChatEntriesRepo {
     const toolName = typeof input.toolName === "string" ? input.toolName : undefined;
     const error = typeof input.error === "string" ? input.error : undefined;
     const parseResult = input.parseResult && typeof input.parseResult === "object" ? input.parseResult : undefined;
+    const thoughtIdRaw = String(input.thoughtId || "").trim();
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : input.id;
     const entry: ThoughtActionEntry = {
       type: "thought-action",
       id: input.id,
@@ -475,6 +488,7 @@ export class ChatEntriesRepo {
       ...(toolName ? { toolName } : {}),
       ...(error ? { error } : {}),
       ...(parseResult ? { parseResult } : {}),
+      thoughtId,
     };
     this.insertEntry({
       id: entry.id,
@@ -489,6 +503,7 @@ export class ChatEntriesRepo {
         ...(toolName ? { toolName } : {}),
         ...(error ? { error } : {}),
         ...(parseResult ? { parseResult } : {}),
+        thoughtId,
       }),
       createdAt: entry.createdAt,
     });
@@ -505,8 +520,23 @@ export class ChatEntriesRepo {
       toolName?: string;
       error?: string;
       parseResult?: ThoughtActionEntry["parseResult"];
-    },
+      thoughtId?: string;
+    }
   ): void {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+         FROM chat_entries
+         WHERE id = ? AND conversation_id = ? AND type = 'thought-action'`
+      )
+      .get(input.id, conversationId) as { payload_json?: string } | undefined;
+    if (!row?.payload_json) {
+      throw new Error(`thought-action entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+    const existing = parseJsonObject(row.payload_json);
+    const existingThoughtId = typeof existing.thoughtId === "string" ? existing.thoughtId.trim() : "";
+    const thoughtIdRaw = typeof input.thoughtId === "string" ? input.thoughtId.trim() : "";
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : existingThoughtId || undefined;
     const payload: Record<string, unknown> = {
       status: input.status,
       ...(typeof input.summary === "string" ? { summary: input.summary } : {}),
@@ -514,6 +544,7 @@ export class ChatEntriesRepo {
       ...(typeof input.toolName === "string" ? { toolName: input.toolName } : {}),
       ...(typeof input.error === "string" ? { error: input.error } : {}),
       ...(input.parseResult && typeof input.parseResult === "object" ? { parseResult: input.parseResult } : {}),
+      ...(thoughtId !== undefined ? { thoughtId } : {}),
     };
     const result = this.db
       .prepare(
@@ -521,16 +552,15 @@ export class ChatEntriesRepo {
          SET payload_json = @payload_json
          WHERE id = @id
            AND conversation_id = @conversation_id
-           AND type = 'thought-action'`,
+           AND type = 'thought-action'`
       )
       .run({
         id: input.id,
         conversation_id: conversationId,
         payload_json: JSON.stringify(payload),
       });
-    if (Number(result.changes ?? 0) !== 1) {
+    if (Number(result.changes ?? 0) !== 1)
       throw new Error(`thought-action entry not found for update: conversation=${conversationId} id=${input.id}`);
-    }
   }
 
   appendTitleLlmStreamEntry(
@@ -546,12 +576,15 @@ export class ChatEntriesRepo {
       status?: "running" | "completed" | "failed" | "cancelled";
       error?: string;
       llmModel?: string;
-    },
+      thoughtId: string;
+    }
   ): TitleLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtIdRaw = String(input.thoughtId || "").trim();
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : input.id;
     const entry: TitleLlmStreamEntry = {
       type: "title_llm_stream",
       id: input.id,
@@ -565,6 +598,7 @@ export class ChatEntriesRepo {
       status: input.status ?? "running",
       ...(input.error ? { error: input.error } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
+      thoughtId,
     };
     const payload: Record<string, unknown> = {
       llmRequest: entry.llmRequest,
@@ -575,6 +609,7 @@ export class ChatEntriesRepo {
       ...(entry.error ? { error: entry.error } : {}),
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
+    payload.thoughtId = thoughtId;
     this.insertEntry({
       id: entry.id,
       conversationId,
@@ -602,10 +637,25 @@ export class ChatEntriesRepo {
       cachedPromptTokens?: number;
       completionTokens?: number;
       parseResult?: PlannerLlmStreamEntry["parseResult"];
-    },
+      thoughtId?: string;
+    }
   ): void {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+         FROM chat_entries
+         WHERE id = ? AND conversation_id = ? AND type = 'planner_llm_stream'`
+      )
+      .get(input.id, conversationId) as { payload_json?: string } | undefined;
+    if (!row?.payload_json) {
+      throw new Error(`planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+    const existing = parseJsonObject(row.payload_json);
+    const existingThoughtId = typeof existing.thoughtId === "string" ? existing.thoughtId.trim() : "";
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtIdRaw = typeof input.thoughtId === "string" ? input.thoughtId.trim() : "";
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : existingThoughtId || undefined;
     const payload: Record<string, unknown> = {
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
@@ -627,22 +677,22 @@ export class ChatEntriesRepo {
     if (input.parseResult && typeof input.parseResult === "object") {
       payload.parseResult = input.parseResult;
     }
+    if (thoughtId !== undefined) payload.thoughtId = thoughtId;
     const result = this.db
       .prepare(
         `UPDATE chat_entries
          SET payload_json = @payload_json
          WHERE id = @id
            AND conversation_id = @conversation_id
-           AND type = 'planner_llm_stream'`,
+           AND type = 'planner_llm_stream'`
       )
       .run({
         id: input.id,
         conversation_id: conversationId,
         payload_json: JSON.stringify(payload),
       });
-    if (Number(result.changes ?? 0) !== 1) {
+    if (Number(result.changes ?? 0) !== 1)
       throw new Error(`planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
-    }
   }
 
   updateTitleLlmStreamEntry(
@@ -659,10 +709,25 @@ export class ChatEntriesRepo {
       promptTokens?: number;
       cachedPromptTokens?: number;
       completionTokens?: number;
-    },
+      thoughtId?: string;
+    }
   ): void {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+         FROM chat_entries
+         WHERE id = ? AND conversation_id = ? AND type = 'title_llm_stream'`
+      )
+      .get(input.id, conversationId) as { payload_json?: string } | undefined;
+    if (!row?.payload_json) {
+      throw new Error(`title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+    const existing = parseJsonObject(row.payload_json);
+    const existingThoughtId = typeof existing.thoughtId === "string" ? existing.thoughtId.trim() : "";
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtIdRaw = typeof input.thoughtId === "string" ? input.thoughtId.trim() : "";
+    const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : existingThoughtId || undefined;
     const payload: Record<string, unknown> = {
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
@@ -681,22 +746,22 @@ export class ChatEntriesRepo {
     if (typeof input.completionTokens === "number" && Number.isFinite(input.completionTokens)) {
       payload.completionTokens = input.completionTokens;
     }
+    if (thoughtId !== undefined) payload.thoughtId = thoughtId;
     const result = this.db
       .prepare(
         `UPDATE chat_entries
          SET payload_json = @payload_json
          WHERE id = @id
            AND conversation_id = @conversation_id
-           AND type = 'title_llm_stream'`,
+           AND type = 'title_llm_stream'`
       )
       .run({
         id: input.id,
         conversation_id: conversationId,
         payload_json: JSON.stringify(payload),
       });
-    if (Number(result.changes ?? 0) !== 1) {
+    if (Number(result.changes ?? 0) !== 1)
       throw new Error(`title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
-    }
   }
 
   getLastUserMessage(conversationId: string): UserMessageEntry | null {
@@ -706,7 +771,7 @@ export class ChatEntriesRepo {
          FROM chat_entries
          WHERE conversation_id = ? AND type = 'user-message'
          ORDER BY conversation_index DESC
-         LIMIT 1`,
+         LIMIT 1`
       )
       .get(conversationId) as ChatEntryDbRow | undefined;
     if (!row) return null;
@@ -749,7 +814,7 @@ export class ChatEntriesRepo {
            FROM chat_entries e
            JOIN lineage l ON l.id = e.id
            WHERE e.conversation_id = @conversation_id
-           ORDER BY e.conversation_index ASC`,
+           ORDER BY e.conversation_index ASC`
         )
         .all({
           conversation_id: conversationId,
@@ -765,7 +830,7 @@ export class ChatEntriesRepo {
         `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
          FROM chat_entries
          WHERE conversation_id = ?
-         ORDER BY conversation_index ASC`,
+         ORDER BY conversation_index ASC`
       )
       .all(conversationId) as ChatEntryDbRow[];
 
@@ -777,7 +842,7 @@ export class ChatEntriesRepo {
       .prepare(
         `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
          FROM chat_entries
-         WHERE conversation_id = ? AND id = ?`,
+         WHERE conversation_id = ? AND id = ?`
       )
       .get(conversationId, entryId) as ChatEntryDbRow | undefined;
     return row ? this.toEntry(row) : null;
@@ -802,7 +867,7 @@ export class ChatEntriesRepo {
          SELECT 1 AS is_present
          FROM lineage
          WHERE id = @entry_id
-         LIMIT 1`,
+         LIMIT 1`
       )
       .get({
         conversation_id: conversationId,
@@ -814,200 +879,212 @@ export class ChatEntriesRepo {
 
   private toEntry(row: ChatEntryDbRow): ChatEntry {
     const payload = parseJsonObject(row.payload_json);
-      if (row.type === "user-message") {
-        const selection = userMessageSelectionFromPayload(payload);
-        const attachments = userMessageAttachmentsFromPayload(payload);
-        return {
-          type: "user-message",
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          text: String(payload.text ?? ""),
-          ...selection,
-          ...(attachments.length > 0 ? { attachments } : {}),
-        } satisfies UserMessageEntry;
-      }
-      if (row.type === "assistant-message") {
-        return {
-          type: "assistant-message",
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          text: String(payload.text ?? ""),
-        } satisfies AssistantMessageEntry;
-      }
-      if (row.type === "planner_llm_stream") {
-        const llmModel =
-          typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
-        const promptTokens =
-          typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
-            ? payload.promptTokens
-            : undefined;
-        const cachedPromptTokens =
-          typeof payload.cachedPromptTokens === "number" && Number.isFinite(payload.cachedPromptTokens)
-            ? payload.cachedPromptTokens
-            : undefined;
-        const completionTokens =
-          typeof payload.completionTokens === "number" && Number.isFinite(payload.completionTokens)
-            ? payload.completionTokens
-            : undefined;
-        const status =
-          payload.status === "running" ||
-          payload.status === "completed" ||
-          payload.status === "failed" ||
-          payload.status === "cancelled"
-            ? payload.status
-            : payload.failed === true
-              ? "failed"
-              : Number.isFinite(payload.thoughtMs as number)
-                ? "completed"
-                : "running";
-        const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
-        const parseResult =
-          payload.parseResult &&
-          typeof payload.parseResult === "object" &&
-          (((payload.parseResult as Record<string, unknown>).status === "ok" &&
-            (payload.parseResult as Record<string, unknown>).parsed &&
-            typeof (payload.parseResult as Record<string, unknown>).parsed === "object") ||
-            ((payload.parseResult as Record<string, unknown>).status === "error" &&
-              typeof (payload.parseResult as Record<string, unknown>).error === "string"))
-            ? (payload.parseResult as PlannerLlmStreamEntry["parseResult"])
-            : undefined;
-        return {
-          type: "planner_llm_stream",
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          llmRequest: String(payload.llmRequest ?? ""),
-          llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
-          thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
-          decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
-          status,
-          ...(error !== undefined ? { error } : {}),
-          ...(llmModel !== undefined ? { llmModel } : {}),
-          ...(promptTokens !== undefined ? { promptTokens } : {}),
-          ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
-          ...(completionTokens !== undefined ? { completionTokens } : {}),
-          ...(parseResult !== undefined ? { parseResult } : {}),
-        } satisfies PlannerLlmStreamEntry;
-      }
-      if (row.type === "thought-prepare") {
-        const llmModel =
-          typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
-        return {
-          type: "thought-prepare",
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          requestText: String(payload.requestText ?? ""),
-          status: "completed",
-          ...(llmModel !== undefined ? { llmModel } : {}),
-        } satisfies ThoughtPrepareEntry;
-      }
-      if (row.type === "thought-action") {
-        const status =
-          payload.status === "running" ||
-          payload.status === "completed" ||
-          payload.status === "failed" ||
-          payload.status === "cancelled"
-            ? payload.status
-            : "running";
-        const summary = typeof payload.summary === "string" ? payload.summary : undefined;
-        const action = typeof payload.action === "string" ? payload.action : undefined;
-        const toolName = typeof payload.toolName === "string" ? payload.toolName : undefined;
-        const error = typeof payload.error === "string" ? payload.error : undefined;
-        const parseResult =
-          payload.parseResult &&
-          typeof payload.parseResult === "object" &&
-          (((payload.parseResult as Record<string, unknown>).status === "ok" &&
-            (payload.parseResult as Record<string, unknown>).parsed &&
-            typeof (payload.parseResult as Record<string, unknown>).parsed === "object") ||
-            ((payload.parseResult as Record<string, unknown>).status === "error" &&
-              typeof (payload.parseResult as Record<string, unknown>).error === "string"))
-            ? (payload.parseResult as ThoughtActionEntry["parseResult"])
-            : undefined;
-        return {
-          type: "thought-action",
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          status,
-          ...(summary ? { summary } : {}),
-          ...(action ? { action } : {}),
-          ...(toolName ? { toolName } : {}),
-          ...(error ? { error } : {}),
-          ...(parseResult ? { parseResult } : {}),
-        } satisfies ThoughtActionEntry;
-      }
-      if (row.type === "title_llm_stream") {
-        const llmModel =
-          typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
-        const promptTokens =
-          typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
-            ? payload.promptTokens
-            : undefined;
-        const cachedPromptTokens =
-          typeof payload.cachedPromptTokens === "number" && Number.isFinite(payload.cachedPromptTokens)
-            ? payload.cachedPromptTokens
-            : undefined;
-        const completionTokens =
-          typeof payload.completionTokens === "number" && Number.isFinite(payload.completionTokens)
-            ? payload.completionTokens
-            : undefined;
-        const status =
-          payload.status === "running" ||
-          payload.status === "completed" ||
-          payload.status === "failed" ||
-          payload.status === "cancelled"
-            ? payload.status
-            : payload.failed === true
-              ? "failed"
-              : Number.isFinite(payload.thoughtMs as number)
-                ? "completed"
-                : "running";
-        const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
-        return {
-          type: "title_llm_stream",
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          llmRequest: String(payload.llmRequest ?? ""),
-          llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
-          thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
-          decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
-          status,
-          ...(error !== undefined ? { error } : {}),
-          ...(llmModel !== undefined ? { llmModel } : {}),
-          ...(promptTokens !== undefined ? { promptTokens } : {}),
-          ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
-          ...(completionTokens !== undefined ? { completionTokens } : {}),
-        } satisfies TitleLlmStreamEntry;
-      }
+    if (row.type === "user-message") {
+      const selection = userMessageSelectionFromPayload(payload);
+      const attachments = userMessageAttachmentsFromPayload(payload);
       return {
-        type: "tool-invocation",
+        type: "user-message",
         id: row.id,
         conversationIndex: row.conversation_index,
         createdAt: row.created_at,
         parentId: row.parent_id,
-        toolId: String(payload.toolId ?? ""),
-        state:
-          payload.state === "requested" ||
-          payload.state === "running" ||
-          payload.state === "done" ||
-          payload.state === "error"
-            ? payload.state
-            : "running",
-        parameters:
-          payload.parameters && typeof payload.parameters === "object"
-            ? (payload.parameters as Record<string, unknown>)
-            : {},
-        result: payload.result ?? null,
-      } satisfies ToolInvocationEntry;
+        text: String(payload.text ?? ""),
+        ...selection,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      } satisfies UserMessageEntry;
+    }
+    if (row.type === "assistant-message") {
+      return {
+        type: "assistant-message",
+        id: row.id,
+        conversationIndex: row.conversation_index,
+        createdAt: row.created_at,
+        parentId: row.parent_id,
+        text: String(payload.text ?? ""),
+      } satisfies AssistantMessageEntry;
+    }
+    if (row.type === "planner_llm_stream") {
+      const thoughtIdRaw = typeof payload.thoughtId === "string" ? payload.thoughtId.trim() : "";
+      const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : row.id;
+      const llmModel =
+        typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
+      const promptTokens =
+        typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
+          ? payload.promptTokens
+          : undefined;
+      const cachedPromptTokens =
+        typeof payload.cachedPromptTokens === "number" && Number.isFinite(payload.cachedPromptTokens)
+          ? payload.cachedPromptTokens
+          : undefined;
+      const completionTokens =
+        typeof payload.completionTokens === "number" && Number.isFinite(payload.completionTokens)
+          ? payload.completionTokens
+          : undefined;
+      const status =
+        payload.status === "running" ||
+        payload.status === "completed" ||
+        payload.status === "failed" ||
+        payload.status === "cancelled"
+          ? payload.status
+          : payload.failed === true
+          ? "failed"
+          : Number.isFinite(payload.thoughtMs as number)
+          ? "completed"
+          : "running";
+      const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
+      const parseResult =
+        payload.parseResult &&
+        typeof payload.parseResult === "object" &&
+        (((payload.parseResult as Record<string, unknown>).status === "ok" &&
+          (payload.parseResult as Record<string, unknown>).parsed &&
+          typeof (payload.parseResult as Record<string, unknown>).parsed === "object") ||
+          ((payload.parseResult as Record<string, unknown>).status === "error" &&
+            typeof (payload.parseResult as Record<string, unknown>).error === "string"))
+          ? (payload.parseResult as PlannerLlmStreamEntry["parseResult"])
+          : undefined;
+      return {
+        type: "planner_llm_stream",
+        id: row.id,
+        conversationIndex: row.conversation_index,
+        createdAt: row.created_at,
+        parentId: row.parent_id,
+        llmRequest: String(payload.llmRequest ?? ""),
+        llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
+        thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
+        decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
+        status,
+        ...(error !== undefined ? { error } : {}),
+        ...(llmModel !== undefined ? { llmModel } : {}),
+        ...(promptTokens !== undefined ? { promptTokens } : {}),
+        ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
+        ...(completionTokens !== undefined ? { completionTokens } : {}),
+        ...(parseResult !== undefined ? { parseResult } : {}),
+        thoughtId,
+      } satisfies PlannerLlmStreamEntry;
+    }
+    if (row.type === "thought-prepare") {
+      const thoughtIdRaw = typeof payload.thoughtId === "string" ? payload.thoughtId.trim() : "";
+      const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : row.id;
+      const llmModel =
+        typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
+      return {
+        type: "thought-prepare",
+        id: row.id,
+        conversationIndex: row.conversation_index,
+        createdAt: row.created_at,
+        parentId: row.parent_id,
+        requestText: String(payload.requestText ?? ""),
+        status: "completed",
+        ...(llmModel !== undefined ? { llmModel } : {}),
+        thoughtId,
+      } satisfies ThoughtPrepareEntry;
+    }
+    if (row.type === "thought-action") {
+      const thoughtIdRaw = typeof payload.thoughtId === "string" ? payload.thoughtId.trim() : "";
+      const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : row.id;
+      const status =
+        payload.status === "running" ||
+        payload.status === "completed" ||
+        payload.status === "failed" ||
+        payload.status === "cancelled"
+          ? payload.status
+          : "running";
+      const summary = typeof payload.summary === "string" ? payload.summary : undefined;
+      const action = typeof payload.action === "string" ? payload.action : undefined;
+      const toolName = typeof payload.toolName === "string" ? payload.toolName : undefined;
+      const error = typeof payload.error === "string" ? payload.error : undefined;
+      const parseResult =
+        payload.parseResult &&
+        typeof payload.parseResult === "object" &&
+        (((payload.parseResult as Record<string, unknown>).status === "ok" &&
+          (payload.parseResult as Record<string, unknown>).parsed &&
+          typeof (payload.parseResult as Record<string, unknown>).parsed === "object") ||
+          ((payload.parseResult as Record<string, unknown>).status === "error" &&
+            typeof (payload.parseResult as Record<string, unknown>).error === "string"))
+          ? (payload.parseResult as ThoughtActionEntry["parseResult"])
+          : undefined;
+      return {
+        type: "thought-action",
+        id: row.id,
+        conversationIndex: row.conversation_index,
+        createdAt: row.created_at,
+        parentId: row.parent_id,
+        status,
+        ...(summary ? { summary } : {}),
+        ...(action ? { action } : {}),
+        ...(toolName ? { toolName } : {}),
+        ...(error ? { error } : {}),
+        ...(parseResult ? { parseResult } : {}),
+        thoughtId,
+      } satisfies ThoughtActionEntry;
+    }
+    if (row.type === "title_llm_stream") {
+      const thoughtIdRaw = typeof payload.thoughtId === "string" ? payload.thoughtId.trim() : "";
+      const thoughtId = thoughtIdRaw.length > 0 ? thoughtIdRaw : row.id;
+      const llmModel =
+        typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
+      const promptTokens =
+        typeof payload.promptTokens === "number" && Number.isFinite(payload.promptTokens)
+          ? payload.promptTokens
+          : undefined;
+      const cachedPromptTokens =
+        typeof payload.cachedPromptTokens === "number" && Number.isFinite(payload.cachedPromptTokens)
+          ? payload.cachedPromptTokens
+          : undefined;
+      const completionTokens =
+        typeof payload.completionTokens === "number" && Number.isFinite(payload.completionTokens)
+          ? payload.completionTokens
+          : undefined;
+      const status =
+        payload.status === "running" ||
+        payload.status === "completed" ||
+        payload.status === "failed" ||
+        payload.status === "cancelled"
+          ? payload.status
+          : payload.failed === true
+          ? "failed"
+          : Number.isFinite(payload.thoughtMs as number)
+          ? "completed"
+          : "running";
+      const error = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : undefined;
+      return {
+        type: "title_llm_stream",
+        id: row.id,
+        conversationIndex: row.conversation_index,
+        createdAt: row.created_at,
+        parentId: row.parent_id,
+        llmRequest: String(payload.llmRequest ?? ""),
+        llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
+        thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
+        decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
+        status,
+        ...(error !== undefined ? { error } : {}),
+        ...(llmModel !== undefined ? { llmModel } : {}),
+        ...(promptTokens !== undefined ? { promptTokens } : {}),
+        ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
+        ...(completionTokens !== undefined ? { completionTokens } : {}),
+        thoughtId,
+      } satisfies TitleLlmStreamEntry;
+    }
+    return {
+      type: "tool-invocation",
+      id: row.id,
+      conversationIndex: row.conversation_index,
+      createdAt: row.created_at,
+      parentId: row.parent_id,
+      toolId: String(payload.toolId ?? ""),
+      state:
+        payload.state === "requested" ||
+        payload.state === "running" ||
+        payload.state === "done" ||
+        payload.state === "error"
+          ? payload.state
+          : "running",
+      parameters:
+        payload.parameters && typeof payload.parameters === "object"
+          ? (payload.parameters as Record<string, unknown>)
+          : {},
+      result: payload.result ?? null,
+    } satisfies ToolInvocationEntry;
   }
 }

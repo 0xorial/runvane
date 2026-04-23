@@ -15,6 +15,10 @@ import {
   usageFromStreamingError,
 } from "./decisionTaskProcessor/plannerStreamUtils.js";
 import { parseJsonObjectFromCompletionText } from "./decisionTaskProcessor/plannerTextParsing.js";
+import {
+  startThreeStepLlmFlowAndPublish,
+  updateThoughtActionEntryAndPublish,
+} from "./decisionTaskProcessor/decisionStreaming.js";
 import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
 
 type ToolExecutionEnvelope = {
@@ -411,27 +415,20 @@ Tool request:
 ${plannerRequest}
 
 Return ONLY valid JSON object for tool parameters.`;
-    const resolverEntryId = crypto.randomUUID();
-    const resolverCreatedAt = new Date().toISOString();
     const resolverStartedAtMs = Date.now();
-    const resolverEntry = this.chatEntries.appendPlannerLlmStreamEntry(task.conversationId, {
-      id: resolverEntryId,
-      createdAt: resolverCreatedAt,
-      llmRequest: toolParamPrompt,
-      llmResponse: "",
-      thoughtMs: null,
-      decision: null,
-      status: "running",
-      llmModel: model,
-    });
-    this.hub.publish(task.conversationId, {
-      type: SseType.PLANNER_STARTING,
-      chatEntryId: resolverEntryId,
-      conversationIndex: resolverEntry.conversationIndex,
-      createdAt: resolverEntry.createdAt,
-      requestText: toolParamPrompt,
-      llmModel: model,
-    });
+    const flow = startThreeStepLlmFlowAndPublish(
+      { chatEntries: this.chatEntries, hub: this.hub },
+      {
+        conversationId: task.conversationId,
+        parentId: task.sourceEntryId ?? null,
+        requestText: toolParamPrompt,
+        llmModel: model,
+        queriedKind: "planner",
+        actionSummary: "Waiting for tool parameter resolution output",
+      },
+    );
+    const resolverEntryId = flow.queriedEntry.id;
+    const thoughtActionEntry = flow.actionEntry;
 
     let reconstructedReply = "";
     let resolverTokenUsage: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number } | undefined;
@@ -483,12 +480,68 @@ Return ONLY valid JSON object for tool parameters.`;
         llmModel: model,
         ...TokenUsageMapper.toSseFields(resolverTokenUsage),
       });
+      updateThoughtActionEntryAndPublish(
+        { chatEntries: this.chatEntries, hub: this.hub },
+        {
+          conversationId: task.conversationId,
+          id: thoughtActionEntry.id,
+          status: cancelled ? "cancelled" : "failed",
+          summary: cancelled ? "Cancelled" : detail,
+          action: cancelled ? "cancelled" : "failed",
+          ...(cancelled ? {} : { error: detail }),
+          parseResult: {
+            status: "error",
+            error: detail,
+          },
+        },
+      );
       throw e;
     }
-    const parsed = parseJsonObjectFromCompletionText({
-      text: completionText,
-      context: `tool resolver response for ${task.toolName}`,
-    });
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parseJsonObjectFromCompletionText({
+        text: completionText,
+        context: `tool resolver response for ${task.toolName}`,
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      this.chatEntries.updatePlannerLlmStreamEntry(task.conversationId, {
+        id: resolverEntryId,
+        llmRequest: toolParamPrompt,
+        llmResponse: completionText,
+        thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
+        decision: null,
+        status: "failed",
+        error: detail,
+        llmModel: model,
+        ...TokenUsageMapper.toEntryFields(resolverTokenUsage),
+      });
+      this.hub.publish(task.conversationId, {
+        type: SseType.PLANNER_RESPONSE,
+        chatEntryId: resolverEntryId,
+        summary: detail,
+        finished: true,
+        action: "failed",
+        llmModel: model,
+        ...TokenUsageMapper.toSseFields(resolverTokenUsage),
+      });
+      updateThoughtActionEntryAndPublish(
+        { chatEntries: this.chatEntries, hub: this.hub },
+        {
+          conversationId: task.conversationId,
+          id: thoughtActionEntry.id,
+          status: "failed",
+          summary: detail,
+          action: "failed",
+          error: detail,
+          parseResult: {
+            status: "error",
+            error: detail,
+          },
+        },
+      );
+      throw e;
+    }
     this.chatEntries.updatePlannerLlmStreamEntry(task.conversationId, {
       id: resolverEntryId,
       llmRequest: toolParamPrompt,
@@ -513,6 +566,24 @@ Return ONLY valid JSON object for tool parameters.`;
       llmModel: model,
       ...TokenUsageMapper.toSseFields(resolverTokenUsage),
     });
+    updateThoughtActionEntryAndPublish(
+      { chatEntries: this.chatEntries, hub: this.hub },
+      {
+        conversationId: task.conversationId,
+        id: thoughtActionEntry.id,
+        status: "completed",
+        summary: `Resolved parameters for ${task.toolName}`,
+        action: "tool_call",
+        toolName: task.toolName,
+        parseResult: {
+          status: "ok",
+          parsed: {
+            toolName: task.toolName,
+            parameters: parsed,
+          },
+        },
+      },
+    );
     return parsed;
   }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Bot, Brain, Dot, User, Wrench } from "lucide-react";
+import { Activity, Bot, Dot, FileText, MessageSquare, Sparkles, User, Wrench } from "lucide-react";
 import { getConversationMessages, setConversationActiveLeaf } from "@/api/client";
 import type { ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
@@ -47,13 +47,16 @@ function entryIcon(entry: ChatEntry) {
   if (entry.type === "user-message") return <User className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "assistant-message") return <Bot className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "tool-invocation") return <Wrench className="mt-0.5 h-3 w-3 shrink-0" />;
-  if (
-    entry.type === "planner_llm_stream" ||
-    entry.type === "title_llm_stream" ||
-    entry.type === "thought-prepare" ||
-    entry.type === "thought-action"
-  ) {
-    return <Brain className="mt-0.5 h-3 w-3 shrink-0" />;
+  if (entry.type === "thought-prepare") return <FileText className="mt-0.5 h-3 w-3 shrink-0" />;
+  if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream")
+    return <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />;
+  if (entry.type === "thought-action") {
+    const toolName = String(entry.toolName || "").trim();
+    return toolName ? (
+      <Wrench className="mt-0.5 h-3 w-3 shrink-0" />
+    ) : (
+      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+    );
   }
   return <Dot className="mt-0.5 h-3 w-3 shrink-0" />;
 }
@@ -79,9 +82,6 @@ export function ConversationBranchesPanel({
 }: ConversationBranchesPanelProps) {
   const [allEntries, setAllEntries] = useState<ChatEntry[]>([]);
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
-
-  const activePathIds = useMemo(() => new Set(activePathEntries.map((entry) => entry.id)), [activePathEntries]);
-  const activeLeafId = activePathEntries[activePathEntries.length - 1]?.id ?? null;
   const activePathSignature = useMemo(() => activePathEntries.map((entry) => entry.id).join("|"), [activePathEntries]);
 
   const reloadAllEntries = useCallback(async () => {
@@ -100,6 +100,9 @@ export function ConversationBranchesPanel({
       notifyError(`Failed to load conversation branches: ${detail}`);
     });
   }, [reloadAllEntries, activePathSignature]);
+
+  const activePathIds = useMemo(() => new Set(activePathEntries.map((entry) => entry.id)), [activePathEntries]);
+  const activeLeafId = activePathEntries[activePathEntries.length - 1]?.id ?? null;
 
   const entriesById = useMemo(() => new Map(allEntries.map((entry) => [entry.id, entry])), [allEntries]);
 

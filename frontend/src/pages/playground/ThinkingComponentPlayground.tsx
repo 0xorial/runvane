@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { PlannerLlmStreamEntry } from "../../protocol/chatEntry";
-import { ThinkingRow } from "../../components/chat/rows/ThinkingRow";
+import type { PlannerLlmStreamEntry, ThoughtActionEntry, ThoughtPrepareEntry } from "../../protocol/chatEntry";
+import { ThoughtTripletRow } from "../../components/chat/rows/ThoughtTripletRow";
 import { Button } from "@/components/ui/button";
 
 const STREAM_CHUNKS = [
@@ -47,12 +47,14 @@ const STREAM_CHUNKS = [
 ];
 
 function createInitialEntry(id: string): PlannerLlmStreamEntry {
+  const prepareId = `${id}-prepare`;
   return {
     type: "planner_llm_stream",
     id,
+    thoughtId: id,
     conversationIndex: 0,
     createdAt: new Date().toISOString(),
-    parentId: null,
+    parentId: prepareId,
     llmModel: "demo-model",
     llmRequest:
       "Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses. Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking t\nraces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.Plan implementation for a provider-agnostic LLM integration. Include boundaries, failure handling, observability, and a migration plan with explicit risk controls. Provide enough detail to validate UI behavior for long thinking traces and streamed partial responses.",
@@ -106,7 +108,34 @@ export function ThinkingComponentPlayground() {
           {paused ? "Continue" : "Pause"}
         </Button>
       </div>
-      <ThinkingRow entry={entry} conversationId={null} />
+      <ThoughtTripletRow
+        prepare={
+          {
+            type: "thought-prepare",
+            id: `${entry.thoughtId}-prepare`,
+            thoughtId: entry.thoughtId,
+            conversationIndex: entry.conversationIndex - 1,
+            createdAt: entry.createdAt,
+            parentId: null,
+            requestText: entry.llmRequest,
+          } satisfies ThoughtPrepareEntry
+        }
+        queried={entry}
+        action={
+          {
+            type: "thought-action",
+            id: `${entry.thoughtId}-action`,
+            thoughtId: entry.thoughtId,
+            conversationIndex: entry.conversationIndex + 1,
+            createdAt: entry.createdAt,
+            parentId: entry.id,
+            status: entry.status === "completed" ? "completed" : "running",
+            summary: entry.status === "completed" ? "Respond to user" : "Waiting for model output",
+            parseResult: entry.status === "completed" ? { status: "ok", parsed: { demo: true } } : undefined,
+          } satisfies ThoughtActionEntry
+        }
+        conversationId={null}
+      />
     </section>
   );
 }

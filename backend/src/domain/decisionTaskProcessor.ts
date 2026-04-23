@@ -3,11 +3,10 @@ import type { ContinueConversationTask } from "./agentTask.js";
 import { buildPlannerPrompt, parseAgenticPlannerOutput } from "./continueConversationPlannerProtocol.js";
 import { throwIfCancelled } from "./taskCancellation.js";
 import {
-  appendDecisionEntryAndPublishStart,
-  appendThoughtActionEntryAndPublish,
   appendThoughtPrepareEntryAndPublish,
   getDecisionLlmResponse,
   publishDecisionThoughtDelta,
+  startThreeStepLlmFlowAndPublish,
 } from "./decisionTaskProcessor/decisionStreaming.js";
 import {
   finalizeParsedDecisionResult,
@@ -77,51 +76,35 @@ export class DecisionTaskProcessor {
       throw new Error(`cannot reprocess thought without ancestor user-message: ${input.sourceEntryId}`);
     }
 
-    const prepareEntry = appendThoughtPrepareEntryAndPublish(this.deps, {
+    const flow = startThreeStepLlmFlowAndPublish(this.deps, {
       conversationId: input.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
       parentId: sourceEntry.parentId,
       requestText: sourceEntry.llmRequest,
       llmModel: sourceEntry.llmModel,
-    });
-    const plannerEntry = appendDecisionEntryAndPublishStart(this.deps, {
-      conversationId: input.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: prepareEntry.createdAt,
-      parentId: prepareEntry.id,
-      llmRequest: sourceEntry.llmRequest,
-      llmModel: sourceEntry.llmModel,
-    });
-    const thoughtActionEntry = appendThoughtActionEntryAndPublish(this.deps, {
-      conversationId: input.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: plannerEntry.createdAt,
-      parentId: plannerEntry.id,
-      status: "running",
-      summary: "Waiting for planner output",
+      queriedKind: "planner",
+      actionSummary: "Waiting for planner output",
     });
     publishDecisionThoughtDelta(this.deps, {
       conversationId: input.conversationId,
-      plannerEntryId: plannerEntry.id,
+      plannerEntryId: flow.queriedEntry.id,
       delta: input.editedResponse.trim() ? input.editedResponse : "",
     });
 
     const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: input.conversationId,
-      plannerEntryId: plannerEntry.id,
-      thoughtActionEntryId: thoughtActionEntry.id,
-      llmRequest: plannerEntry.llmRequest,
+      plannerEntryId: flow.queriedEntry.id,
+      thoughtActionEntryId: flow.actionEntry.id,
+      llmRequest: flow.queriedEntry.llmRequest,
       llmResponse: input.editedResponse,
       streamedAnswer: input.editedResponse,
       enabledToolIds: enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId),
-      plannerLlmModel: plannerEntry.llmModel,
-      requestStartedMs: Date.parse(plannerEntry.createdAt),
+      plannerLlmModel: flow.queriedEntry.llmModel,
+      requestStartedMs: Date.parse(flow.queriedEntry.createdAt),
       anchorUserMessage,
       completionSummaryFallback: "reprocessed planner step completed",
       parseErrorPrefix: "failed to parse edited planner response",
     });
-    return { plannerEntryId: plannerEntry.id, queuedToolCalls: finalized.queuedToolCalls };
+    return { plannerEntryId: flow.queriedEntry.id, queuedToolCalls: finalized.queuedToolCalls };
   }
 
   async process(task: ContinueConversationTask, opts?: { shouldCancel?: () => boolean }): Promise<void> {
@@ -162,6 +145,7 @@ export class DecisionTaskProcessor {
       toolIds: enabledToolIds,
       priorToolResults: priorToolResultsFromEntries(entries),
     });
+    const thoughtId = crypto.randomUUID();
     const prepareEntry = appendThoughtPrepareEntryAndPublish(this.deps, {
       conversationId: task.conversationId,
       id: crypto.randomUUID(),
@@ -169,6 +153,7 @@ export class DecisionTaskProcessor {
       parentId: triggerEntry?.id ?? null,
       requestText: llmRequest,
       llmModel: plannerLlmModel,
+      thoughtId,
     });
 
     const llmResponse = await getDecisionLlmResponse(this.deps, {
@@ -176,6 +161,7 @@ export class DecisionTaskProcessor {
       requestText: llmRequest,
       plannerLlmModel,
       parentId: prepareEntry.id,
+      thoughtId,
       llmOverrides,
       requestParams,
       files: inputFiles,

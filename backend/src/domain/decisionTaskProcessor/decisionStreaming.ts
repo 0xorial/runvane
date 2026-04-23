@@ -9,8 +9,10 @@ import { extractAssistantOutputFromJsonLike } from "./plannerTextParsing.js";
 import type { DecisionLlmResult, DecisionProcessorDeps, LlmOverrides } from "./types.js";
 import { publishConversationUpdated, resolvePlannerModel } from "./context.js";
 
+type QueriedEntryKind = "planner" | "title";
+
 export function appendThoughtPrepareEntryAndPublish(
-  deps: DecisionProcessorDeps,
+  deps: Pick<DecisionProcessorDeps, "chatEntries" | "hub">,
   input: {
     conversationId: string;
     id: string;
@@ -18,6 +20,7 @@ export function appendThoughtPrepareEntryAndPublish(
     requestText: string;
     llmModel?: string;
     parentId?: string | null;
+    thoughtId: string;
   },
 ): { id: string; conversationIndex: number; createdAt: string } {
   const entry = deps.chatEntries.appendThoughtPrepareEntry(input.conversationId, {
@@ -26,6 +29,7 @@ export function appendThoughtPrepareEntryAndPublish(
     requestText: input.requestText,
     llmModel: input.llmModel,
     parentId: input.parentId,
+    thoughtId: input.thoughtId,
   });
   deps.hub.publish(input.conversationId, {
     type: SseType.CHAT_ENTRY_UPSERT,
@@ -35,7 +39,7 @@ export function appendThoughtPrepareEntryAndPublish(
 }
 
 export function appendDecisionEntryAndPublishStart(
-  deps: DecisionProcessorDeps,
+  deps: Pick<DecisionProcessorDeps, "chatEntries" | "hub">,
   input: {
     conversationId: string;
     id: string;
@@ -43,6 +47,7 @@ export function appendDecisionEntryAndPublishStart(
     llmRequest: string;
     llmModel?: string;
     parentId?: string | null;
+    thoughtId: string;
   },
 ): { id: string; conversationIndex: number; createdAt: string; llmRequest: string; llmModel?: string } {
   const entry = deps.chatEntries.appendPlannerLlmStreamEntry(input.conversationId, {
@@ -55,6 +60,7 @@ export function appendDecisionEntryAndPublishStart(
     decision: null,
     status: "running",
     llmModel: input.llmModel,
+    thoughtId: input.thoughtId,
   });
   deps.hub.publish(input.conversationId, {
     type: SseType.PLANNER_STARTING,
@@ -63,12 +69,112 @@ export function appendDecisionEntryAndPublishStart(
     createdAt: entry.createdAt,
     requestText: entry.llmRequest,
     llmModel: entry.llmModel,
+    thoughtId: entry.thoughtId,
   });
   return entry;
 }
 
+export function appendQueriedModelEntryAndPublishStart(
+  deps: Pick<DecisionProcessorDeps, "chatEntries" | "hub">,
+  input: {
+    conversationId: string;
+    id: string;
+    createdAt: string;
+    llmRequest: string;
+    llmModel?: string;
+    parentId?: string | null;
+    kind: QueriedEntryKind;
+    thoughtId: string;
+  },
+): { id: string; conversationIndex: number; createdAt: string; llmRequest: string; llmModel?: string } {
+  if (input.kind === "planner") {
+    return appendDecisionEntryAndPublishStart(deps, {
+      conversationId: input.conversationId,
+      id: input.id,
+      createdAt: input.createdAt,
+      llmRequest: input.llmRequest,
+      llmModel: input.llmModel,
+      parentId: input.parentId,
+      thoughtId: input.thoughtId,
+    });
+  }
+  const entry = deps.chatEntries.appendTitleLlmStreamEntry(input.conversationId, {
+    id: input.id,
+    createdAt: input.createdAt,
+    parentId: input.parentId,
+    llmRequest: input.llmRequest,
+    llmResponse: "",
+    thoughtMs: null,
+    decision: null,
+    status: "running",
+    llmModel: input.llmModel,
+    thoughtId: input.thoughtId,
+  });
+  deps.hub.publish(input.conversationId, {
+    type: SseType.TITLE_STARTING,
+    chatEntryId: entry.id,
+    conversationIndex: entry.conversationIndex,
+    createdAt: entry.createdAt,
+    requestText: entry.llmRequest,
+    llmModel: entry.llmModel,
+    thoughtId: entry.thoughtId,
+  });
+  return entry;
+}
+
+export function startThreeStepLlmFlowAndPublish(
+  deps: Pick<DecisionProcessorDeps, "chatEntries" | "hub">,
+  input: {
+    conversationId: string;
+    parentId?: string | null;
+    requestText: string;
+    llmModel?: string;
+    queriedKind: QueriedEntryKind;
+    actionSummary: string;
+    createdAt?: string;
+    thoughtId?: string;
+  },
+): {
+  thoughtId: string;
+  prepareEntry: { id: string; conversationIndex: number; createdAt: string };
+  queriedEntry: { id: string; conversationIndex: number; createdAt: string; llmRequest: string; llmModel?: string };
+  actionEntry: { id: string; conversationIndex: number; createdAt: string };
+} {
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  const thoughtId = String(input.thoughtId || "").trim() || crypto.randomUUID();
+  const prepareEntry = appendThoughtPrepareEntryAndPublish(deps, {
+    conversationId: input.conversationId,
+    id: crypto.randomUUID(),
+    createdAt,
+    parentId: input.parentId,
+    requestText: input.requestText,
+    llmModel: input.llmModel,
+    thoughtId,
+  });
+  const queriedEntry = appendQueriedModelEntryAndPublishStart(deps, {
+    conversationId: input.conversationId,
+    id: crypto.randomUUID(),
+    createdAt: prepareEntry.createdAt,
+    parentId: prepareEntry.id,
+    llmRequest: input.requestText,
+    llmModel: input.llmModel,
+    kind: input.queriedKind,
+    thoughtId,
+  });
+  const actionEntry = appendThoughtActionEntryAndPublish(deps, {
+    conversationId: input.conversationId,
+    id: crypto.randomUUID(),
+    createdAt: queriedEntry.createdAt,
+    parentId: queriedEntry.id,
+    status: "running",
+    summary: input.actionSummary,
+    thoughtId,
+  });
+  return { thoughtId, prepareEntry, queriedEntry, actionEntry };
+}
+
 export function appendThoughtActionEntryAndPublish(
-  deps: DecisionProcessorDeps,
+  deps: Pick<DecisionProcessorDeps, "chatEntries" | "hub">,
   input: {
     conversationId: string;
     id: string;
@@ -80,6 +186,7 @@ export function appendThoughtActionEntryAndPublish(
     toolName?: string;
     error?: string;
     parseResult?: ThoughtActionEntry["parseResult"];
+    thoughtId: string;
   },
 ): { id: string; conversationIndex: number; createdAt: string } {
   const entry = deps.chatEntries.appendThoughtActionEntry(input.conversationId, {
@@ -92,6 +199,7 @@ export function appendThoughtActionEntryAndPublish(
     toolName: input.toolName,
     error: input.error,
     parseResult: input.parseResult,
+    thoughtId: input.thoughtId,
   });
   deps.hub.publish(input.conversationId, {
     type: SseType.CHAT_ENTRY_UPSERT,
@@ -101,7 +209,7 @@ export function appendThoughtActionEntryAndPublish(
 }
 
 export function updateThoughtActionEntryAndPublish(
-  deps: DecisionProcessorDeps,
+  deps: Pick<DecisionProcessorDeps, "chatEntries" | "hub">,
   input: {
     conversationId: string;
     id: string;
@@ -111,6 +219,7 @@ export function updateThoughtActionEntryAndPublish(
     toolName?: string;
     error?: string;
     parseResult?: ThoughtActionEntry["parseResult"];
+    thoughtId?: string;
   },
 ): void {
   deps.chatEntries.updateThoughtActionEntry(input.conversationId, {
@@ -121,6 +230,7 @@ export function updateThoughtActionEntryAndPublish(
     toolName: input.toolName,
     error: input.error,
     parseResult: input.parseResult,
+    thoughtId: input.thoughtId,
   });
   const updated = deps.chatEntries.getMessage(input.conversationId, input.id);
   if (!updated) return;
@@ -131,7 +241,7 @@ export function updateThoughtActionEntryAndPublish(
 }
 
 export function publishDecisionThoughtDelta(
-  deps: DecisionProcessorDeps,
+  deps: Pick<DecisionProcessorDeps, "hub">,
   input: { conversationId: string; plannerEntryId: string; delta: string },
 ): void {
   if (!input.delta) return;
@@ -190,12 +300,14 @@ export async function getDecisionLlmResponse(
     requestText: string;
     plannerLlmModel: string;
     parentId?: string | null;
+    thoughtId: string;
     llmOverrides: LlmOverrides;
     requestParams: Record<string, unknown>;
     files: Array<{ filename: string; mimeType: string; base64Data: string }>;
     shouldCancel?: () => boolean;
   },
 ): Promise<DecisionLlmResult> {
+  const thoughtId = String(input.thoughtId || "").trim() || crypto.randomUUID();
   const plannerEntryId = crypto.randomUUID();
   const thoughtActionEntryId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -207,6 +319,7 @@ export async function getDecisionLlmResponse(
     parentId: input.parentId,
     llmRequest: input.requestText,
     llmModel: input.plannerLlmModel,
+    thoughtId,
   });
   appendThoughtActionEntryAndPublish(deps, {
     conversationId: input.conversationId,
@@ -215,6 +328,7 @@ export async function getDecisionLlmResponse(
     parentId: plannerEntryId,
     status: "running",
     summary: "Waiting for planner output",
+    thoughtId,
   });
 
   let reply = "";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { createConversation, postConversationMessage, uploadFile } from "../api/client";
@@ -11,12 +11,20 @@ import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
 import { ConversationBranchesPanel } from "../components/chat/ConversationBranchesPanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
 import { ChatMessageRow, messageRowKey } from "../components/chat/ChatMessageRow";
+import { ThoughtTripletRow } from "../components/chat/rows/ThoughtTripletRow";
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import type { ChatAttachment } from "../protocol/chatEntry";
+import type {
+  ChatEntry,
+  PlannerLlmStreamEntry,
+  ThoughtActionEntry,
+  ThoughtPrepareEntry,
+  TitleLlmStreamEntry,
+} from "../protocol/chatEntry";
 
 async function sendMessageToConversation(
   conversationId: string,
@@ -82,6 +90,104 @@ export function ChatPage({
   const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
+
+  const renderedRows = useMemo<
+    Array<
+      | { kind: "single"; entry$: (typeof chatEntries)[number] }
+      | {
+          kind: "triplet";
+          thoughtId: string;
+          prepare: ThoughtPrepareEntry;
+          queried: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+          action: ThoughtActionEntry;
+          anchorIds: string[];
+        }
+    >
+  >(() => {
+    const isThoughtStepEntry = (entry: ChatEntry): boolean =>
+      entry.type === "thought-prepare" ||
+      entry.type === "planner_llm_stream" ||
+      entry.type === "title_llm_stream" ||
+      entry.type === "thought-action";
+
+    const entries = chatEntries.map((entry$) => entry$.get());
+    const entryById = new Map(entries.map((entry) => [entry.id, entry]));
+    const childrenByParent = new Map<string | null, ChatEntry[]>();
+    for (const entry of entries) {
+      const list = childrenByParent.get(entry.parentId) ?? [];
+      list.push(entry);
+      childrenByParent.set(entry.parentId, list);
+    }
+    for (const list of childrenByParent.values()) {
+      list.sort((a, b) =>
+        a.conversationIndex !== b.conversationIndex ? a.conversationIndex - b.conversationIndex : a.createdAt.localeCompare(b.createdAt),
+      );
+    }
+
+    const tripletByEntryId = new Map<
+      string,
+      {
+        tripletId: string;
+        firstEntryId: string;
+        prepare: ThoughtPrepareEntry;
+        queried: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+        action: ThoughtActionEntry;
+      }
+    >();
+
+    for (const queried of entries) {
+      if (queried.type !== "planner_llm_stream" && queried.type !== "title_llm_stream") continue;
+      const parent = queried.parentId ? entryById.get(queried.parentId) : null;
+      if (!parent || parent.type !== "thought-prepare") continue;
+      const action = (childrenByParent.get(queried.id) ?? []).find((x): x is ThoughtActionEntry => x.type === "thought-action");
+      if (!action) continue;
+
+      const thoughtId =
+        queried.thoughtId && parent.thoughtId === queried.thoughtId && action.thoughtId === queried.thoughtId
+          ? queried.thoughtId
+          : `legacy-${queried.id}`;
+      const firstEntryId =
+        [parent, queried, action].sort((a, b) =>
+          a.conversationIndex !== b.conversationIndex ? a.conversationIndex - b.conversationIndex : a.createdAt.localeCompare(b.createdAt),
+        )[0].id;
+      const triplet = { tripletId: thoughtId, firstEntryId, prepare: parent, queried, action };
+      tripletByEntryId.set(parent.id, triplet);
+      tripletByEntryId.set(queried.id, triplet);
+      tripletByEntryId.set(action.id, triplet);
+    }
+
+    const rows: Array<
+      | { kind: "single"; entry$: (typeof chatEntries)[number] }
+      | {
+          kind: "triplet";
+          thoughtId: string;
+          prepare: ThoughtPrepareEntry;
+          queried: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+          action: ThoughtActionEntry;
+          anchorIds: string[];
+        }
+    > = [];
+
+    for (const entry$ of chatEntries) {
+      const entry = entry$.get();
+      const triplet = tripletByEntryId.get(entry.id);
+      if (!triplet) {
+        if (isThoughtStepEntry(entry)) continue;
+        rows.push({ kind: "single", entry$ });
+        continue;
+      }
+      if (entry.id !== triplet.firstEntryId) continue;
+      rows.push({
+        kind: "triplet",
+        thoughtId: triplet.tripletId,
+        prepare: triplet.prepare,
+        queried: triplet.queried,
+        action: triplet.action,
+        anchorIds: [triplet.prepare.id, triplet.queried.id, triplet.action.id],
+      });
+    }
+    return rows;
+  }, [chatEntries]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => composerTextareaRef.current?.focus());
@@ -263,11 +369,28 @@ export function ChatPage({
                 className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
                 topAnchorEntryId={topAnchorEntryId}
               >
-                {chatEntries.map((entry$) => {
-                  const entry = entry$.get();
+                {renderedRows.map((row) => {
+                  if (row.kind === "single") {
+                    const entry = row.entry$.get();
+                    return (
+                      <div key={messageRowKey(row.entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                        <ChatMessageRow entry$={row.entry$} />
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                      <ChatMessageRow entry$={entry$} conversationId={conversationId} />
+                    <div key={`thought-${row.thoughtId}`} data-chat-entry-id={row.queried.id} data-chat-entry-type={row.queried.type}>
+                      {row.anchorIds.map((anchorId) =>
+                        anchorId === row.queried.id ? null : (
+                          <div key={anchorId} data-chat-entry-id={anchorId} className="h-0 overflow-hidden" aria-hidden />
+                        ),
+                      )}
+                      <ThoughtTripletRow
+                        prepare={row.prepare}
+                        queried={row.queried}
+                        action={row.action}
+                        conversationId={conversationId}
+                      />
                     </div>
                   );
                 })}
@@ -297,11 +420,28 @@ export function ChatPage({
               className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
               topAnchorEntryId={topAnchorEntryId}
             >
-              {chatEntries.map((entry$) => {
-                const entry = entry$.get();
+              {renderedRows.map((row) => {
+                if (row.kind === "single") {
+                  const entry = row.entry$.get();
+                  return (
+                    <div key={messageRowKey(row.entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                      <ChatMessageRow entry$={row.entry$} />
+                    </div>
+                  );
+                }
                 return (
-                  <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                    <ChatMessageRow entry$={entry$} conversationId={conversationId} />
+                  <div key={`thought-${row.thoughtId}`} data-chat-entry-id={row.queried.id} data-chat-entry-type={row.queried.type}>
+                    {row.anchorIds.map((anchorId) =>
+                      anchorId === row.queried.id ? null : (
+                        <div key={anchorId} data-chat-entry-id={anchorId} className="h-0 overflow-hidden" aria-hidden />
+                      ),
+                    )}
+                    <ThoughtTripletRow
+                      prepare={row.prepare}
+                      queried={row.queried}
+                      action={row.action}
+                      conversationId={conversationId}
+                    />
                   </div>
                 );
               })}
