@@ -5,17 +5,14 @@ import type { TasksRepo } from "../infra/repositories/tasksRepo.js";
 import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
 import type { ToolInvocationEntry } from "../types/chatEntry.js";
-import { TokenUsageMapper } from "../types/tokenUsage.js";
 import type { RunToolTask } from "./agentTask.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
 import { mostPermissivePermission } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
-import {
-  composeFailedPlannerResponse,
-  usageFromStreamingError,
-} from "./decisionTaskProcessor/plannerStreamUtils.js";
+import { usageFromStreamingError } from "./decisionTaskProcessor/plannerStreamUtils.js";
 import { parseJsonObjectFromCompletionText } from "./decisionTaskProcessor/plannerTextParsing.js";
 import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
+import { finishThoughtLifecycle, publishThoughtLlmDelta, startThoughtLifecycle } from "./thoughtLifecycle.js";
 
 type ToolExecutionEnvelope = {
   ok: boolean;
@@ -411,27 +408,19 @@ Tool request:
 ${plannerRequest}
 
 Return ONLY valid JSON object for tool parameters.`;
-    const resolverEntryId = crypto.randomUUID();
-    const resolverCreatedAt = new Date().toISOString();
-    const resolverStartedAtMs = Date.now();
-    const resolverEntry = this.chatEntries.appendPlannerLlmStreamEntry(task.conversationId, {
-      id: resolverEntryId,
-      createdAt: resolverCreatedAt,
-      llmRequest: toolParamPrompt,
-      llmResponse: "",
-      thoughtMs: null,
-      decision: null,
-      status: "running",
-      llmModel: model,
-    });
-    this.hub.publish(task.conversationId, {
-      type: SseType.PLANNER_STARTING,
-      chatEntryId: resolverEntryId,
-      conversationIndex: resolverEntry.conversationIndex,
-      createdAt: resolverEntry.createdAt,
-      requestText: toolParamPrompt,
-      llmModel: model,
-    });
+    const thought = startThoughtLifecycle(
+      { chatEntries: this.chatEntries, hub: this.hub },
+      {
+        conversationId: task.conversationId,
+        parentId: task.sourceEntryId ?? null,
+        llmRequest: toolParamPrompt,
+        llmModel: model,
+        kind: "planner",
+        includeAction: true,
+        runningSummary: `Resolving ${task.toolName} parameters`,
+      },
+    );
+    const resolverStartedAtMs = Date.parse(thought.streamEntry.createdAt);
 
     let reconstructedReply = "";
     let resolverTokenUsage: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number } | undefined;
@@ -447,9 +436,10 @@ Return ONLY valid JSON object for tool parameters.`;
         (delta) => {
           throwIfCancelled(shouldCancel);
           reconstructedReply += delta;
-          this.hub.publish(task.conversationId, {
-            type: SseType.PLANNER_LLM_STREAM,
-            chatEntryId: resolverEntryId,
+          publishThoughtLlmDelta({ chatEntries: this.chatEntries, hub: this.hub }, {
+            conversationId: task.conversationId,
+            kind: "planner",
+            streamEntryId: thought.streamEntry.id,
             delta,
           });
         }
@@ -463,25 +453,21 @@ Return ONLY valid JSON object for tool parameters.`;
       }
       const detail = e instanceof Error ? e.message : String(e);
       const cancelled = isTaskCancelledError(e);
-      this.chatEntries.updatePlannerLlmStreamEntry(task.conversationId, {
-        id: resolverEntryId,
+      finishThoughtLifecycle({ chatEntries: this.chatEntries, hub: this.hub }, {
+        conversationId: task.conversationId,
+        kind: "planner",
+        streamEntryId: thought.streamEntry.id,
+        thoughtActionEntryId: thought.thoughtActionEntry.id,
         llmRequest: toolParamPrompt,
-        llmResponse: composeFailedPlannerResponse(reconstructedReply),
+        llmResponse: reconstructedReply,
         thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
         decision: null,
         status: cancelled ? "cancelled" : "failed",
         error: detail,
         llmModel: model,
-        ...TokenUsageMapper.toEntryFields(resolverTokenUsage),
-      });
-      this.hub.publish(task.conversationId, {
-        type: SseType.PLANNER_RESPONSE,
-        chatEntryId: resolverEntryId,
+        usage: resolverTokenUsage,
         summary: cancelled ? "Cancelled" : detail,
-        finished: true,
         action: cancelled ? "cancelled" : "failed",
-        llmModel: model,
-        ...TokenUsageMapper.toSseFields(resolverTokenUsage),
       });
       throw e;
     }
@@ -489,8 +475,11 @@ Return ONLY valid JSON object for tool parameters.`;
       text: completionText,
       context: `tool resolver response for ${task.toolName}`,
     });
-    this.chatEntries.updatePlannerLlmStreamEntry(task.conversationId, {
-      id: resolverEntryId,
+    finishThoughtLifecycle({ chatEntries: this.chatEntries, hub: this.hub }, {
+      conversationId: task.conversationId,
+      kind: "planner",
+      streamEntryId: thought.streamEntry.id,
+      thoughtActionEntryId: thought.thoughtActionEntry.id,
       llmRequest: toolParamPrompt,
       llmResponse: completionText,
       thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
@@ -501,17 +490,10 @@ Return ONLY valid JSON object for tool parameters.`;
       },
       status: "completed",
       llmModel: model,
-      ...TokenUsageMapper.toEntryFields(resolverTokenUsage),
-    });
-    this.hub.publish(task.conversationId, {
-      type: SseType.PLANNER_RESPONSE,
-      chatEntryId: resolverEntryId,
+      usage: resolverTokenUsage,
       summary: `Resolved parameters for ${task.toolName}`,
-      finished: true,
       action: "tool_call",
       toolName: task.toolName,
-      llmModel: model,
-      ...TokenUsageMapper.toSseFields(resolverTokenUsage),
     });
     return parsed;
   }

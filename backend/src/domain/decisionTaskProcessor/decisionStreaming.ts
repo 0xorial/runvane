@@ -2,133 +2,12 @@ import { logger } from "../../infra/logger.js";
 import type { StreamTextCompletionResult } from "../../llm_provider/provider.js";
 import { SseType } from "../../types/sse.js";
 import { TokenUsageMapper } from "../../types/tokenUsage.js";
-import type { ThoughtActionEntry } from "../../types/chatEntry.js";
+import { updateThoughtActionEntryAndPublish } from "../thoughtLifecycle.js";
 import { isTaskCancelledError, throwIfCancelled } from "../taskCancellation.js";
 import { composeFailedPlannerResponse, incrementalDelta, usageFromStreamingError } from "./plannerStreamUtils.js";
 import { extractAssistantOutputFromJsonLike } from "./plannerTextParsing.js";
 import type { DecisionLlmResult, DecisionProcessorDeps, LlmOverrides } from "./types.js";
 import { publishConversationUpdated, resolvePlannerModel } from "./context.js";
-
-export function appendThoughtPrepareEntryAndPublish(
-  deps: DecisionProcessorDeps,
-  input: {
-    conversationId: string;
-    id: string;
-    createdAt: string;
-    requestText: string;
-    llmModel?: string;
-    parentId?: string | null;
-  },
-): { id: string; conversationIndex: number; createdAt: string } {
-  const entry = deps.chatEntries.appendThoughtPrepareEntry(input.conversationId, {
-    id: input.id,
-    createdAt: input.createdAt,
-    requestText: input.requestText,
-    llmModel: input.llmModel,
-    parentId: input.parentId,
-  });
-  deps.hub.publish(input.conversationId, {
-    type: SseType.CHAT_ENTRY_UPSERT,
-    entry,
-  });
-  return { id: entry.id, conversationIndex: entry.conversationIndex, createdAt: entry.createdAt };
-}
-
-export function appendDecisionEntryAndPublishStart(
-  deps: DecisionProcessorDeps,
-  input: {
-    conversationId: string;
-    id: string;
-    createdAt: string;
-    llmRequest: string;
-    llmModel?: string;
-    parentId?: string | null;
-  },
-): { id: string; conversationIndex: number; createdAt: string; llmRequest: string; llmModel?: string } {
-  const entry = deps.chatEntries.appendPlannerLlmStreamEntry(input.conversationId, {
-    id: input.id,
-    createdAt: input.createdAt,
-    parentId: input.parentId,
-    llmRequest: input.llmRequest,
-    llmResponse: "",
-    thoughtMs: null,
-    decision: null,
-    status: "running",
-    llmModel: input.llmModel,
-  });
-  deps.hub.publish(input.conversationId, {
-    type: SseType.PLANNER_STARTING,
-    chatEntryId: entry.id,
-    conversationIndex: entry.conversationIndex,
-    createdAt: entry.createdAt,
-    requestText: entry.llmRequest,
-    llmModel: entry.llmModel,
-  });
-  return entry;
-}
-
-export function appendThoughtActionEntryAndPublish(
-  deps: DecisionProcessorDeps,
-  input: {
-    conversationId: string;
-    id: string;
-    createdAt: string;
-    parentId?: string | null;
-    status: "running" | "completed" | "failed" | "cancelled";
-    summary?: string;
-    action?: string;
-    toolName?: string;
-    error?: string;
-    parseResult?: ThoughtActionEntry["parseResult"];
-  },
-): { id: string; conversationIndex: number; createdAt: string } {
-  const entry = deps.chatEntries.appendThoughtActionEntry(input.conversationId, {
-    id: input.id,
-    createdAt: input.createdAt,
-    parentId: input.parentId,
-    status: input.status,
-    summary: input.summary,
-    action: input.action,
-    toolName: input.toolName,
-    error: input.error,
-    parseResult: input.parseResult,
-  });
-  deps.hub.publish(input.conversationId, {
-    type: SseType.CHAT_ENTRY_UPSERT,
-    entry,
-  });
-  return { id: entry.id, conversationIndex: entry.conversationIndex, createdAt: entry.createdAt };
-}
-
-export function updateThoughtActionEntryAndPublish(
-  deps: DecisionProcessorDeps,
-  input: {
-    conversationId: string;
-    id: string;
-    status: "running" | "completed" | "failed" | "cancelled";
-    summary?: string;
-    action?: string;
-    toolName?: string;
-    error?: string;
-    parseResult?: ThoughtActionEntry["parseResult"];
-  },
-): void {
-  deps.chatEntries.updateThoughtActionEntry(input.conversationId, {
-    id: input.id,
-    status: input.status,
-    summary: input.summary,
-    action: input.action,
-    toolName: input.toolName,
-    error: input.error,
-    parseResult: input.parseResult,
-  });
-  const updated = deps.chatEntries.getMessage(input.conversationId, input.id);
-  if (!updated) return;
-  deps.hub.publish(input.conversationId, {
-    type: SseType.CHAT_ENTRY_UPSERT,
-    entry: updated,
-  });
-}
 
 export function publishDecisionThoughtDelta(
   deps: DecisionProcessorDeps,
@@ -187,36 +66,17 @@ export async function getDecisionLlmResponse(
   deps: DecisionProcessorDeps,
   input: {
     conversationId: string;
+    plannerEntryId: string;
+    thoughtActionEntryId: string;
+    requestStartedMs: number;
     requestText: string;
     plannerLlmModel: string;
-    parentId?: string | null;
     llmOverrides: LlmOverrides;
     requestParams: Record<string, unknown>;
     files: Array<{ filename: string; mimeType: string; base64Data: string }>;
     shouldCancel?: () => boolean;
   },
 ): Promise<DecisionLlmResult> {
-  const plannerEntryId = crypto.randomUUID();
-  const thoughtActionEntryId = crypto.randomUUID();
-  const createdAt = new Date().toISOString();
-  const requestStartedMs = Date.now();
-  appendDecisionEntryAndPublishStart(deps, {
-    conversationId: input.conversationId,
-    id: plannerEntryId,
-    createdAt,
-    parentId: input.parentId,
-    llmRequest: input.requestText,
-    llmModel: input.plannerLlmModel,
-  });
-  appendThoughtActionEntryAndPublish(deps, {
-    conversationId: input.conversationId,
-    id: thoughtActionEntryId,
-    createdAt,
-    parentId: plannerEntryId,
-    status: "running",
-    summary: "Waiting for planner output",
-  });
-
   let reply = "";
   let firstDeltaPublished = false;
   let plannerText = "";
@@ -238,8 +98,8 @@ export async function getDecisionLlmResponse(
           logger.info(
             {
               conversationId: input.conversationId,
-              plannerEntryId,
-              firstStreamLatencyMs: Math.max(0, Date.now() - requestStartedMs),
+              plannerEntryId: input.plannerEntryId,
+              firstStreamLatencyMs: Math.max(0, Date.now() - input.requestStartedMs),
             },
             "[sse] first llm token streamed",
           );
@@ -248,7 +108,7 @@ export async function getDecisionLlmResponse(
         const thoughtDelta = incrementalDelta(plannerText, reconstructedReply);
         publishDecisionThoughtDelta(deps, {
           conversationId: input.conversationId,
-          plannerEntryId,
+          plannerEntryId: input.plannerEntryId,
           delta: thoughtDelta,
         });
         plannerText = reconstructedReply;
@@ -279,10 +139,10 @@ export async function getDecisionLlmResponse(
     if (isTaskCancelledError(e)) {
       const detail = e instanceof Error ? e.message : String(e);
       deps.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
-        id: plannerEntryId,
+        id: input.plannerEntryId,
         llmRequest: input.requestText,
         llmResponse: composeFailedPlannerResponse(reconstructedReply),
-        thoughtMs: Math.max(0, Date.now() - requestStartedMs),
+        thoughtMs: Math.max(0, Date.now() - input.requestStartedMs),
         decision: null,
         status: "cancelled",
         error: detail,
@@ -292,7 +152,7 @@ export async function getDecisionLlmResponse(
       publishConversationUpdated(deps, input.conversationId);
       deps.hub.publish(input.conversationId, {
         type: SseType.PLANNER_RESPONSE,
-        chatEntryId: plannerEntryId,
+        chatEntryId: input.plannerEntryId,
         summary: "Cancelled",
         finished: true,
         action: "cancelled",
@@ -301,7 +161,7 @@ export async function getDecisionLlmResponse(
       });
       updateThoughtActionEntryAndPublish(deps, {
         conversationId: input.conversationId,
-        id: thoughtActionEntryId,
+        id: input.thoughtActionEntryId,
         status: "cancelled",
         summary: "Cancelled",
         action: "cancelled",
@@ -311,10 +171,10 @@ export async function getDecisionLlmResponse(
     }
     const detail = e instanceof Error ? e.message : String(e);
     deps.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
-      id: plannerEntryId,
+      id: input.plannerEntryId,
       llmRequest: input.requestText,
       llmResponse: composeFailedPlannerResponse(reconstructedReply),
-      thoughtMs: Math.max(0, Date.now() - requestStartedMs),
+      thoughtMs: Math.max(0, Date.now() - input.requestStartedMs),
       decision: null,
       status: "failed",
       error: detail,
@@ -324,7 +184,7 @@ export async function getDecisionLlmResponse(
     publishConversationUpdated(deps, input.conversationId);
     deps.hub.publish(input.conversationId, {
       type: SseType.PLANNER_RESPONSE,
-      chatEntryId: plannerEntryId,
+      chatEntryId: input.plannerEntryId,
       summary: detail,
       finished: true,
       action: "failed",
@@ -333,7 +193,7 @@ export async function getDecisionLlmResponse(
     });
     updateThoughtActionEntryAndPublish(deps, {
       conversationId: input.conversationId,
-      id: thoughtActionEntryId,
+      id: input.thoughtActionEntryId,
       status: "failed",
       summary: detail,
       action: "failed",
@@ -344,12 +204,12 @@ export async function getDecisionLlmResponse(
 
   return {
     kind: "ok",
-    plannerEntryId,
-    thoughtActionEntryId,
+    plannerEntryId: input.plannerEntryId,
+    thoughtActionEntryId: input.thoughtActionEntryId,
     assistantEntryId,
     reply,
     streamedAnswer,
     plannerTokenUsage,
-    requestStartedMs,
+    requestStartedMs: input.requestStartedMs,
   };
 }

@@ -40,6 +40,14 @@ export type ConversationModelTokenUsageRow = {
 export class ChatEntriesRepo {
   constructor(private readonly db: SqliteDb) {}
 
+  private requireThoughtId(value: unknown, context: string): string {
+    const thoughtId = typeof value === "string" ? value.trim() : "";
+    if (!thoughtId) {
+      throw new Error(`missing required thoughtId: ${context}`);
+    }
+    return thoughtId;
+  }
+
   private getActiveLeafEntryId(conversationId: string): string | null {
     const row = this.db
       .prepare(
@@ -351,6 +359,7 @@ export class ChatEntriesRepo {
     conversationId: string,
     input: {
       id: string;
+      thoughtId: string;
       createdAt: string;
       parentId?: string | null;
       llmRequest: string;
@@ -366,6 +375,7 @@ export class ChatEntriesRepo {
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtId = this.requireThoughtId(input.thoughtId, `append planner_llm_stream ${input.id}`);
     const entry: PlannerLlmStreamEntry = {
       type: "planner_llm_stream",
       id: input.id,
@@ -373,6 +383,7 @@ export class ChatEntriesRepo {
       createdAt: input.createdAt,
       parentId,
       llmRequest: input.llmRequest,
+      thoughtId,
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
       decision: input.decision ?? null,
@@ -382,6 +393,7 @@ export class ChatEntriesRepo {
     };
     const payload: Record<string, unknown> = {
       llmRequest: entry.llmRequest,
+      thoughtId,
       llmResponse: entry.llmResponse ?? "",
       thoughtMs: entry.thoughtMs ?? null,
       decision: entry.decision ?? null,
@@ -405,6 +417,7 @@ export class ChatEntriesRepo {
     conversationId: string,
     input: {
       id: string;
+      thoughtId: string;
       createdAt: string;
       parentId?: string | null;
       requestText: string;
@@ -415,18 +428,21 @@ export class ChatEntriesRepo {
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtId = this.requireThoughtId(input.thoughtId, `append thought-prepare ${input.id}`);
     const entry: ThoughtPrepareEntry = {
       type: "thought-prepare",
       id: input.id,
       conversationIndex,
       createdAt: input.createdAt,
       parentId,
+      thoughtId,
       requestText: input.requestText,
       status: "completed",
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
     const payload: Record<string, unknown> = {
       requestText: entry.requestText,
+      thoughtId,
       status: "completed",
     };
     if (llmModel !== undefined) payload.llmModel = llmModel;
@@ -446,6 +462,7 @@ export class ChatEntriesRepo {
     conversationId: string,
     input: {
       id: string;
+      thoughtId: string;
       createdAt: string;
       parentId?: string | null;
       status: ThoughtActionEntry["status"];
@@ -463,12 +480,14 @@ export class ChatEntriesRepo {
     const toolName = typeof input.toolName === "string" ? input.toolName : undefined;
     const error = typeof input.error === "string" ? input.error : undefined;
     const parseResult = input.parseResult && typeof input.parseResult === "object" ? input.parseResult : undefined;
+    const thoughtId = this.requireThoughtId(input.thoughtId, `append thought-action ${input.id}`);
     const entry: ThoughtActionEntry = {
       type: "thought-action",
       id: input.id,
       conversationIndex,
       createdAt: input.createdAt,
       parentId,
+      thoughtId,
       status: input.status,
       ...(summary ? { summary } : {}),
       ...(action ? { action } : {}),
@@ -483,6 +502,7 @@ export class ChatEntriesRepo {
       parentId: entry.parentId,
       type: "thought-action",
       payloadJson: JSON.stringify({
+        thoughtId,
         status: entry.status,
         ...(summary ? { summary } : {}),
         ...(action ? { action } : {}),
@@ -507,7 +527,20 @@ export class ChatEntriesRepo {
       parseResult?: ThoughtActionEntry["parseResult"];
     },
   ): void {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+         FROM chat_entries
+         WHERE id = ? AND conversation_id = ? AND type = 'thought-action'`,
+      )
+      .get(input.id, conversationId) as { payload_json?: string } | undefined;
+    if (!row?.payload_json) {
+      throw new Error(`thought-action entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+    const existingPayload = parseJsonObject(row.payload_json);
+    const thoughtId = this.requireThoughtId(existingPayload.thoughtId, `update thought-action ${input.id}`);
     const payload: Record<string, unknown> = {
+      thoughtId,
       status: input.status,
       ...(typeof input.summary === "string" ? { summary: input.summary } : {}),
       ...(typeof input.action === "string" ? { action: input.action } : {}),
@@ -528,15 +561,14 @@ export class ChatEntriesRepo {
         conversation_id: conversationId,
         payload_json: JSON.stringify(payload),
       });
-    if (Number(result.changes ?? 0) !== 1) {
-      throw new Error(`thought-action entry not found for update: conversation=${conversationId} id=${input.id}`);
-    }
+    if (Number(result.changes ?? 0) !== 1) throw new Error(`thought-action entry not found for update: conversation=${conversationId} id=${input.id}`);
   }
 
   appendTitleLlmStreamEntry(
     conversationId: string,
     input: {
       id: string;
+      thoughtId: string;
       createdAt: string;
       parentId?: string | null;
       llmRequest: string;
@@ -552,12 +584,14 @@ export class ChatEntriesRepo {
     const parentId = this.resolveParentId(conversationId, input.parentId);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
+    const thoughtId = this.requireThoughtId(input.thoughtId, `append title_llm_stream ${input.id}`);
     const entry: TitleLlmStreamEntry = {
       type: "title_llm_stream",
       id: input.id,
       conversationIndex,
       createdAt: input.createdAt,
       parentId,
+      thoughtId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
@@ -568,6 +602,7 @@ export class ChatEntriesRepo {
     };
     const payload: Record<string, unknown> = {
       llmRequest: entry.llmRequest,
+      thoughtId,
       llmResponse: entry.llmResponse ?? "",
       thoughtMs: entry.thoughtMs ?? null,
       decision: entry.decision ?? null,
@@ -604,9 +639,22 @@ export class ChatEntriesRepo {
       parseResult?: PlannerLlmStreamEntry["parseResult"];
     },
   ): void {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+         FROM chat_entries
+         WHERE id = ? AND conversation_id = ? AND type = 'planner_llm_stream'`,
+      )
+      .get(input.id, conversationId) as { payload_json?: string } | undefined;
+    if (!row?.payload_json) {
+      throw new Error(`planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+    const existingPayload = parseJsonObject(row.payload_json);
+    const thoughtId = this.requireThoughtId(existingPayload.thoughtId, `update planner_llm_stream ${input.id}`);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const payload: Record<string, unknown> = {
+      thoughtId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
@@ -640,9 +688,7 @@ export class ChatEntriesRepo {
         conversation_id: conversationId,
         payload_json: JSON.stringify(payload),
       });
-    if (Number(result.changes ?? 0) !== 1) {
-      throw new Error(`planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
-    }
+    if (Number(result.changes ?? 0) !== 1) throw new Error(`planner_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
   }
 
   updateTitleLlmStreamEntry(
@@ -661,9 +707,22 @@ export class ChatEntriesRepo {
       completionTokens?: number;
     },
   ): void {
+    const row = this.db
+      .prepare(
+        `SELECT payload_json
+         FROM chat_entries
+         WHERE id = ? AND conversation_id = ? AND type = 'title_llm_stream'`,
+      )
+      .get(input.id, conversationId) as { payload_json?: string } | undefined;
+    if (!row?.payload_json) {
+      throw new Error(`title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
+    }
+    const existingPayload = parseJsonObject(row.payload_json);
+    const thoughtId = this.requireThoughtId(existingPayload.thoughtId, `update title_llm_stream ${input.id}`);
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const payload: Record<string, unknown> = {
+      thoughtId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse ?? "",
       thoughtMs: input.thoughtMs ?? null,
@@ -694,9 +753,7 @@ export class ChatEntriesRepo {
         conversation_id: conversationId,
         payload_json: JSON.stringify(payload),
       });
-    if (Number(result.changes ?? 0) !== 1) {
-      throw new Error(`title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
-    }
+    if (Number(result.changes ?? 0) !== 1) throw new Error(`title_llm_stream entry not found for update: conversation=${conversationId} id=${input.id}`);
   }
 
   getLastUserMessage(conversationId: string): UserMessageEntry | null {
@@ -839,6 +896,7 @@ export class ChatEntriesRepo {
         } satisfies AssistantMessageEntry;
       }
       if (row.type === "planner_llm_stream") {
+        const thoughtId = this.requireThoughtId(payload.thoughtId, `read planner_llm_stream ${row.id}`);
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         const promptTokens =
@@ -881,6 +939,7 @@ export class ChatEntriesRepo {
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
           parentId: row.parent_id,
+          thoughtId,
           llmRequest: String(payload.llmRequest ?? ""),
           llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
           thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,
@@ -895,6 +954,7 @@ export class ChatEntriesRepo {
         } satisfies PlannerLlmStreamEntry;
       }
       if (row.type === "thought-prepare") {
+        const thoughtId = this.requireThoughtId(payload.thoughtId, `read thought-prepare ${row.id}`);
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         return {
@@ -903,12 +963,14 @@ export class ChatEntriesRepo {
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
           parentId: row.parent_id,
+          thoughtId,
           requestText: String(payload.requestText ?? ""),
           status: "completed",
           ...(llmModel !== undefined ? { llmModel } : {}),
         } satisfies ThoughtPrepareEntry;
       }
       if (row.type === "thought-action") {
+        const thoughtId = this.requireThoughtId(payload.thoughtId, `read thought-action ${row.id}`);
         const status =
           payload.status === "running" ||
           payload.status === "completed" ||
@@ -936,6 +998,7 @@ export class ChatEntriesRepo {
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
           parentId: row.parent_id,
+          thoughtId,
           status,
           ...(summary ? { summary } : {}),
           ...(action ? { action } : {}),
@@ -945,6 +1008,7 @@ export class ChatEntriesRepo {
         } satisfies ThoughtActionEntry;
       }
       if (row.type === "title_llm_stream") {
+        const thoughtId = this.requireThoughtId(payload.thoughtId, `read title_llm_stream ${row.id}`);
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         const promptTokens =
@@ -977,6 +1041,7 @@ export class ChatEntriesRepo {
           conversationIndex: row.conversation_index,
           createdAt: row.created_at,
           parentId: row.parent_id,
+          thoughtId,
           llmRequest: String(payload.llmRequest ?? ""),
           llmResponse: typeof payload.llmResponse === "string" ? payload.llmResponse : undefined,
           thoughtMs: Number.isFinite(payload.thoughtMs as number) ? (payload.thoughtMs as number) : null,

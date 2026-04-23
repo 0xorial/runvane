@@ -7,7 +7,7 @@ import type {
   FinalizeDecisionResultOutput,
 } from "./types.js";
 import { agentToolConfigFor, publishConversationUpdated } from "./context.js";
-import { updateThoughtActionEntryAndPublish } from "./decisionStreaming.js";
+import { updateThoughtActionEntryAndPublish } from "../thoughtLifecycle.js";
 
 export function parseRequestedToolCalls(input: {
   requests: AgenticToolRequest[];

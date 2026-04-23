@@ -5,8 +5,8 @@ import { LlmProviderSettingsRepo } from "../../infra/repositories/llmProviderSet
 import { ConversationEventHub } from "../../events/conversationEventHub.js";
 import { SseType } from "../../types/sse.js";
 import type { StreamTextCompletionUsage } from "../../llm_provider/provider.js";
-import { TokenUsageMapper } from "../../types/tokenUsage.js";
 import { normalizeConversationTokenUsageRow } from "../../domain/conversationUsage.js";
+import { finishThoughtLifecycle, publishThoughtLlmDelta, startThoughtLifecycle } from "../../domain/thoughtLifecycle.js";
 
 type TitleGenerationResult = {
   model: string;
@@ -89,86 +89,80 @@ export async function maybeAutoTitleConversation({
   if (String(row.title || "").trim() !== "New chat") return;
   let generated: TitleGenerationResult | null = null;
   let generationError: unknown = null;
-  const startedAtMs = Date.now();
   const titlePrompt = buildTitlePrompt(firstMessage);
-  const plannerEntryId = crypto.randomUUID();
-  const plannerEntry = chatEntries.appendTitleLlmStreamEntry(conversationId, {
-    id: plannerEntryId,
-    createdAt: new Date().toISOString(),
-    llmRequest: titlePrompt,
-    llmResponse: "",
-    thoughtMs: null,
-    decision: null,
-    status: "running",
-  });
-  hub.publish(conversationId, {
-    type: SseType.TITLE_STARTING,
-    chatEntryId: plannerEntry.id,
-    conversationIndex: plannerEntry.conversationIndex,
-    createdAt: plannerEntry.createdAt,
-    requestText: titlePrompt,
-  });
+  const thought = startThoughtLifecycle(
+    { chatEntries, hub },
+    {
+      conversationId,
+      llmRequest: titlePrompt,
+      kind: "title",
+      includeAction: true,
+      runningSummary: "Generating title",
+    },
+  );
+  const startedAtMs = Date.parse(thought.streamEntry.createdAt);
   let streamedResponse = "";
   try {
     generated = await generateConversationTitleUsingSystemModel(llmProviderSettings, titlePrompt, (delta) => {
       streamedResponse += delta;
-      hub.publish(conversationId, {
-        type: SseType.TITLE_LLM_STREAM,
-        chatEntryId: plannerEntry.id,
-        delta,
-      });
+      publishThoughtLlmDelta(
+        { chatEntries, hub },
+        {
+          conversationId,
+          kind: "title",
+          streamEntryId: thought.streamEntry.id,
+          delta,
+        },
+      );
     });
   } catch (e) {
     generationError = e;
     logger.error({ conversationId, error: e }, "[chat] title generation request failed");
   }
 
+  let lifecycleStatus: "completed" | "failed" = "failed";
+  let lifecycleSummary = "Title generation failed, fallback used";
+  let lifecycleAction = "failed";
+  let lifecycleError: string | undefined;
+  let lifecycleLlmModel: string | undefined;
+  let lifecycleUsage: StreamTextCompletionUsage | undefined;
+  let lifecycleResponse = streamedResponse;
   if (generated) {
     const titleOutcomeFailed = generated.cleanTitle == null;
-    const titleOutcomeError = titleOutcomeFailed ? "Generated title was empty, fallback used" : "";
-    chatEntries.updateTitleLlmStreamEntry(conversationId, {
-      id: plannerEntryId,
-      llmRequest: titlePrompt,
-      llmResponse: generated.fullResponse,
-      thoughtMs: Math.max(0, Date.now() - startedAtMs),
-      decision: null,
-      status: titleOutcomeFailed ? "failed" : "completed",
-      ...(titleOutcomeFailed ? { error: titleOutcomeError } : {}),
-      llmModel: generated.model,
-      ...TokenUsageMapper.toEntryFields(generated.usage),
-    });
-    hub.publish(conversationId, {
-      type: SseType.TITLE_RESPONSE,
-      chatEntryId: plannerEntry.id,
-      summary:
-        generated.cleanTitle != null
-          ? `Generated title: ${generated.cleanTitle}`
-          : "Generated title was empty, fallback used",
-      finished: true,
-      action: generated.cleanTitle != null ? "final_answer" : "failed",
-      llmModel: generated.model,
-      ...TokenUsageMapper.toSseFields(generated.usage),
-    });
+    lifecycleStatus = titleOutcomeFailed ? "failed" : "completed";
+    lifecycleSummary = generated.cleanTitle != null ? `Generated title: ${generated.cleanTitle}` : "Generated title was empty, fallback used";
+    lifecycleAction = generated.cleanTitle != null ? "final_answer" : "failed";
+    lifecycleError = titleOutcomeFailed ? "Generated title was empty, fallback used" : undefined;
+    lifecycleLlmModel = generated.model;
+    lifecycleUsage = generated.usage;
+    lifecycleResponse = generated.fullResponse;
   } else if (!generationError) {
-    // No provider/model configured for title generation; close the thought row explicitly.
-    const detail = "Title generation skipped, fallback used";
-    chatEntries.updateTitleLlmStreamEntry(conversationId, {
-      id: plannerEntryId,
+    lifecycleSummary = "Title generation skipped, fallback used";
+    lifecycleError = lifecycleSummary;
+    lifecycleResponse = "";
+  } else {
+    lifecycleError = generationError instanceof Error ? generationError.message : String(generationError);
+  }
+
+  finishThoughtLifecycle(
+    { chatEntries, hub },
+    {
+      conversationId,
+      kind: "title",
+      streamEntryId: thought.streamEntry.id,
+      thoughtActionEntryId: thought.thoughtActionEntry.id,
       llmRequest: titlePrompt,
-      llmResponse: "",
+      llmResponse: lifecycleResponse,
       thoughtMs: Math.max(0, Date.now() - startedAtMs),
       decision: null,
-      status: "failed",
-      error: detail,
-    });
-    hub.publish(conversationId, {
-      type: SseType.TITLE_RESPONSE,
-      chatEntryId: plannerEntry.id,
-      summary: detail,
-      finished: true,
-      action: "failed",
-    });
-  }
+      status: lifecycleStatus,
+      error: lifecycleError,
+      llmModel: lifecycleLlmModel,
+      usage: lifecycleUsage,
+      summary: lifecycleSummary,
+      action: lifecycleAction,
+    },
+  );
 
   const byModel = generated?.cleanTitle ?? null;
   const title = byModel || fallbackConversationTitle(firstMessage);
@@ -197,24 +191,4 @@ export async function maybeAutoTitleConversation({
       tokenUsageByModel,
     },
   });
-
-  if (generationError) {
-    const detail = generationError instanceof Error ? generationError.message : String(generationError);
-    chatEntries.updateTitleLlmStreamEntry(conversationId, {
-      id: plannerEntryId,
-      llmRequest: titlePrompt,
-      llmResponse: streamedResponse,
-      thoughtMs: Math.max(0, Date.now() - startedAtMs),
-      decision: null,
-      status: "failed",
-      error: detail,
-    });
-    hub.publish(conversationId, {
-      type: SseType.TITLE_RESPONSE,
-      chatEntryId: plannerEntry.id,
-      summary: "Title generation failed, fallback used",
-      finished: true,
-      action: "failed",
-    });
-  }
 }

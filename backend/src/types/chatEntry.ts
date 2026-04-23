@@ -188,6 +188,7 @@ export function userMessageAttachmentsFromPayload(payload: Record<string, unknow
 /** Planner / thinking row — same `type` string as SSE `planner_llm_stream`. */
 export type PlannerLlmStreamEntry = ChatEntryBase & {
   type: "planner_llm_stream";
+  thoughtId: string;
   llmRequest: string; // plain text that was sent to the LLM
   llmResponse?: string;
   thoughtMs?: number | null;
@@ -210,6 +211,7 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
 };
 export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("planner_llm_stream"),
+  thoughtId: z.string(),
   llmRequest: z.string(),
   llmResponse: z.string().optional(),
   thoughtMs: z.number().finite().nullable().optional(),
@@ -236,12 +238,14 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
 
 export type ThoughtPrepareEntry = ChatEntryBase & {
   type: "thought-prepare";
+  thoughtId: string;
   requestText: string;
   llmModel?: string;
   status?: "completed";
 };
 export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("thought-prepare"),
+  thoughtId: z.string(),
   requestText: z.string(),
   llmModel: z.string().optional(),
   status: z.literal("completed").optional(),
@@ -249,6 +253,7 @@ export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
 
 export type TitleLlmStreamEntry = ChatEntryBase & {
   type: "title_llm_stream";
+  thoughtId: string;
   llmRequest: string;
   llmResponse?: string;
   thoughtMs?: number | null;
@@ -262,6 +267,7 @@ export type TitleLlmStreamEntry = ChatEntryBase & {
 };
 export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("title_llm_stream"),
+  thoughtId: z.string(),
   llmRequest: z.string(),
   llmResponse: z.string().optional(),
   thoughtMs: z.number().finite().nullable().optional(),
@@ -276,6 +282,7 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
 
 export type ThoughtActionEntry = ChatEntryBase & {
   type: "thought-action";
+  thoughtId: string;
   status: "running" | "completed" | "failed" | "cancelled";
   summary?: string;
   action?: string;
@@ -293,6 +300,7 @@ export type ThoughtActionEntry = ChatEntryBase & {
 };
 export const ThoughtActionEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("thought-action"),
+  thoughtId: z.string(),
   status: z.enum(["running", "completed", "failed", "cancelled"]),
   summary: z.string().optional(),
   action: z.string().optional(),

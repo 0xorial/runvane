@@ -3,9 +3,6 @@ import type { ContinueConversationTask } from "./agentTask.js";
 import { buildPlannerPrompt, parseAgenticPlannerOutput } from "./continueConversationPlannerProtocol.js";
 import { throwIfCancelled } from "./taskCancellation.js";
 import {
-  appendDecisionEntryAndPublishStart,
-  appendThoughtActionEntryAndPublish,
-  appendThoughtPrepareEntryAndPublish,
   getDecisionLlmResponse,
   publishDecisionThoughtDelta,
 } from "./decisionTaskProcessor/decisionStreaming.js";
@@ -24,6 +21,7 @@ import {
 } from "./decisionTaskProcessor/context.js";
 import type { DecisionProcessorDeps, ParsedDecisionResponse } from "./decisionTaskProcessor/types.js";
 import type { ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
+import { startThoughtLifecycle } from "./thoughtLifecycle.js";
 import type { AgentsRepo } from "../infra/repositories/agentsRepo.js";
 import type { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
 import type { ConversationsRepo } from "../infra/repositories/conversationsRepo.js";
@@ -77,51 +75,36 @@ export class DecisionTaskProcessor {
       throw new Error(`cannot reprocess thought without ancestor user-message: ${input.sourceEntryId}`);
     }
 
-    const prepareEntry = appendThoughtPrepareEntryAndPublish(this.deps, {
+    const thought = startThoughtLifecycle(this.deps, {
       conversationId: input.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
       parentId: sourceEntry.parentId,
-      requestText: sourceEntry.llmRequest,
-      llmModel: sourceEntry.llmModel,
-    });
-    const plannerEntry = appendDecisionEntryAndPublishStart(this.deps, {
-      conversationId: input.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: prepareEntry.createdAt,
-      parentId: prepareEntry.id,
       llmRequest: sourceEntry.llmRequest,
       llmModel: sourceEntry.llmModel,
-    });
-    const thoughtActionEntry = appendThoughtActionEntryAndPublish(this.deps, {
-      conversationId: input.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: plannerEntry.createdAt,
-      parentId: plannerEntry.id,
-      status: "running",
-      summary: "Waiting for planner output",
+      kind: "planner",
+      includeAction: true,
+      runningSummary: "Waiting for planner output",
     });
     publishDecisionThoughtDelta(this.deps, {
       conversationId: input.conversationId,
-      plannerEntryId: plannerEntry.id,
+      plannerEntryId: thought.streamEntry.id,
       delta: input.editedResponse.trim() ? input.editedResponse : "",
     });
 
     const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: input.conversationId,
-      plannerEntryId: plannerEntry.id,
-      thoughtActionEntryId: thoughtActionEntry.id,
-      llmRequest: plannerEntry.llmRequest,
+      plannerEntryId: thought.streamEntry.id,
+      thoughtActionEntryId: thought.thoughtActionEntry.id,
+      llmRequest: thought.streamEntry.llmRequest,
       llmResponse: input.editedResponse,
       streamedAnswer: input.editedResponse,
       enabledToolIds: enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId),
-      plannerLlmModel: plannerEntry.llmModel,
-      requestStartedMs: Date.parse(plannerEntry.createdAt),
+      plannerLlmModel: thought.streamEntry.llmModel,
+      requestStartedMs: Date.parse(thought.streamEntry.createdAt),
       anchorUserMessage,
       completionSummaryFallback: "reprocessed planner step completed",
       parseErrorPrefix: "failed to parse edited planner response",
     });
-    return { plannerEntryId: plannerEntry.id, queuedToolCalls: finalized.queuedToolCalls };
+    return { plannerEntryId: thought.streamEntry.id, queuedToolCalls: finalized.queuedToolCalls };
   }
 
   async process(task: ContinueConversationTask, opts?: { shouldCancel?: () => boolean }): Promise<void> {
@@ -162,20 +145,24 @@ export class DecisionTaskProcessor {
       toolIds: enabledToolIds,
       priorToolResults: priorToolResultsFromEntries(entries),
     });
-    const prepareEntry = appendThoughtPrepareEntryAndPublish(this.deps, {
+    const thought = startThoughtLifecycle(this.deps, {
       conversationId: task.conversationId,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
       parentId: triggerEntry?.id ?? null,
-      requestText: llmRequest,
+      llmRequest,
       llmModel: plannerLlmModel,
+      kind: "planner",
+      includeAction: true,
+      runningSummary: "Waiting for planner output",
     });
+    const requestStartedMs = Date.parse(thought.streamEntry.createdAt);
 
     const llmResponse = await getDecisionLlmResponse(this.deps, {
       conversationId: task.conversationId,
+      plannerEntryId: thought.streamEntry.id,
+      thoughtActionEntryId: thought.thoughtActionEntry.id,
+      requestStartedMs,
       requestText: llmRequest,
       plannerLlmModel,
-      parentId: prepareEntry.id,
       llmOverrides,
       requestParams,
       files: inputFiles,

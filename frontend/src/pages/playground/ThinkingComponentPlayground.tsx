@@ -50,6 +50,7 @@ function createInitialEntry(id: string): PlannerLlmStreamEntry {
   return {
     type: "planner_llm_stream",
     id,
+    thoughtId: `playground-thought-${id}`,
     conversationIndex: 0,
     createdAt: new Date().toISOString(),
     parentId: null,
