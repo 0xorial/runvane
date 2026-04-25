@@ -4,7 +4,7 @@ import type {
   LlmDecision,
   LlmDecisionUserResponse,
 } from "../types/chatEntry.js";
-import { AgenticPlannerOutputSchema } from "../types/chatEntry.js";
+import { AgenticPlannerOutputSchema, LlmDecisionUserResponseSchema } from "../types/chatEntry.js";
 import {
   extractAssistantOutputFromJsonLike,
   extractLastBalancedJsonObject,
@@ -143,6 +143,24 @@ export function parseAgenticPlannerOutput(input: {
     .trim();
   const parsed = parseFirstJsonObjectCandidate([withoutFence, extractLastBalancedJsonObject(withoutFence)]);
   const assistantFallback = input.streamedAnswer || extractAssistantOutputFromJsonLike(input.reply) || "";
+  const parsedUserResponseDecision = LlmDecisionUserResponseSchema.safeParse(parsed);
+  if (parsedUserResponseDecision.success) {
+    const decision = parsedUserResponseDecision.data;
+    const text = decision.text.trim();
+    const output: AgenticPlannerOutput = {
+      assistant_output: text,
+      tool_calls: [],
+      tool_requests: [],
+      followup: "finalize",
+    };
+    return {
+      output,
+      decision: {
+        type: "user-response",
+        text: text || assistantFallback || input.reply,
+      } satisfies LlmDecisionUserResponse,
+    };
+  }
   const parsedAgentic = AgenticPlannerOutputSchema.safeParse(parsed);
   if (parsedAgentic.success) {
     const normalizedToolCalls = parsedAgentic.data.tool_calls.filter((call) => input.isToolAvailable(call.toolId));

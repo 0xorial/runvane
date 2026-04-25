@@ -22,14 +22,21 @@ export function messageRowKey(entry$: ObservableItem<ChatEntry>): string {
 }
 
 /** Renders one ChatEntry row by `entry.type`. */
-export function ChatMessageRow({ entry$, conversationId: _conversationId, thoughtTripletsById }: ChatMessageRowProps) {
+export function ChatMessageRow({ entry$, conversationId, thoughtTripletsById }: ChatMessageRowProps) {
   const entry = useObservableValue(entry$);
   if (entry.type === "user-message") {
     return <UserMessageRow entry={entry} />;
   }
   if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
     const refs = thoughtTripletsById?.get(entry.thoughtId);
-    return <ThoughtTripletRow streamEntry$={entry$} prepareEntry={refs?.prepareEntry} actionEntry={refs?.actionEntry} />;
+    return (
+      <ThoughtTripletRow
+        streamEntry$={entry$}
+        conversationId={conversationId}
+        prepareEntry={refs?.prepareEntry}
+        actionEntry={refs?.actionEntry}
+      />
+    );
   }
   // These rows should be grouped/rendered only through ThoughtTripletRow.
   // Keep this guard for safety and emit a dev warning if filtering regresses.
