@@ -27,12 +27,12 @@ export function StepChip({
         active ? "bg-secondary text-foreground" : "hover:bg-secondary/60 hover:text-foreground",
       )}
     >
-      <span className="inline-flex h-3.5 w-3.5 items-center justify-center">{icon}</span>
-      <span className="inline-flex min-w-0 items-center gap-1">
+      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">{icon}</span>
+      <span className={cn("inline-flex min-w-0 items-center gap-1", align === "right" ? "" : "flex-1")}>
         {label ? <span className="truncate font-medium">{label}</span> : null}
         {hasMeta ? <span className="truncate opacity-60">{label ? `· ${meta}` : meta}</span> : null}
       </span>
-      <ChevronDown className={cn("h-3.5 w-3.5 opacity-60 transition-transform", active ? "rotate-180" : "")} />
+      <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 opacity-60 transition-transform", active ? "rotate-180" : "")} />
     </button>
   );
 }

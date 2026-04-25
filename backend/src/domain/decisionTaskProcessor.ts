@@ -24,6 +24,7 @@ import {
 import type { DecisionProcessorDeps, ParsedDecisionResponse } from "./decisionTaskProcessor/types.js";
 import type { ChatEntry, UserMessageEntry } from "../types/chatEntry.js";
 import { startThoughtLifecycle } from "./thoughtLifecycle.js";
+import { SseType } from "../types/sse.js";
 import type { AgentsRepo } from "../infra/repositories/agentsRepo.js";
 import type { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
 import type { ConversationsRepo } from "../infra/repositories/conversationsRepo.js";
@@ -77,37 +78,49 @@ export class DecisionTaskProcessor {
       throw new Error(`cannot reprocess thought without ancestor user-message: ${input.sourceEntryId}`);
     }
 
-    const thought = startThoughtLifecycle(this.deps, {
-      conversationId: input.conversationId,
+    const plannerEntry = this.deps.chatEntries.appendPlannerLlmStreamEntry(input.conversationId, {
+      id: crypto.randomUUID(),
+      thoughtId: sourceEntry.thoughtId,
+      createdAt: new Date().toISOString(),
       parentId: sourceEntry.parentId,
       llmRequest: sourceEntry.llmRequest,
       llmProviderId: sourceEntry.llmProviderId,
+      llmResponse: "",
+      thoughtMs: null,
+      decision: null,
+      status: "running",
       llmModel: sourceEntry.llmModel,
-      kind: "planner",
-      includeAction: true,
-      summary: "Call preparation",
+    });
+    this.deps.hub.publish(input.conversationId, {
+      type: SseType.PLANNER_STARTING,
+      chatEntryId: plannerEntry.id,
+      thoughtId: plannerEntry.thoughtId,
+      conversationIndex: plannerEntry.conversationIndex,
+      createdAt: plannerEntry.createdAt,
+      requestText: plannerEntry.llmRequest,
+      llmProviderId: plannerEntry.llmProviderId,
+      llmModel: plannerEntry.llmModel,
     });
     publishDecisionThoughtDelta(this.deps, {
       conversationId: input.conversationId,
-      plannerEntryId: thought.streamEntry.id,
+      plannerEntryId: plannerEntry.id,
       delta: input.editedResponse.trim() ? input.editedResponse : "",
     });
 
     const finalized = this.parseAndFinalizeDecisionResult({
       conversationId: input.conversationId,
-      plannerEntryId: thought.streamEntry.id,
-      thoughtActionEntryId: thought.thoughtActionEntry.id,
-      llmRequest: thought.streamEntry.llmRequest,
+      plannerEntryId: plannerEntry.id,
+      llmRequest: plannerEntry.llmRequest,
       llmResponse: input.editedResponse,
       streamedAnswer: input.editedResponse,
       enabledToolIds: enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId),
-      plannerLlmProviderId: thought.streamEntry.llmProviderId,
-      plannerLlmModel: thought.streamEntry.llmModel,
-      requestStartedMs: Date.parse(thought.streamEntry.createdAt),
+      plannerLlmProviderId: plannerEntry.llmProviderId,
+      plannerLlmModel: plannerEntry.llmModel,
+      requestStartedMs: Date.parse(plannerEntry.createdAt),
       completionSummaryFallback: "reprocessed planner step completed",
       parseErrorPrefix: "failed to parse edited planner response",
     });
-    return { plannerEntryId: thought.streamEntry.id, queuedToolCalls: finalized.queuedToolCalls };
+    return { plannerEntryId: plannerEntry.id, queuedToolCalls: finalized.queuedToolCalls };
   }
 
   async process(task: ContinueConversationTask, opts?: { shouldCancel?: () => boolean }): Promise<void> {
