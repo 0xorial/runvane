@@ -383,15 +383,3 @@ export function decideApproval(
 ): Promise<unknown> {
   return sendJson(`/api/approvals/${encodeURIComponent(String(approvalId))}/decision`, "POST", body);
 }
-
-export function cancelRunById(runId: string): Promise<unknown> {
-  return sendJson(`/api/runs/${encodeURIComponent(runId)}/cancel`, "POST", {});
-}
-
-export function pauseRunById(runId: string): Promise<unknown> {
-  return sendJson(`/api/runs/${encodeURIComponent(runId)}/pause`, "POST", {});
-}
-
-export function resumeRunPauseById(runId: string): Promise<unknown> {
-  return sendJson(`/api/runs/${encodeURIComponent(runId)}/resume_pause`, "POST", {});
-}

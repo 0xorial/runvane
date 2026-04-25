@@ -171,7 +171,11 @@ export async function getDecisionLlmResponse(
         if (answerDelta) {
           if (!assistantEntryId) {
             assistantEntryId = crypto.randomUUID();
-            deps.chatEntries.appendAssistantMessage(input.conversationId, "", { id: assistantEntryId });
+            deps.chatEntries.appendAssistantMessage(input.conversationId, "", {
+              id: assistantEntryId,
+              // Keep streamed assistant output on the same planner branch.
+              parentId: input.thoughtActionEntryId,
+            });
           }
           deps.hub.publish(input.conversationId, {
             type: SseType.ASSISTANT_STREAM,

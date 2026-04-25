@@ -8,7 +8,6 @@ import type { UploadsRepo } from "../../infra/repositories/uploadsRepo.js";
 import type { ConversationEventHub } from "../../events/conversationEventHub.js";
 import type { ToolPermission } from "../../tools/baseTool.js";
 import type { ToolRegistry } from "../../tools/toolRegistry.js";
-import type { UserMessageEntry } from "../../types/chatEntry.js";
 import type { parseAgenticPlannerOutput } from "../continueConversationPlannerProtocol.js";
 
 export type EnqueueRunToolInput = {
@@ -18,13 +17,25 @@ export type EnqueueRunToolInput = {
   toolName: string;
   params: unknown;
   toolRequest?: string;
-  batchId?: string;
   agentToolConfig?: {
     enabled?: boolean;
     policy?: ToolPermission;
     rules?: Record<string, unknown>;
   };
 };
+
+export type ExecuteRunToolResult =
+  | {
+      kind: "skipped";
+    }
+  | {
+      kind: "completed";
+      toolEntryId: string;
+    }
+  | {
+      kind: "blocked";
+      toolEntryId: string;
+    };
 
 export type DecisionProcessorDeps = {
   chatEntries: ChatEntriesRepo;
@@ -35,7 +46,7 @@ export type DecisionProcessorDeps = {
   agents: AgentsRepo;
   uploads: UploadsRepo;
   tools: ToolRegistry;
-  enqueueRunTool: (input: EnqueueRunToolInput) => { taskId: number };
+  executeRunTool: (input: EnqueueRunToolInput, opts?: { shouldCancel?: () => boolean }) => Promise<ExecuteRunToolResult>;
 };
 
 export type LlmOverrides = {
@@ -50,6 +61,11 @@ export type ToolConfig = {
   enabled: boolean;
   policy: ToolPermission;
   rules?: Record<string, unknown>;
+};
+
+export type RequestedToolCall = {
+  toolName: string;
+  toolRequest: string;
 };
 
 export type DecisionLlmSuccess = {
@@ -75,11 +91,11 @@ export type FinalizeDecisionResultInput = {
   thoughtActionEntryId?: string | null;
   llmRequest: string;
   llmResponse: string;
+  streamedAnswer: string;
   enabledToolIds: string[];
   plannerLlmModel?: string;
   requestStartedMs: number;
   parsedLlmResponse: ParsedDecisionResponse;
-  anchorUserMessage: UserMessageEntry;
   assistantEntryId?: string | null;
   plannerTokenUsage?: StreamTextCompletionResult["usage"];
   completionSummaryFallback: string;
@@ -88,4 +104,5 @@ export type FinalizeDecisionResultInput = {
 export type FinalizeDecisionResultOutput = {
   queuedToolCalls: number;
   followup: DecisionFollowup;
+  requestedToolCalls: RequestedToolCall[];
 };

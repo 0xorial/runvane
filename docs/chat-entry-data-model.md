@@ -1,122 +1,115 @@
 # Chat Entry Data Model
 
-This document defines the canonical chat event model for both frontend and backend.
+This doc describes the **actual DB structure** used for chat timeline data.
 
-## Goal
+## Core Table
 
-Use one conceptual model for chat timeline items, independent from storage details.
+Chat timeline is stored in `chat_entries` with one row per timeline entry.
 
-- UI renders rows from `ChatEntry.type`
-- backend stores data in DB rows, but exposes data that maps cleanly to `ChatEntry`
-- avoid DB-specific naming in UI (`segmentKind`, `segmentMeta`) outside adapter layer
+Columns:
 
-## Canonical Types
+- `id TEXT PRIMARY KEY` - entry id.
+- `conversation_id TEXT NOT NULL` - conversation owner (FK to `conversations.id`).
+- `conversation_index INTEGER NOT NULL` - monotonic order inside one conversation.
+- `parent_id TEXT` - parent entry id in the conversation tree (logical self-link).
+- `type TEXT NOT NULL` - entry type discriminator.
+- `payload_json TEXT NOT NULL` - type-specific fields.
+- `created_at TEXT NOT NULL` - ISO timestamp.
 
-```ts
-type LlmDecision =
-  | {
-      type: "tool-invocation";
-      toolId: string;
-      parameters: Record<string, unknown>;
-    }
-  | {
-      type: "user-response";
-      text: string;
-    };
+Conversation linkage:
 
-type ChatEntry =
-  | {
-      type: "user-message";
-      id: string;
-      text: string;
-      createdAt?: string;
-    }
-  | {
-      type: "planner_llm_stream";
-      id: string;
-      runId: string | null;
-      plannerStepId: number;
-      state: "running" | "done";
-      thoughtMs?: number;
-      decision?: LlmDecision | Record<string, unknown>;
-      createdAt?: string;
-    }
-  | {
-      type: "tool-invocation";
-      id: string;
-      runId: string | null;
-      toolId: string;
-      state: "requested" | "running" | "done" | "error";
-      parameters?: Record<string, unknown>;
-      result?: unknown;
-      traces?: Array<Record<string, unknown>>;
-      createdAt?: string;
-    }
-  | {
-      type: "assistant-message";
-      id: string;
-      text: string;
-      runId?: string | null;
-      traces?: Array<Record<string, unknown>>;
-      createdAt?: string;
-    };
-```
+- `conversations.active_leaf_entry_id` points to the currently active leaf in the branch tree.
 
-## Mapping from DB Rows
+## Entry Types In DB
 
-Current DB rows (`messages`) map as:
+`type` is one of:
 
-- `role=user` -> `ChatEntry(type="user-message")`
-- `segmentKind=thinking` -> `ChatEntry(type="planner_llm_stream")` (same string as SSE `planner_llm_stream`)
-- `segmentKind=tool` -> `ChatEntry(type="tool-invocation")`
-- `segmentKind=final` -> `ChatEntry(type="assistant-message")`
-- plain assistant row without segment kind -> `ChatEntry(type="assistant-message")`
+- `user-message`
+- `assistant-message`
+- `planner_llm_stream`
+- `title_llm_stream`
+- `thought-prepare`
+- `thought-action`
+- `tool-invocation`
 
-This mapping lives in:
+Shared top-level (outside payload) for all entries:
 
-- `frontend/src/utils/chatEntries.ts`
+- `id`, `conversation_id`, `conversation_index`, `parent_id`, `type`, `created_at`
 
-Only that adapter should know DB field names like `segmentKind`/`segmentMeta`.
+## `payload_json` Shapes
 
-## Rendering Contract
+### `user-message`
 
-Timeline UI should switch only on `entry.type`:
+- `text: string`
+- `agentId: string`
+- optional: `llmProviderId`, `llmModel`, `modelPresetId`
+- optional: `attachments[]`
 
-- `user-message` -> user row component
-- `planner_llm_stream` -> thinking/planner row component (`llm-call` accepted as legacy)
-- `tool-invocation` -> tool row component
-- `assistant-message` -> final or plain assistant text row component
+### `assistant-message`
 
-File using this contract:
+- `text: string`
 
-- `frontend/src/components/chat/ChatMessageRow.tsx`
+### `planner_llm_stream`
 
-## Backend Alignment Rules
+- `thoughtId: string` (required)
+- `llmRequest: string`
+- `llmResponse: string`
+- `thoughtMs: number | null`
+- `decision: object | null`
+- `status: "running" | "completed" | "failed" | "cancelled"`
+- optional: `error`, `llmModel`, token usage fields (`promptTokens`, `cachedPromptTokens`, `completionTokens`)
+- optional: `parseResult`
 
-When backend writes assistant timeline rows, ensure:
+### `title_llm_stream`
 
-1. Planner row (`thinking`) includes:
-   - `runId`
-   - `plannerStepId`
-   - `pending` while running, then `thoughtMs` and optional `decision` when done
-2. Tool row (`tool`) includes:
-   - `runId`
-   - `toolName`
-   - `toolCall` payload when available
-3. Final row (`final`) includes:
-   - `runId`
-   - final answer text in `text`
+- same core shape as `planner_llm_stream`
+- includes `thoughtId` and status/error/token fields
 
-This guarantees deterministic conversion into `ChatEntry`.
+### `thought-prepare`
 
-## Migration Direction
+- `thoughtId: string` (required)
+- `requestText: string`
+- fixed status semantics: completed prepare step
+- optional: `title`, `llmModel`
 
-Short term:
+### `thought-action`
 
-- keep DB schema as-is
-- keep adapter-based translation
+- `thoughtId: string` (required)
+- `status: "running" | "completed" | "failed" | "cancelled"`
+- optional: `summary`, `action`, `toolName`, `error`, `parseResult`
 
-Long term:
+### `tool-invocation`
 
-- backend API may emit `ChatEntry[]` directly
-- adapter becomes a no-op passthrough
+- `toolId: string`
+- `state: "requested" | "running" | "done" | "error"`
+- `parameters: object`
+- `result: unknown`
+
+## Relationship Model
+
+There are 2 linkage layers:
+
+- **Tree linkage** via `parent_id` (branch structure and active lineage).
+- **Thought grouping** via `payload_json.thoughtId` (ties `thought-prepare` + stream + `thought-action`).
+
+Important:
+
+- `thoughtId` is a logical group key in payload, not a DB foreign key.
+- `parent_id` and `active_leaf_entry_id` are logical references (not enforced FK constraints).
+
+## Read Behavior
+
+- Default message fetch returns active lineage only (following `active_leaf_entry_id` through `parent_id` chain).
+- `?all=1` returns all entries in `conversation_index` order.
+
+## Probe Time Expected Sequence
+
+For the `what is the time?` probe flow, expected order is:
+
+1. auto title thought (3 steps)
+2. planner thought (3 steps)
+3. realtime assistant feedback starts streaming
+4. tool parameter preparation thought (3 steps)
+5. tool call
+6. planner thought (3 steps)
+7. final assistant feedback streams and completes

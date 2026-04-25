@@ -232,7 +232,7 @@ export function createConversationsRouter(runtime: Runtime) {
     }
 
     const out = toPostConversationMessageAcceptedResponse(conversationId);
-    logger.info({ conversationId, taskId: result.taskId }, "[http] message accepted");
+    logger.info({ conversationId }, "[http] message accepted");
     return c.json(out, 202);
   });
 
@@ -249,7 +249,7 @@ export function createConversationsRouter(runtime: Runtime) {
     if (result.kind === "tool_invocation_not_requested") {
       return c.json({ detail: "tool invocation is not in requested state" }, 400);
     }
-    return c.json({ conversationId, taskId: result.taskId }, 202);
+    return c.json({ conversationId }, 202);
   });
 
   r.post("/:conversationId/cancel-processing", (c) => {

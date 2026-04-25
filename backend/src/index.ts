@@ -11,7 +11,6 @@ import { ConversationsRepo } from "./infra/repositories/conversationsRepo.js";
 import { LlmProviderSettingsRepo } from "./infra/repositories/llmProviderSettingsRepo.js";
 import { ModelCapabilitiesRepo } from "./infra/repositories/modelCapabilitiesRepo.js";
 import { ModelPresetsRepo } from "./infra/repositories/modelPresetsRepo.js";
-import { TasksRepo } from "./infra/repositories/tasksRepo.js";
 import { ToolExecutionLogsRepo } from "./infra/repositories/toolExecutionLogsRepo.js";
 import { UploadsRepo, resolveUploadsDir } from "./infra/repositories/uploadsRepo.js";
 import { LlmProviderRegistry } from "./llm_provider/registry.js";
@@ -26,7 +25,6 @@ const llmProviderRegistry = new LlmProviderRegistry();
 const llmProviderSettings = new LlmProviderSettingsRepo(db, llmProviderRegistry);
 const modelPresets = new ModelPresetsRepo(db);
 const modelCapabilities = new ModelCapabilitiesRepo(db);
-const tasks = new TasksRepo(db);
 const toolExecutionLogs = new ToolExecutionLogsRepo(db);
 const uploads = new UploadsRepo(resolveUploadsDir(process.env.BACKEND2_UPLOADS_DIR));
 const runtime = createRuntime({
@@ -36,7 +34,6 @@ const runtime = createRuntime({
   llmProviderSettings,
   modelPresets,
   modelCapabilities,
-  tasks,
   uploads,
   toolExecutionLogs,
 });

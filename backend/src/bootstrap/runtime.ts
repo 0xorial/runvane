@@ -1,9 +1,8 @@
 import type { PostConversationMessageRequest } from "../routes/conversations.types.js";
-import { AgentTaskType } from "../domain/agentTask.js";
+import type { ContinueConversationTask, RunToolTask } from "../domain/agentTask.js";
 import { DecisionTaskProcessor } from "../domain/decisionTaskProcessor.js";
 import { RunToolTaskProcessor } from "../domain/runToolTaskProcessor.js";
 import { ConversationEventHub } from "../events/conversationEventHub.js";
-import { InMemoryJobQueue } from "../infra/inMemoryJobQueue.js";
 import { logger } from "../infra/logger.js";
 import { AgentsRepo } from "../infra/repositories/agentsRepo.js";
 import { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
@@ -11,7 +10,6 @@ import { ConversationsRepo } from "../infra/repositories/conversationsRepo.js";
 import { LlmProviderSettingsRepo } from "../infra/repositories/llmProviderSettingsRepo.js";
 import { ModelCapabilitiesRepo } from "../infra/repositories/modelCapabilitiesRepo.js";
 import { ModelPresetsRepo } from "../infra/repositories/modelPresetsRepo.js";
-import { TasksRepo } from "../infra/repositories/tasksRepo.js";
 import { ToolExecutionLogsRepo } from "../infra/repositories/toolExecutionLogsRepo.js";
 import { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import { ToolRegistry } from "../tools/toolRegistry.js";
@@ -20,17 +18,16 @@ import { CurlTool } from "../tools/builtins/curl/tool.js";
 import type { UserMessageEntry } from "../types/chatEntry.js";
 import { SseType } from "../types/sse.js";
 import { maybeAutoTitleConversation } from "./runtime/autoTitle.js";
-import { createTaskEnqueueHelpers, registerTaskQueueHandler } from "./runtime/taskQueue.js";
 
 export type EnqueueUserMessageResult =
-  | { kind: "ok"; taskId: number }
+  | { kind: "ok" }
   | { kind: "conversation_not_found" }
   | { kind: "agent_not_found" }
   | { kind: "invalid_message" }
   | { kind: "invalid_attachment"; attachmentId: string };
 
 export type ApproveToolInvocationResult =
-  | { kind: "ok"; taskId: number }
+  | { kind: "ok" }
   | { kind: "conversation_not_found" }
   | { kind: "tool_invocation_not_found" }
   | { kind: "tool_invocation_not_requested" };
@@ -52,30 +49,34 @@ export function createRuntime(opts: {
   llmProviderSettings: LlmProviderSettingsRepo;
   modelPresets: ModelPresetsRepo;
   modelCapabilities: ModelCapabilitiesRepo;
-  tasks: TasksRepo;
   uploads: UploadsRepo;
   toolExecutionLogs: ToolExecutionLogsRepo;
 }) {
-  const {
-    agents,
-    conversations,
-    chatEntries,
-    llmProviderSettings,
-    modelPresets,
-    modelCapabilities,
-    tasks,
-    uploads,
-    toolExecutionLogs,
-  } = opts;
+  const { agents, conversations, chatEntries, llmProviderSettings, modelPresets, modelCapabilities, uploads, toolExecutionLogs } = opts;
   const hub = new ConversationEventHub();
-  const queue = new InMemoryJobQueue();
+  const activeExecutions = new Map<string, AbortController>();
   const tools = new ToolRegistry();
   tools.register(new GetCurrentTimeTool());
   tools.register(new CurlTool());
-  const { enqueueContinueConversation, enqueueRunTool } = createTaskEnqueueHelpers({
-    tasks,
-    queue,
-  });
+  const beginExecution = (conversationId: string): AbortController => {
+    activeExecutions.get(conversationId)?.abort();
+    const controller = new AbortController();
+    activeExecutions.set(conversationId, controller);
+    return controller;
+  };
+  const finishExecution = (conversationId: string, controller: AbortController): void => {
+    if (activeExecutions.get(conversationId) === controller) {
+      activeExecutions.delete(conversationId);
+    }
+  };
+
+  const runToolTaskProcessor = new RunToolTaskProcessor(
+    chatEntries,
+    hub,
+    tools,
+    toolExecutionLogs,
+    llmProviderSettings,
+  );
 
   const decisionTaskProcessor = new DecisionTaskProcessor(
     chatEntries,
@@ -86,23 +87,43 @@ export function createRuntime(opts: {
     agents,
     uploads,
     tools,
-    enqueueRunTool,
+    async (input, opts2) => {
+      const runToolTask: RunToolTask = {
+        conversationId: input.conversationId,
+        sourceEntryId: input.sourceEntryId,
+        agentId: input.agentId,
+        toolName: input.toolName,
+        params: input.params,
+        ...(input.toolRequest ? { toolRequest: input.toolRequest } : {}),
+        ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
+      };
+      return runToolTaskProcessor.process(runToolTask, opts2);
+    },
   );
-  const runToolTaskProcessor = new RunToolTaskProcessor(
-    chatEntries,
-    hub,
-    tools,
-    toolExecutionLogs,
-    tasks,
-    llmProviderSettings,
-    enqueueContinueConversation,
-  );
-  registerTaskQueueHandler({
-    queue,
-    tasks,
-    decisionTaskProcessor,
-    runToolTaskProcessor,
-  });
+
+  const startReactiveConversationProcessing = (conversationId: string, sourceEntryId?: string): void => {
+    const controller = beginExecution(conversationId);
+    const continueTask: ContinueConversationTask = {
+      conversationId,
+      ...(sourceEntryId ? { sourceEntryId } : {}),
+    };
+    void decisionTaskProcessor
+      .process(continueTask, { shouldCancel: () => controller.signal.aborted })
+      .catch((error) => {
+        logger.error(
+          {
+            conversationId,
+            sourceEntryId: sourceEntryId ?? null,
+            detail: error instanceof Error ? error.message : String(error),
+            error,
+          },
+          "[chat] reactive conversation processing failed",
+        );
+      })
+      .finally(() => {
+        finishExecution(conversationId, controller);
+      });
+  };
 
   function enqueueUserMessage(conversationId: string, body: PostConversationMessageRequest): EnqueueUserMessageResult {
     const entriesBefore = chatEntries.countEntries(conversationId);
@@ -172,15 +193,8 @@ export function createRuntime(opts: {
       entry: userEntry,
     });
 
-    const task = tasks.create({
-      task_type: AgentTaskType.CONTINUE_CONVERSATION,
-      payload: { conversationId, sourceEntryId: user.id },
-      sourceEntryId: user.id,
-    });
-    logger.info({ conversationId, taskId: task.id }, "[chat] continue_conversation task created");
-    queue.enqueue({ taskId: task.id });
-    logger.info({ conversationId, taskId: task.id }, "[chat] continue_conversation task enqueued");
     if (entriesBefore === 0) {
+      let plannerSourceEntryId = user.id;
       void maybeAutoTitleConversation({
         conversations,
         chatEntries,
@@ -188,9 +202,25 @@ export function createRuntime(opts: {
         hub,
         conversationId,
         firstMessage: text,
+        onThoughtStarted: ({ thoughtActionEntryId }) => {
+          // Title lifecycle creates 3 entries immediately; continue from the latest title anchor.
+          plannerSourceEntryId = thoughtActionEntryId;
+        },
+      }).catch((error) => {
+        logger.error(
+          {
+            conversationId,
+            detail: error instanceof Error ? error.message : String(error),
+            error,
+          },
+          "[chat] auto title failed",
+        );
       });
+      startReactiveConversationProcessing(conversationId, plannerSourceEntryId);
+    } else {
+      startReactiveConversationProcessing(conversationId, user.id);
     }
-    return { kind: "ok", taskId: task.id };
+    return { kind: "ok" };
   }
 
   function approveToolInvocation(conversationId: string, toolInvocationId: string): ApproveToolInvocationResult {
@@ -209,28 +239,52 @@ export function createRuntime(opts: {
     const agent = agentId ? agents.get(agentId) : null;
     const rules = agent?.default_llm_configuration?.tools?.[row.toolId]?.rules ?? {};
 
-    const { taskId } = enqueueRunTool({
+    const toolRequest = String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim();
+    const controller = beginExecution(conversationId);
+    const runToolTask: RunToolTask = {
       conversationId,
       sourceEntryId: row.id,
       agentId,
       toolName: row.toolId,
       params: {},
-      toolRequest: String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim() || undefined,
+      ...(toolRequest ? { toolRequest } : {}),
       approvalGranted: true,
       agentToolConfig: {
         enabled: true,
         policy: "allow",
         rules,
       },
-    });
-    return { kind: "ok", taskId };
+    };
+    void runToolTaskProcessor
+      .process(runToolTask, { shouldCancel: () => controller.signal.aborted })
+      .then((result) => {
+        if (result.kind !== "completed") return;
+        startReactiveConversationProcessing(conversationId, result.toolEntryId);
+      })
+      .catch((error) => {
+        logger.error(
+          {
+            conversationId,
+            toolInvocationId,
+            detail: error instanceof Error ? error.message : String(error),
+            error,
+          },
+          "[chat] approved tool execution failed",
+        );
+      })
+      .finally(() => {
+        finishExecution(conversationId, controller);
+      });
+    return { kind: "ok" };
   }
 
   function cancelConversationProcessing(conversationId: string): CancelConversationProcessingResult {
     if (!conversations.exists(conversationId)) {
       return { kind: "conversation_not_found" };
     }
-    const cancelledTaskCount = tasks.cancelOpenByConversationId(conversationId);
+    const controller = activeExecutions.get(conversationId);
+    const cancelledTaskCount = controller ? 1 : 0;
+    controller?.abort();
     logger.info({ conversationId, cancelledTaskCount }, "[chat] cancel conversation processing requested");
     return { kind: "ok", cancelledTaskCount };
   }
@@ -261,16 +315,15 @@ export function createRuntime(opts: {
     llmProviderSettings,
     modelPresets,
     modelCapabilities,
-    tasks,
     uploads,
     hub,
-    queue,
     tools,
     decisionTaskProcessor,
     enqueueUserMessage,
     approveToolInvocation,
     cancelConversationProcessing,
     reprocessThought,
-    enqueueRunTool,
+    startReactiveConversationProcessing,
+    activeExecutionCount: () => activeExecutions.size,
   };
 }

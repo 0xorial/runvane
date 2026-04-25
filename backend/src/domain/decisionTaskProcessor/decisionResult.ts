@@ -5,16 +5,17 @@ import type {
   DecisionProcessorDeps,
   FinalizeDecisionResultInput,
   FinalizeDecisionResultOutput,
+  RequestedToolCall,
 } from "./types.js";
-import { agentToolConfigFor, publishConversationUpdated } from "./context.js";
+import { publishConversationUpdated } from "./context.js";
 import { updateThoughtActionEntryAndPublish } from "../thoughtLifecycle.js";
 
 export function parseRequestedToolCalls(input: {
   requests: AgenticToolRequest[];
   enabledToolIds: string[];
-}): Array<{ toolName: string; toolRequest: string }> {
+}): RequestedToolCall[] {
   if (input.requests.length === 0) return [];
-  const out: Array<{ toolName: string; toolRequest: string }> = [];
+  const out: RequestedToolCall[] = [];
   const allowedTools = new Set(input.enabledToolIds);
   for (const request of input.requests) {
     const toolName = String(request.tool_name ?? "").trim();
@@ -169,21 +170,9 @@ export function finalizeParsedDecisionResult(
     });
   }
 
-  if (requestedToolCalls.length > 0) {
-    const batchId = crypto.randomUUID();
-    for (const requestedCall of requestedToolCalls) {
-      deps.enqueueRunTool({
-        conversationId: input.conversationId,
-        sourceEntryId: input.plannerEntryId,
-        agentId: input.anchorUserMessage.agentId,
-        toolName: requestedCall.toolName,
-        params: {},
-        toolRequest: requestedCall.toolRequest,
-        batchId,
-        agentToolConfig: agentToolConfigFor(deps, input.anchorUserMessage.agentId, requestedCall.toolName),
-      });
-    }
-  }
-
-  return { queuedToolCalls: requestedToolCalls.length, followup: agentic.followup };
+  return {
+    queuedToolCalls: requestedToolCalls.length,
+    followup: agentic.followup,
+    requestedToolCalls,
+  };
 }

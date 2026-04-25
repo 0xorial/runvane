@@ -7,7 +7,7 @@ export function createHealthRouter(runtime: Runtime) {
   const r = new Hono();
 
   r.get("/", (c) => {
-    return c.json(buildHealthResponse(runtime.queue.depth));
+    return c.json(buildHealthResponse(runtime.activeExecutionCount()));
   });
 
   return r;

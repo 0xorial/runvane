@@ -22,6 +22,7 @@ type AutoTitleInput = {
   hub: ConversationEventHub;
   conversationId: string;
   firstMessage: string;
+  onThoughtStarted?: (input: { prepareEntryId: string; streamEntryId: string; thoughtActionEntryId: string }) => void;
 };
 
 function fallbackConversationTitle(firstMessage: string): string {
@@ -83,6 +84,7 @@ export async function maybeAutoTitleConversation({
   hub,
   conversationId,
   firstMessage,
+  onThoughtStarted,
 }: AutoTitleInput): Promise<void> {
   const row = conversations.get(conversationId);
   if (!row) return;
@@ -100,6 +102,11 @@ export async function maybeAutoTitleConversation({
       summary: "Title generation",
     },
   );
+  onThoughtStarted?.({
+    prepareEntryId: thought.prepareEntry.id,
+    streamEntryId: thought.streamEntry.id,
+    thoughtActionEntryId: thought.thoughtActionEntry.id,
+  });
   const startedAtMs = Date.parse(thought.streamEntry.createdAt);
   let streamedResponse = "";
   try {

@@ -11,6 +11,7 @@ import {
   persistDecisionParseFailure,
 } from "./decisionTaskProcessor/decisionResult.js";
 import {
+  agentToolConfigFor,
   buildInputFiles,
   enabledToolIdsForAgent,
   lineageEntries,
@@ -43,7 +44,7 @@ export class DecisionTaskProcessor {
     agents: AgentsRepo,
     uploads: UploadsRepo,
     tools: ToolRegistry,
-    enqueueRunTool: DecisionProcessorDeps["enqueueRunTool"],
+    executeRunTool: DecisionProcessorDeps["executeRunTool"],
   ) {
     this.deps = {
       chatEntries,
@@ -54,7 +55,7 @@ export class DecisionTaskProcessor {
       agents,
       uploads,
       tools,
-      enqueueRunTool,
+      executeRunTool,
     };
   }
 
@@ -100,7 +101,6 @@ export class DecisionTaskProcessor {
       enabledToolIds: enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId),
       plannerLlmModel: thought.streamEntry.llmModel,
       requestStartedMs: Date.parse(thought.streamEntry.createdAt),
-      anchorUserMessage,
       completionSummaryFallback: "reprocessed planner step completed",
       parseErrorPrefix: "failed to parse edited planner response",
     });
@@ -108,94 +108,125 @@ export class DecisionTaskProcessor {
   }
 
   async process(task: ContinueConversationTask, opts?: { shouldCancel?: () => boolean }): Promise<void> {
-    if (task.sourceEntryId && !this.deps.chatEntries.isEntryOnActiveLineage(task.conversationId, task.sourceEntryId)) {
-      logger.info(
-        { conversationId: task.conversationId, sourceEntryId: task.sourceEntryId },
-        "[task] skipped continue_conversation: source entry not on active lineage",
-      );
-      return;
+    let triggerEntryId = task.sourceEntryId;
+    for (;;) {
+      if (triggerEntryId && !this.deps.chatEntries.isEntryOnActiveLineage(task.conversationId, triggerEntryId)) {
+        logger.info(
+          { conversationId: task.conversationId, sourceEntryId: triggerEntryId },
+          "[task] skipped continue_conversation: source entry not on active lineage",
+        );
+        return;
+      }
+      throwIfCancelled(opts?.shouldCancel);
+
+      const entries = this.deps.chatEntries.listMessages(task.conversationId);
+      const triggerEntry = entries.at(-1) ?? null;
+      logger.info({ conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null }, "[task] continue_conversation started");
+      const anchorUserMessage = this.findLastUserMessage(entries);
+      if (!anchorUserMessage) {
+        logger.warn(
+          { conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null },
+          "[task] skipped continue_conversation: no user message",
+        );
+        return;
+      }
+
+      const llmOverrides = resolveLlmOverrides(this.deps, anchorUserMessage);
+      const selectedAgent = this.deps.agents.get(anchorUserMessage.agentId);
+      const effectiveModelPresetId = anchorUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
+      const plannerLlmModel = resolvePlannerModel(this.deps, llmOverrides);
+      const requestParams = resolveRequestParams(this.deps, { modelPresetId: effectiveModelPresetId });
+      const inputFiles = buildInputFiles(this.deps, anchorUserMessage);
+      const enabledToolIds = enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId);
+
+      const llmRequest = buildPlannerPrompt({
+        systemPrompt: this.deps.agents.get(anchorUserMessage.agentId)?.system_prompt ?? "",
+        entries,
+        anchorUserText: anchorUserMessage.text,
+        triggerEntry: triggerEntry,
+        toolIds: enabledToolIds,
+        priorToolResults: priorToolResultsFromEntries(entries),
+      });
+      const thought = startThoughtLifecycle(this.deps, {
+        conversationId: task.conversationId,
+        parentId: triggerEntry?.id ?? null,
+        llmRequest,
+        llmModel: plannerLlmModel,
+        kind: "planner",
+        includeAction: true,
+        summary: "Call preparation",
+      });
+      const requestStartedMs = Date.parse(thought.streamEntry.createdAt);
+
+      const llmResponse = await getDecisionLlmResponse(this.deps, {
+        conversationId: task.conversationId,
+        plannerEntryId: thought.streamEntry.id,
+        thoughtActionEntryId: thought.thoughtActionEntry.id,
+        requestStartedMs,
+        requestText: llmRequest,
+        plannerLlmModel,
+        llmOverrides,
+        requestParams,
+        files: inputFiles,
+        shouldCancel: opts?.shouldCancel,
+      });
+      if (llmResponse.kind === "cancelled") return;
+
+      const finalized = this.parseAndFinalizeDecisionResult({
+        conversationId: task.conversationId,
+        plannerEntryId: llmResponse.plannerEntryId,
+        thoughtActionEntryId: llmResponse.thoughtActionEntryId,
+        llmRequest,
+        llmResponse: llmResponse.reply,
+        streamedAnswer: llmResponse.streamedAnswer,
+        enabledToolIds,
+        plannerLlmModel,
+        requestStartedMs: llmResponse.requestStartedMs,
+        assistantEntryId: llmResponse.assistantEntryId,
+        plannerTokenUsage: llmResponse.plannerTokenUsage,
+        completionSummaryFallback: "planner step completed",
+        parseErrorPrefix: "failed to parse planner response",
+      });
+      throwIfCancelled(opts?.shouldCancel);
+
+      if (finalized.requestedToolCalls.length === 0) {
+        if (finalized.followup !== "continue") {
+          logger.info({ conversationId: task.conversationId }, "[task] continue_conversation completed");
+          return;
+        }
+        logger.warn(
+          { conversationId: task.conversationId, followup: finalized.followup },
+          "[task] planner requested followup without tool call; waiting for next continuation trigger",
+        );
+        return;
+      }
+
+      let lastToolEntryId: string | null = null;
+      const continuationAnchorId =
+        llmResponse.assistantEntryId ?? llmResponse.thoughtActionEntryId ?? llmResponse.plannerEntryId;
+      for (const requestedCall of finalized.requestedToolCalls) {
+        const toolOut = await this.deps.executeRunTool(
+          {
+            conversationId: task.conversationId,
+            sourceEntryId: continuationAnchorId,
+            agentId: anchorUserMessage.agentId,
+            toolName: requestedCall.toolName,
+            params: {},
+            toolRequest: requestedCall.toolRequest,
+            agentToolConfig: agentToolConfigFor(this.deps, anchorUserMessage.agentId, requestedCall.toolName),
+          },
+          { shouldCancel: opts?.shouldCancel },
+        );
+        if (toolOut.kind === "blocked" || toolOut.kind === "skipped") return;
+        lastToolEntryId = toolOut.toolEntryId;
+      }
+
+      if (finalized.followup !== "continue") {
+        logger.info({ conversationId: task.conversationId }, "[task] continue_conversation completed");
+        return;
+      }
+      triggerEntryId = lastToolEntryId ?? llmResponse.plannerEntryId;
     }
-    throwIfCancelled(opts?.shouldCancel);
-
-    const entries = this.deps.chatEntries.listMessages(task.conversationId);
-    const triggerEntry = entries.at(-1) ?? null;
-    logger.info({ conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null }, "[task] continue_conversation started");
-    const anchorUserMessage = this.findLastUserMessage(entries);
-    if (!anchorUserMessage) {
-      logger.warn(
-        { conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null },
-        "[task] skipped continue_conversation: no user message",
-      );
-      return;
-    }
-
-    const llmOverrides = resolveLlmOverrides(this.deps, anchorUserMessage);
-    const selectedAgent = this.deps.agents.get(anchorUserMessage.agentId);
-    const effectiveModelPresetId = anchorUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
-    const plannerLlmModel = resolvePlannerModel(this.deps, llmOverrides);
-    const requestParams = resolveRequestParams(this.deps, { modelPresetId: effectiveModelPresetId });
-    const inputFiles = buildInputFiles(this.deps, anchorUserMessage);
-    const enabledToolIds = enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId);
-
-    const llmRequest = buildPlannerPrompt({
-      systemPrompt: this.deps.agents.get(anchorUserMessage.agentId)?.system_prompt ?? "",
-      entries,
-      anchorUserText: anchorUserMessage.text,
-      triggerEntry: triggerEntry,
-      toolIds: enabledToolIds,
-      priorToolResults: priorToolResultsFromEntries(entries),
-    });
-    const thought = startThoughtLifecycle(this.deps, {
-      conversationId: task.conversationId,
-      parentId: triggerEntry?.id ?? null,
-      llmRequest,
-      llmModel: plannerLlmModel,
-      kind: "planner",
-      includeAction: true,
-      summary: "Call preparation",
-    });
-    const requestStartedMs = Date.parse(thought.streamEntry.createdAt);
-
-    const llmResponse = await getDecisionLlmResponse(this.deps, {
-      conversationId: task.conversationId,
-      plannerEntryId: thought.streamEntry.id,
-      thoughtActionEntryId: thought.thoughtActionEntry.id,
-      requestStartedMs,
-      requestText: llmRequest,
-      plannerLlmModel,
-      llmOverrides,
-      requestParams,
-      files: inputFiles,
-      shouldCancel: opts?.shouldCancel,
-    });
-    if (llmResponse.kind === "cancelled") return;
-
-    const finalized = this.parseAndFinalizeDecisionResult({
-      conversationId: task.conversationId,
-      plannerEntryId: llmResponse.plannerEntryId,
-      thoughtActionEntryId: llmResponse.thoughtActionEntryId,
-      llmRequest,
-      llmResponse: llmResponse.reply,
-      streamedAnswer: llmResponse.streamedAnswer,
-      enabledToolIds,
-      plannerLlmModel,
-      requestStartedMs: llmResponse.requestStartedMs,
-      anchorUserMessage,
-      assistantEntryId: llmResponse.assistantEntryId,
-      plannerTokenUsage: llmResponse.plannerTokenUsage,
-      completionSummaryFallback: "planner step completed",
-      parseErrorPrefix: "failed to parse planner response",
-    });
-    throwIfCancelled(opts?.shouldCancel);
-    if (finalized.queuedToolCalls > 0) return;
-    if (finalized.followup !== "continue") {
-      logger.info({ conversationId: task.conversationId }, "[task] continue_conversation completed");
-      return;
-    }
-    logger.warn(
-      { conversationId: task.conversationId, followup: finalized.followup },
-      "[task] planner requested followup without tool call; waiting for next continuation trigger",
-    );
   }
 
   private findLastUserMessage(entries: ChatEntry[]): UserMessageEntry | null {
@@ -212,7 +243,6 @@ export class DecisionTaskProcessor {
     plannerLlmModel?: string;
     requestStartedMs: number;
     thoughtActionEntryId?: string | null;
-    anchorUserMessage: UserMessageEntry;
     assistantEntryId?: string | null;
     plannerTokenUsage?: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number };
     completionSummaryFallback: string;
@@ -246,11 +276,11 @@ export class DecisionTaskProcessor {
       thoughtActionEntryId: input.thoughtActionEntryId,
       llmRequest: input.llmRequest,
       llmResponse: input.llmResponse,
+      streamedAnswer: input.streamedAnswer,
       enabledToolIds: input.enabledToolIds,
       plannerLlmModel: input.plannerLlmModel,
       requestStartedMs: input.requestStartedMs,
       parsedLlmResponse,
-      anchorUserMessage: input.anchorUserMessage,
       assistantEntryId: input.assistantEntryId,
       plannerTokenUsage: input.plannerTokenUsage,
       completionSummaryFallback: input.completionSummaryFallback,

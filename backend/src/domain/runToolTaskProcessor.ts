@@ -1,7 +1,6 @@
 import type { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
 import type { LlmProviderSettingsRepo } from "../infra/repositories/llmProviderSettingsRepo.js";
 import type { ToolExecutionLogsRepo } from "../infra/repositories/toolExecutionLogsRepo.js";
-import type { TasksRepo } from "../infra/repositories/tasksRepo.js";
 import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
 import type { ToolInvocationEntry } from "../types/chatEntry.js";
@@ -23,18 +22,29 @@ type ToolExecutionEnvelope = {
   timing: { started_at: string; finished_at: string; elapsed_ms: number };
 };
 
+export type RunToolExecutionResult =
+  | {
+      kind: "skipped";
+    }
+  | {
+      kind: "completed";
+      toolEntryId: string;
+    }
+  | {
+      kind: "blocked";
+      toolEntryId: string;
+    };
+
 export class RunToolTaskProcessor {
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
     private readonly hub: ConversationEventHub,
     private readonly tools: ToolRegistry,
     private readonly toolExecutionLogs: ToolExecutionLogsRepo,
-    private readonly tasks: TasksRepo,
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
-    private readonly enqueueContinueConversation: (conversationId: string, sourceEntryId?: string) => { taskId: number },
   ) {}
 
-  async process(task: RunToolTask, taskId?: number, opts?: { shouldCancel?: () => boolean }): Promise<void> {
+  async process(task: RunToolTask, opts?: { shouldCancel?: () => boolean }): Promise<RunToolExecutionResult> {
     const conversationId = task.conversationId;
     if (task.sourceEntryId && !this.chatEntries.isEntryOnActiveLineage(conversationId, task.sourceEntryId)) {
       logger.info(
@@ -45,15 +55,12 @@ export class RunToolTaskProcessor {
         },
         "[tool] skipped run_tool: source entry not on active lineage",
       );
-      return;
+      return { kind: "skipped" };
     }
     throwIfCancelled(opts?.shouldCancel);
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const argsPreview = safeStringify(task.params);
-    const batchId = typeof task.batchId === "string" && task.batchId.trim().length > 0 ? task.batchId.trim() : null;
-    const hasPendingBatchTools = (): boolean =>
-      batchId !== null ? this.tasks.hasUnfinishedRunToolTasksInBatch(batchId, taskId) : false;
     const existingEntry = this.findPendingToolInvocationEntry(conversationId, task);
     let toolEntryId = existingEntry?.id ?? "";
     if (!task.toolRequest && !toolEntryId) {
@@ -77,7 +84,7 @@ export class RunToolTaskProcessor {
     }
 
     this.toolExecutionLogs.append({
-      taskId: taskId ?? null,
+      taskId: null,
       conversationId,
       toolName: task.toolName,
       phase: "started",
@@ -108,7 +115,7 @@ export class RunToolTaskProcessor {
         toolName: task.toolName,
         output,
         ok: false,
-        runContinues: hasPendingBatchTools(),
+        runContinues: false,
       });
       if (!toolEntryId) {
         const created = this.chatEntries.appendToolInvocation(conversationId, {
@@ -129,7 +136,7 @@ export class RunToolTaskProcessor {
         result: envelope,
       });
       this.toolExecutionLogs.append({
-        taskId: taskId ?? null,
+        taskId: null,
         conversationId,
         toolName: task.toolName,
         phase: "failed",
@@ -188,7 +195,7 @@ export class RunToolTaskProcessor {
         toolName: task.toolName,
         output: detail,
         ok: false,
-        runContinues: hasPendingBatchTools(),
+        runContinues: false,
       });
       throw e;
     }
@@ -208,7 +215,7 @@ export class RunToolTaskProcessor {
     const effectivePermission = mostPermissivePermission(rules);
 
     this.toolExecutionLogs.append({
-      taskId: taskId ?? null,
+      taskId: null,
       conversationId,
       toolName: task.toolName,
       phase: "permission_evaluated",
@@ -276,13 +283,13 @@ export class RunToolTaskProcessor {
         result: envelope,
       });
       this.toolExecutionLogs.append({
-        taskId: taskId ?? null,
+        taskId: null,
         conversationId,
         toolName: task.toolName,
         phase: "blocked",
         payload: { ...envelope, rules },
       });
-      return;
+      return { kind: "blocked", toolEntryId };
     }
 
     if (!toolEntryId) {
@@ -339,7 +346,7 @@ export class RunToolTaskProcessor {
       toolName: task.toolName,
       output: safeStringify(outputValue),
       ok: true,
-      runContinues: hasPendingBatchTools(),
+      runContinues: false,
     });
     this.chatEntries.updateToolInvocation(conversationId, {
       id: toolEntryId,
@@ -347,16 +354,14 @@ export class RunToolTaskProcessor {
       result: envelope,
     });
     this.toolExecutionLogs.append({
-      taskId: taskId ?? null,
+      taskId: null,
       conversationId,
       toolName: task.toolName,
       phase: "completed",
       payload: { ...envelope, rules },
     });
-    if (!hasPendingBatchTools()) {
-      this.enqueueContinueConversation(conversationId, toolEntryId);
-    }
     logger.info({ conversationId, toolName: task.toolName }, "[tool] run_tool completed");
+    return { kind: "completed", toolEntryId };
   }
 
   private findPendingToolInvocationEntry(conversationId: string, task: RunToolTask): ToolInvocationEntry | null {
