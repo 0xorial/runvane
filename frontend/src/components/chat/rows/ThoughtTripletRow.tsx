@@ -139,20 +139,10 @@ function ContextPanel({
 
 function ReasoningPanel({ stream }: { stream: PlannerLlmStreamEntry | TitleLlmStreamEntry }) {
   const response = String(stream.llmResponse || "").trim();
-  const promptTokens =
-    typeof stream.promptTokens === "number" && Number.isFinite(stream.promptTokens) ? stream.promptTokens : 0;
-  const cachedPromptTokens =
-    typeof stream.cachedPromptTokens === "number" && Number.isFinite(stream.cachedPromptTokens)
-      ? stream.cachedPromptTokens
-      : 0;
-  const completionTokens =
-    typeof stream.completionTokens === "number" && Number.isFinite(stream.completionTokens)
-      ? stream.completionTokens
-      : 0;
-  const duration =
-    typeof stream.thoughtMs === "number" && Number.isFinite(stream.thoughtMs)
-      ? `${Math.round(stream.thoughtMs)}ms`
-      : "running";
+  const promptTokens = stream.promptTokens ?? 0;
+  const cachedPromptTokens = stream.cachedPromptTokens ?? 0;
+  const completionTokens = stream.completionTokens ?? 0;
+  const duration = stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "running";
   const statusLabel = displayStatus(stream.status ?? "running");
   return (
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
@@ -216,15 +206,12 @@ function reasonMetaLabel(stream: PlannerLlmStreamEntry | TitleLlmStreamEntry): s
   const provider = String(stream.llmProviderId || "").trim() || "unknown-provider";
   const model = String(stream.llmModel || "").trim() || "unknown-model";
   const status = displayStatus(stream.status ?? "running");
-  const promptTokens = typeof stream.promptTokens === "number" && Number.isFinite(stream.promptTokens) ? stream.promptTokens : 0;
-  const cachedPromptTokens =
-    typeof stream.cachedPromptTokens === "number" && Number.isFinite(stream.cachedPromptTokens) ? stream.cachedPromptTokens : 0;
-  const completionTokens =
-    typeof stream.completionTokens === "number" && Number.isFinite(stream.completionTokens) ? stream.completionTokens : 0;
+  const promptTokens = stream.promptTokens ?? 0;
+  const cachedPromptTokens = stream.cachedPromptTokens ?? 0;
+  const completionTokens = stream.completionTokens ?? 0;
   const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
   const tokenLabel = totalTokens > 0 ? `${totalTokens}t` : "";
-  const durationLabel =
-    typeof stream.thoughtMs === "number" && Number.isFinite(stream.thoughtMs) ? `${Math.round(stream.thoughtMs)}ms` : "";
+  const durationLabel = stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "";
   return [tokenLabel, durationLabel, `${provider}/${model}`, status].filter(Boolean).join(" · ");
 }
 
