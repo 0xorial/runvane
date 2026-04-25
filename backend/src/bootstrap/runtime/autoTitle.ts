@@ -9,6 +9,7 @@ import { normalizeConversationTokenUsageRow } from "../../domain/conversationUsa
 import { finishThoughtLifecycle, publishThoughtLlmDelta, startThoughtLifecycle } from "../../domain/thoughtLifecycle.js";
 
 type TitleGenerationResult = {
+  providerId: string;
   model: string;
   fullResponse: string;
   cleanTitle: string | null;
@@ -70,6 +71,7 @@ async function generateConversationTitleUsingSystemModel(
   const fullResponse = String(completion.text || "");
   const clean = normalizeGeneratedTitle(fullResponse);
   return {
+    providerId,
     model,
     fullResponse,
     cleanTitle: clean,
@@ -92,11 +94,13 @@ export async function maybeAutoTitleConversation({
   let generated: TitleGenerationResult | null = null;
   let generationError: unknown = null;
   const titlePrompt = buildTitlePrompt(firstMessage);
+  const titleProviderId = String(llmProviderSettings.getDocument().llm_configuration.provider_id || "").trim() || undefined;
   const thought = startThoughtLifecycle(
     { chatEntries, hub },
     {
       conversationId,
       llmRequest: titlePrompt,
+      llmProviderId: titleProviderId,
       kind: "title",
       includeAction: true,
       summary: "Title generation",
@@ -131,6 +135,7 @@ export async function maybeAutoTitleConversation({
   let lifecycleSummary = "Title generation failed, fallback used";
   let lifecycleAction = "failed";
   let lifecycleError: string | undefined;
+  let lifecycleLlmProviderId: string | undefined;
   let lifecycleLlmModel: string | undefined;
   let lifecycleUsage: StreamTextCompletionUsage | undefined;
   let lifecycleResponse = streamedResponse;
@@ -140,6 +145,7 @@ export async function maybeAutoTitleConversation({
     lifecycleSummary = generated.cleanTitle != null ? `Generated title: ${generated.cleanTitle}` : "Generated title was empty, fallback used";
     lifecycleAction = generated.cleanTitle != null ? "final_answer" : "failed";
     lifecycleError = titleOutcomeFailed ? "Generated title was empty, fallback used" : undefined;
+    lifecycleLlmProviderId = generated.providerId;
     lifecycleLlmModel = generated.model;
     lifecycleUsage = generated.usage;
     lifecycleResponse = generated.fullResponse;
@@ -164,6 +170,7 @@ export async function maybeAutoTitleConversation({
       decision: null,
       status: lifecycleStatus,
       error: lifecycleError,
+      llmProviderId: lifecycleLlmProviderId,
       llmModel: lifecycleLlmModel,
       usage: lifecycleUsage,
       summary: lifecycleSummary,

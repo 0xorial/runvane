@@ -7,7 +7,7 @@ import { isTaskCancelledError, throwIfCancelled } from "../taskCancellation.js";
 import { composeFailedPlannerResponse, incrementalDelta, usageFromStreamingError } from "./plannerStreamUtils.js";
 import { extractAssistantOutputFromJsonLike } from "./plannerTextParsing.js";
 import type { DecisionLlmResult, DecisionProcessorDeps, LlmOverrides } from "./types.js";
-import { publishConversationUpdated, resolvePlannerModel } from "./context.js";
+import { publishConversationUpdated, resolvePlannerModel, resolvePlannerProviderId } from "./context.js";
 
 function extractErrorCauseDetail(error: unknown): string | null {
   if (!(error instanceof Error)) return null;
@@ -130,6 +130,7 @@ export async function getDecisionLlmResponse(
     shouldCancel?: () => boolean;
   },
 ): Promise<DecisionLlmResult> {
+  const plannerLlmProviderId = resolvePlannerProviderId(deps, input.llmOverrides);
   let reply = "";
   let firstDeltaPublished = false;
   let plannerText = "";
@@ -203,6 +204,7 @@ export async function getDecisionLlmResponse(
         decision: null,
         status: "cancelled",
         error: detail,
+        llmProviderId: plannerLlmProviderId,
         llmModel: input.plannerLlmModel,
         ...TokenUsageMapper.toEntryFields(plannerTokenUsage),
       });
@@ -213,6 +215,7 @@ export async function getDecisionLlmResponse(
         summary: "Cancelled",
         finished: true,
         action: "cancelled",
+        llmProviderId: plannerLlmProviderId,
         llmModel: input.plannerLlmModel,
         ...TokenUsageMapper.toSseFields(plannerTokenUsage),
       });
@@ -239,6 +242,7 @@ export async function getDecisionLlmResponse(
       decision: null,
       status: "failed",
       error: detail,
+      llmProviderId: plannerLlmProviderId,
       llmModel: input.plannerLlmModel,
       ...TokenUsageMapper.toEntryFields(plannerTokenUsage),
     });
@@ -249,6 +253,7 @@ export async function getDecisionLlmResponse(
       summary: detail,
       finished: true,
       action: "failed",
+      llmProviderId: plannerLlmProviderId,
       llmModel: input.plannerLlmModel,
       ...TokenUsageMapper.toSseFields(plannerTokenUsage),
     });

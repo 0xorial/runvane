@@ -38,6 +38,7 @@ type StartThoughtInput<TKind extends ThoughtStreamKind, TIncludeAction extends b
   conversationId: string;
   parentId?: string | null;
   llmRequest: string;
+  llmProviderId?: string;
   llmModel?: string;
   kind: TKind;
   includeAction: TIncludeAction;
@@ -66,6 +67,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
     parentId: input.parentId,
     ...(summary ? { title: summary } : {}),
     requestText: input.llmRequest,
+    llmProviderId: input.llmProviderId,
     llmModel: input.llmModel,
   });
   deps.hub.publish(input.conversationId, {
@@ -81,6 +83,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
           createdAt,
           parentId: prepareEntry.id,
           llmRequest: input.llmRequest,
+          llmProviderId: input.llmProviderId,
           llmResponse: "",
           thoughtMs: null,
           decision: null,
@@ -93,6 +96,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
           createdAt,
           parentId: prepareEntry.id,
           llmRequest: input.llmRequest,
+          llmProviderId: input.llmProviderId,
           llmResponse: "",
           thoughtMs: null,
           decision: null,
@@ -106,6 +110,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
     conversationIndex: streamEntry.conversationIndex,
     createdAt: streamEntry.createdAt,
     requestText: streamEntry.llmRequest,
+    llmProviderId: streamEntry.llmProviderId,
     llmModel: streamEntry.llmModel,
   });
 
@@ -193,6 +198,7 @@ export function finishThoughtLifecycle(
     decision?: LlmDecision | null;
     status: ThoughtStreamStatus;
     error?: string;
+    llmProviderId?: string;
     llmModel?: string;
     usage?: ThoughtUsage;
     summary: string;
@@ -205,6 +211,7 @@ export function finishThoughtLifecycle(
     deps.chatEntries.updatePlannerLlmStreamEntry(input.conversationId, {
       id: input.streamEntryId,
       llmRequest: input.llmRequest,
+      llmProviderId: input.llmProviderId,
       llmResponse: input.llmResponse,
       thoughtMs: input.thoughtMs,
       decision: input.decision ?? null,
@@ -218,6 +225,7 @@ export function finishThoughtLifecycle(
     deps.chatEntries.updateTitleLlmStreamEntry(input.conversationId, {
       id: input.streamEntryId,
       llmRequest: input.llmRequest,
+      llmProviderId: input.llmProviderId,
       llmResponse: input.llmResponse,
       thoughtMs: input.thoughtMs,
       decision: input.decision ?? null,
@@ -235,6 +243,7 @@ export function finishThoughtLifecycle(
     finished: true,
     action: input.action,
     ...(input.toolName ? { toolName: input.toolName } : {}),
+    llmProviderId: input.llmProviderId,
     llmModel: input.llmModel,
     ...TokenUsageMapper.toSseFields(input.usage),
   });

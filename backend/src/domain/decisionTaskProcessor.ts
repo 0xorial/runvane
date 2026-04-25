@@ -16,6 +16,7 @@ import {
   enabledToolIdsForAgent,
   lineageEntries,
   priorToolResultsFromEntries,
+  resolvePlannerProviderId,
   resolveLlmOverrides,
   resolvePlannerModel,
   resolveRequestParams,
@@ -80,6 +81,7 @@ export class DecisionTaskProcessor {
       conversationId: input.conversationId,
       parentId: sourceEntry.parentId,
       llmRequest: sourceEntry.llmRequest,
+      llmProviderId: sourceEntry.llmProviderId,
       llmModel: sourceEntry.llmModel,
       kind: "planner",
       includeAction: true,
@@ -99,6 +101,7 @@ export class DecisionTaskProcessor {
       llmResponse: input.editedResponse,
       streamedAnswer: input.editedResponse,
       enabledToolIds: enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId),
+      plannerLlmProviderId: thought.streamEntry.llmProviderId,
       plannerLlmModel: thought.streamEntry.llmModel,
       requestStartedMs: Date.parse(thought.streamEntry.createdAt),
       completionSummaryFallback: "reprocessed planner step completed",
@@ -135,6 +138,7 @@ export class DecisionTaskProcessor {
       const selectedAgent = this.deps.agents.get(anchorUserMessage.agentId);
       const effectiveModelPresetId = anchorUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
       const plannerLlmModel = resolvePlannerModel(this.deps, llmOverrides);
+      const plannerLlmProviderId = resolvePlannerProviderId(this.deps, llmOverrides);
       const requestParams = resolveRequestParams(this.deps, { modelPresetId: effectiveModelPresetId });
       const inputFiles = buildInputFiles(this.deps, anchorUserMessage);
       const enabledToolIds = enabledToolIdsForAgent(this.deps, anchorUserMessage.agentId);
@@ -151,6 +155,7 @@ export class DecisionTaskProcessor {
         conversationId: task.conversationId,
         parentId: triggerEntry?.id ?? null,
         llmRequest,
+        llmProviderId: plannerLlmProviderId,
         llmModel: plannerLlmModel,
         kind: "planner",
         includeAction: true,
@@ -180,6 +185,7 @@ export class DecisionTaskProcessor {
         llmResponse: llmResponse.reply,
         streamedAnswer: llmResponse.streamedAnswer,
         enabledToolIds,
+        plannerLlmProviderId,
         plannerLlmModel,
         requestStartedMs: llmResponse.requestStartedMs,
         assistantEntryId: llmResponse.assistantEntryId,
@@ -240,6 +246,7 @@ export class DecisionTaskProcessor {
     llmResponse: string;
     streamedAnswer: string;
     enabledToolIds: string[];
+    plannerLlmProviderId?: string;
     plannerLlmModel?: string;
     requestStartedMs: number;
     thoughtActionEntryId?: string | null;
@@ -262,6 +269,7 @@ export class DecisionTaskProcessor {
         plannerEntryId: input.plannerEntryId,
         llmRequest: input.llmRequest,
         llmResponse: input.llmResponse,
+        plannerLlmProviderId: input.plannerLlmProviderId,
         plannerLlmModel: input.plannerLlmModel,
         thoughtActionEntryId: input.thoughtActionEntryId,
         requestStartedMs: input.requestStartedMs,
@@ -278,6 +286,7 @@ export class DecisionTaskProcessor {
       llmResponse: input.llmResponse,
       streamedAnswer: input.streamedAnswer,
       enabledToolIds: input.enabledToolIds,
+      plannerLlmProviderId: input.plannerLlmProviderId,
       plannerLlmModel: input.plannerLlmModel,
       requestStartedMs: input.requestStartedMs,
       parsedLlmResponse,

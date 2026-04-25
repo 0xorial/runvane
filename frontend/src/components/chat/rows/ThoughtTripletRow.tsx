@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, FileText, MessageSquare, Sparkles, Wrench } from "lucide-react";
-import type { ChatEntry, PlannerLlmStreamEntry, ThoughtActionEntry, ThoughtPrepareEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import type {
+  ChatEntry,
+  PlannerLlmStreamEntry,
+  ThoughtActionEntry,
+  ThoughtPrepareEntry,
+  TitleLlmStreamEntry,
+} from "@/protocol/chatEntry";
 import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";
 import { cn } from "@/lib/utils";
@@ -24,6 +30,7 @@ export function ThoughtTripletRow({ streamEntry$, prepareEntry, actionEntry }: T
   const contextTitle = String(prepareStepEntry?.title ?? "").trim() || "Preparation";
   const reasonMeta = reasonMetaLabel(stream);
   const actionMeta = actionMetaLabel(actionStepEntry, stream);
+  const actionLabel = actionMeta.usesTool ? `call ${actionMeta.toolName ?? "tool"}` : "Reply";
 
   return (
     <ChatThreadIndent className="py-0 mb-1">
@@ -38,7 +45,7 @@ export function ThoughtTripletRow({ streamEntry$, prepareEntry, actionEntry }: T
           <Connector />
           <StepChip
             icon={stream.status === "running" ? <TinyProgressCircle /> : <Sparkles className="h-3 w-3" />}
-            label="Reason"
+            label=""
             meta={reasonMeta}
             active={expanded === "reasoning"}
             onClick={() => setExpanded((v) => (v === "reasoning" ? null : "reasoning"))}
@@ -46,9 +53,10 @@ export function ThoughtTripletRow({ streamEntry$, prepareEntry, actionEntry }: T
           <Connector />
           <StepChip
             icon={actionMeta.usesTool ? <Wrench className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
-            label={actionMeta.usesTool ? "Tool" : "Reply"}
+            label={actionLabel}
             meta={actionMeta.status}
             active={expanded === "action"}
+            align="right"
             onClick={() => setExpanded((v) => (v === "action" ? null : "action"))}
           />
         </div>
@@ -66,12 +74,14 @@ function StepChip({
   label,
   meta,
   active,
+  align = "left",
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   meta?: string;
   active: boolean;
+  align?: "left" | "right";
   onClick: () => void;
 }) {
   const hasMeta = typeof meta === "string" && meta.trim().length > 0;
@@ -80,24 +90,29 @@ function StepChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded px-2 py-1 transition-colors",
-        active ? "bg-secondary text-foreground" : "hover:bg-secondary/60 hover:text-foreground",
+        "inline-flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded px-2 py-1 transition-colors",
+        align === "right" ? "justify-end text-right" : "justify-start text-left",
+        active ? "bg-secondary text-foreground" : "hover:bg-secondary/60 hover:text-foreground"
       )}
     >
-      {icon}
-      <span className="font-medium">{label}</span>
-      {hasMeta ? <span className="truncate opacity-60">· {meta}</span> : null}
-      <ChevronDown className={cn("h-3 w-3 opacity-60 transition-transform", active ? "rotate-180" : "")} />
+      <span className="inline-flex h-3.5 w-3.5 items-center justify-center">{icon}</span>
+      <span className="inline-flex min-w-0 items-center gap-1">
+        {label ? <span className="truncate font-medium">{label}</span> : null}
+        {hasMeta ? <span className="truncate opacity-60">{label ? `· ${meta}` : meta}</span> : null}
+      </span>
+      <ChevronDown className={cn("h-3.5 w-3.5 opacity-60 transition-transform", active ? "rotate-180" : "")} />
     </button>
   );
 }
 
 function Connector() {
-  return <span className="self-center opacity-30">→</span>;
+  return <span className="self-center opacity-60">→</span>;
 }
 
 function TinyProgressCircle() {
-  return <span className="h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" aria-hidden="true" />;
+  return (
+    <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" aria-hidden="true" />
+  );
 }
 
 function ContextPanel({
@@ -111,7 +126,11 @@ function ContextPanel({
   return (
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
       <div className="text-[10px] text-muted-foreground">
-        {prepareEntry?.llmModel ? `model: ${prepareEntry.llmModel}` : stream.llmModel ? `model: ${stream.llmModel}` : "model: unknown"}
+        {prepareEntry?.llmModel
+          ? `model: ${prepareEntry.llmModel}`
+          : stream.llmModel
+          ? `model: ${stream.llmModel}`
+          : "model: unknown"}
       </div>
       <ReadOnlySection label="Prompt" value={prompt} />
     </div>
@@ -120,16 +139,25 @@ function ContextPanel({
 
 function ReasoningPanel({ stream }: { stream: PlannerLlmStreamEntry | TitleLlmStreamEntry }) {
   const response = String(stream.llmResponse || "").trim();
-  const promptTokens = typeof stream.promptTokens === "number" && Number.isFinite(stream.promptTokens) ? stream.promptTokens : 0;
+  const promptTokens =
+    typeof stream.promptTokens === "number" && Number.isFinite(stream.promptTokens) ? stream.promptTokens : 0;
   const cachedPromptTokens =
-    typeof stream.cachedPromptTokens === "number" && Number.isFinite(stream.cachedPromptTokens) ? stream.cachedPromptTokens : 0;
+    typeof stream.cachedPromptTokens === "number" && Number.isFinite(stream.cachedPromptTokens)
+      ? stream.cachedPromptTokens
+      : 0;
   const completionTokens =
-    typeof stream.completionTokens === "number" && Number.isFinite(stream.completionTokens) ? stream.completionTokens : 0;
-  const duration = typeof stream.thoughtMs === "number" && Number.isFinite(stream.thoughtMs) ? `${Math.round(stream.thoughtMs)}ms` : "running";
+    typeof stream.completionTokens === "number" && Number.isFinite(stream.completionTokens)
+      ? stream.completionTokens
+      : 0;
+  const duration =
+    typeof stream.thoughtMs === "number" && Number.isFinite(stream.thoughtMs)
+      ? `${Math.round(stream.thoughtMs)}ms`
+      : "running";
+  const statusLabel = displayStatus(stream.status ?? "running");
   return (
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
-        <span>status: {stream.status ?? "running"}</span>
+        {statusLabel ? <span>status: {statusLabel}</span> : null}
         <span>prompt: {promptTokens}t</span>
         <span>cached: {cachedPromptTokens}t</span>
         <span>completion: {completionTokens}t</span>
@@ -158,17 +186,26 @@ function ActionPanel({
     if (stream.decision) return JSON.stringify(stream.decision, null, 2);
     return "";
   }, [actionEntry?.parseResult, stream.decision]);
+  const statusLabel = displayStatus(actionEntry?.status ?? stream.status ?? "running");
 
   return (
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
       <div className="text-[10px] text-muted-foreground">
-        status: {actionEntry?.status ?? stream.status ?? "running"}
-        {action ? ` · action: ${action}` : ""}
-        {actionEntry?.toolName ? ` · tool: ${actionEntry.toolName}` : ""}
+        {[
+          statusLabel ? `status: ${statusLabel}` : "",
+          action ? `action: ${action}` : "",
+          actionEntry?.toolName ? `tool: ${actionEntry.toolName}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </div>
       <ReadOnlySection label="Summary" value={summary} />
       <ReadOnlySection label="Decision JSON" value={parseJson} />
-      {(actionEntry?.status === "failed" || actionEntry?.status === "cancelled" || stream.status === "failed" || stream.status === "cancelled") && error ? (
+      {(actionEntry?.status === "failed" ||
+        actionEntry?.status === "cancelled" ||
+        stream.status === "failed" ||
+        stream.status === "cancelled") &&
+      error ? (
         <ReadOnlySection label="Error" value={error} danger />
       ) : null}
     </div>
@@ -176,20 +213,39 @@ function ActionPanel({
 }
 
 function reasonMetaLabel(stream: PlannerLlmStreamEntry | TitleLlmStreamEntry): string {
-  const model = String(stream.llmModel || "").trim() || "unknown model";
-  const status = stream.status ?? "running";
-  return `${status} · ${model}`;
+  const provider = String(stream.llmProviderId || "").trim() || "unknown-provider";
+  const model = String(stream.llmModel || "").trim() || "unknown-model";
+  const status = displayStatus(stream.status ?? "running");
+  const promptTokens = typeof stream.promptTokens === "number" && Number.isFinite(stream.promptTokens) ? stream.promptTokens : 0;
+  const cachedPromptTokens =
+    typeof stream.cachedPromptTokens === "number" && Number.isFinite(stream.cachedPromptTokens) ? stream.cachedPromptTokens : 0;
+  const completionTokens =
+    typeof stream.completionTokens === "number" && Number.isFinite(stream.completionTokens) ? stream.completionTokens : 0;
+  const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
+  const tokenLabel = totalTokens > 0 ? `${totalTokens}t` : "";
+  const durationLabel =
+    typeof stream.thoughtMs === "number" && Number.isFinite(stream.thoughtMs) ? `${Math.round(stream.thoughtMs)}ms` : "";
+  return [tokenLabel, durationLabel, `${provider}/${model}`, status].filter(Boolean).join(" · ");
 }
 
 function actionMetaLabel(
   actionEntry: ThoughtActionEntry | null,
-  stream: PlannerLlmStreamEntry | TitleLlmStreamEntry,
-): { usesTool: boolean; status: string } {
+  stream: PlannerLlmStreamEntry | TitleLlmStreamEntry
+): { usesTool: boolean; status: string; toolName: string | null } {
   const toolName = String(actionEntry?.toolName || "").trim();
   const action = String(actionEntry?.action || "").trim();
-  const streamTool = stream.decision?.type === "tool-invocation";
+  const streamToolName = stream.decision?.type === "tool-invocation" ? String(stream.decision.toolId || "").trim() : "";
+  const streamTool = streamToolName.length > 0;
   const usesTool = Boolean(toolName) || action === "tool_call" || streamTool;
-  return { usesTool, status: actionEntry?.status ?? stream.status ?? "running" };
+  return {
+    usesTool,
+    status: displayStatus(actionEntry?.status ?? stream.status ?? "running"),
+    toolName: toolName || streamToolName || null,
+  };
+}
+
+function displayStatus(status: string): string {
+  return status === "completed" ? "" : status;
 }
 
 function ReadOnlySection({ label, value, danger = false }: { label: string; value: string; danger?: boolean }) {
@@ -200,7 +256,9 @@ function ReadOnlySection({ label, value, danger = false }: { label: string; valu
       <pre
         className={cn(
           "whitespace-pre-wrap break-words rounded border px-2 py-1.5 font-mono text-[11px]",
-          danger ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border/50 bg-muted/40 text-foreground/90",
+          danger
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : "border-border/50 bg-muted/40 text-foreground/90"
         )}
       >
         {value}

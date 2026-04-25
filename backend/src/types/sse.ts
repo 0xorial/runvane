@@ -94,6 +94,7 @@ export type PlannerStartingSsePayload = {
   conversationIndex: number;
   createdAt: string;
   requestText: string;
+  llmProviderId?: string;
   llmModel?: string;
 };
 export const PlannerStartingSsePayloadSchema = z.object({
@@ -103,6 +104,7 @@ export const PlannerStartingSsePayloadSchema = z.object({
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
   requestText: z.string(),
+  llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
 });
 
@@ -124,6 +126,7 @@ export type TitleStartingSsePayload = {
   conversationIndex: number;
   createdAt: string;
   requestText: string;
+  llmProviderId?: string;
   llmModel?: string;
 };
 export const TitleStartingSsePayloadSchema = z.object({
@@ -133,6 +136,7 @@ export const TitleStartingSsePayloadSchema = z.object({
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
   requestText: z.string(),
+  llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
 });
 
@@ -165,6 +169,7 @@ export type PlannerResponseSsePayload = {
   finished: boolean;
   action?: string;
   toolName?: string;
+  llmProviderId?: string;
   llmModel?: string;
   promptTokens?: number;
   cachedPromptTokens?: number;
@@ -177,6 +182,7 @@ export const PlannerResponseSsePayloadSchema = z.object({
   finished: z.boolean(),
   action: z.string().optional(),
   toolName: z.string().optional(),
+  llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
   promptTokens: z.number().finite().optional(),
   cachedPromptTokens: z.number().finite().optional(),
@@ -189,6 +195,7 @@ export type TitleResponseSsePayload = {
   summary: string;
   finished: boolean;
   action?: string;
+  llmProviderId?: string;
   llmModel?: string;
   promptTokens?: number;
   cachedPromptTokens?: number;
@@ -200,6 +207,7 @@ export const TitleResponseSsePayloadSchema = z.object({
   summary: z.string(),
   finished: z.boolean(),
   action: z.string().optional(),
+  llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
   promptTokens: z.number().finite().optional(),
   cachedPromptTokens: z.number().finite().optional(),
@@ -306,6 +314,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
     requestText: z.string(),
+    llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
@@ -320,6 +329,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
     requestText: z.string(),
+    llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
@@ -339,6 +349,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     finished: z.boolean(),
     action: z.string().optional(),
     toolName: z.string().optional(),
+    llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
     promptTokens: z.number().finite().optional(),
     cachedPromptTokens: z.number().finite().optional(),
@@ -350,6 +361,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     summary: z.string(),
     finished: z.boolean(),
     action: z.string().optional(),
+    llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
     promptTokens: z.number().finite().optional(),
     cachedPromptTokens: z.number().finite().optional(),

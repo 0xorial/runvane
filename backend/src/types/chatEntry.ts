@@ -190,6 +190,7 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   type: "planner_llm_stream";
   thoughtId: string;
   llmRequest: string; // plain text that was sent to the LLM
+  llmProviderId?: string;
   llmResponse?: string;
   thoughtMs?: number | null;
   decision?: LlmDecision | null;
@@ -213,6 +214,7 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("planner_llm_stream"),
   thoughtId: z.string(),
   llmRequest: z.string(),
+  llmProviderId: z.string().optional(),
   llmResponse: z.string().optional(),
   thoughtMs: z.number().finite().nullable().optional(),
   decision: LlmDecisionSchema.nullable().optional(),
@@ -241,6 +243,7 @@ export type ThoughtPrepareEntry = ChatEntryBase & {
   thoughtId: string;
   title?: string;
   requestText: string;
+  llmProviderId?: string;
   llmModel?: string;
   status?: "completed";
 };
@@ -249,6 +252,7 @@ export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   thoughtId: z.string(),
   title: z.string().optional(),
   requestText: z.string(),
+  llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
   status: z.literal("completed").optional(),
 });
@@ -257,6 +261,7 @@ export type TitleLlmStreamEntry = ChatEntryBase & {
   type: "title_llm_stream";
   thoughtId: string;
   llmRequest: string;
+  llmProviderId?: string;
   llmResponse?: string;
   thoughtMs?: number | null;
   decision?: LlmDecision | null;
@@ -271,6 +276,7 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("title_llm_stream"),
   thoughtId: z.string(),
   llmRequest: z.string(),
+  llmProviderId: z.string().optional(),
   llmResponse: z.string().optional(),
   thoughtMs: z.number().finite().nullable().optional(),
   decision: LlmDecisionSchema.nullable().optional(),

@@ -20,17 +20,20 @@ function entryPreview(entry: ChatEntry): string {
     return `Tool: ${entry.toolId || "unknown"}`;
   }
   if (entry.type === "thought-prepare") {
+    const summary = String(entry.title || "").trim();
+    if (summary) return summary;
     const model = String(entry.llmModel || "").trim();
-    return model ? `prepare · ${model}` : "prepare";
+    return model || "(context)";
   }
   if (entry.type === "thought-action") {
-    const status = String(entry.status || "running").trim();
+    const status = displayStatus(String(entry.status || "running").trim());
     const action = String(entry.action || "").trim();
     const toolName = String(entry.toolName || "").trim();
-    const meta = [action, toolName].filter((x) => x.length > 0).join(" · ");
-    return meta ? `${status} · ${meta}` : status;
+    const meta = [action, toolName].filter((x) => x.length > 0).join(" ");
+    const body = [status, meta].filter((x) => x.length > 0).join(" ");
+    return body ? `Decided: ${body}` : "Decided";
   }
-  const status = String(entry.status || "running").trim();
+  const status = displayStatus(String(entry.status || "running").trim());
   const promptTokens = typeof entry.promptTokens === "number" && Number.isFinite(entry.promptTokens) ? entry.promptTokens : 0;
   const cachedPromptTokens =
     typeof entry.cachedPromptTokens === "number" && Number.isFinite(entry.cachedPromptTokens) ? entry.cachedPromptTokens : 0;
@@ -39,8 +42,12 @@ function entryPreview(entry: ChatEntry): string {
   const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
   const tokenLabel = totalTokens > 0 ? `${totalTokens} tok` : "";
   const model = String(entry.llmModel || "").trim();
-  const meta = [model, tokenLabel].filter((x) => x.length > 0).join(" · ");
-  return meta ? `${status} · ${meta}` : status;
+  const meta = [model, tokenLabel].filter((x) => x.length > 0).join(" ");
+  return [status, meta].filter((x) => x.length > 0).join(" ");
+}
+
+function displayStatus(status: string): string {
+  return status === "completed" ? "" : status;
 }
 
 function entryIcon(entry: ChatEntry) {

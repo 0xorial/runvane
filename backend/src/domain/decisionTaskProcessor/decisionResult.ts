@@ -36,6 +36,7 @@ export function persistDecisionParseFailure(
     plannerEntryId: string;
     llmRequest: string;
     llmResponse: string;
+    plannerLlmProviderId?: string;
     plannerLlmModel?: string;
     thoughtActionEntryId?: string | null;
     requestStartedMs: number;
@@ -51,6 +52,7 @@ export function persistDecisionParseFailure(
     decision: null,
     status: "failed",
     error: input.detail,
+      llmProviderId: input.plannerLlmProviderId,
     llmModel: input.plannerLlmModel,
     parseResult: {
       status: "error",
@@ -65,6 +67,7 @@ export function persistDecisionParseFailure(
     summary: input.detail,
     finished: true,
     action: "failed",
+    llmProviderId: input.plannerLlmProviderId,
     llmModel: input.plannerLlmModel,
     ...TokenUsageMapper.toSseFields(input.plannerTokenUsage),
   });
@@ -126,6 +129,7 @@ export function finalizeParsedDecisionResult(
     thoughtMs: Math.max(0, Date.now() - input.requestStartedMs),
     decision,
     status: "completed",
+    llmProviderId: input.plannerLlmProviderId,
     llmModel: input.plannerLlmModel,
     parseResult: {
       status: "ok",
@@ -150,6 +154,7 @@ export function finalizeParsedDecisionResult(
     finished: true,
     action: requestedToolCalls.length > 0 ? "tool_call" : "final_answer",
     ...(requestedToolCalls.length > 0 ? { toolName: requestedToolCalls[0].toolName } : {}),
+    llmProviderId: input.plannerLlmProviderId,
     llmModel: input.plannerLlmModel,
     ...TokenUsageMapper.toSseFields(input.plannerTokenUsage),
   });

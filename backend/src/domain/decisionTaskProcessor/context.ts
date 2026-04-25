@@ -61,6 +61,11 @@ export function resolvePlannerModel(deps: DecisionProcessorDeps, overrides: { ll
   return String(overrides.llmModel || doc.llm_configuration.model_name || "gpt-4o-mini");
 }
 
+export function resolvePlannerProviderId(deps: DecisionProcessorDeps, overrides: { llmProviderId?: string }): string {
+  const doc = deps.llmProviderSettings.getDocument();
+  return String(overrides.llmProviderId || doc.llm_configuration.provider_id || "openai");
+}
+
 function parseStructuredParamValue(key: string, value: unknown): unknown {
   if (typeof value !== "string") return value;
   const trimmed = value.trim();

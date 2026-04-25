@@ -93,6 +93,7 @@ export type FinalizeDecisionResultInput = {
   llmResponse: string;
   streamedAnswer: string;
   enabledToolIds: string[];
+  plannerLlmProviderId?: string;
   plannerLlmModel?: string;
   requestStartedMs: number;
   parsedLlmResponse: ParsedDecisionResponse;

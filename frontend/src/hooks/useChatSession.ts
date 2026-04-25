@@ -135,6 +135,10 @@ export function useChatSession(conversationId: string | null | undefined) {
           const store = storeRef.current;
           const thinkingType = ev.type === SseType.TITLE_STARTING ? "title_llm_stream" : "planner_llm_stream";
           if (!store.getById(ev.chatEntryId)) {
+            const llmProviderId =
+              typeof ev.llmProviderId === "string" && ev.llmProviderId.trim() !== ""
+                ? ev.llmProviderId.trim()
+                : undefined;
             const llmModel =
               typeof ev.llmModel === "string" && ev.llmModel.trim() !== "" ? ev.llmModel.trim() : undefined;
             store.append({
@@ -146,6 +150,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               parentId: null,
               llmRequest: ev.requestText,
               status: "running",
+              ...(llmProviderId !== undefined ? { llmProviderId } : {}),
               ...(llmModel !== undefined ? { llmModel } : {}),
             });
           }
@@ -225,6 +230,8 @@ export function useChatSession(conversationId: string | null | undefined) {
                 delete next.error;
               }
               const modelWire = typeof ev.llmModel === "string" ? ev.llmModel.trim() : "";
+              const providerWire = typeof ev.llmProviderId === "string" ? ev.llmProviderId.trim() : "";
+              if (providerWire) next.llmProviderId = providerWire;
               if (modelWire) next.llmModel = modelWire;
               const usage = plannerResponseUsageFromEvent(ev);
               if (usage) {

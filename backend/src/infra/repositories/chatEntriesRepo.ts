@@ -160,7 +160,14 @@ export class ChatEntriesRepo {
       .prepare(
         `SELECT
            e.conversation_id AS conversation_id,
-           TRIM(CAST(json_extract(e.payload_json, '$.llmModel') AS TEXT)) AS model_name,
+           CASE
+             WHEN TRIM(COALESCE(CAST(json_extract(e.payload_json, '$.llmProviderId') AS TEXT), '')) != ''
+               AND TRIM(COALESCE(CAST(json_extract(e.payload_json, '$.llmModel') AS TEXT), '')) != ''
+             THEN TRIM(CAST(json_extract(e.payload_json, '$.llmProviderId') AS TEXT))
+               || '/'
+               || TRIM(CAST(json_extract(e.payload_json, '$.llmModel') AS TEXT))
+             ELSE TRIM(CAST(json_extract(e.payload_json, '$.llmModel') AS TEXT))
+           END AS model_name,
            SUM(COALESCE(CAST(json_extract(e.payload_json, '$.promptTokens') AS INTEGER), 0)) AS prompt_tokens,
            SUM(COALESCE(CAST(json_extract(e.payload_json, '$.cachedPromptTokens') AS INTEGER), 0)) AS cached_prompt_tokens,
            SUM(COALESCE(CAST(json_extract(e.payload_json, '$.completionTokens') AS INTEGER), 0)) AS completion_tokens
@@ -363,6 +370,7 @@ export class ChatEntriesRepo {
       createdAt: string;
       parentId?: string | null;
       llmRequest: string;
+      llmProviderId?: string;
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
@@ -373,6 +381,8 @@ export class ChatEntriesRepo {
   ): PlannerLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
+    const llmProviderIdRaw = typeof input.llmProviderId === "string" ? input.llmProviderId.trim() : "";
+    const llmProviderId = llmProviderIdRaw.length > 0 ? llmProviderIdRaw : undefined;
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const thoughtId = this.requireThoughtId(input.thoughtId, `append planner_llm_stream ${input.id}`);
@@ -389,6 +399,7 @@ export class ChatEntriesRepo {
       decision: input.decision ?? null,
       status: input.status ?? "running",
       ...(input.error ? { error: input.error } : {}),
+      ...(llmProviderId !== undefined ? { llmProviderId } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
     const payload: Record<string, unknown> = {
@@ -400,6 +411,7 @@ export class ChatEntriesRepo {
       status: entry.status ?? "running",
       ...(entry.error ? { error: entry.error } : {}),
     };
+    if (llmProviderId !== undefined) payload.llmProviderId = llmProviderId;
     if (llmModel !== undefined) payload.llmModel = llmModel;
     this.insertEntry({
       id: entry.id,
@@ -422,11 +434,14 @@ export class ChatEntriesRepo {
       parentId?: string | null;
       title?: string;
       requestText: string;
+      llmProviderId?: string;
       llmModel?: string;
     },
   ): ThoughtPrepareEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
+    const llmProviderIdRaw = typeof input.llmProviderId === "string" ? input.llmProviderId.trim() : "";
+    const llmProviderId = llmProviderIdRaw.length > 0 ? llmProviderIdRaw : undefined;
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const titleRaw = typeof input.title === "string" ? input.title.trim() : "";
@@ -442,6 +457,7 @@ export class ChatEntriesRepo {
       ...(title !== undefined ? { title } : {}),
       requestText: input.requestText,
       status: "completed",
+      ...(llmProviderId !== undefined ? { llmProviderId } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
     const payload: Record<string, unknown> = {
@@ -450,6 +466,7 @@ export class ChatEntriesRepo {
       status: "completed",
     };
     if (title !== undefined) payload.title = title;
+    if (llmProviderId !== undefined) payload.llmProviderId = llmProviderId;
     if (llmModel !== undefined) payload.llmModel = llmModel;
     this.insertEntry({
       id: entry.id,
@@ -577,6 +594,7 @@ export class ChatEntriesRepo {
       createdAt: string;
       parentId?: string | null;
       llmRequest: string;
+      llmProviderId?: string;
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
@@ -587,6 +605,8 @@ export class ChatEntriesRepo {
   ): TitleLlmStreamEntry {
     const conversationIndex = this.nextConversationIndex(conversationId);
     const parentId = this.resolveParentId(conversationId, input.parentId);
+    const llmProviderIdRaw = typeof input.llmProviderId === "string" ? input.llmProviderId.trim() : "";
+    const llmProviderId = llmProviderIdRaw.length > 0 ? llmProviderIdRaw : undefined;
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const thoughtId = this.requireThoughtId(input.thoughtId, `append title_llm_stream ${input.id}`);
@@ -603,6 +623,7 @@ export class ChatEntriesRepo {
       decision: input.decision ?? null,
       status: input.status ?? "running",
       ...(input.error ? { error: input.error } : {}),
+      ...(llmProviderId !== undefined ? { llmProviderId } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
     const payload: Record<string, unknown> = {
@@ -614,6 +635,7 @@ export class ChatEntriesRepo {
       status: entry.status ?? "running",
       ...(entry.error ? { error: entry.error } : {}),
     };
+    if (llmProviderId !== undefined) payload.llmProviderId = llmProviderId;
     if (llmModel !== undefined) payload.llmModel = llmModel;
     this.insertEntry({
       id: entry.id,
@@ -632,6 +654,7 @@ export class ChatEntriesRepo {
     input: {
       id: string;
       llmRequest: string;
+      llmProviderId?: string;
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
@@ -656,6 +679,8 @@ export class ChatEntriesRepo {
     }
     const existingPayload = parseJsonObject(row.payload_json);
     const thoughtId = this.requireThoughtId(existingPayload.thoughtId, `update planner_llm_stream ${input.id}`);
+    const llmProviderIdRaw = typeof input.llmProviderId === "string" ? input.llmProviderId.trim() : "";
+    const llmProviderId = llmProviderIdRaw.length > 0 ? llmProviderIdRaw : undefined;
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const payload: Record<string, unknown> = {
@@ -667,6 +692,7 @@ export class ChatEntriesRepo {
       status: input.status ?? "running",
       ...(input.error ? { error: input.error } : {}),
     };
+    if (llmProviderId !== undefined) payload.llmProviderId = llmProviderId;
     if (llmModel !== undefined) payload.llmModel = llmModel;
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
       payload.promptTokens = input.promptTokens;
@@ -701,6 +727,7 @@ export class ChatEntriesRepo {
     input: {
       id: string;
       llmRequest: string;
+      llmProviderId?: string;
       llmResponse?: string;
       thoughtMs?: number | null;
       decision?: LlmDecision | null;
@@ -724,6 +751,8 @@ export class ChatEntriesRepo {
     }
     const existingPayload = parseJsonObject(row.payload_json);
     const thoughtId = this.requireThoughtId(existingPayload.thoughtId, `update title_llm_stream ${input.id}`);
+    const llmProviderIdRaw = typeof input.llmProviderId === "string" ? input.llmProviderId.trim() : "";
+    const llmProviderId = llmProviderIdRaw.length > 0 ? llmProviderIdRaw : undefined;
     const llmModelRaw = typeof input.llmModel === "string" ? input.llmModel.trim() : "";
     const llmModel = llmModelRaw.length > 0 ? llmModelRaw : undefined;
     const payload: Record<string, unknown> = {
@@ -735,6 +764,7 @@ export class ChatEntriesRepo {
       status: input.status ?? "running",
       ...(input.error ? { error: input.error } : {}),
     };
+    if (llmProviderId !== undefined) payload.llmProviderId = llmProviderId;
     if (llmModel !== undefined) payload.llmModel = llmModel;
     if (typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)) {
       payload.promptTokens = input.promptTokens;
@@ -902,6 +932,10 @@ export class ChatEntriesRepo {
       }
       if (row.type === "planner_llm_stream") {
         const thoughtId = this.requireThoughtId(payload.thoughtId, `read planner_llm_stream ${row.id}`);
+        const llmProviderId =
+          typeof payload.llmProviderId === "string" && payload.llmProviderId.trim() !== ""
+            ? payload.llmProviderId.trim()
+            : undefined;
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         const promptTokens =
@@ -951,6 +985,7 @@ export class ChatEntriesRepo {
           decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
           status,
           ...(error !== undefined ? { error } : {}),
+          ...(llmProviderId !== undefined ? { llmProviderId } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),
           ...(promptTokens !== undefined ? { promptTokens } : {}),
           ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
@@ -961,6 +996,10 @@ export class ChatEntriesRepo {
       if (row.type === "thought-prepare") {
         const thoughtId = this.requireThoughtId(payload.thoughtId, `read thought-prepare ${row.id}`);
         const title = typeof payload.title === "string" && payload.title.trim() !== "" ? payload.title.trim() : undefined;
+        const llmProviderId =
+          typeof payload.llmProviderId === "string" && payload.llmProviderId.trim() !== ""
+            ? payload.llmProviderId.trim()
+            : undefined;
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         return {
@@ -973,6 +1012,7 @@ export class ChatEntriesRepo {
           ...(title !== undefined ? { title } : {}),
           requestText: String(payload.requestText ?? ""),
           status: "completed",
+          ...(llmProviderId !== undefined ? { llmProviderId } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),
         } satisfies ThoughtPrepareEntry;
       }
@@ -1016,6 +1056,10 @@ export class ChatEntriesRepo {
       }
       if (row.type === "title_llm_stream") {
         const thoughtId = this.requireThoughtId(payload.thoughtId, `read title_llm_stream ${row.id}`);
+        const llmProviderId =
+          typeof payload.llmProviderId === "string" && payload.llmProviderId.trim() !== ""
+            ? payload.llmProviderId.trim()
+            : undefined;
         const llmModel =
           typeof payload.llmModel === "string" && payload.llmModel.trim() !== "" ? payload.llmModel.trim() : undefined;
         const promptTokens =
@@ -1055,6 +1099,7 @@ export class ChatEntriesRepo {
           decision: payload.decision && typeof payload.decision === "object" ? (payload.decision as LlmDecision) : null,
           status,
           ...(error !== undefined ? { error } : {}),
+          ...(llmProviderId !== undefined ? { llmProviderId } : {}),
           ...(llmModel !== undefined ? { llmModel } : {}),
           ...(promptTokens !== undefined ? { promptTokens } : {}),
           ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),

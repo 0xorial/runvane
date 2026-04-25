@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { createConversation, postConversationMessage, uploadFile } from "../api/client";
@@ -81,6 +81,16 @@ export function ChatPage({
 
   const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
+  const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);
+  const tripletStreamIdByThoughtId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of activePathEntries) {
+      if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
+        map.set(entry.thoughtId, entry.id);
+      }
+    }
+    return map;
+  }, [activePathEntries]);
   const thoughtTripletsById = new Map<string, ThoughtTripletRefs>();
   for (const entry$ of chatEntries) {
     const entry = entry$.get();
@@ -99,6 +109,17 @@ export function ChatPage({
     const entry = entry$.get();
     return entry.type !== "thought-prepare" && entry.type !== "thought-action";
   });
+  const resolveVisibleAnchorEntryId = useCallback(
+    (entryId: string): string => {
+      const selected = activePathEntryById.get(entryId);
+      if (!selected) return entryId;
+      if (selected.type !== "thought-prepare" && selected.type !== "thought-action") {
+        return entryId;
+      }
+      return tripletStreamIdByThoughtId.get(selected.thoughtId) ?? entryId;
+    },
+    [activePathEntryById, tripletStreamIdByThoughtId],
+  );
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
@@ -300,8 +321,9 @@ export function ChatPage({
                 conversationId={conversationId}
                 activePathEntries={activePathEntries}
                 onAnchorEntrySelected={(entryId) => {
-                  setSelectedBranchAnchorEntryId(entryId);
-                  setTopAnchorEntryId(entryId);
+                  const visibleAnchorId = resolveVisibleAnchorEntryId(entryId);
+                  setSelectedBranchAnchorEntryId(visibleAnchorId);
+                  setTopAnchorEntryId(visibleAnchorId);
                 }}
               />
             </aside>
