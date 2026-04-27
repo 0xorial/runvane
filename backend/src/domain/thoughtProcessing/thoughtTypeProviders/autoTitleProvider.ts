@@ -1,4 +1,5 @@
 import { usageByConversationId } from "../../conversationUsage.js";
+import { finishThoughtLifecycle } from "../../thoughtLifecycle.js";
 import type { ChatEntriesRepo } from "../../../infra/repositories/chatEntriesRepo.js";
 import type { ConversationsRepo } from "../../../infra/repositories/conversationsRepo.js";
 import type { ConversationEventHub } from "../../../events/conversationEventHub.js";
@@ -26,7 +27,9 @@ export type AutoTitlePrepareOutput = {
 export type AutoTitleReasonOutput = {
   conversationId: string;
   streamEntryId: string;
+  thoughtActionEntryId: string | null;
   prompt: string;
+  requestStartedMs: number;
   result?: ThoughtReasonLlmResult;
   fallbackTitle: string;
 };
@@ -55,7 +58,9 @@ export function createAutoTitleThoughtTypeProvider(
       reasonOutput: {
         conversationId: input.prepareOutput.conversationId,
         streamEntryId: input.prepareOutput.streamEntryId,
+        thoughtActionEntryId: input.thought.thoughtActionEntryId ?? null,
         prompt: input.prepareOutput.titlePrompt,
+        requestStartedMs: Date.now(),
         fallbackTitle: input.prepareOutput.fallbackTitle,
       },
     }),
@@ -68,19 +73,22 @@ export function createAutoTitleThoughtTypeProvider(
       const current = deps.conversations.get(result.conversationId);
       const nextTitle = cleanTitle ?? result.fallbackTitle;
       const summary = cleanTitle ? `Generated title: ${cleanTitle}` : "Generated title was empty, fallback used";
-      deps.hub.publish(result.conversationId, {
-        type: SseType.TITLE_RESPONSE,
-        chatEntryId: result.streamEntryId,
+      finishThoughtLifecycle({ chatEntries: deps.chatEntries, hub: deps.hub }, {
+        conversationId: result.conversationId,
+        kind: "title",
+        streamEntryId: result.streamEntryId,
+        thoughtActionEntryId: result.thoughtActionEntryId,
+        llmRequest: result.prompt,
+        llmResponse: result.result.fullResponse,
+        thoughtMs: Math.max(0, Date.now() - result.requestStartedMs),
+        decision: null,
+        status: cleanTitle ? "completed" : "failed",
+        ...(cleanTitle ? {} : { error: summary }),
+        llmProviderId: result.result.providerId,
+        llmModel: result.result.model,
+        usage: result.result.usage,
         summary,
-        finished: true,
         action: cleanTitle ? "final_answer" : "failed",
-        ...(result.result.providerId ? { llmProviderId: result.result.providerId } : {}),
-        ...(result.result.model ? { llmModel: result.result.model } : {}),
-        ...(result.result.usage ? { promptTokens: result.result.usage.promptTokens } : {}),
-        ...(result.result.usage?.cachedPromptTokens != null
-          ? { cachedPromptTokens: result.result.usage.cachedPromptTokens }
-          : {}),
-        ...(result.result.usage ? { completionTokens: result.result.usage.completionTokens } : {}),
       });
       if (!current || String(current.title || "").trim() !== "New chat") return;
       const updated = deps.conversations.updateTitle(result.conversationId, nextTitle);

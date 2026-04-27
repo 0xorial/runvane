@@ -13,7 +13,10 @@ const STEP_SUMMARY: Record<ThoughtStepHandle["step"], string> = {
   decision: "Applying decision",
 };
 
-export async function createStepHandle(step: ThoughtStepHandle["step"], thought: StepThought): Promise<ThoughtStepHandle> {
+export async function createStepHandle(
+  step: ThoughtStepHandle["step"],
+  thought: StepThought
+): Promise<ThoughtStepHandle> {
   if (!thought.conversationId || !thought.thoughtActionEntryId) return { step };
   const deps = getThoughtRuntimeDeps();
   updateThoughtActionEntryAndPublish(
@@ -23,7 +26,7 @@ export async function createStepHandle(step: ThoughtStepHandle["step"], thought:
       id: thought.thoughtActionEntryId,
       status: "running",
       summary: STEP_SUMMARY[step],
-    },
+    }
   );
   return { step };
 }

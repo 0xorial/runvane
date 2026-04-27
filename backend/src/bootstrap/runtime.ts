@@ -262,19 +262,21 @@ export function createRuntime(opts: {
           onStarted: ({ thoughtActionEntryId }) => {
             if (thoughtActionEntryId) plannerSourceEntryId = thoughtActionEntryId;
           },
-        },
-      ).catch((error) => {
-        logger.error(
-          {
-            conversationId,
-            detail: error instanceof Error ? error.message : String(error),
-            error,
-          },
-          "[chat] auto title failed"
-        );
-      }).finally(() => {
-        finishTitleExecution(conversationId, titleController);
-      });
+        }
+      )
+        .catch((error) => {
+          logger.error(
+            {
+              conversationId,
+              detail: error instanceof Error ? error.message : String(error),
+              error,
+            },
+            "[chat] auto title failed"
+          );
+        })
+        .finally(() => {
+          finishTitleExecution(conversationId, titleController);
+        });
       startReactiveConversationProcessing(conversationId, plannerSourceEntryId);
     } else {
       startReactiveConversationProcessing(conversationId, user.id);
@@ -404,7 +406,7 @@ export function createRuntime(opts: {
 
   function loadPlannerReprocessContext(
     conversationId: string,
-    sourceEntryId: string,
+    sourceEntryId: string
   ): {
     enabledToolIds: string[];
   } {

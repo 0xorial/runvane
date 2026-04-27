@@ -25,10 +25,10 @@ export function useChatSession(conversationId: string | null | undefined) {
   const liveDisposeRef = useRef<(() => void) | null>(null);
   const pollDisposeRef = useRef<(() => void) | null>(null);
   const pendingUserByConversationRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
-  const reloadInFlightByConversationRef = useRef<Map<string, Promise<void>>>(new Map());
-  const reloadQueuedByConversationRef = useRef<Set<string>>(new Set());
   const pendingAssistantByEntryIdRef = useRef<Map<string, { delta: string; parentId: string | null }>>(new Map());
-  const pendingToolStartByEntryIdRef = useRef<Map<string, { toolName: string; approvalRequired: boolean; argsPreview?: string; parentId: string | null }>>(new Map());
+  const pendingToolStartByEntryIdRef = useRef<
+    Map<string, { toolName: string; approvalRequired: boolean; argsPreview?: string; parentId: string | null }>
+  >(new Map());
 
   const mergePendingUsers = useCallback((cid: string, fetched: ChatEntry[]): ChatEntry[] => {
     const pending = pendingUserByConversationRef.current.get(cid) ?? [];
@@ -68,30 +68,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       const fetched = mapApiMessagesToChatEntries(data);
       storeRef.current.replace(mergePendingUsers(cid, fetched));
     },
-    [mergePendingUsers],
-  );
-
-  const scheduleReloadMessages = useCallback(
-    (cid: string) => {
-      const inFlight = reloadInFlightByConversationRef.current.get(cid);
-      if (inFlight) {
-        reloadQueuedByConversationRef.current.add(cid);
-        return;
-      }
-      const run = (async () => {
-        try {
-          await reloadMessages(cid);
-        } finally {
-          reloadInFlightByConversationRef.current.delete(cid);
-          if (reloadQueuedByConversationRef.current.has(cid)) {
-            reloadQueuedByConversationRef.current.delete(cid);
-            scheduleReloadMessages(cid);
-          }
-        }
-      })();
-      reloadInFlightByConversationRef.current.set(cid, run);
-    },
-    [reloadMessages],
+    [mergePendingUsers]
   );
 
   const reconcileIncomingUserMessage = useCallback((cid: string, incoming: UserMessageEntry): boolean => {
@@ -122,8 +99,8 @@ export function useChatSession(conversationId: string | null | undefined) {
       storeRef.current.replace(defaultChatEntries);
       return;
     }
-    scheduleReloadMessages(String(conversationId));
-  }, [conversationId, scheduleReloadMessages]);
+    void reloadMessages(String(conversationId));
+  }, [conversationId, reloadMessages]);
 
   useEffect(() => {
     liveDisposeRef.current?.();
@@ -154,6 +131,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               });
               Object.assign(next as Record<string, unknown>, ev.entry as Record<string, unknown>);
             });
+            store.touchRows();
             return;
           }
           store.append(ev.entry);
@@ -197,6 +175,7 @@ export function useChatSession(conversationId: string | null | undefined) {
             next.status = "running";
             delete next.error;
           });
+          store.touchRows();
           return;
         } else if (ev.type === SseType.ASSISTANT_STREAM) {
           const store = storeRef.current;
@@ -220,6 +199,7 @@ export function useChatSession(conversationId: string | null | undefined) {
             if (next.type !== "assistant-message") return;
             next.text = `${next.text}${ev.delta}`;
           });
+          store.touchRows();
           return;
         } else if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
           const store = storeRef.current;
@@ -239,16 +219,16 @@ export function useChatSession(conversationId: string | null | undefined) {
                       parameters: {},
                     }
                   : ev.summary.trim()
-                    ? {
-                        type: "user-response",
-                        text: ev.summary.trim(),
-                      }
-                    : (next.decision ?? null);
+                  ? {
+                      type: "user-response",
+                      text: ev.summary.trim(),
+                    }
+                  : next.decision ?? null;
               const createdAtMs = Date.parse(next.createdAt);
               next.thoughtMs =
                 ev.finished && Number.isFinite(createdAtMs)
                   ? Math.max(0, Date.now() - createdAtMs)
-                  : (next.thoughtMs ?? null);
+                  : next.thoughtMs ?? null;
               if (ev.action === "failed") {
                 next.status = "failed";
                 next.error = ev.summary;
@@ -272,6 +252,7 @@ export function useChatSession(conversationId: string | null | undefined) {
                 }
               }
             });
+            store.touchRows();
           }
           return;
         } else if (ev.type === SseType.TOOL_INVOCATION_START) {
@@ -284,6 +265,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               next.state = ev.approvalRequired ? "requested" : "running";
               next.parameters = ev.argsPreview ? { argsPreview: ev.argsPreview } : next.parameters;
             });
+            store.touchRows();
             return;
           }
           const pending = pendingToolStartByEntryIdRef.current.get(ev.chatEntryId);
@@ -311,7 +293,7 @@ export function useChatSession(conversationId: string | null | undefined) {
             (e) =>
               e.type === "tool-invocation" &&
               e.toolId === ev.toolName &&
-              (e.state === "requested" || e.state === "running"),
+              (e.state === "requested" || e.state === "running")
           );
           if (idx < 0) return;
           const row$ = rows[idx];
@@ -322,14 +304,11 @@ export function useChatSession(conversationId: string | null | undefined) {
             next.state = ev.ok ? "done" : "error";
             next.result = ev.output;
           });
+          store.touchRows();
         } else assertNever(ev);
       },
     });
-    pollDisposeRef.current = subscribeGlobalPoll(async () => {
-      // Fallback when SSE is dead.
-      await reloadMessages(cid);
-      return false;
-    });
+    pollDisposeRef.current = subscribeGlobalPoll(async () => false);
 
     return () => {
       liveDisposeRef.current?.();
@@ -337,17 +316,17 @@ export function useChatSession(conversationId: string | null | undefined) {
       pollDisposeRef.current?.();
       pollDisposeRef.current = null;
     };
-  }, [conversationId, reconcileIncomingUserMessage, scheduleReloadMessages]);
+  }, [conversationId, reconcileIncomingUserMessage]);
 
   useEffect(() => {
     if (!conversationId) return;
     const cid = String(conversationId);
     const handler = () => {
-      scheduleReloadMessages(cid);
+      void reloadMessages(cid);
     };
     window.addEventListener("runvane:refresh-chat", handler);
     return () => window.removeEventListener("runvane:refresh-chat", handler);
-  }, [conversationId, scheduleReloadMessages]);
+  }, [conversationId, reloadMessages]);
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
   const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);
@@ -390,7 +369,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       storeRef.current.append(row);
       return row.id;
     },
-    [],
+    []
   );
 
   return {

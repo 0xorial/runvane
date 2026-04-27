@@ -2,14 +2,8 @@ import { logger } from "../infra/logger.js";
 import type { ContinueConversationTask } from "./agentTask.js";
 import { buildPlannerPrompt, parseAgenticPlannerOutput } from "./continueConversationPlannerProtocol.js";
 import { throwIfCancelled } from "./taskCancellation.js";
-import {
-  getDecisionLlmResponse,
-  publishDecisionThoughtDelta,
-} from "./decisionTaskProcessor/decisionStreaming.js";
-import {
-  finalizeParsedDecisionResult,
-  persistDecisionParseFailure,
-} from "./decisionTaskProcessor/decisionResult.js";
+import { getDecisionLlmResponse, publishDecisionThoughtDelta } from "./decisionTaskProcessor/decisionStreaming.js";
+import { finalizeParsedDecisionResult, persistDecisionParseFailure } from "./decisionTaskProcessor/decisionResult.js";
 import {
   agentToolConfigFor,
   buildInputFiles,
@@ -21,7 +15,11 @@ import {
   resolvePlannerModel,
   resolveRequestParams,
 } from "./decisionTaskProcessor/context.js";
-import type { DecisionProcessorDeps, FinalizeDecisionResultOutput, ParsedDecisionResponse } from "./decisionTaskProcessor/types.js";
+import type {
+  DecisionProcessorDeps,
+  FinalizeDecisionResultOutput,
+  ParsedDecisionResponse,
+} from "./decisionTaskProcessor/types.js";
 import type { ChatEntry, PlannerLlmStreamEntry, UserMessageEntry } from "../types/chatEntry.js";
 import { startThoughtLifecycle } from "./thoughtLifecycle.js";
 import { SseType } from "../types/sse.js";
@@ -70,7 +68,7 @@ export class DecisionTaskProcessor {
     agents: AgentsRepo,
     uploads: UploadsRepo,
     tools: ToolRegistry,
-    executeRunTool: DecisionProcessorDeps["executeRunTool"],
+    executeRunTool: DecisionProcessorDeps["executeRunTool"]
   ) {
     this.deps = {
       chatEntries,
@@ -124,7 +122,7 @@ export class DecisionTaskProcessor {
       if (triggerEntryId && !this.deps.chatEntries.isEntryOnActiveLineage(task.conversationId, triggerEntryId)) {
         logger.info(
           { conversationId: task.conversationId, sourceEntryId: triggerEntryId },
-          "[task] skipped continue_conversation: source entry not on active lineage",
+          "[task] skipped continue_conversation: source entry not on active lineage"
         );
         return;
       }
@@ -132,12 +130,15 @@ export class DecisionTaskProcessor {
 
       const entries = this.deps.chatEntries.listMessages(task.conversationId);
       const triggerEntry = entries.at(-1) ?? null;
-      logger.info({ conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null }, "[task] continue_conversation started");
+      logger.info(
+        { conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null },
+        "[task] continue_conversation started"
+      );
       const anchorUserMessage = this.findLastUserMessage(entries);
       if (!anchorUserMessage) {
         logger.warn(
           { conversationId: task.conversationId, triggerEntryType: triggerEntry?.type ?? null },
-          "[task] skipped continue_conversation: no user message",
+          "[task] skipped continue_conversation: no user message"
         );
         return;
       }
@@ -183,7 +184,7 @@ export class DecisionTaskProcessor {
         }
         logger.warn(
           { conversationId: task.conversationId, followup: finalized.followup },
-          "[task] planner requested followup without tool call; waiting for next continuation trigger",
+          "[task] planner requested followup without tool call; waiting for next continuation trigger"
         );
         return;
       }
@@ -202,7 +203,7 @@ export class DecisionTaskProcessor {
             toolRequest: requestedCall.toolRequest,
             agentToolConfig: agentToolConfigFor(this.deps, anchorUserMessage.agentId, requestedCall.toolName),
           },
-          { shouldCancel: opts?.shouldCancel },
+          { shouldCancel: opts?.shouldCancel }
         );
         if (toolOut.kind === "blocked" || toolOut.kind === "skipped") return;
         lastToolEntryId = toolOut.toolEntryId;
@@ -220,7 +221,10 @@ export class DecisionTaskProcessor {
     return [...entries].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message") ?? null;
   }
 
-  private loadReprocessContext(conversationId: string, sourceEntryId: string): {
+  private loadReprocessContext(
+    conversationId: string,
+    sourceEntryId: string
+  ): {
     conversationId: string;
     sourceEntry: PlannerLlmStreamEntry;
     anchorUserMessage: UserMessageEntry;
@@ -260,7 +264,7 @@ export class DecisionTaskProcessor {
       sourceEntry: PlannerLlmStreamEntry;
       enabledToolIds: string[];
     },
-    editedResponse: string,
+    editedResponse: string
   ): { plannerEntryId: string; queuedToolCalls: number } {
     const { sourceEntry } = ctx;
     const plannerEntry = this.deps.chatEntries.appendPlannerLlmStreamEntry(ctx.conversationId, {
@@ -299,14 +303,17 @@ export class DecisionTaskProcessor {
       anchorUserMessage: UserMessageEntry;
       enabledToolIds: string[];
     },
-    input: { editedRequestText: string; llmProviderId: string; llmModel: string },
+    input: { editedRequestText: string; llmProviderId: string; llmModel: string }
   ): Promise<{ plannerEntryId: string; queuedToolCalls: number }> {
     const selectedAgent = this.deps.agents.get(ctx.anchorUserMessage.agentId);
-    const effectiveModelPresetId = ctx.anchorUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
+    const effectiveModelPresetId =
+      ctx.anchorUserMessage.modelPresetId ?? selectedAgent?.default_model_preset_id ?? null;
     const requestParams = resolveRequestParams(this.deps, { modelPresetId: effectiveModelPresetId });
     const inputFiles = buildInputFiles(this.deps, ctx.anchorUserMessage);
     const previousPrepareEntry =
-      ctx.sourceEntry.parentId != null ? this.deps.chatEntries.getMessage(ctx.conversationId, ctx.sourceEntry.parentId) : null;
+      ctx.sourceEntry.parentId != null
+        ? this.deps.chatEntries.getMessage(ctx.conversationId, ctx.sourceEntry.parentId)
+        : null;
     const prepareParentId =
       previousPrepareEntry && previousPrepareEntry.type === "thought-prepare"
         ? previousPrepareEntry.parentId
@@ -326,12 +333,15 @@ export class DecisionTaskProcessor {
     if (plannerRun.kind === "cancelled") {
       return { plannerEntryId: plannerRun.plannerEntryId, queuedToolCalls: 0 };
     }
-    return { plannerEntryId: plannerRun.llmResponse.plannerEntryId, queuedToolCalls: plannerRun.finalized.queuedToolCalls };
+    return {
+      plannerEntryId: plannerRun.llmResponse.plannerEntryId,
+      queuedToolCalls: plannerRun.finalized.queuedToolCalls,
+    };
   }
 
   private buildCompletionFromReplayEntry(
     plannerEntry: PlannerLlmStreamEntry,
-    editedResponse: string,
+    editedResponse: string
   ): PlannerRunCompletion {
     return {
       plannerEntryId: plannerEntry.id,

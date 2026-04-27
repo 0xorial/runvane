@@ -32,9 +32,13 @@ export async function reprocessPlannerPrepareStep(input: {
   }
   const editedRequestText = input.editedRequestText.trim();
   if (!editedRequestText) throw new Error("editedRequestText is required");
-  const previousPrepareEntry = sourceEntry.parentId ? deps.chatEntries.getMessage(input.conversationId, sourceEntry.parentId) : null;
+  const previousPrepareEntry = sourceEntry.parentId
+    ? deps.chatEntries.getMessage(input.conversationId, sourceEntry.parentId)
+    : null;
   const prepareParentId =
-    previousPrepareEntry && previousPrepareEntry.type === "thought-prepare" ? previousPrepareEntry.parentId : sourceEntry.parentId;
+    previousPrepareEntry && previousPrepareEntry.type === "thought-prepare"
+      ? previousPrepareEntry.parentId
+      : sourceEntry.parentId;
   const started = startThoughtLifecycle(
     { chatEntries: deps.chatEntries, hub: deps.hub },
     {
@@ -46,25 +50,28 @@ export async function reprocessPlannerPrepareStep(input: {
       kind: "planner",
       includeAction: true,
       summary: "Call preparation",
-    },
+    }
   );
   throwIfCancelled(input.shouldCancel);
-  await runReasonStep({
-    thought: {
-      thoughtType: "planner",
-      thoughtId: started.streamEntry.thoughtId,
-      conversationId: input.conversationId,
-      streamEntryId: started.streamEntry.id,
-      thoughtActionEntryId: started.thoughtActionEntry.id,
-    },
-    prepareOutput: {
-      conversationId: input.conversationId,
-      streamEntryId: started.streamEntry.id,
-      thoughtActionEntryId: started.thoughtActionEntry.id,
-      llmRequest: editedRequestText,
-      enabledToolIds: input.enabledToolIds,
-    },
-  } as ReasonStepInput<any, any>, { shouldCancel: input.shouldCancel });
+  await runReasonStep(
+    {
+      thought: {
+        thoughtType: "planner",
+        thoughtId: started.streamEntry.thoughtId,
+        conversationId: input.conversationId,
+        streamEntryId: started.streamEntry.id,
+        thoughtActionEntryId: started.thoughtActionEntry.id,
+      },
+      prepareOutput: {
+        conversationId: input.conversationId,
+        streamEntryId: started.streamEntry.id,
+        thoughtActionEntryId: started.thoughtActionEntry.id,
+        llmRequest: editedRequestText,
+        enabledToolIds: input.enabledToolIds,
+      },
+    } as ReasonStepInput<any, any>,
+    { shouldCancel: input.shouldCancel }
+  );
   const persisted = deps.chatEntries.getMessage(input.conversationId, started.streamEntry.id);
   const queuedToolCalls =
     persisted?.type === "planner_llm_stream" && persisted.parseResult?.status === "ok"
