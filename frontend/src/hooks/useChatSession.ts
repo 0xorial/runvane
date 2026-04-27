@@ -25,6 +25,10 @@ export function useChatSession(conversationId: string | null | undefined) {
   const liveDisposeRef = useRef<(() => void) | null>(null);
   const pollDisposeRef = useRef<(() => void) | null>(null);
   const pendingUserByConversationRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
+  const reloadInFlightByConversationRef = useRef<Map<string, Promise<void>>>(new Map());
+  const reloadQueuedByConversationRef = useRef<Set<string>>(new Set());
+  const pendingAssistantByEntryIdRef = useRef<Map<string, { delta: string; parentId: string | null }>>(new Map());
+  const pendingToolStartByEntryIdRef = useRef<Map<string, { toolName: string; approvalRequired: boolean; argsPreview?: string; parentId: string | null }>>(new Map());
 
   const mergePendingUsers = useCallback((cid: string, fetched: ChatEntry[]): ChatEntry[] => {
     const pending = pendingUserByConversationRef.current.get(cid) ?? [];
@@ -67,6 +71,29 @@ export function useChatSession(conversationId: string | null | undefined) {
     [mergePendingUsers],
   );
 
+  const scheduleReloadMessages = useCallback(
+    (cid: string) => {
+      const inFlight = reloadInFlightByConversationRef.current.get(cid);
+      if (inFlight) {
+        reloadQueuedByConversationRef.current.add(cid);
+        return;
+      }
+      const run = (async () => {
+        try {
+          await reloadMessages(cid);
+        } finally {
+          reloadInFlightByConversationRef.current.delete(cid);
+          if (reloadQueuedByConversationRef.current.has(cid)) {
+            reloadQueuedByConversationRef.current.delete(cid);
+            scheduleReloadMessages(cid);
+          }
+        }
+      })();
+      reloadInFlightByConversationRef.current.set(cid, run);
+    },
+    [reloadMessages],
+  );
+
   const reconcileIncomingUserMessage = useCallback((cid: string, incoming: UserMessageEntry): boolean => {
     const pending = pendingUserByConversationRef.current.get(cid) ?? [];
     if (pending.length === 0) return false;
@@ -95,8 +122,8 @@ export function useChatSession(conversationId: string | null | undefined) {
       storeRef.current.replace(defaultChatEntries);
       return;
     }
-    void reloadMessages(String(conversationId));
-  }, [conversationId, reloadMessages]);
+    scheduleReloadMessages(String(conversationId));
+  }, [conversationId, scheduleReloadMessages]);
 
   useEffect(() => {
     liveDisposeRef.current?.();
@@ -147,7 +174,7 @@ export function useChatSession(conversationId: string | null | undefined) {
               thoughtId: ev.thoughtId,
               conversationIndex: ev.conversationIndex,
               createdAt: ev.createdAt,
-              parentId: null,
+              parentId: ev.parentId ?? null,
               llmRequest: ev.requestText,
               status: "running",
               ...(llmProviderId !== undefined ? { llmProviderId } : {}),
@@ -159,7 +186,6 @@ export function useChatSession(conversationId: string | null | undefined) {
           const store = storeRef.current;
           const row$ = store.getById(ev.chatEntryId);
           if (!row$) {
-            void reloadMessages(cid);
             return;
           }
           row$.mutate((next) => {
@@ -176,13 +202,17 @@ export function useChatSession(conversationId: string | null | undefined) {
           const store = storeRef.current;
           const row$ = store.getById(ev.chatEntryId);
           if (!row$) {
+            const pending = pendingAssistantByEntryIdRef.current.get(ev.chatEntryId);
+            const parentId = ev.parentId ?? pending?.parentId ?? null;
+            const delta = `${pending?.delta ?? ""}${ev.delta}`;
+            pendingAssistantByEntryIdRef.current.delete(ev.chatEntryId);
             store.append({
               type: "assistant-message",
               id: ev.chatEntryId,
               conversationIndex: store.getRows().length,
               createdAt: new Date().toISOString(),
-              parentId: null,
-              text: ev.delta,
+              parentId,
+              text: delta,
             });
             return;
           }
@@ -242,7 +272,7 @@ export function useChatSession(conversationId: string | null | undefined) {
                 }
               }
             });
-          } else void reloadMessages(cid);
+          }
           return;
         } else if (ev.type === SseType.TOOL_INVOCATION_START) {
           const store = storeRef.current;
@@ -256,15 +286,21 @@ export function useChatSession(conversationId: string | null | undefined) {
             });
             return;
           }
+          const pending = pendingToolStartByEntryIdRef.current.get(ev.chatEntryId);
+          const parentId = ev.parentId ?? pending?.parentId ?? null;
+          const toolName = ev.toolName || pending?.toolName || "unknown";
+          const approvalRequired = ev.approvalRequired ?? pending?.approvalRequired ?? false;
+          const argsPreview = ev.argsPreview ?? pending?.argsPreview;
+          pendingToolStartByEntryIdRef.current.delete(ev.chatEntryId);
           store.append({
             type: "tool-invocation",
             id: ev.chatEntryId,
             conversationIndex: store.getRows().length,
             createdAt: new Date().toISOString(),
-              parentId: null,
-            toolId: ev.toolName,
-            state: ev.approvalRequired ? "requested" : "running",
-            parameters: ev.argsPreview ? { argsPreview: ev.argsPreview } : {},
+            parentId,
+            toolId: toolName,
+            state: approvalRequired ? "requested" : "running",
+            parameters: argsPreview ? { argsPreview } : {},
             result: null,
           });
           return;
@@ -301,17 +337,17 @@ export function useChatSession(conversationId: string | null | undefined) {
       pollDisposeRef.current?.();
       pollDisposeRef.current = null;
     };
-  }, [conversationId, reloadMessages, reconcileIncomingUserMessage]);
+  }, [conversationId, reconcileIncomingUserMessage, scheduleReloadMessages]);
 
   useEffect(() => {
     if (!conversationId) return;
     const cid = String(conversationId);
     const handler = () => {
-      void reloadMessages(cid);
+      scheduleReloadMessages(cid);
     };
     window.addEventListener("runvane:refresh-chat", handler);
     return () => window.removeEventListener("runvane:refresh-chat", handler);
-  }, [conversationId, reloadMessages]);
+  }, [conversationId, scheduleReloadMessages]);
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
   const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);

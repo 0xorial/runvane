@@ -92,7 +92,6 @@ export function ConversationBranchesPanel({
 
   const activePathIds = useMemo(() => new Set(activePathEntries.map((entry) => entry.id)), [activePathEntries]);
   const activeLeafId = activePathEntries[activePathEntries.length - 1]?.id ?? null;
-  const activePathSignature = useMemo(() => activePathEntries.map((entry) => entry.id).join("|"), [activePathEntries]);
 
   const reloadAllEntries = useCallback(async () => {
     if (!conversationId) {
@@ -109,13 +108,21 @@ export function ConversationBranchesPanel({
       const detail = e instanceof Error ? e.message : String(e);
       notifyError(`Failed to load conversation branches: ${detail}`);
     });
-  }, [reloadAllEntries, activePathSignature]);
+  }, [reloadAllEntries]);
 
-  const entriesById = useMemo(() => new Map(allEntries.map((entry) => [entry.id, entry])), [allEntries]);
+  const mergedEntries = useMemo(() => {
+    const byId = new Map(allEntries.map((entry) => [entry.id, entry]));
+    for (const entry of activePathEntries) {
+      byId.set(entry.id, entry);
+    }
+    return [...byId.values()].sort(byConversationIndexAsc);
+  }, [allEntries, activePathEntries]);
+
+  const entriesById = useMemo(() => new Map(mergedEntries.map((entry) => [entry.id, entry])), [mergedEntries]);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string | null, ChatEntry[]>();
-    for (const entry of allEntries) {
+    for (const entry of mergedEntries) {
       const parentId = entry.parentId;
       if (parentId && !entriesById.has(parentId)) {
         const roots = map.get(null) ?? [];
@@ -131,7 +138,7 @@ export function ConversationBranchesPanel({
       list.sort(byConversationIndexAsc);
     }
     return map;
-  }, [allEntries, entriesById]);
+  }, [mergedEntries, entriesById]);
 
   const rootNodes = childrenByParent.get(null) ?? [];
 

@@ -1,6 +1,14 @@
 import type { PostConversationMessageRequest } from "../routes/conversations.types.js";
 import type { ContinueConversationTask, RunToolTask } from "../domain/agentTask.js";
 import { DecisionTaskProcessor } from "../domain/decisionTaskProcessor.js";
+import { lineageEntries } from "../domain/decisionTaskProcessor/context.js";
+import {
+  configureThoughtRuntime,
+  configureThoughtTypeProviders,
+  initiateThought,
+} from "../domain/thoughtProcessing/index.js";
+import { reprocessPlannerPrepareStep } from "../domain/thoughtProcessing/steps/prepareStep.js";
+import { reprocessPlannerReasonStep } from "../domain/thoughtProcessing/steps/reasonStep.js";
 import { RunToolTaskProcessor } from "../domain/runToolTaskProcessor.js";
 import { ConversationEventHub } from "../events/conversationEventHub.js";
 import { logger } from "../infra/logger.js";
@@ -17,7 +25,6 @@ import { GetCurrentTimeTool } from "../tools/builtins/getCurrentTime/tool.js";
 import { CurlTool } from "../tools/builtins/curl/tool.js";
 import type { UserMessageEntry } from "../types/chatEntry.js";
 import { SseType } from "../types/sse.js";
-import { maybeAutoTitleConversation } from "./runtime/autoTitle.js";
 
 export type EnqueueUserMessageResult =
   | { kind: "ok" }
@@ -52,9 +59,19 @@ export function createRuntime(opts: {
   uploads: UploadsRepo;
   toolExecutionLogs: ToolExecutionLogsRepo;
 }) {
-  const { agents, conversations, chatEntries, llmProviderSettings, modelPresets, modelCapabilities, uploads, toolExecutionLogs } = opts;
+  const {
+    agents,
+    conversations,
+    chatEntries,
+    llmProviderSettings,
+    modelPresets,
+    modelCapabilities,
+    uploads,
+    toolExecutionLogs,
+  } = opts;
   const hub = new ConversationEventHub();
   const activeExecutions = new Map<string, AbortController>();
+  const activeTitleExecutions = new Map<string, AbortController>();
   const tools = new ToolRegistry();
   tools.register(new GetCurrentTimeTool());
   tools.register(new CurlTool());
@@ -69,13 +86,24 @@ export function createRuntime(opts: {
       activeExecutions.delete(conversationId);
     }
   };
+  const beginTitleExecution = (conversationId: string): AbortController => {
+    activeTitleExecutions.get(conversationId)?.abort();
+    const controller = new AbortController();
+    activeTitleExecutions.set(conversationId, controller);
+    return controller;
+  };
+  const finishTitleExecution = (conversationId: string, controller: AbortController): void => {
+    if (activeTitleExecutions.get(conversationId) === controller) {
+      activeTitleExecutions.delete(conversationId);
+    }
+  };
 
   const runToolTaskProcessor = new RunToolTaskProcessor(
     chatEntries,
     hub,
     tools,
     toolExecutionLogs,
-    llmProviderSettings,
+    llmProviderSettings
   );
 
   const decisionTaskProcessor = new DecisionTaskProcessor(
@@ -98,8 +126,29 @@ export function createRuntime(opts: {
         ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
       };
       return runToolTaskProcessor.process(runToolTask, opts2);
-    },
+    }
   );
+
+  configureThoughtRuntime({
+    chatEntries,
+    llmProviderSettings,
+    hub,
+  });
+  configureThoughtTypeProviders({
+    autoTitle: {
+      conversations,
+      chatEntries,
+      hub,
+    },
+    planner: {
+      chatEntries,
+      hub,
+    },
+    toolParams: {
+      chatEntries,
+      hub,
+    },
+  });
 
   const startReactiveConversationProcessing = (conversationId: string, sourceEntryId?: string): void => {
     const controller = beginExecution(conversationId);
@@ -117,7 +166,7 @@ export function createRuntime(opts: {
             detail: error instanceof Error ? error.message : String(error),
             error,
           },
-          "[chat] reactive conversation processing failed",
+          "[chat] reactive conversation processing failed"
         );
       })
       .finally(() => {
@@ -166,7 +215,7 @@ export function createRuntime(opts: {
         modelPresetId: body.modelPresetId ?? null,
         attachmentCount: resolvedAttachments.length,
       },
-      "[chat] enqueue user message",
+      "[chat] enqueue user message"
     );
     const user = chatEntries.appendUserMessage(conversationId, text, {
       agentId,
@@ -195,26 +244,36 @@ export function createRuntime(opts: {
 
     if (entriesBefore === 0) {
       let plannerSourceEntryId = user.id;
-      void maybeAutoTitleConversation({
-        conversations,
-        chatEntries,
-        llmProviderSettings,
-        hub,
-        conversationId,
-        firstMessage: text,
-        onThoughtStarted: ({ thoughtActionEntryId }) => {
-          // Title lifecycle creates 3 entries immediately; continue from the latest title anchor.
-          plannerSourceEntryId = thoughtActionEntryId;
+      const titleController = beginTitleExecution(conversationId);
+      void initiateThought(
+        {
+          thoughtType: "autoTitle",
+          thought: {
+            thoughtId: crypto.randomUUID(),
+            conversationId,
+            streamEntryId: "",
+          } as any,
+          seed: {
+            firstMessage: text,
+          },
         },
-      }).catch((error) => {
+        {
+          shouldCancel: () => titleController.signal.aborted,
+          onStarted: ({ thoughtActionEntryId }) => {
+            if (thoughtActionEntryId) plannerSourceEntryId = thoughtActionEntryId;
+          },
+        },
+      ).catch((error) => {
         logger.error(
           {
             conversationId,
             detail: error instanceof Error ? error.message : String(error),
             error,
           },
-          "[chat] auto title failed",
+          "[chat] auto title failed"
         );
+      }).finally(() => {
+        finishTitleExecution(conversationId, titleController);
       });
       startReactiveConversationProcessing(conversationId, plannerSourceEntryId);
     } else {
@@ -269,7 +328,7 @@ export function createRuntime(opts: {
             detail: error instanceof Error ? error.message : String(error),
             error,
           },
-          "[chat] approved tool execution failed",
+          "[chat] approved tool execution failed"
         );
       })
       .finally(() => {
@@ -283,29 +342,97 @@ export function createRuntime(opts: {
       return { kind: "conversation_not_found" };
     }
     const controller = activeExecutions.get(conversationId);
-    const cancelledTaskCount = controller ? 1 : 0;
+    const titleController = activeTitleExecutions.get(conversationId);
+    const cancelledTaskCount = (controller ? 1 : 0) + (titleController ? 1 : 0);
     controller?.abort();
+    titleController?.abort();
     logger.info({ conversationId, cancelledTaskCount }, "[chat] cancel conversation processing requested");
     return { kind: "ok", cancelledTaskCount };
   }
 
-  async function reprocessThought(
+  async function reprocessThoughtReason(
     conversationId: string,
-    input: { sourceEntryId: string; editedResponse: string },
+    input: {
+      sourceEntryId: string;
+      editedResponse: string;
+    }
   ): Promise<ReprocessThoughtResult> {
     if (!conversations.exists(conversationId)) {
       return { kind: "conversation_not_found" };
     }
-    const out = await decisionTaskProcessor.reprocessPlannerThought({
+    const ctx = loadPlannerReprocessContext(conversationId, input.sourceEntryId);
+    const out = await reprocessPlannerReasonStep({
       conversationId,
       sourceEntryId: input.sourceEntryId,
       editedResponse: input.editedResponse,
+      enabledToolIds: ctx.enabledToolIds,
     });
     return {
       kind: "ok",
       plannerEntryId: out.plannerEntryId,
       queuedToolCalls: out.queuedToolCalls,
     };
+  }
+
+  async function reprocessThoughtContext(
+    conversationId: string,
+    input: {
+      sourceEntryId: string;
+      editedRequestText: string;
+      llmProviderId: string;
+      llmModel: string;
+    }
+  ): Promise<ReprocessThoughtResult> {
+    if (!conversations.exists(conversationId)) {
+      return { kind: "conversation_not_found" };
+    }
+    const ctx = loadPlannerReprocessContext(conversationId, input.sourceEntryId);
+    const out = await reprocessPlannerPrepareStep({
+      conversationId,
+      sourceEntryId: input.sourceEntryId,
+      editedRequestText: input.editedRequestText,
+      llmProviderId: input.llmProviderId,
+      llmModel: input.llmModel,
+      enabledToolIds: ctx.enabledToolIds,
+    });
+    return {
+      kind: "ok",
+      plannerEntryId: out.plannerEntryId,
+      queuedToolCalls: out.queuedToolCalls,
+    };
+  }
+
+  function loadPlannerReprocessContext(
+    conversationId: string,
+    sourceEntryId: string,
+  ): {
+    enabledToolIds: string[];
+  } {
+    const sourceEntry = chatEntries.getMessage(conversationId, sourceEntryId);
+    if (!sourceEntry || sourceEntry.type !== "planner_llm_stream") {
+      throw new Error(`planner thought not found: ${sourceEntryId}`);
+    }
+    const entries = chatEntries.listMessages(conversationId, { activePathOnly: false });
+    const lineage = lineageEntries(entries, sourceEntry.id);
+    const anchorUserMessage =
+      [...lineage].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message") ?? null;
+    if (!anchorUserMessage) {
+      throw new Error(`cannot reprocess thought without ancestor user-message: ${sourceEntryId}`);
+    }
+    return {
+      enabledToolIds: enabledToolIdsForAgentId(anchorUserMessage.agentId),
+    };
+  }
+
+  function enabledToolIdsForAgentId(agentId: string): string[] {
+    const agent = agents.get(agentId);
+    return tools
+      .list()
+      .filter((tool) => {
+        const cfg = agent?.default_llm_configuration?.tools?.[tool.getName()];
+        return cfg?.enabled !== false;
+      })
+      .map((tool) => tool.getName());
   }
 
   return {
@@ -322,8 +449,9 @@ export function createRuntime(opts: {
     enqueueUserMessage,
     approveToolInvocation,
     cancelConversationProcessing,
-    reprocessThought,
+    reprocessThoughtReason,
+    reprocessThoughtContext,
     startReactiveConversationProcessing,
-    activeExecutionCount: () => activeExecutions.size,
+    activeExecutionCount: () => activeExecutions.size + activeTitleExecutions.size,
   };
 }

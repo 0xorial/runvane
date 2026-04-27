@@ -109,6 +109,7 @@ export function startThoughtLifecycle<TKind extends ThoughtStreamKind, TIncludeA
     thoughtId: streamEntry.thoughtId,
     conversationIndex: streamEntry.conversationIndex,
     createdAt: streamEntry.createdAt,
+    parentId: streamEntry.parentId,
     requestText: streamEntry.llmRequest,
     llmProviderId: streamEntry.llmProviderId,
     llmModel: streamEntry.llmModel,

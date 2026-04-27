@@ -79,6 +79,7 @@ export class RunToolTaskProcessor {
         chatEntryId: toolEntryId,
         toolName: task.toolName,
         approvalRequired: false,
+        ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
         ...(argsPreview ? { argsPreview: argsPreview } : {}),
       });
     }
@@ -267,6 +268,7 @@ export class RunToolTaskProcessor {
           chatEntryId: toolEntryId,
           toolName: task.toolName,
           approvalRequired: true,
+          ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
           ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
         });
       } else {
@@ -316,6 +318,7 @@ export class RunToolTaskProcessor {
       chatEntryId: toolEntryId,
       toolName: task.toolName,
       approvalRequired: false,
+      ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
       ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
     });
 

@@ -93,6 +93,7 @@ export type PlannerStartingSsePayload = {
   thoughtId: string;
   conversationIndex: number;
   createdAt: string;
+  parentId?: string | null;
   requestText: string;
   llmProviderId?: string;
   llmModel?: string;
@@ -103,6 +104,7 @@ export const PlannerStartingSsePayloadSchema = z.object({
   thoughtId: z.string(),
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
+  parentId: z.string().nullable().optional(),
   requestText: z.string(),
   llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
@@ -125,6 +127,7 @@ export type TitleStartingSsePayload = {
   thoughtId: string;
   conversationIndex: number;
   createdAt: string;
+  parentId?: string | null;
   requestText: string;
   llmProviderId?: string;
   llmModel?: string;
@@ -135,6 +138,7 @@ export const TitleStartingSsePayloadSchema = z.object({
   thoughtId: z.string(),
   conversationIndex: z.number().finite(),
   createdAt: z.string(),
+  parentId: z.string().nullable().optional(),
   requestText: z.string(),
   llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
@@ -155,11 +159,13 @@ export type AssistantStreamSsePayload = {
   type: typeof SseType.ASSISTANT_STREAM;
   chatEntryId: string;
   delta: string;
+  parentId?: string;
 };
 export const AssistantStreamSsePayloadSchema = z.object({
   type: z.literal(SseType.ASSISTANT_STREAM),
   chatEntryId: z.string(),
   delta: z.string(),
+  parentId: z.string().optional(),
 });
 
 export type PlannerResponseSsePayload = {
@@ -219,6 +225,7 @@ export type ToolInvocationStartSsePayload = {
   chatEntryId: string;
   toolName: string;
   approvalRequired: boolean;
+  parentId?: string;
   argsPreview?: string;
   approval?: Record<string, unknown>;
   run?: Record<string, unknown>;
@@ -229,6 +236,7 @@ export const ToolInvocationStartSsePayloadSchema = z.object({
   chatEntryId: z.string(),
   toolName: z.string(),
   approvalRequired: z.boolean(),
+  parentId: z.string().optional(),
   argsPreview: z.string().optional(),
   approval: z.record(z.string(), z.unknown()).optional(),
   run: z.record(z.string(), z.unknown()).optional(),
@@ -313,6 +321,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     thoughtId: z.string(),
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
+    parentId: z.string().nullable().optional(),
     requestText: z.string(),
     llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
@@ -328,6 +337,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     thoughtId: z.string(),
     conversationIndex: z.number().finite(),
     createdAt: z.string(),
+    parentId: z.string().nullable().optional(),
     requestText: z.string(),
     llmProviderId: z.string().optional(),
     llmModel: z.string().optional(),
@@ -341,6 +351,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     type: z.literal(SseType.ASSISTANT_STREAM),
     chatEntryId: z.string(),
     delta: z.string(),
+    parentId: z.string().optional(),
   }),
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.PLANNER_RESPONSE),
@@ -372,6 +383,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     chatEntryId: z.string(),
     toolName: z.string(),
     approvalRequired: z.boolean(),
+    parentId: z.string().optional(),
     argsPreview: z.string().optional(),
     approval: z.record(z.string(), z.unknown()).optional(),
     run: z.record(z.string(), z.unknown()).optional(),

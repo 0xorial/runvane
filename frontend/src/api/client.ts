@@ -238,8 +238,53 @@ export async function reprocessThought(
   editedResponse: string,
 ): Promise<PostAcceptedResult<{ conversationId: string; plannerEntryId: string; queuedToolCalls: number }>> {
   const result = await postJsonAccepted(
-    `/api/conversations/${encodeURIComponent(conversationId)}/thoughts/${encodeURIComponent(entryId)}/reprocess`,
+    `/api/conversations/${encodeURIComponent(conversationId)}/thoughts/${encodeURIComponent(entryId)}/reprocess-reason`,
     { editedResponse },
+  );
+  const data = result.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("POST /api/conversations/:id/thoughts/:entryId/reprocess: invalid response envelope");
+  }
+  const row = data as {
+    conversationId?: unknown;
+    plannerEntryId?: unknown;
+    queuedToolCalls?: unknown;
+  };
+  const conversationIdOut = String(row.conversationId ?? "").trim();
+  const plannerEntryId = String(row.plannerEntryId ?? "").trim();
+  const queuedToolCalls =
+    typeof row.queuedToolCalls === "number" && Number.isFinite(row.queuedToolCalls)
+      ? Math.max(0, Math.trunc(row.queuedToolCalls))
+      : NaN;
+  if (!conversationIdOut || !plannerEntryId || Number.isNaN(queuedToolCalls)) {
+    throw new Error("POST /api/conversations/:id/thoughts/:entryId/reprocess: invalid response fields");
+  }
+  return {
+    status: result.status,
+    data: {
+      conversationId: conversationIdOut,
+      plannerEntryId,
+      queuedToolCalls,
+    },
+  };
+}
+
+export async function reprocessThoughtContext(
+  conversationId: string,
+  entryId: string,
+  input: {
+    editedRequestText: string;
+    llmProviderId: string;
+    llmModel: string;
+  },
+): Promise<PostAcceptedResult<{ conversationId: string; plannerEntryId: string; queuedToolCalls: number }>> {
+  const result = await postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/thoughts/${encodeURIComponent(entryId)}/reprocess-context`,
+    {
+      editedRequestText: input.editedRequestText,
+      llmProviderId: input.llmProviderId,
+      llmModel: input.llmModel,
+    },
   );
   const data = result.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) {

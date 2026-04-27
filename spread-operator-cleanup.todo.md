@@ -1,0 +1,3 @@
+- Non-compliant: many object forwarding/mapping sites still manually copy fields instead of using spread/destructure when shapes mostly match.
+- Why it matters: manual fan-out is verbose, error-prone during refactors, and hides the few real renames among noise.
+- Suggested fix direction: run a repo-wide cleanup pass to prefer `{ ...obj }` + explicit overrides/renames only where needed; remove no-benefit wrappers that only remap unchanged fields.

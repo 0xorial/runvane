@@ -1,20 +1,137 @@
+import { useEffect, useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
+import { getLlmSettings, reprocessThoughtContext } from "@/api/client";
 import type { PlannerLlmStreamEntry, ThoughtPrepareEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import { notifyError } from "@/utils/toast";
+import { buildModelGroups, type ModelGroup } from "@/pages/settings/helpers";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { ReadOnlySection } from "./ReadOnlySection";
 
 export function ContextStep({
   prepareEntry,
   stream,
+  conversationId,
 }: {
   prepareEntry: ThoughtPrepareEntry | null;
   stream: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+  conversationId: string | null;
 }) {
-  const prompt = (prepareEntry?.requestText ?? stream.llmRequest ?? "").trim();
+  const prompt = useMemo(() => (prepareEntry?.requestText ?? stream.llmRequest ?? "").trim(), [prepareEntry?.requestText, stream.llmRequest]);
+  const currentProviderId = String(prepareEntry?.llmProviderId ?? stream.llmProviderId ?? "").trim();
+  const currentModel = String(prepareEntry?.llmModel ?? stream.llmModel ?? "").trim();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedPrompt, setEditedPrompt] = useState(prompt);
+  const [selectedProviderId, setSelectedProviderId] = useState(currentProviderId);
+  const [selectedModel, setSelectedModel] = useState(currentModel);
+  const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    void getLlmSettings()
+      .then((llm) => setModelGroups(buildModelGroups(llm.providers)))
+      .catch(() => setModelGroups([]));
+  }, []);
+
+  useEffect(() => {
+    if (isEditing) return;
+    setEditedPrompt(prompt);
+    setSelectedProviderId(currentProviderId);
+    setSelectedModel(currentModel);
+  }, [currentModel, currentProviderId, isEditing, prompt]);
+
+  const canEdit = Boolean(conversationId);
+  const canApply = Boolean(
+    conversationId &&
+      editedPrompt.trim().length > 0 &&
+      selectedProviderId.trim().length > 0 &&
+      selectedModel.trim().length > 0 &&
+      !isSaving,
+  );
+
+  const applyEdit = async () => {
+    const cid = conversationId;
+    if (!cid || !canApply) return;
+    setIsSaving(true);
+    try {
+      await reprocessThoughtContext(cid, stream.id, {
+        editedRequestText: editedPrompt.trim(),
+        llmProviderId: selectedProviderId.trim(),
+        llmModel: selectedModel.trim(),
+      });
+      setIsEditing(false);
+      window.dispatchEvent(new Event("runvane:refresh-chat"));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      notifyError(`Failed to reprocess context: ${detail}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
-      <div className="text-[10px] text-muted-foreground">
-        {prepareEntry?.llmModel ? `model: ${prepareEntry.llmModel}` : stream.llmModel ? `model: ${stream.llmModel}` : "model: unknown"}
+      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>{currentProviderId && currentModel ? `model: ${currentProviderId}/${currentModel}` : "model: unknown"}</span>
+        {canEdit ? (
+          <button
+            type="button"
+            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            onClick={() => setIsEditing((v) => !v)}
+            title="Edit context and branch"
+          >
+            <Pencil className="h-3 w-3" />
+            {isEditing ? "Close edit" : "Edit"}
+          </button>
+        ) : null}
       </div>
-      <ReadOnlySection label="Prompt" value={prompt} />
+      {isEditing ? (
+        <div className="space-y-1.5">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Model</div>
+          <ModelSelector
+            value={selectedModel}
+            onChange={(model, providerId) => {
+              setSelectedModel(model);
+              if (providerId) setSelectedProviderId(String(providerId).trim());
+            }}
+            modelGroups={modelGroups}
+            placeholder="Select model"
+            searchPlaceholder="Search model"
+          />
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Prompt</div>
+          <textarea
+            className="h-28 w-full resize-y rounded border border-border/70 bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground focus:outline-none"
+            value={editedPrompt}
+            onChange={(event) => setEditedPrompt(event.currentTarget.value)}
+          />
+          <div className="flex justify-end gap-1.5">
+            <button
+              type="button"
+              className="rounded border border-border/70 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
+              onClick={() => {
+                setEditedPrompt(prompt);
+                setSelectedProviderId(currentProviderId);
+                setSelectedModel(currentModel);
+                setIsEditing(false);
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => {
+                void applyEdit();
+              }}
+              disabled={!canApply}
+            >
+              {isSaving ? "Applying..." : "Apply"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <ReadOnlySection label="Prompt" value={prompt} />
+      )}
     </div>
   );
 }

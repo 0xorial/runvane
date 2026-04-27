@@ -182,6 +182,7 @@ export async function getDecisionLlmResponse(
             type: SseType.ASSISTANT_STREAM,
             chatEntryId: assistantEntryId,
             delta: answerDelta,
+            parentId: input.thoughtActionEntryId,
           });
         }
         streamedAnswer = streamedAssistantOutput;

@@ -60,7 +60,7 @@ export function ThoughtTripletRow({ streamEntry$, conversationId, prepareEntry, 
           />
         </div>
 
-        {expanded === "context" ? <ContextStep prepareEntry={prepareStepEntry} stream={stream} /> : null}
+        {expanded === "context" ? <ContextStep prepareEntry={prepareStepEntry} stream={stream} conversationId={conversationId} /> : null}
         {expanded === "reasoning" ? <ReasoningStep stream={stream} conversationId={conversationId} /> : null}
         {expanded === "action" ? <ActionStep actionEntry={actionStepEntry} stream={stream} /> : null}
       </div>

@@ -99,8 +99,14 @@ const SetConversationActiveLeafRequestSchema: z.ZodType<SetConversationActiveLea
   entryId: z.string().min(1),
 });
 
-const ReprocessThoughtRequestSchema = z.object({
+const ReprocessThoughtReasonRequestSchema = z.object({
   editedResponse: z.string().min(1),
+});
+
+const ReprocessThoughtContextRequestSchema = z.object({
+  editedRequestText: z.string().min(1),
+  llmProviderId: z.string().min(1),
+  llmModel: z.string().min(1),
 });
 
 const UpdateConversationRequestSchema = z.object({
@@ -222,10 +228,22 @@ export function validatePostConversationMessageRequest(data: unknown): PostConve
   return parsed.data;
 }
 
-export function validateReprocessThoughtRequest(data: unknown): { editedResponse: string } {
-  const parsed = ReprocessThoughtRequestSchema.safeParse(data);
+export function validateReprocessThoughtReasonRequest(data: unknown): { editedResponse: string } {
+  const parsed = ReprocessThoughtReasonRequestSchema.safeParse(data);
   if (!parsed.success) {
-    throw formatZodError("POST /api/conversations/:id/thoughts/:entryId/reprocess request", parsed.error);
+    throw formatZodError("POST /api/conversations/:id/thoughts/:entryId/reprocess-reason request", parsed.error);
+  }
+  return parsed.data;
+}
+
+export function validateReprocessThoughtContextRequest(data: unknown): {
+  editedRequestText: string;
+  llmProviderId: string;
+  llmModel: string;
+} {
+  const parsed = ReprocessThoughtContextRequestSchema.safeParse(data);
+  if (!parsed.success) {
+    throw formatZodError("POST /api/conversations/:id/thoughts/:entryId/reprocess-context request", parsed.error);
   }
   return parsed.data;
 }
