@@ -263,6 +263,9 @@ export function useChatSession(conversationId: string | null | undefined) {
               if (next.type !== "tool-invocation") return;
               next.toolId = ev.toolName;
               next.state = ev.approvalRequired ? "requested" : "running";
+              if (typeof ev.parentId === "string" && ev.parentId.trim() !== "") {
+                next.parentId = ev.parentId;
+              }
               next.parameters = ev.argsPreview ? { argsPreview: ev.argsPreview } : next.parameters;
             });
             store.touchRows();

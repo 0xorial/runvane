@@ -60,6 +60,7 @@ export class RunToolTaskProcessor {
     const argsPreview = safeStringify(task.params);
     const existingEntry = this.findPendingToolInvocationEntry(conversationId, task);
     let toolEntryId = existingEntry?.id ?? "";
+    let toolEntryParentId = existingEntry?.parentId ?? null;
     if (!task.toolRequest && !toolEntryId) {
       const created = this.chatEntries.appendToolInvocation(conversationId, {
         toolId: task.toolName,
@@ -71,12 +72,13 @@ export class RunToolTaskProcessor {
         result: null,
       });
       toolEntryId = created.id;
+      toolEntryParentId = created.parentId;
       this.hub.publish(conversationId, {
         type: SseType.TOOL_INVOCATION_START,
         chatEntryId: toolEntryId,
         toolName: task.toolName,
         approvalRequired: false,
-        ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
+        ...(toolEntryParentId ? { parentId: toolEntryParentId } : {}),
         ...(argsPreview ? { argsPreview: argsPreview } : {}),
       });
     }
@@ -127,6 +129,7 @@ export class RunToolTaskProcessor {
           result: envelope,
         });
         toolEntryId = created.id;
+        toolEntryParentId = created.parentId;
       }
       this.chatEntries.updateToolInvocation(conversationId, {
         id: toolEntryId,
@@ -210,6 +213,7 @@ export class RunToolTaskProcessor {
           result: envelope,
         });
         toolEntryId = created.id;
+        toolEntryParentId = created.parentId;
       }
       if (effectivePermission === "ask_user") {
         this.hub.publish(conversationId, {
@@ -217,7 +221,7 @@ export class RunToolTaskProcessor {
           chatEntryId: toolEntryId,
           toolName: task.toolName,
           approvalRequired: true,
-          ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
+          ...(toolEntryParentId ? { parentId: toolEntryParentId } : {}),
           ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
         });
       } else {
@@ -249,6 +253,7 @@ export class RunToolTaskProcessor {
       startedAtMs,
       argsPreview,
       toolEntryId,
+      toolEntryParentId,
       entries,
       tool,
       parsedParams,
@@ -304,6 +309,7 @@ export class RunToolTaskProcessor {
     startedAtMs: number;
     argsPreview: string;
     toolEntryId: string;
+    toolEntryParentId: string | null;
     entries: ReturnType<ChatEntriesRepo["listMessages"]>;
     tool: NonNullable<ReturnType<ToolRegistry["get"]>>;
     parsedParams: unknown;
@@ -314,6 +320,7 @@ export class RunToolTaskProcessor {
     const { task, startedAt, startedAtMs, argsPreview, entries, tool, parsedParams, parsedRules, rules } = input;
     const conversationId = task.conversationId;
     let toolEntryId = input.toolEntryId;
+    let toolEntryParentId = input.toolEntryParentId;
     if (!toolEntryId) {
       const resolvedParamsRecord =
         parsedParams && typeof parsedParams === "object" && !Array.isArray(parsedParams)
@@ -333,13 +340,14 @@ export class RunToolTaskProcessor {
         result: null,
       });
       toolEntryId = created.id;
+      toolEntryParentId = created.parentId;
     }
     this.hub.publish(conversationId, {
       type: SseType.TOOL_INVOCATION_START,
       chatEntryId: toolEntryId,
       toolName: task.toolName,
       approvalRequired: false,
-      ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
+      ...(toolEntryParentId ? { parentId: toolEntryParentId } : {}),
       ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
     });
     throwIfCancelled(input.shouldCancel);

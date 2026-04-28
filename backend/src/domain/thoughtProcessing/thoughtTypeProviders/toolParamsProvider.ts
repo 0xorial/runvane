@@ -60,12 +60,9 @@ export type ToolParamsThoughtTypeProviderDeps = {
   runToolTaskProcessor: RunToolTaskProcessor;
 };
 
-export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeProviderDeps): ThoughtTypeProvider<
-  ToolParamsPrepareSeed,
-  ToolParamsPrepareOutput,
-  ToolParamsReasonOutput,
-  ToolParamsThought
-> {
+export function createToolParamsThoughtTypeProvider(
+  deps: ToolParamsThoughtTypeProviderDeps
+): ThoughtTypeProvider<ToolParamsPrepareSeed, ToolParamsPrepareOutput, ToolParamsReasonOutput, ToolParamsThought> {
   return {
     runPrepare: async (_step, input) => ({
       thought: input.thought,
@@ -80,7 +77,7 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
           input.seed.toolName,
           input.seed.toolAiDescription,
           input.seed.toolParamsSchema,
-          input.seed.toolRequest,
+          input.seed.toolRequest
         ),
         toolRequest: input.seed.toolRequest,
         ...(input.seed.agentToolConfig ? { agentToolConfig: input.seed.agentToolConfig } : {}),
@@ -116,7 +113,31 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
         });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        finishThoughtLifecycle({ chatEntries: deps.chatEntries, hub: deps.hub }, {
+        finishThoughtLifecycle(
+          { chatEntries: deps.chatEntries, hub: deps.hub },
+          {
+            conversationId: reason.conversationId,
+            kind: "planner",
+            streamEntryId: reason.streamEntryId,
+            thoughtActionEntryId: reason.thoughtActionEntryId,
+            llmRequest: reason.prompt,
+            llmResponse: reason.result.fullResponse,
+            thoughtMs: Math.max(0, Date.now() - reason.requestStartedMs),
+            decision: null,
+            status: "failed",
+            error: detail,
+            llmProviderId: reason.result.providerId,
+            llmModel: reason.result.model,
+            usage: reason.result.usage,
+            summary: detail,
+            action: "failed",
+          }
+        );
+        throw error;
+      }
+      finishThoughtLifecycle(
+        { chatEntries: deps.chatEntries, hub: deps.hub },
+        {
           conversationId: reason.conversationId,
           kind: "planner",
           streamEntryId: reason.streamEntryId,
@@ -124,38 +145,20 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
           llmRequest: reason.prompt,
           llmResponse: reason.result.fullResponse,
           thoughtMs: Math.max(0, Date.now() - reason.requestStartedMs),
-          decision: null,
-          status: "failed",
-          error: detail,
+          decision: {
+            type: "tool-invocation",
+            toolId: reason.toolName,
+            parameters: parsedParams,
+          },
+          status: "completed",
           llmProviderId: reason.result.providerId,
           llmModel: reason.result.model,
           usage: reason.result.usage,
-          summary: detail,
-          action: "failed",
-        });
-        throw error;
-      }
-      finishThoughtLifecycle({ chatEntries: deps.chatEntries, hub: deps.hub }, {
-        conversationId: reason.conversationId,
-        kind: "planner",
-        streamEntryId: reason.streamEntryId,
-        thoughtActionEntryId: reason.thoughtActionEntryId,
-        llmRequest: reason.prompt,
-        llmResponse: reason.result.fullResponse,
-        thoughtMs: Math.max(0, Date.now() - reason.requestStartedMs),
-        decision: {
-          type: "tool-invocation",
-          toolId: reason.toolName,
-          parameters: parsedParams,
-        },
-        status: "completed",
-        llmProviderId: reason.result.providerId,
-        llmModel: reason.result.model,
-        usage: reason.result.usage,
-        summary: `Resolved parameters for ${reason.toolName}`,
-        action: "tool_call",
-        toolName: reason.toolName,
-      });
+          summary: `Resolved parameters for ${reason.toolName}`,
+          action: "tool_call",
+          toolName: reason.toolName,
+        }
+      );
       await deps.runToolTaskProcessor.process({
         conversationId: reason.conversationId,
         ...(reason.sourceEntryId ? { sourceEntryId: reason.sourceEntryId } : {}),
@@ -189,7 +192,7 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
         input.seed.toolName,
         input.seed.toolAiDescription,
         input.seed.toolParamsSchema,
-        input.seed.toolRequest,
+        input.seed.toolRequest
       ),
       kind: "planner",
       includeAction: true,
@@ -212,7 +215,7 @@ function buildToolParamsPrompt(
   toolName: string,
   toolAiDescription: string,
   toolParamsSchema: unknown,
-  toolRequest: string,
+  toolRequest: string
 ): string {
   return `You produce ONLY JSON object parameters for one tool.
 

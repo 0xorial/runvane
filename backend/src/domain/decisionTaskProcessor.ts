@@ -32,7 +32,10 @@ import type { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
 import { initiateThought } from "./thoughtProcessing/index.js";
-import type { ToolParamsPrepareSeed, ToolParamsThought } from "./thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js";
+import type {
+  ToolParamsPrepareSeed,
+  ToolParamsThought,
+} from "./thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js";
 
 type PlannerRunCompletion = {
   plannerEntryId: string;
@@ -69,7 +72,7 @@ export class DecisionTaskProcessor {
     modelPresets: ModelPresetsRepo,
     agents: AgentsRepo,
     uploads: UploadsRepo,
-    tools: ToolRegistry,
+    tools: ToolRegistry
   ) {
     this.deps = {
       chatEntries,
@@ -196,31 +199,34 @@ export class DecisionTaskProcessor {
         if (!tool) {
           throw new Error(`tool request references missing tool: ${requestedCall.toolName}`);
         }
-        await initiateThought<ToolParamsPrepareSeed, ToolParamsThought>({
-          thoughtType: "toolParams",
-          thought: {
-            thoughtId: crypto.randomUUID(),
-            conversationId: task.conversationId,
-            streamEntryId: "",
-          },
-          seed: {
-            conversationId: task.conversationId,
-            sourceEntryId: continuationAnchorId,
-            agentId: anchorUserMessage.agentId,
-            toolName: requestedCall.toolName,
-            toolAiDescription: tool.getAiDescription(),
-            toolParamsSchema: tool.getParamsSchema(),
-            toolRequest: requestedCall.toolRequest,
-            agentToolConfig: agentToolConfigFor(this.deps, anchorUserMessage.agentId, requestedCall.toolName),
-            plannerFollowup: {
-              mode: finalized.followup,
-              userText: anchorUserMessage.text,
-              enabledToolIds,
+        await initiateThought<ToolParamsPrepareSeed, ToolParamsThought>(
+          {
+            thoughtType: "toolParams",
+            thought: {
+              thoughtId: crypto.randomUUID(),
+              conversationId: task.conversationId,
+              streamEntryId: "",
+            },
+            seed: {
+              conversationId: task.conversationId,
+              sourceEntryId: continuationAnchorId,
+              agentId: anchorUserMessage.agentId,
+              toolName: requestedCall.toolName,
+              toolAiDescription: tool.getAiDescription(),
+              toolParamsSchema: tool.getParamsSchema(),
+              toolRequest: requestedCall.toolRequest,
+              agentToolConfig: agentToolConfigFor(this.deps, anchorUserMessage.agentId, requestedCall.toolName),
+              plannerFollowup: {
+                mode: finalized.followup,
+                userText: anchorUserMessage.text,
+                enabledToolIds,
+              },
             },
           },
-        }, {
-          shouldCancel: opts?.shouldCancel,
-        });
+          {
+            shouldCancel: opts?.shouldCancel,
+          }
+        );
       }
       logger.info({ conversationId: task.conversationId }, "[task] continue_conversation delegated tool execution");
       return;
