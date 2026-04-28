@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings, Square } from "lucide-react";
 import {
   cancelConversationProcessing,
-  getConversations,
   getModelCapabilities,
   renameConversation,
 } from "../../../api/client";
@@ -65,50 +64,12 @@ export function ChatTitlePanel({
     [tokenUsageByModel, pricingByModel],
   );
 
-  async function refreshConversationMetrics(targetConversationId: string) {
-    const payload = await getConversations();
-    const row = payload.conversations.find((x) => x.id === targetConversationId);
-    if (!row) return;
-    setTokenTotals(TokenUsageMapper.fromConversationTotals(row));
-    setTokenUsageByModel(row.tokenUsageByModel ?? []);
-    setConversationUpdatedAt(String(row.updatedAt ?? ""));
-  }
-
-  function refreshTitle() {
-    if (!conversationId) {
-      setTitle("New chat");
-      setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
-      setTokenUsageByModel([]);
-      setConversationUpdatedAt("");
-      return () => {};
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const rows = await getConversations();
-        if (cancelled) return;
-        const row = rows.conversations.find((x) => x.id === conversationId);
-        setTitle(String(row?.title || "Untitled"));
-        setTokenTotals(TokenUsageMapper.fromConversationTotals(row ?? {}));
-        setTokenUsageByModel(row?.tokenUsageByModel ?? []);
-        setConversationUpdatedAt(String(row?.updatedAt ?? ""));
-      } catch (e) {
-        if (cancelled) return;
-        const detail = e instanceof Error ? e.message : String(e);
-        notifyError(`Failed to load chat title: ${detail}`);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }
-
   useEffect(() => {
+    setTitle(conversationId ? "Untitled" : "New chat");
     setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
     setTokenUsageByModel([]);
     setConversationUpdatedAt("");
     setStreamRawTitle("");
-    return refreshTitle();
   }, [conversationId]);
 
   useEffect(() => {
@@ -155,12 +116,6 @@ export function ChatTitlePanel({
           setTokenUsageByModel(ev.conversation.tokenUsageByModel ?? []);
           setConversationUpdatedAt(String(ev.conversation.updatedAt ?? ""));
           return;
-        }
-        if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
-          void refreshConversationMetrics(cid).catch((e) => {
-            const detail = e instanceof Error ? e.message : String(e);
-            notifyError(`Failed to refresh chat metrics: ${detail}`);
-          });
         }
       },
     });
