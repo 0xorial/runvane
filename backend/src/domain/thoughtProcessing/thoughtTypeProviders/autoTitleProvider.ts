@@ -6,7 +6,7 @@ import type { ConversationEventHub } from "../../../events/conversationEventHub.
 import { SseType } from "../../../types/sse.js";
 import type { ThoughtExecution, ThoughtTypeProvider, ThoughtReasonLlmResult } from "../types.js";
 
-type AutoTitleThought = ThoughtExecution & {
+export type AutoTitleThought = ThoughtExecution & {
   thoughtType: "autoTitle";
   conversationId: string;
   streamEntryId: string;

@@ -127,7 +127,7 @@ export async function getDecisionLlmResponse(
     llmOverrides: LlmOverrides;
     requestParams: Record<string, unknown>;
     files: Array<{ filename: string; mimeType: string; base64Data: string }>;
-    shouldCancel?: () => boolean;
+    signal?: AbortSignal;
   },
 ): Promise<DecisionLlmResult> {
   const plannerLlmProviderId = resolvePlannerProviderId(deps, input.llmOverrides);
@@ -146,7 +146,7 @@ export async function getDecisionLlmResponse(
       input.requestParams,
       input.files,
       (delta) => {
-        throwIfCancelled(input.shouldCancel);
+        throwIfCancelled(input.signal);
         if (!firstDeltaPublished) {
           firstDeltaPublished = true;
           logger.info(

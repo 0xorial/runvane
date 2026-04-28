@@ -4,7 +4,7 @@ import { createStepHandle } from "./stepHandle.js";
 
 export async function runDecisionStep(
   input: DecisionStepInput,
-  _opts?: { shouldCancel?: () => boolean }
+  _opts?: { signal?: AbortSignal }
 ): Promise<void> {
   const provider = resolveThoughtTypeProvider(input.thought.thoughtType);
   const step = await createStepHandle("decision", input.thought);

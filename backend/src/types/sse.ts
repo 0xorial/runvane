@@ -1,5 +1,5 @@
-import type { ChatEntry, UserMessageEntry } from "./chatEntry.js";
-import { ChatEntrySchema, UserMessageEntrySchema } from "./chatEntry.js";
+import type { ChatEntry, PreparedReasonStepInput, UserMessageEntry } from "./chatEntry.js";
+import { ChatEntrySchema, PreparedReasonStepInputSchema, UserMessageEntrySchema } from "./chatEntry.js";
 import { z } from "zod";
 
 export const SseType = {
@@ -13,6 +13,10 @@ export const SseType = {
   ASSISTANT_STREAM: "assistant_stream",
   PLANNER_RESPONSE: "planner_response",
   TITLE_RESPONSE: "title_response",
+  THOUGHT_PREPARE_STEP_STARTING: "thought_prepare_step_starting",
+  THOUGHT_PREPARE_STEP_FINISHED: "thought_prepare_step_finished",
+  THOUGHT_PREPARE_STEP_FAILED: "thought_prepare_step_failed",
+  THOUGHT_PREPARE_STEP_CANCELLED: "thought_prepare_step_cancelled",
   TOOL_INVOCATION_START: "tool_invocation_start", // "upsert", can be sent multiple times
   TOOL_INVOCATION_END: "tool_invocation_end",
   CHAT_ENTRY_UPSERT: "chat_entry_upsert",
@@ -220,6 +224,46 @@ export const TitleResponseSsePayloadSchema = z.object({
   completionTokens: z.number().finite().optional(),
 });
 
+export type ThoughtPrepareStepStartingSsePayload = {
+  type: typeof SseType.THOUGHT_PREPARE_STEP_STARTING;
+  chatEntryId: string;
+};
+export const ThoughtPrepareStepStartingSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_PREPARE_STEP_STARTING),
+  chatEntryId: z.string(),
+});
+
+export type ThoughtPrepareStepFinishedSsePayload = {
+  type: typeof SseType.THOUGHT_PREPARE_STEP_FINISHED;
+  chatEntryId: string;
+  preparedReasonStepInput: PreparedReasonStepInput;
+};
+export const ThoughtPrepareStepFinishedSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_PREPARE_STEP_FINISHED),
+  chatEntryId: z.string(),
+  preparedReasonStepInput: PreparedReasonStepInputSchema,
+});
+
+export type ThoughtPrepareStepFailedSsePayload = {
+  type: typeof SseType.THOUGHT_PREPARE_STEP_FAILED;
+  chatEntryId: string;
+  error: string;
+};
+export const ThoughtPrepareStepFailedSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_PREPARE_STEP_FAILED),
+  chatEntryId: z.string(),
+  error: z.string(),
+});
+
+export type ThoughtPrepareStepCancelledSsePayload = {
+  type: typeof SseType.THOUGHT_PREPARE_STEP_CANCELLED;
+  chatEntryId: string;
+};
+export const ThoughtPrepareStepCancelledSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_PREPARE_STEP_CANCELLED),
+  chatEntryId: z.string(),
+});
+
 export type ToolInvocationStartSsePayload = {
   type: typeof SseType.TOOL_INVOCATION_START;
   chatEntryId: string;
@@ -278,6 +322,10 @@ export type SsePayload =
   | AssistantStreamSsePayload
   | PlannerResponseSsePayload
   | TitleResponseSsePayload
+  | ThoughtPrepareStepStartingSsePayload
+  | ThoughtPrepareStepFinishedSsePayload
+  | ThoughtPrepareStepFailedSsePayload
+  | ThoughtPrepareStepCancelledSsePayload
   | ToolInvocationStartSsePayload
   | ToolInvocationEndSsePayload
   | ChatEntryUpsertSsePayload;
@@ -292,6 +340,10 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   AssistantStreamSsePayloadSchema,
   PlannerResponseSsePayloadSchema,
   TitleResponseSsePayloadSchema,
+  ThoughtPrepareStepStartingSsePayloadSchema,
+  ThoughtPrepareStepFinishedSsePayloadSchema,
+  ThoughtPrepareStepFailedSsePayloadSchema,
+  ThoughtPrepareStepCancelledSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
   ChatEntryUpsertSsePayloadSchema,
@@ -377,6 +429,24 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
     promptTokens: z.number().finite().optional(),
     cachedPromptTokens: z.number().finite().optional(),
     completionTokens: z.number().finite().optional(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_PREPARE_STEP_STARTING),
+    chatEntryId: z.string(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_PREPARE_STEP_FINISHED),
+    chatEntryId: z.string(),
+    preparedReasonStepInput: PreparedReasonStepInputSchema,
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_PREPARE_STEP_FAILED),
+    chatEntryId: z.string(),
+    error: z.string(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_PREPARE_STEP_CANCELLED),
+    chatEntryId: z.string(),
   }),
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.TOOL_INVOCATION_START),

@@ -5,8 +5,8 @@ export class TaskCancelledError extends Error {
   }
 }
 
-export function throwIfCancelled(shouldCancel?: () => boolean): void {
-  if (shouldCancel?.()) {
+export function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
     throw new TaskCancelledError();
   }
 }

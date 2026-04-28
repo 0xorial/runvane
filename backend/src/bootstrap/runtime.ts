@@ -1,15 +1,15 @@
 import type { PostConversationMessageRequest } from "../routes/conversations.types.js";
-import type { ContinueConversationTask, RunToolTask } from "../domain/agentTask.js";
-import { DecisionTaskProcessor } from "../domain/decisionTaskProcessor.js";
-import { lineageEntries } from "../domain/decisionTaskProcessor/context.js";
+import type { RunToolTask } from "../domain/agentTask.js";
 import {
   configureThoughtRuntime,
   configureThoughtTypeProviders,
   initiateThought,
+  initiateThoughtWithSeed,
 } from "../domain/thoughtProcessing/index.js";
 import { reprocessPlannerPrepareStep } from "../domain/thoughtProcessing/steps/prepareStep.js";
 import { reprocessPlannerReasonStep } from "../domain/thoughtProcessing/steps/reasonStep.js";
 import { RunToolTaskProcessor } from "../domain/runToolTaskProcessor.js";
+import type { ToolParamsPrepareSeed, ToolParamsThought } from "../domain/thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js";
 import { ConversationEventHub } from "../events/conversationEventHub.js";
 import { logger } from "../infra/logger.js";
 import { AgentsRepo } from "../infra/repositories/agentsRepo.js";
@@ -105,21 +105,12 @@ export function createRuntime(opts: {
     toolExecutionLogs,
   );
 
-  const decisionTaskProcessor = new DecisionTaskProcessor(
-    chatEntries,
-    conversations,
-    hub,
-    llmProviderSettings,
-    modelPresets,
-    agents,
-    uploads,
-    tools,
-  );
-
   configureThoughtRuntime({
     chatEntries,
     llmProviderSettings,
     hub,
+    agents,
+    tools,
   });
   configureThoughtTypeProviders({
     autoTitle: {
@@ -130,6 +121,38 @@ export function createRuntime(opts: {
     planner: {
       chatEntries,
       hub,
+      executeToolRequest: async (input) => {
+        const tool = tools.get(input.toolName);
+        if (!tool) {
+          throw new Error(`tool request references missing tool: ${input.toolName}`);
+        }
+        if (!input.agentId) {
+          throw new Error("planner tool execution requires agentId");
+        }
+        await initiateThoughtWithSeed<ToolParamsPrepareSeed, ToolParamsThought>({
+          thoughtType: "toolParams",
+          thought: {
+            thoughtId: crypto.randomUUID(),
+            conversationId: input.conversationId,
+            streamEntryId: "",
+          },
+          seed: {
+            conversationId: input.conversationId,
+            sourceEntryId: input.continuationAnchorId,
+            agentId: input.agentId,
+            toolName: input.toolName,
+            toolAiDescription: tool.getAiDescription(),
+            toolParamsSchema: tool.getParamsSchema(),
+            toolRequest: input.toolRequest,
+            agentToolConfig: agents.get(input.agentId)?.default_llm_configuration?.tools?.[input.toolName],
+            plannerFollowup: {
+              mode: input.followup,
+              userText: input.userText,
+              enabledToolIds: input.enabledToolIds,
+            },
+          },
+        });
+      },
     },
     toolParams: {
       chatEntries,
@@ -140,12 +163,23 @@ export function createRuntime(opts: {
 
   const startReactiveConversationProcessing = (conversationId: string, sourceEntryId?: string): void => {
     const controller = beginExecution(conversationId);
-    const continueTask: ContinueConversationTask = {
-      conversationId,
-      ...(sourceEntryId ? { sourceEntryId } : {}),
-    };
-    void decisionTaskProcessor
-      .process(continueTask, { shouldCancel: () => controller.signal.aborted })
+    void (async () => {
+      const sourceOnActiveLineage =
+        sourceEntryId == null || chatEntries.isEntryOnActiveLineage(conversationId, sourceEntryId);
+      if (sourceEntryId && !sourceOnActiveLineage) {
+        logger.info(
+          { conversationId, sourceEntryId },
+          "[task] source entry not on active lineage; falling back to active leaf"
+        );
+      }
+      await initiateThought(
+        {
+          conversationId,
+          thoughtType: "planner",
+        },
+        { signal: controller.signal },
+      );
+    })()
       .catch((error) => {
         logger.error(
           {
@@ -235,18 +269,11 @@ export function createRuntime(opts: {
       const titleController = beginTitleExecution(conversationId);
       void initiateThought(
         {
+          conversationId,
           thoughtType: "autoTitle",
-          thought: {
-            thoughtId: crypto.randomUUID(),
-            conversationId,
-            streamEntryId: "",
-          } as any,
-          seed: {
-            firstMessage: text,
-          },
         },
         {
-          shouldCancel: () => titleController.signal.aborted,
+          signal: titleController.signal,
           onStarted: ({ thoughtActionEntryId }) => {
             if (thoughtActionEntryId) plannerSourceEntryId = thoughtActionEntryId;
           },
@@ -326,7 +353,7 @@ export function createRuntime(opts: {
       },
     };
     void runToolTaskProcessor
-      .allowAndRun(runToolTask, { shouldCancel: () => controller.signal.aborted })
+      .allowAndRun(runToolTask, { signal: controller.signal })
       .then((result) => {
         if (result.kind !== "completed") return;
         startReactiveConversationProcessing(conversationId, result.toolEntryId);
@@ -371,12 +398,10 @@ export function createRuntime(opts: {
     if (!conversations.exists(conversationId)) {
       return { kind: "conversation_not_found" };
     }
-    const ctx = loadPlannerReprocessContext(conversationId, input.sourceEntryId);
     const out = await reprocessPlannerReasonStep({
       conversationId,
       sourceEntryId: input.sourceEntryId,
       editedResponse: input.editedResponse,
-      enabledToolIds: ctx.enabledToolIds,
     });
     return {
       kind: "ok",
@@ -397,53 +422,18 @@ export function createRuntime(opts: {
     if (!conversations.exists(conversationId)) {
       return { kind: "conversation_not_found" };
     }
-    const ctx = loadPlannerReprocessContext(conversationId, input.sourceEntryId);
     const out = await reprocessPlannerPrepareStep({
       conversationId,
       sourceEntryId: input.sourceEntryId,
       editedRequestText: input.editedRequestText,
       llmProviderId: input.llmProviderId,
       llmModel: input.llmModel,
-      enabledToolIds: ctx.enabledToolIds,
     });
     return {
       kind: "ok",
       plannerEntryId: out.plannerEntryId,
       queuedToolCalls: out.queuedToolCalls,
     };
-  }
-
-  function loadPlannerReprocessContext(
-    conversationId: string,
-    sourceEntryId: string
-  ): {
-    enabledToolIds: string[];
-  } {
-    const sourceEntry = chatEntries.getMessage(conversationId, sourceEntryId);
-    if (!sourceEntry || sourceEntry.type !== "planner_llm_stream") {
-      throw new Error(`planner thought not found: ${sourceEntryId}`);
-    }
-    const entries = chatEntries.listMessages(conversationId, { activePathOnly: false });
-    const lineage = lineageEntries(entries, sourceEntry.id);
-    const anchorUserMessage =
-      [...lineage].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message") ?? null;
-    if (!anchorUserMessage) {
-      throw new Error(`cannot reprocess thought without ancestor user-message: ${sourceEntryId}`);
-    }
-    return {
-      enabledToolIds: enabledToolIdsForAgentId(anchorUserMessage.agentId),
-    };
-  }
-
-  function enabledToolIdsForAgentId(agentId: string): string[] {
-    const agent = agents.get(agentId);
-    return tools
-      .list()
-      .filter((tool) => {
-        const cfg = agent?.default_llm_configuration?.tools?.[tool.getName()];
-        return cfg?.enabled !== false;
-      })
-      .map((tool) => tool.getName());
   }
 
   return {
@@ -456,7 +446,6 @@ export function createRuntime(opts: {
     uploads,
     hub,
     tools,
-    decisionTaskProcessor,
     enqueueUserMessage,
     approveToolInvocation,
     cancelConversationProcessing,

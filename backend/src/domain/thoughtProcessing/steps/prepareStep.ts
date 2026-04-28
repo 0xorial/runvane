@@ -1,18 +1,115 @@
 import { startThoughtLifecycle } from "../../thoughtLifecycle.js";
 import { throwIfCancelled } from "../../taskCancellation.js";
-import { resolveThoughtTypeProvider } from "../thoughtTypeProviders/index.js";
-import type { PrepareStepInput, ReasonStepInput } from "../types.js";
+import type { PrepareStepInput, ReasonStepInput, ThoughtTypeProvider, ThoughtTypeProvider2 } from "../types.js";
+import type { PlannerPrepareOutput, PlannerThought } from "../thoughtTypeProviders/plannerProvider.js";
 import { runReasonStep } from "./reasonStep.js";
-import { getThoughtRuntimeDeps } from "./runtimeDeps.js";
+import { getThoughtRuntimeDeps, type ThoughtRuntimeDeps } from "./runtimeDeps.js";
+import { resolvePlannerReprocessContext } from "./reprocessPlannerContext.js";
 import { createStepHandle } from "./stepHandle.js";
+import type { ConversationEventHub } from "../../../events/conversationEventHub.js";
+import type {
+  ChatEntryPayloadByType,
+  ChatEntriesRepo,
+  ChatEntryDbRow,
+} from "../../../infra/repositories/chatEntriesRepo.js";
+import { parseJsonObject } from "../../../infra/repositories/json.js";
+import { SseType } from "../../../types/sse.js";
+import type { ChatEntry } from "../../../types/chatEntry.js";
 
-export async function runPrepareStep(input: PrepareStepInput, opts?: { shouldCancel?: () => boolean }): Promise<void> {
-  throwIfCancelled(opts?.shouldCancel);
-  const provider = resolveThoughtTypeProvider(input.thought.thoughtType);
-  const step = await createStepHandle("prepare", input.thought);
-  const reasonInput = await provider.runPrepare(step, input);
-  throwIfCancelled(opts?.shouldCancel);
-  await runReasonStep(reasonInput, opts);
+type PrepareStepInput = {
+  conversationId: string;
+  thoughtId: string;
+};
+
+type PrepareStepDeps = {
+  chatEntries: ChatEntriesRepo;
+  hub: ConversationEventHub;
+};
+
+// thought entries must be pre-created before calling this
+export async function runPrepareStep(
+  input: PrepareStepInput,
+  provider: ThoughtTypeProvider2,
+  signal: AbortSignal,
+  deps: PrepareStepDeps
+): Promise<void> {
+  // try to see if "thought" already exists, meaning there are entries with the same thoughtId
+  const thoughtEntries = deps.chatEntries.getThoughtEntries(input.conversationId, input.thoughtId);
+  const prepareEntry = thoughtEntries.find(
+    (entry): entry is ChatEntryDbRow<"thought-prepare"> => entry.type === "thought-prepare"
+  );
+  if (!prepareEntry) {
+    throw new Error(`prepare entry not found for thought: ${input.thoughtId}`);
+  }
+  deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "running");
+  deps.hub.publish(input.conversationId, {
+    type: SseType.THOUGHT_PREPARE_STEP_STARTING,
+    chatEntryId: prepareEntry.id,
+  });
+  const currentJsonPayload = parseEntryPayload(prepareEntry, "thought-prepare");
+  try {
+    const reasonInput = await provider.runPrepare({ prepareEntry }, signal);
+    deps.hub.publish(input.conversationId, {
+      type: SseType.THOUGHT_PREPARE_STEP_FINISHED,
+      chatEntryId: prepareEntry.id,
+      preparedReasonStepInput: reasonInput.preparedReasonStepInput,
+    });
+    deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "completed");
+    deps.chatEntries.setEntryPayload(input.conversationId, prepareEntry.id, {
+      ...currentJsonPayload,
+      preparedReasonStepInput: reasonInput.preparedReasonStepInput,
+    });
+    signal.throwIfAborted();
+    await runReasonStep(reasonInput);
+  } catch (error) {
+    if (isAbortLikeError(error, signal)) {
+      deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "cancelled");
+      deps.hub.publish(input.conversationId, {
+        type: SseType.THOUGHT_PREPARE_STEP_CANCELLED,
+        chatEntryId: prepareEntry.id,
+      });
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "failed");
+    deps.hub.publish(input.conversationId, {
+      type: SseType.THOUGHT_PREPARE_STEP_FAILED,
+      chatEntryId: prepareEntry.id,
+      error: detail,
+    });
+    throw error;
+  }
+}
+
+function parseEntryPayload<TType extends ChatEntry["type"]>(
+  entry: ChatEntryDbRow,
+  expectedType: TType
+): ChatEntryPayloadByType[TType] {
+  if (entry.type !== expectedType) {
+    throw new Error(`entry type mismatch: expected ${expectedType}, got ${entry.type}`);
+  }
+  const payload = parseJsonObject(entry.payload_json);
+  if (typeof payload !== "object" || payload == null || Array.isArray(payload)) {
+    throw new Error(`invalid payload json for ${expectedType}: ${entry.id}`);
+  }
+  switch (expectedType) {
+    case "thought-prepare": {
+      if (typeof payload.requestText !== "string") {
+        throw new Error(`invalid thought-prepare payload: requestText missing (${entry.id})`);
+      }
+      if (typeof payload.thoughtId !== "string" || payload.thoughtId.trim() === "") {
+        throw new Error(`invalid thought-prepare payload: thoughtId missing (${entry.id})`);
+      }
+      return payload as ChatEntryPayloadByType[TType];
+    }
+    default:
+      return payload as ChatEntryPayloadByType[TType];
+  }
+}
+
+function isAbortLikeError(error: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted) return true;
+  return error instanceof Error && error.name === "AbortError";
 }
 
 export async function reprocessPlannerPrepareStep(input: {
@@ -21,15 +118,14 @@ export async function reprocessPlannerPrepareStep(input: {
   editedRequestText: string;
   llmProviderId: string;
   llmModel: string;
-  enabledToolIds: string[];
-  shouldCancel?: () => boolean;
+  signal?: AbortSignal;
 }): Promise<{ plannerEntryId: string; queuedToolCalls: number }> {
-  throwIfCancelled(input.shouldCancel);
+  throwIfCancelled(input.signal);
   const deps = getThoughtRuntimeDeps();
-  const sourceEntry = deps.chatEntries.getMessage(input.conversationId, input.sourceEntryId);
-  if (!sourceEntry || sourceEntry.type !== "planner_llm_stream") {
-    throw new Error(`planner thought not found: ${input.sourceEntryId}`);
-  }
+  const { sourceEntry, anchorUserMessage, enabledToolIds } = resolvePlannerReprocessContext({
+    conversationId: input.conversationId,
+    sourceEntryId: input.sourceEntryId,
+  });
   const editedRequestText = input.editedRequestText.trim();
   if (!editedRequestText) throw new Error("editedRequestText is required");
   const previousPrepareEntry = sourceEntry.parentId
@@ -52,26 +148,26 @@ export async function reprocessPlannerPrepareStep(input: {
       summary: "Call preparation",
     }
   );
-  throwIfCancelled(input.shouldCancel);
-  await runReasonStep(
-    {
-      thought: {
-        thoughtType: "planner",
-        thoughtId: started.streamEntry.thoughtId,
-        conversationId: input.conversationId,
-        streamEntryId: started.streamEntry.id,
-        thoughtActionEntryId: started.thoughtActionEntry.id,
-      },
-      prepareOutput: {
-        conversationId: input.conversationId,
-        streamEntryId: started.streamEntry.id,
-        thoughtActionEntryId: started.thoughtActionEntry.id,
-        llmRequest: editedRequestText,
-        enabledToolIds: input.enabledToolIds,
-      },
-    } as ReasonStepInput<any, any>,
-    { shouldCancel: input.shouldCancel }
-  );
+  throwIfCancelled(input.signal);
+  const reasonInput: ReasonStepInput<PlannerPrepareOutput, PlannerThought> = {
+    thought: {
+      thoughtType: "planner",
+      thoughtId: started.streamEntry.thoughtId,
+      conversationId: input.conversationId,
+      streamEntryId: started.streamEntry.id,
+      thoughtActionEntryId: started.thoughtActionEntry.id,
+    },
+    prepareOutput: {
+      conversationId: input.conversationId,
+      streamEntryId: started.streamEntry.id,
+      thoughtActionEntryId: started.thoughtActionEntry.id,
+      agentId: anchorUserMessage.agentId,
+      userText: anchorUserMessage.text,
+      llmRequest: editedRequestText,
+      enabledToolIds,
+    },
+  };
+  await runReasonStep(reasonInput, { signal: input.signal });
   const persisted = deps.chatEntries.getMessage(input.conversationId, started.streamEntry.id);
   const queuedToolCalls =
     persisted?.type === "planner_llm_stream" && persisted.parseResult?.status === "ok"

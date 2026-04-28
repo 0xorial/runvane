@@ -1,5 +1,5 @@
 import { resolveThoughtTypeProvider, type AnyThoughtTypeProvider } from "../thoughtTypeProviders/index.js";
-import type { DecisionStepInput, ReasonStepInput } from "../types.js";
+import type { DecisionStepInput, ReasonStepInput, ReasonStepInput2, ThoughtTypeProvider2 } from "../types.js";
 import { runDecisionStep } from "./decisionStep.js";
 import { getThoughtRuntimeDeps } from "./runtimeDeps.js";
 import { createStepHandle } from "./stepHandle.js";
@@ -8,19 +8,41 @@ import type { PlannerLlmStreamEntry } from "../../../types/chatEntry.js";
 import { isTaskCancelledError, throwIfCancelled } from "../../taskCancellation.js";
 import { updateThoughtActionEntryAndPublish } from "../../thoughtLifecycle.js";
 import { TokenUsageMapper } from "../../../types/tokenUsage.js";
+import { resolvePlannerReprocessContext } from "./reprocessPlannerContext.js";
 
-export async function runReasonStep(input: ReasonStepInput, opts?: { shouldCancel?: () => boolean }): Promise<void> {
+export async function runReasonStep2(
+  input: ReasonStepInput2,
+  provider: ThoughtTypeProvider2,
+  signal: AbortSignal
+): Promise<void> {
+  const reasonInput = await provider.runReason(input, signal);
+  signal.throwIfAborted();
+  await runReasonDecisionPhase(input.thought.thoughtType, provider, reasonInput, { signal });
+}
+
+export async function runReasonStep(input: ReasonStepInput, opts?: { signal?: AbortSignal }): Promise<void> {
   const provider = resolveThoughtTypeProvider(input.thought.thoughtType);
   const step = await createStepHandle("reason", input.thought);
   const decisionInput = await provider.runReason(step, input);
+  await runReasonDecisionPhase(input.thought.thoughtType, provider, decisionInput, opts, { executeRuntime: true });
+}
+
+async function runReasonDecisionPhase(
+  thoughtType: string,
+  provider: AnyThoughtTypeProvider,
+  decisionInput: DecisionStepInput,
+  opts?: { signal?: AbortSignal },
+  cfg?: { executeRuntime?: boolean }
+): Promise<void> {
   try {
-    throwIfCancelled(opts?.shouldCancel);
-    const runtimeDecisionInput = await executeReasonRuntime(provider, decisionInput, opts);
-    throwIfCancelled(opts?.shouldCancel);
+    throwIfCancelled(opts?.signal);
+    const runtimeDecisionInput =
+      cfg?.executeRuntime === false ? decisionInput : await executeReasonRuntime(provider, decisionInput, opts);
+    throwIfCancelled(opts?.signal);
     await runDecisionStep(runtimeDecisionInput, opts);
   } catch (error) {
     if (!isTaskCancelledError(error)) throw error;
-    persistReasonCancellation(input.thought.thoughtType, decisionInput);
+    persistReasonCancellation(thoughtType, decisionInput);
     return;
   }
 }
@@ -28,12 +50,12 @@ export async function runReasonStep(input: ReasonStepInput, opts?: { shouldCance
 async function executeReasonRuntime(
   provider: AnyThoughtTypeProvider,
   decisionInput: DecisionStepInput,
-  opts?: { shouldCancel?: () => boolean },
+  opts?: { signal?: AbortSignal }
 ): Promise<DecisionStepInput> {
   const request = provider.getReasonLlmRequest?.(decisionInput);
   if (!request) return decisionInput;
   const deps = getThoughtRuntimeDeps();
-  throwIfCancelled(opts?.shouldCancel);
+  throwIfCancelled(opts?.signal);
   const doc = deps.llmProviderSettings.getDocument();
   const { provider_id: providerId, model_name: model } = doc.llm_configuration;
   const llmProvider = deps.llmProviderSettings.getProvider(providerId);
@@ -48,12 +70,12 @@ async function executeReasonRuntime(
     providerSettings,
     { model, prompt: request.prompt },
     (delta) => {
-      throwIfCancelled(opts?.shouldCancel);
+      throwIfCancelled(opts?.signal);
       streamedResponse += delta;
       provider.onReasonLlmDelta?.(decisionInput, delta);
-    },
+    }
   );
-  throwIfCancelled(opts?.shouldCancel);
+  throwIfCancelled(opts?.signal);
   if (!provider.applyReasonLlmResult) return decisionInput;
   return provider.applyReasonLlmResult(decisionInput, {
     fullResponse: String(completion.text || streamedResponse),
@@ -67,15 +89,14 @@ export async function reprocessPlannerReasonStep(input: {
   conversationId: string;
   sourceEntryId: string;
   editedResponse: string;
-  enabledToolIds: string[];
-  shouldCancel?: () => boolean;
+  signal?: AbortSignal;
 }): Promise<{ plannerEntryId: string; queuedToolCalls: number }> {
-  throwIfCancelled(input.shouldCancel);
+  throwIfCancelled(input.signal);
   const deps = getThoughtRuntimeDeps();
-  const sourceEntry = deps.chatEntries.getMessage(input.conversationId, input.sourceEntryId);
-  if (!sourceEntry || sourceEntry.type !== "planner_llm_stream") {
-    throw new Error(`planner thought not found: ${input.sourceEntryId}`);
-  }
+  const { sourceEntry, anchorUserMessage, enabledToolIds } = resolvePlannerReprocessContext({
+    conversationId: input.conversationId,
+    sourceEntryId: input.sourceEntryId,
+  });
   const editedResponse = input.editedResponse.trim();
   if (!editedResponse) throw new Error("editedResponse is required");
   const plannerEntry = deps.chatEntries.appendPlannerLlmStreamEntry(input.conversationId, {
@@ -97,8 +118,9 @@ export async function reprocessPlannerReasonStep(input: {
     chatEntryId: plannerEntry.id,
     delta: editedResponse,
   });
-  throwIfCancelled(input.shouldCancel);
-  await runDecisionStep({
+  throwIfCancelled(input.signal);
+  const provider = resolveThoughtTypeProvider("planner");
+  const decisionInput = {
     thought: {
       thoughtType: "planner",
       thoughtId: plannerEntry.thoughtId,
@@ -109,8 +131,10 @@ export async function reprocessPlannerReasonStep(input: {
       conversationId: input.conversationId,
       streamEntryId: plannerEntry.id,
       thoughtActionEntryId: null,
+      agentId: anchorUserMessage.agentId,
+      userText: anchorUserMessage.text,
       prompt: plannerEntry.llmRequest,
-      enabledToolIds: input.enabledToolIds,
+      enabledToolIds,
       requestStartedMs: Date.parse(plannerEntry.createdAt),
       result: {
         fullResponse: editedResponse,
@@ -118,7 +142,16 @@ export async function reprocessPlannerReasonStep(input: {
         ...(plannerEntry.llmModel ? { model: plannerEntry.llmModel } : {}),
       },
     },
-  } as DecisionStepInput<any, any>, { shouldCancel: input.shouldCancel });
+  } as DecisionStepInput<any, any>;
+  await runReasonDecisionPhase(
+    "planner",
+    provider,
+    decisionInput,
+    { signal: input.signal },
+    {
+      executeRuntime: false,
+    }
+  );
   const persisted = deps.chatEntries.getMessage(input.conversationId, plannerEntry.id);
   const queuedToolCalls =
     persisted?.type === "planner_llm_stream" && persisted.parseResult?.status === "ok"
@@ -133,7 +166,7 @@ export async function reprocessPlannerReasonStep(input: {
 function publishPlannerStarting(
   conversationId: string,
   plannerEntry: PlannerLlmStreamEntry,
-  hub: ReturnType<typeof getThoughtRuntimeDeps>["hub"],
+  hub: ReturnType<typeof getThoughtRuntimeDeps>["hub"]
 ): void {
   const { id: chatEntryId, llmRequest: requestText, ...entry } = plannerEntry;
   hub.publish(conversationId, {
@@ -206,7 +239,7 @@ function persistReasonCancellation(thoughtType: string, decisionInput: DecisionS
         summary: "Cancelled",
         action: "cancelled",
         error: "task cancelled by user",
-      },
+      }
     );
   }
 }

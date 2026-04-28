@@ -1,4 +1,6 @@
+import type { ChatEntryDbRow } from "../../infra/repositories/chatEntriesRepo.js";
 import type { StreamTextCompletionUsage } from "../../llm_provider/provider.js";
+import type { PreparedReasonStepInput, ThoughtPrepareEntry } from "../../types/chatEntry.js";
 
 export type ThoughtType = "autoTitle" | "planner" | "toolParams";
 
@@ -55,27 +57,42 @@ export type ThoughtLifecycleStarted = {
   thoughtActionEntryId: string | null;
 };
 
+export type ReasonStepInput2 = {
+  preparedReasonStepInput: PreparedReasonStepInput;
+};
+
+export type ThoughtPrepareEntry2 = {
+  prepareEntry: ChatEntryDbRow<"thought-prepare">;
+};
+
+export type ThoughtTypeProvider2 = {
+  runPrepare: (input: ThoughtPrepareEntry2, signal: AbortSignal) => Promise<ReasonStepInput2>;
+};
+
 export type ThoughtTypeProvider<
   TSeed = unknown,
   TPrepareOutput = unknown,
   TReasonOutput = unknown,
-  TThought extends ThoughtExecution = ThoughtExecution,
+  TThought extends ThoughtExecution = ThoughtExecution
 > = {
-  runPrepare: (step: ThoughtStepHandle, input: PrepareStepInput<TSeed, TThought>) => Promise<ReasonStepInput<TPrepareOutput, TThought>>;
+  runPrepare: (
+    step: ThoughtStepHandle,
+    input: PrepareStepInput<TSeed, TThought>
+  ) => Promise<ReasonStepInput<TPrepareOutput, TThought>>;
   runReason: (
     step: ThoughtStepHandle,
-    input: ReasonStepInput<TPrepareOutput, TThought>,
+    input: ReasonStepInput<TPrepareOutput, TThought>
   ) => Promise<DecisionStepInput<TReasonOutput, TThought>>;
   runDecision: (step: ThoughtStepHandle, input: DecisionStepInput<TReasonOutput, TThought>) => Promise<void>;
   getReasonLlmRequest?: (input: DecisionStepInput<TReasonOutput, TThought>) => ThoughtReasonLlmRequest | null;
   onReasonLlmDelta?: (input: DecisionStepInput<TReasonOutput, TThought>, delta: string) => void;
   applyReasonLlmResult?: (
     input: DecisionStepInput<TReasonOutput, TThought>,
-    result: ThoughtReasonLlmResult,
+    result: ThoughtReasonLlmResult
   ) => DecisionStepInput<TReasonOutput, TThought>;
   getLifecycleStartRequest?: (input: PrepareStepInput<TSeed, TThought>) => ThoughtLifecycleStartRequest | null;
   applyLifecycleStart?: (
     input: PrepareStepInput<TSeed, TThought>,
-    started: ThoughtLifecycleStarted,
+    started: ThoughtLifecycleStarted
   ) => PrepareStepInput<TSeed, TThought>;
 };

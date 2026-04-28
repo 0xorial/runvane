@@ -185,6 +185,7 @@ export function userMessageAttachmentsFromPayload(payload: Record<string, unknow
   return out;
 }
 
+// todo rename to thought-reason
 /** Planner / thinking row — same `type` string as SSE `planner_llm_stream`. */
 export type PlannerLlmStreamEntry = ChatEntryBase & {
   type: "planner_llm_stream";
@@ -238,14 +239,22 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
     .optional(),
 });
 
+export type PreparedReasonStepInput = {
+  requestText: string;
+  llmProviderId?: string;
+  llmModel?: string;
+};
+export const PreparedReasonStepInputSchema = z.object({
+  requestText: z.string(),
+  llmProviderId: z.string().optional(),
+  llmModel: z.string().optional(),
+});
+
 export type ThoughtPrepareEntry = ChatEntryBase & {
   type: "thought-prepare";
   thoughtId: string;
   title?: string;
-  requestText: string;
-  llmProviderId?: string;
-  llmModel?: string;
-  status?: "completed";
+  preparedReasonStepInput?: PreparedReasonStepInput;
 };
 export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("thought-prepare"),
@@ -254,7 +263,6 @@ export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   requestText: z.string(),
   llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
-  status: z.literal("completed").optional(),
 });
 
 export type TitleLlmStreamEntry = ChatEntryBase & {

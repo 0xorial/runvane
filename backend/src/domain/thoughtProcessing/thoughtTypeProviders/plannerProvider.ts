@@ -18,7 +18,9 @@ export type PlannerThought = ThoughtExecution & {
 export type PlannerPrepareSeed = {
   conversationId: string;
   anchorEntryId: string;
+  agentId: string | null;
   userText: string;
+  systemPrompt: string;
   enabledToolIds: string[];
 };
 
@@ -26,6 +28,8 @@ export type PlannerPrepareOutput = {
   conversationId: string;
   streamEntryId: string;
   thoughtActionEntryId: string | null;
+  agentId: string | null;
+  userText: string;
   llmRequest: string;
   enabledToolIds: string[];
 };
@@ -34,6 +38,8 @@ export type PlannerReasonOutput = {
   conversationId: string;
   streamEntryId: string;
   thoughtActionEntryId: string | null;
+  agentId: string | null;
+  userText: string;
   prompt: string;
   enabledToolIds: string[];
   requestStartedMs: number;
@@ -45,6 +51,18 @@ export type PlannerReasonOutput = {
 export type PlannerThoughtTypeProviderDeps = {
   chatEntries: ChatEntriesRepo;
   hub: ConversationEventHub;
+  executeToolRequest: (input: PlannerToolRequestExecutionInput) => Promise<void>;
+};
+
+export type PlannerToolRequestExecutionInput = {
+  conversationId: string;
+  continuationAnchorId: string;
+  agentId: string | null;
+  userText: string;
+  enabledToolIds: string[];
+  followup: "continue" | "finalize";
+  toolName: string;
+  toolRequest: string;
 };
 
 export function createPlannerThoughtTypeProvider(deps: PlannerThoughtTypeProviderDeps): ThoughtTypeProvider<
@@ -68,8 +86,10 @@ export function createPlannerThoughtTypeProvider(deps: PlannerThoughtTypeProvide
         conversationId: input.seed.conversationId,
         streamEntryId: input.thought.streamEntryId,
         thoughtActionEntryId: input.thought.thoughtActionEntryId ?? null,
+        agentId: input.seed.agentId,
+        userText: input.seed.userText,
         llmRequest: buildPlannerPrompt({
-          systemPrompt: "",
+          systemPrompt: input.seed.systemPrompt,
           entries: deps.chatEntries.listMessages(input.seed.conversationId),
           anchorUserText: input.seed.userText,
           triggerEntry: deps.chatEntries.getMessage(input.seed.conversationId, input.seed.anchorEntryId),
@@ -85,6 +105,8 @@ export function createPlannerThoughtTypeProvider(deps: PlannerThoughtTypeProvide
         conversationId: input.prepareOutput.conversationId,
         streamEntryId: input.prepareOutput.streamEntryId,
         thoughtActionEntryId: input.prepareOutput.thoughtActionEntryId,
+        agentId: input.prepareOutput.agentId,
+        userText: input.prepareOutput.userText,
         prompt: input.prepareOutput.llmRequest,
         enabledToolIds: input.prepareOutput.enabledToolIds,
         requestStartedMs: Date.now(),
@@ -98,6 +120,7 @@ export function createPlannerThoughtTypeProvider(deps: PlannerThoughtTypeProvide
       let summary = "Planner response completed";
       let action = "final_answer";
       let toolName: string | undefined;
+      let requestedToolCalls: Array<{ toolName: string; toolRequest: string }> = [];
       let decision: { type: "user-response"; text: string } | { type: "tool-invocation"; toolId: string; parameters: Record<string, unknown> } | null = null;
       let parseResult: { status: "ok"; parsed: ReturnType<typeof parseAgenticPlannerOutput>["output"] } | { status: "error"; error: string } = {
         status: "error",
@@ -109,7 +132,7 @@ export function createPlannerThoughtTypeProvider(deps: PlannerThoughtTypeProvide
           streamedAnswer: reason.streamedAnswer ?? "",
           isToolAvailable: (toolId) => reason.enabledToolIds.includes(toolId),
         });
-        const requestedToolCalls = parseRequestedToolCalls({
+        requestedToolCalls = parseRequestedToolCalls({
           requests: parsed.output.tool_requests,
           enabledToolIds: reason.enabledToolIds,
         });
@@ -122,6 +145,19 @@ export function createPlannerThoughtTypeProvider(deps: PlannerThoughtTypeProvide
           summary = `Queued ${requestedToolCalls.length} tool call(s)`;
           action = "tool_call";
           toolName = requestedToolCalls[0].toolName;
+          const continuationAnchorId = reason.assistantEntryId ?? reason.thoughtActionEntryId ?? reason.streamEntryId;
+          for (const requested of requestedToolCalls) {
+            await deps.executeToolRequest({
+              conversationId: reason.conversationId,
+              continuationAnchorId,
+              agentId: reason.agentId,
+              userText: reason.userText,
+              enabledToolIds: reason.enabledToolIds,
+              followup: parsed.output.followup,
+              toolName: requested.toolName,
+              toolRequest: requested.toolRequest,
+            });
+          }
         } else {
           const assistantText = String(parsed.output.assistant_output ?? "").trim();
           summary = assistantText || "Planner completed";

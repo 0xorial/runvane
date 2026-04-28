@@ -9,7 +9,6 @@ import { mostPermissivePermission } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
 import { throwIfCancelled } from "./taskCancellation.js";
 import { initiateThought } from "./thoughtProcessing/index.js";
-import type { PlannerPrepareSeed, PlannerThought } from "./thoughtProcessing/thoughtTypeProviders/plannerProvider.js";
 
 type ToolExecutionEnvelope = {
   ok: boolean;
@@ -41,7 +40,7 @@ export class RunToolTaskProcessor {
     private readonly toolExecutionLogs: ToolExecutionLogsRepo,
   ) {}
 
-  async process(task: RunToolTask, opts?: { shouldCancel?: () => boolean }): Promise<RunToolExecutionResult> {
+  async process(task: RunToolTask, opts?: { signal?: AbortSignal }): Promise<RunToolExecutionResult> {
     const conversationId = task.conversationId;
     if (task.sourceEntryId && !this.chatEntries.isEntryOnActiveLineage(conversationId, task.sourceEntryId)) {
       logger.info(
@@ -54,7 +53,7 @@ export class RunToolTaskProcessor {
       );
       return { kind: "skipped" };
     }
-    throwIfCancelled(opts?.shouldCancel);
+    throwIfCancelled(opts?.signal);
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const argsPreview = safeStringify(task.params);
@@ -152,7 +151,7 @@ export class RunToolTaskProcessor {
         : {};
     const parsedRules = tool.parseRules(task.agentToolConfig?.rules ?? defaultRulesRaw);
     const parsedParams = tool.parseParams(task.params);
-    throwIfCancelled(opts?.shouldCancel);
+    throwIfCancelled(opts?.signal);
 
     const rules = await tool.evaluatePermission({
       conversationId,
@@ -259,11 +258,11 @@ export class RunToolTaskProcessor {
       parsedParams,
       parsedRules,
       rules,
-      shouldCancel: opts?.shouldCancel,
+      signal: opts?.signal,
     });
   }
 
-  async allowAndRun(task: RunToolTask, opts?: { shouldCancel?: () => boolean }): Promise<RunToolExecutionResult> {
+  async allowAndRun(task: RunToolTask, opts?: { signal?: AbortSignal }): Promise<RunToolExecutionResult> {
     const pending = this.findPendingToolInvocationEntry(task.conversationId, task);
     if (!pending || pending.state !== "requested") {
       logger.info(
@@ -315,7 +314,7 @@ export class RunToolTaskProcessor {
     parsedParams: unknown;
     parsedRules: Record<string, unknown>;
     rules: Awaited<ReturnType<NonNullable<ReturnType<ToolRegistry["get"]>>["evaluatePermission"]>>;
-    shouldCancel?: () => boolean;
+    signal?: AbortSignal;
   }): Promise<RunToolExecutionResult> {
     const { task, startedAt, startedAtMs, argsPreview, entries, tool, parsedParams, parsedRules, rules } = input;
     const conversationId = task.conversationId;
@@ -350,14 +349,14 @@ export class RunToolTaskProcessor {
       ...(toolEntryParentId ? { parentId: toolEntryParentId } : {}),
       ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
     });
-    throwIfCancelled(input.shouldCancel);
+    throwIfCancelled(input.signal);
     const outputValue = await tool.runTool(parsedParams, {
       conversationId,
       agentId: task.agentId,
       entries,
       toolRules: parsedRules,
     });
-    throwIfCancelled(input.shouldCancel);
+    throwIfCancelled(input.signal);
     const finishedAt = new Date();
     const envelope: ToolExecutionEnvelope = {
       ok: true,
@@ -392,26 +391,8 @@ export class RunToolTaskProcessor {
     });
     logger.info({ conversationId, toolName: task.toolName }, "[tool] run_tool completed");
     if (task.plannerFollowup?.mode === "continue") {
-      throwIfCancelled(input.shouldCancel);
-      await initiateThought<PlannerPrepareSeed, PlannerThought>(
-        {
-          thoughtType: "planner",
-          thought: {
-            thoughtId: crypto.randomUUID(),
-            conversationId,
-            streamEntryId: "",
-          },
-          seed: {
-            conversationId,
-            anchorEntryId: toolEntryId,
-            userText: task.plannerFollowup.userText,
-            enabledToolIds: task.plannerFollowup.enabledToolIds,
-          },
-        },
-        {
-          shouldCancel: input.shouldCancel,
-        },
-      );
+      throwIfCancelled(input.signal);
+      await initiateThought({ conversationId, thoughtType: "planner" }, { signal: input.signal });
     }
     return { kind: "completed", toolEntryId };
   }
