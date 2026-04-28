@@ -10,6 +10,11 @@ export type RunToolTask = {
   toolName: string;
   params: unknown;
   toolRequest?: string;
+  plannerFollowup?: {
+    mode: "continue" | "finalize";
+    userText: string;
+    enabledToolIds: string[];
+  };
   approvalGranted?: boolean;
   agentToolConfig?: {
     enabled?: boolean;

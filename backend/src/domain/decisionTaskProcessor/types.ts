@@ -10,33 +10,6 @@ import type { ToolPermission } from "../../tools/baseTool.js";
 import type { ToolRegistry } from "../../tools/toolRegistry.js";
 import type { parseAgenticPlannerOutput } from "../continueConversationPlannerProtocol.js";
 
-export type EnqueueRunToolInput = {
-  conversationId: string;
-  sourceEntryId?: string;
-  agentId: string | null;
-  toolName: string;
-  params: unknown;
-  toolRequest?: string;
-  agentToolConfig?: {
-    enabled?: boolean;
-    policy?: ToolPermission;
-    rules?: Record<string, unknown>;
-  };
-};
-
-export type ExecuteRunToolResult =
-  | {
-      kind: "skipped";
-    }
-  | {
-      kind: "completed";
-      toolEntryId: string;
-    }
-  | {
-      kind: "blocked";
-      toolEntryId: string;
-    };
-
 export type DecisionProcessorDeps = {
   chatEntries: ChatEntriesRepo;
   conversations: ConversationsRepo;
@@ -46,7 +19,6 @@ export type DecisionProcessorDeps = {
   agents: AgentsRepo;
   uploads: UploadsRepo;
   tools: ToolRegistry;
-  executeRunTool: (input: EnqueueRunToolInput, opts?: { shouldCancel?: () => boolean }) => Promise<ExecuteRunToolResult>;
 };
 
 export type LlmOverrides = {

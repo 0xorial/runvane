@@ -103,7 +103,6 @@ export function createRuntime(opts: {
     hub,
     tools,
     toolExecutionLogs,
-    llmProviderSettings
   );
 
   const decisionTaskProcessor = new DecisionTaskProcessor(
@@ -115,18 +114,6 @@ export function createRuntime(opts: {
     agents,
     uploads,
     tools,
-    async (input, opts2) => {
-      const runToolTask: RunToolTask = {
-        conversationId: input.conversationId,
-        sourceEntryId: input.sourceEntryId,
-        agentId: input.agentId,
-        toolName: input.toolName,
-        params: input.params,
-        ...(input.toolRequest ? { toolRequest: input.toolRequest } : {}),
-        ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
-      };
-      return runToolTaskProcessor.process(runToolTask, opts2);
-    }
   );
 
   configureThoughtRuntime({
@@ -147,6 +134,7 @@ export function createRuntime(opts: {
     toolParams: {
       chatEntries,
       hub,
+      runToolTaskProcessor,
     },
   });
 
@@ -301,14 +289,35 @@ export function createRuntime(opts: {
     const rules = agent?.default_llm_configuration?.tools?.[row.toolId]?.rules ?? {};
 
     const toolRequest = String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim();
+    const storedParams = Object.fromEntries(
+      Object.entries(row.parameters).filter(([key]) =>
+        !["tool_request", "source", "planner_followup_mode", "planner_followup_user_text", "planner_followup_enabled_tool_ids"].includes(key)
+      )
+    );
+    const plannerFollowupMode = String((row.parameters as Record<string, unknown>)?.planner_followup_mode ?? "").trim();
+    const plannerFollowupUserText = String((row.parameters as Record<string, unknown>)?.planner_followup_user_text ?? "").trim();
+    const plannerFollowupEnabledToolIdsRaw =
+      (row.parameters as Record<string, unknown>)?.planner_followup_enabled_tool_ids;
+    const plannerFollowupEnabledToolIds = Array.isArray(plannerFollowupEnabledToolIdsRaw)
+      ? plannerFollowupEnabledToolIdsRaw.map((value) => String(value ?? "").trim()).filter(Boolean)
+      : [];
     const controller = beginExecution(conversationId);
     const runToolTask: RunToolTask = {
       conversationId,
       sourceEntryId: row.id,
       agentId,
       toolName: row.toolId,
-      params: {},
+      params: storedParams,
       ...(toolRequest ? { toolRequest } : {}),
+      ...(plannerFollowupMode === "continue" && plannerFollowupUserText && plannerFollowupEnabledToolIds.length > 0
+        ? {
+            plannerFollowup: {
+              mode: "continue",
+              userText: plannerFollowupUserText,
+              enabledToolIds: plannerFollowupEnabledToolIds,
+            } as const,
+          }
+        : {}),
       approvalGranted: true,
       agentToolConfig: {
         enabled: true,
@@ -317,7 +326,7 @@ export function createRuntime(opts: {
       },
     };
     void runToolTaskProcessor
-      .process(runToolTask, { shouldCancel: () => controller.signal.aborted })
+      .allowAndRun(runToolTask, { shouldCancel: () => controller.signal.aborted })
       .then((result) => {
         if (result.kind !== "completed") return;
         startReactiveConversationProcessing(conversationId, result.toolEntryId);

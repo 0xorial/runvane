@@ -8,7 +8,7 @@ import type { ChatEntriesRepo } from "../../../infra/repositories/chatEntriesRep
 import { SseType } from "../../../types/sse.js";
 import type { ThoughtExecution, ThoughtReasonLlmResult, ThoughtTypeProvider } from "../types.js";
 
-type PlannerThought = ThoughtExecution & {
+export type PlannerThought = ThoughtExecution & {
   thoughtType: "planner";
   conversationId: string;
   streamEntryId: string;

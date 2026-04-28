@@ -13,7 +13,7 @@ export const SseType = {
   ASSISTANT_STREAM: "assistant_stream",
   PLANNER_RESPONSE: "planner_response",
   TITLE_RESPONSE: "title_response",
-  TOOL_INVOCATION_START: "tool_invocation_start",
+  TOOL_INVOCATION_START: "tool_invocation_start", // "upsert", can be sent multiple times
   TOOL_INVOCATION_END: "tool_invocation_end",
   CHAT_ENTRY_UPSERT: "chat_entry_upsert",
 } as const;

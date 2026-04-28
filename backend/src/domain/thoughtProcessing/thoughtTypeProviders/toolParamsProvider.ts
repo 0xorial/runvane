@@ -4,8 +4,10 @@ import type { ConversationEventHub } from "../../../events/conversationEventHub.
 import type { ChatEntriesRepo } from "../../../infra/repositories/chatEntriesRepo.js";
 import { SseType } from "../../../types/sse.js";
 import type { ThoughtExecution, ThoughtReasonLlmResult, ThoughtTypeProvider } from "../types.js";
+import type { RunToolTask } from "../../agentTask.js";
+import type { RunToolTaskProcessor } from "../../runToolTaskProcessor.js";
 
-type ToolParamsThought = ThoughtExecution & {
+export type ToolParamsThought = ThoughtExecution & {
   thoughtType: "toolParams";
   conversationId: string;
   streamEntryId: string;
@@ -14,24 +16,40 @@ type ToolParamsThought = ThoughtExecution & {
 
 export type ToolParamsPrepareSeed = {
   conversationId: string;
+  sourceEntryId?: string;
+  agentId: string | null;
   toolName: string;
+  toolAiDescription: string;
+  toolParamsSchema: unknown;
   toolRequest: string;
+  agentToolConfig?: RunToolTask["agentToolConfig"];
+  plannerFollowup?: RunToolTask["plannerFollowup"];
 };
 
 export type ToolParamsPrepareOutput = {
   conversationId: string;
   streamEntryId: string;
   thoughtActionEntryId: string | null;
+  sourceEntryId: string | null;
+  agentId: string | null;
   toolName: string;
   resolverPrompt: string;
+  toolRequest: string;
+  agentToolConfig?: RunToolTask["agentToolConfig"];
+  plannerFollowup?: RunToolTask["plannerFollowup"];
 };
 
 export type ToolParamsReasonOutput = {
   conversationId: string;
   streamEntryId: string;
   thoughtActionEntryId: string | null;
+  sourceEntryId: string | null;
+  agentId: string | null;
   toolName: string;
+  toolRequest: string;
   prompt: string;
+  agentToolConfig?: RunToolTask["agentToolConfig"];
+  plannerFollowup?: RunToolTask["plannerFollowup"];
   requestStartedMs: number;
   result?: ThoughtReasonLlmResult;
 };
@@ -39,6 +57,7 @@ export type ToolParamsReasonOutput = {
 export type ToolParamsThoughtTypeProviderDeps = {
   chatEntries: ChatEntriesRepo;
   hub: ConversationEventHub;
+  runToolTaskProcessor: RunToolTaskProcessor;
 };
 
 export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeProviderDeps): ThoughtTypeProvider<
@@ -54,8 +73,18 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
         conversationId: input.seed.conversationId,
         streamEntryId: input.thought.streamEntryId,
         thoughtActionEntryId: input.thought.thoughtActionEntryId ?? null,
+        sourceEntryId: input.seed.sourceEntryId ?? null,
+        agentId: input.seed.agentId,
         toolName: input.seed.toolName,
-        resolverPrompt: buildToolParamsPrompt(input.seed.toolName, input.seed.toolRequest),
+        resolverPrompt: buildToolParamsPrompt(
+          input.seed.toolName,
+          input.seed.toolAiDescription,
+          input.seed.toolParamsSchema,
+          input.seed.toolRequest,
+        ),
+        toolRequest: input.seed.toolRequest,
+        ...(input.seed.agentToolConfig ? { agentToolConfig: input.seed.agentToolConfig } : {}),
+        ...(input.seed.plannerFollowup ? { plannerFollowup: input.seed.plannerFollowup } : {}),
       },
     }),
     runReason: async (_step, input) => ({
@@ -64,8 +93,13 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
         conversationId: input.prepareOutput.conversationId,
         streamEntryId: input.prepareOutput.streamEntryId,
         thoughtActionEntryId: input.prepareOutput.thoughtActionEntryId,
+        sourceEntryId: input.prepareOutput.sourceEntryId,
+        agentId: input.prepareOutput.agentId,
         toolName: input.prepareOutput.toolName,
+        toolRequest: input.prepareOutput.toolRequest,
         prompt: input.prepareOutput.resolverPrompt,
+        ...(input.prepareOutput.agentToolConfig ? { agentToolConfig: input.prepareOutput.agentToolConfig } : {}),
+        ...(input.prepareOutput.plannerFollowup ? { plannerFollowup: input.prepareOutput.plannerFollowup } : {}),
         requestStartedMs: Date.now(),
       },
     }),
@@ -74,8 +108,9 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
       if (!reason.result) {
         throw new Error("toolParams decision requires runtime-provided LLM result");
       }
+      let parsedParams: Record<string, unknown>;
       try {
-        parseJsonObjectFromCompletionText({
+        parsedParams = parseJsonObjectFromCompletionText({
           text: reason.result.fullResponse,
           context: `tool resolver response for ${reason.toolName}`,
         });
@@ -111,7 +146,7 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
         decision: {
           type: "tool-invocation",
           toolId: reason.toolName,
-          parameters: {},
+          parameters: parsedParams,
         },
         status: "completed",
         llmProviderId: reason.result.providerId,
@@ -120,6 +155,16 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
         summary: `Resolved parameters for ${reason.toolName}`,
         action: "tool_call",
         toolName: reason.toolName,
+      });
+      await deps.runToolTaskProcessor.process({
+        conversationId: reason.conversationId,
+        ...(reason.sourceEntryId ? { sourceEntryId: reason.sourceEntryId } : {}),
+        agentId: reason.agentId,
+        toolName: reason.toolName,
+        params: parsedParams,
+        toolRequest: reason.toolRequest,
+        ...(reason.agentToolConfig ? { agentToolConfig: reason.agentToolConfig } : {}),
+        ...(reason.plannerFollowup ? { plannerFollowup: reason.plannerFollowup } : {}),
       });
     },
     getReasonLlmRequest: (input) => ({ prompt: input.reasonOutput.prompt }),
@@ -139,7 +184,13 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
     }),
     getLifecycleStartRequest: (input) => ({
       conversationId: input.seed.conversationId,
-      llmRequest: input.seed.toolRequest,
+      ...(input.seed.sourceEntryId ? { parentId: input.seed.sourceEntryId } : {}),
+      llmRequest: buildToolParamsPrompt(
+        input.seed.toolName,
+        input.seed.toolAiDescription,
+        input.seed.toolParamsSchema,
+        input.seed.toolRequest,
+      ),
       kind: "planner",
       includeAction: true,
       summary: `Resolve ${input.seed.toolName} parameters`,
@@ -157,10 +208,19 @@ export function createToolParamsThoughtTypeProvider(deps: ToolParamsThoughtTypeP
   };
 }
 
-function buildToolParamsPrompt(toolName: string, toolRequest: string): string {
+function buildToolParamsPrompt(
+  toolName: string,
+  toolAiDescription: string,
+  toolParamsSchema: unknown,
+  toolRequest: string,
+): string {
   return `You produce ONLY JSON object parameters for one tool.
 
 Tool name: ${toolName}
+Tool AI description: ${toolAiDescription}
+Tool parameter JSON schema:
+${JSON.stringify(toolParamsSchema, null, 2)}
+
 Tool request:
 ${toolRequest}
 

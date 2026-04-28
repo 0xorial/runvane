@@ -1,5 +1,4 @@
 import type { ChatEntriesRepo } from "../infra/repositories/chatEntriesRepo.js";
-import type { LlmProviderSettingsRepo } from "../infra/repositories/llmProviderSettingsRepo.js";
 import type { ToolExecutionLogsRepo } from "../infra/repositories/toolExecutionLogsRepo.js";
 import { logger } from "../infra/logger.js";
 import { SseType } from "../types/sse.js";
@@ -8,10 +7,9 @@ import type { RunToolTask } from "./agentTask.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
 import { mostPermissivePermission } from "../tools/baseTool.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
-import { usageFromStreamingError } from "./decisionTaskProcessor/plannerStreamUtils.js";
-import { parseJsonObjectFromCompletionText } from "./decisionTaskProcessor/plannerTextParsing.js";
-import { isTaskCancelledError, throwIfCancelled } from "./taskCancellation.js";
-import { finishThoughtLifecycle, publishThoughtLlmDelta, startThoughtLifecycle } from "./thoughtLifecycle.js";
+import { throwIfCancelled } from "./taskCancellation.js";
+import { initiateThought } from "./thoughtProcessing/index.js";
+import type { PlannerPrepareSeed, PlannerThought } from "./thoughtProcessing/thoughtTypeProviders/plannerProvider.js";
 
 type ToolExecutionEnvelope = {
   ok: boolean;
@@ -41,7 +39,6 @@ export class RunToolTaskProcessor {
     private readonly hub: ConversationEventHub,
     private readonly tools: ToolRegistry,
     private readonly toolExecutionLogs: ToolExecutionLogsRepo,
-    private readonly llmProviderSettings: LlmProviderSettingsRepo,
   ) {}
 
   async process(task: RunToolTask, opts?: { shouldCancel?: () => boolean }): Promise<RunToolExecutionResult> {
@@ -123,7 +120,7 @@ export class RunToolTaskProcessor {
           toolId: task.toolName,
           state: "error",
           parameters: task.toolRequest
-            ? { tool_request: task.toolRequest, source: "planner_tool_request" }
+            ? { tool_request: task.toolRequest, source: "planner_tool_request", ...plannerFollowupMetadata(task) }
             : task.params && typeof task.params === "object" && !Array.isArray(task.params)
               ? (task.params as Record<string, unknown>)
               : { raw: task.params },
@@ -151,56 +148,7 @@ export class RunToolTaskProcessor {
         ? (tool.getDefaultRules() as unknown as Record<string, unknown>)
         : {};
     const parsedRules = tool.parseRules(task.agentToolConfig?.rules ?? defaultRulesRaw);
-    let resolvedParams: unknown;
-    try {
-      resolvedParams = task.toolRequest ? await this.resolveToolParamsFromPlannerRequest(task, tool, opts?.shouldCancel) : task.params;
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      const finishedAt = new Date();
-      const envelope: ToolExecutionEnvelope = {
-        ok: false,
-        toolId: task.toolName,
-        output: null,
-        error: detail,
-        permission_state: "forbid",
-        timing: {
-          started_at: startedAt.toISOString(),
-          finished_at: finishedAt.toISOString(),
-          elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
-        },
-      };
-      if (!toolEntryId) {
-        const created = this.chatEntries.appendToolInvocation(conversationId, {
-          toolId: task.toolName,
-          state: "error",
-          parameters: task.toolRequest
-            ? { tool_request: task.toolRequest, source: "planner_tool_request" }
-            : {},
-          result: {
-            ...envelope,
-            stage: "tool_request_resolution",
-          },
-        });
-        toolEntryId = created.id;
-      }
-      this.chatEntries.updateToolInvocation(conversationId, {
-        id: toolEntryId,
-        state: "error",
-        result: {
-          ...envelope,
-          stage: "tool_request_resolution",
-        },
-      });
-      this.hub.publish(conversationId, {
-        type: SseType.TOOL_INVOCATION_END,
-        toolName: task.toolName,
-        output: detail,
-        ok: false,
-        runContinues: false,
-      });
-      throw e;
-    }
-    const parsedParams = tool.parseParams(resolvedParams);
+    const parsedParams = tool.parseParams(task.params);
     throwIfCancelled(opts?.shouldCancel);
 
     const rules = await tool.evaluatePermission({
@@ -256,6 +204,7 @@ export class RunToolTaskProcessor {
                 ...resolvedParamsRecord,
                 tool_request: task.toolRequest,
                 source: "planner_tool_request",
+                ...plannerFollowupMetadata(task),
               }
             : resolvedParamsRecord,
           result: envelope,
@@ -294,6 +243,77 @@ export class RunToolTaskProcessor {
       return { kind: "blocked", toolEntryId };
     }
 
+    return this.runTool({
+      task,
+      startedAt,
+      startedAtMs,
+      argsPreview,
+      toolEntryId,
+      entries,
+      tool,
+      parsedParams,
+      parsedRules,
+      rules,
+      shouldCancel: opts?.shouldCancel,
+    });
+  }
+
+  async allowAndRun(task: RunToolTask, opts?: { shouldCancel?: () => boolean }): Promise<RunToolExecutionResult> {
+    const pending = this.findPendingToolInvocationEntry(task.conversationId, task);
+    if (!pending || pending.state !== "requested") {
+      logger.info(
+        {
+          conversationId: task.conversationId,
+          sourceEntryId: task.sourceEntryId ?? null,
+          toolName: task.toolName,
+        },
+        "[tool] skipped allowAndRun: no requested invocation",
+      );
+      return { kind: "skipped" };
+    }
+    return this.process(
+      {
+        ...task,
+        sourceEntryId: pending.id,
+        approvalGranted: true,
+      },
+      opts,
+    );
+  }
+
+  private findPendingToolInvocationEntry(conversationId: string, task: RunToolTask): ToolInvocationEntry | null {
+    const rows = this.chatEntries.listMessages(conversationId);
+    const matches = rows
+      .filter((row): row is ToolInvocationEntry => row.type === "tool-invocation")
+      .filter((row) => row.toolId === task.toolName)
+      .filter((row) => row.state === "requested" || row.state === "running");
+    if (matches.length === 0) return null;
+    if (task.toolRequest) {
+      const withRequest = matches.filter((row) => {
+        const toolRequest = String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim();
+        return toolRequest === task.toolRequest;
+      });
+      return withRequest.at(-1) ?? matches.at(-1) ?? null;
+    }
+    return matches.at(-1) ?? null;
+  }
+
+  private async runTool(input: {
+    task: RunToolTask;
+    startedAt: Date;
+    startedAtMs: number;
+    argsPreview: string;
+    toolEntryId: string;
+    entries: ReturnType<ChatEntriesRepo["listMessages"]>;
+    tool: NonNullable<ReturnType<ToolRegistry["get"]>>;
+    parsedParams: unknown;
+    parsedRules: Record<string, unknown>;
+    rules: Awaited<ReturnType<NonNullable<ReturnType<ToolRegistry["get"]>>["evaluatePermission"]>>;
+    shouldCancel?: () => boolean;
+  }): Promise<RunToolExecutionResult> {
+    const { task, startedAt, startedAtMs, argsPreview, entries, tool, parsedParams, parsedRules, rules } = input;
+    const conversationId = task.conversationId;
+    let toolEntryId = input.toolEntryId;
     if (!toolEntryId) {
       const resolvedParamsRecord =
         parsedParams && typeof parsedParams === "object" && !Array.isArray(parsedParams)
@@ -307,6 +327,7 @@ export class RunToolTaskProcessor {
               ...resolvedParamsRecord,
               tool_request: task.toolRequest,
               source: "planner_tool_request",
+              ...plannerFollowupMetadata(task),
             }
           : resolvedParamsRecord,
         result: null,
@@ -321,15 +342,14 @@ export class RunToolTaskProcessor {
       ...(task.sourceEntryId ? { parentId: task.sourceEntryId } : {}),
       ...(task.toolRequest ? { argsPreview: task.toolRequest } : argsPreview ? { argsPreview: argsPreview } : {}),
     });
-
-    throwIfCancelled(opts?.shouldCancel);
+    throwIfCancelled(input.shouldCancel);
     const outputValue = await tool.runTool(parsedParams, {
       conversationId,
       agentId: task.agentId,
       entries,
       toolRules: parsedRules,
     });
-    throwIfCancelled(opts?.shouldCancel);
+    throwIfCancelled(input.shouldCancel);
     const finishedAt = new Date();
     const envelope: ToolExecutionEnvelope = {
       ok: true,
@@ -343,7 +363,6 @@ export class RunToolTaskProcessor {
         elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
       },
     };
-
     this.hub.publish(conversationId, {
       type: SseType.TOOL_INVOCATION_END,
       toolName: task.toolName,
@@ -364,150 +383,31 @@ export class RunToolTaskProcessor {
       payload: { ...envelope, rules },
     });
     logger.info({ conversationId, toolName: task.toolName }, "[tool] run_tool completed");
+    if (task.plannerFollowup?.mode === "continue") {
+      throwIfCancelled(input.shouldCancel);
+      await initiateThought<PlannerPrepareSeed, PlannerThought>(
+        {
+          thoughtType: "planner",
+          thought: {
+            thoughtId: crypto.randomUUID(),
+            conversationId,
+            streamEntryId: "",
+          },
+          seed: {
+            conversationId,
+            anchorEntryId: toolEntryId,
+            userText: task.plannerFollowup.userText,
+            enabledToolIds: task.plannerFollowup.enabledToolIds,
+          },
+        },
+        {
+          shouldCancel: input.shouldCancel,
+        },
+      );
+    }
     return { kind: "completed", toolEntryId };
   }
 
-  private findPendingToolInvocationEntry(conversationId: string, task: RunToolTask): ToolInvocationEntry | null {
-    const rows = this.chatEntries.listMessages(conversationId);
-    const matches = rows
-      .filter((row): row is ToolInvocationEntry => row.type === "tool-invocation")
-      .filter((row) => row.toolId === task.toolName)
-      .filter((row) => row.state === "requested" || row.state === "running");
-    if (matches.length === 0) return null;
-    if (task.toolRequest) {
-      const withRequest = matches.filter((row) => {
-        const toolRequest = String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim();
-        return toolRequest === task.toolRequest;
-      });
-      return withRequest.at(-1) ?? matches.at(-1) ?? null;
-    }
-    return matches.at(-1) ?? null;
-  }
-
-  private async resolveToolParamsFromPlannerRequest(
-    task: RunToolTask,
-    tool: NonNullable<ReturnType<ToolRegistry["get"]>>,
-    shouldCancel?: () => boolean
-  ): Promise<Record<string, unknown>> {
-    throwIfCancelled(shouldCancel);
-    const plannerRequest = String(task.toolRequest ?? "").trim();
-    if (!plannerRequest) {
-      throw new Error(`run_tool task missing toolRequest for ${task.toolName}`);
-    }
-    const config = this.llmProviderSettings.getDocument().llm_configuration;
-    const providerId = String(config.tool_call_provider_id || config.provider_id || "openai");
-    const model = String(config.tool_call_model_name || config.model_name || "gpt-4o-mini");
-    const provider = this.llmProviderSettings.getProvider(providerId);
-    if (!provider) {
-      throw new Error(`unknown provider for tool request resolution: ${providerId}`);
-    }
-    const providerSettings = this.llmProviderSettings.getProviderSettings(providerId);
-    if (!providerSettings) {
-      throw new Error(`provider settings not found for tool request resolution: ${providerId}`);
-    }
-    const toolParamPrompt = `You produce ONLY JSON object parameters for one tool.
-
-Tool name: ${tool.getName()}
-Tool AI description: ${tool.getAiDescription()}
-Tool parameter JSON schema:
-${JSON.stringify(tool.getParamsSchema(), null, 2)}
-
-Tool request:
-${plannerRequest}
-
-Return ONLY valid JSON object for tool parameters.`;
-    const thought = startThoughtLifecycle(
-      { chatEntries: this.chatEntries, hub: this.hub },
-      {
-        conversationId: task.conversationId,
-        parentId: task.sourceEntryId ?? null,
-        llmRequest: toolParamPrompt,
-        llmProviderId: providerId,
-        llmModel: model,
-        kind: "planner",
-        includeAction: true,
-        summary: `Resolving ${task.toolName} parameters`,
-      },
-    );
-    const resolverStartedAtMs = Date.parse(thought.streamEntry.createdAt);
-
-    let reconstructedReply = "";
-    let resolverTokenUsage: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number } | undefined;
-    let completionText = "";
-    try {
-      const completion = await provider.streamTextCompletion(
-        providerSettings,
-        {
-          model,
-          prompt: toolParamPrompt,
-          requestParams: {},
-        },
-        (delta) => {
-          throwIfCancelled(shouldCancel);
-          reconstructedReply += delta;
-          publishThoughtLlmDelta({ chatEntries: this.chatEntries, hub: this.hub }, {
-            conversationId: task.conversationId,
-            kind: "planner",
-            streamEntryId: thought.streamEntry.id,
-            delta,
-          });
-        }
-      );
-      resolverTokenUsage = completion.usage;
-      completionText = reconstructedReply || completion.text || "";
-    } catch (e) {
-      const partialUsage = usageFromStreamingError(e);
-      if (partialUsage) {
-        resolverTokenUsage = partialUsage;
-      }
-      const detail = e instanceof Error ? e.message : String(e);
-      const cancelled = isTaskCancelledError(e);
-      finishThoughtLifecycle({ chatEntries: this.chatEntries, hub: this.hub }, {
-        conversationId: task.conversationId,
-        kind: "planner",
-        streamEntryId: thought.streamEntry.id,
-        thoughtActionEntryId: thought.thoughtActionEntry.id,
-        llmRequest: toolParamPrompt,
-        llmResponse: reconstructedReply,
-        thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
-        decision: null,
-        status: cancelled ? "cancelled" : "failed",
-        error: detail,
-        llmProviderId: providerId,
-        llmModel: model,
-        usage: resolverTokenUsage,
-        summary: cancelled ? "Cancelled" : detail,
-        action: cancelled ? "cancelled" : "failed",
-      });
-      throw e;
-    }
-    const parsed = parseJsonObjectFromCompletionText({
-      text: completionText,
-      context: `tool resolver response for ${task.toolName}`,
-    });
-    finishThoughtLifecycle({ chatEntries: this.chatEntries, hub: this.hub }, {
-      conversationId: task.conversationId,
-      kind: "planner",
-      streamEntryId: thought.streamEntry.id,
-      thoughtActionEntryId: thought.thoughtActionEntry.id,
-      llmRequest: toolParamPrompt,
-      llmResponse: completionText,
-      thoughtMs: Math.max(0, Date.now() - resolverStartedAtMs),
-      decision: {
-        type: "tool-invocation",
-        toolId: task.toolName,
-        parameters: {},
-      },
-      status: "completed",
-      llmProviderId: providerId,
-      llmModel: model,
-      usage: resolverTokenUsage,
-      summary: `Resolved parameters for ${task.toolName}`,
-      action: "tool_call",
-      toolName: task.toolName,
-    });
-    return parsed;
-  }
 }
 
 function safeStringify(value: unknown): string {
@@ -517,4 +417,13 @@ function safeStringify(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function plannerFollowupMetadata(task: RunToolTask): Record<string, unknown> {
+  if (!task.plannerFollowup) return {};
+  return {
+    planner_followup_mode: task.plannerFollowup.mode,
+    planner_followup_user_text: task.plannerFollowup.userText,
+    planner_followup_enabled_tool_ids: task.plannerFollowup.enabledToolIds,
+  };
 }

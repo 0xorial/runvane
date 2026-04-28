@@ -31,6 +31,8 @@ import type { ModelPresetsRepo } from "../infra/repositories/modelPresetsRepo.js
 import type { UploadsRepo } from "../infra/repositories/uploadsRepo.js";
 import type { ConversationEventHub } from "../events/conversationEventHub.js";
 import type { ToolRegistry } from "../tools/toolRegistry.js";
+import { initiateThought } from "./thoughtProcessing/index.js";
+import type { ToolParamsPrepareSeed, ToolParamsThought } from "./thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js";
 
 type PlannerRunCompletion = {
   plannerEntryId: string;
@@ -68,7 +70,6 @@ export class DecisionTaskProcessor {
     agents: AgentsRepo,
     uploads: UploadsRepo,
     tools: ToolRegistry,
-    executeRunTool: DecisionProcessorDeps["executeRunTool"]
   ) {
     this.deps = {
       chatEntries,
@@ -79,7 +80,6 @@ export class DecisionTaskProcessor {
       agents,
       uploads,
       tools,
-      executeRunTool,
     };
   }
 
@@ -189,31 +189,41 @@ export class DecisionTaskProcessor {
         return;
       }
 
-      let lastToolEntryId: string | null = null;
       const continuationAnchorId =
         llmResponse.assistantEntryId ?? llmResponse.thoughtActionEntryId ?? llmResponse.plannerEntryId;
       for (const requestedCall of finalized.requestedToolCalls) {
-        const toolOut = await this.deps.executeRunTool(
-          {
+        const tool = this.deps.tools.get(requestedCall.toolName);
+        if (!tool) {
+          throw new Error(`tool request references missing tool: ${requestedCall.toolName}`);
+        }
+        await initiateThought<ToolParamsPrepareSeed, ToolParamsThought>({
+          thoughtType: "toolParams",
+          thought: {
+            thoughtId: crypto.randomUUID(),
+            conversationId: task.conversationId,
+            streamEntryId: "",
+          },
+          seed: {
             conversationId: task.conversationId,
             sourceEntryId: continuationAnchorId,
             agentId: anchorUserMessage.agentId,
             toolName: requestedCall.toolName,
-            params: {},
+            toolAiDescription: tool.getAiDescription(),
+            toolParamsSchema: tool.getParamsSchema(),
             toolRequest: requestedCall.toolRequest,
             agentToolConfig: agentToolConfigFor(this.deps, anchorUserMessage.agentId, requestedCall.toolName),
+            plannerFollowup: {
+              mode: finalized.followup,
+              userText: anchorUserMessage.text,
+              enabledToolIds,
+            },
           },
-          { shouldCancel: opts?.shouldCancel }
-        );
-        if (toolOut.kind === "blocked" || toolOut.kind === "skipped") return;
-        lastToolEntryId = toolOut.toolEntryId;
+        }, {
+          shouldCancel: opts?.shouldCancel,
+        });
       }
-
-      if (finalized.followup !== "continue") {
-        logger.info({ conversationId: task.conversationId }, "[task] continue_conversation completed");
-        return;
-      }
-      triggerEntryId = lastToolEntryId ?? llmResponse.plannerEntryId;
+      logger.info({ conversationId: task.conversationId }, "[task] continue_conversation delegated tool execution");
+      return;
     }
   }
 
