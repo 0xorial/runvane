@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Conversation {
+  id                      String            @id
+  title                   String
+  groupId                 String?           @map("group_id")
+  isDeleted               Boolean           @default(false) @map("is_deleted")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  lastMessageAt           DateTime          @default(now()) @map("last_message_at")
+  promptTokensTotal       Int               @default(0) @map("prompt_tokens_total")
+  cachedPromptTokensTotal Int               @default(0) @map("cached_prompt_tokens_total")
+  completionTokensTotal   Int               @default(0) @map("completion_tokens_total")
+  group                   ConversationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@map("conversations")
+}
+
+model ConversationGroup {
+  id            String         @id
+  name          String         @unique
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  conversations Conversation[]
+
+  @@map("conversation_groups")
+}
+
+model Agent {
+  id                         String   @id
+  name                       String
+  systemPrompt               String   @default("") @map("system_prompt")
+  defaultLlmConfigurationJson Json?   @map("default_llm_configuration_json")
+  defaultModelPresetId       Int?     @map("default_model_preset_id")
+  modelProviderId            String?  @map("model_provider_id")
+  modelName                  String?  @map("model_name")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  @@map("agents")
+}
+
+model LlmProviderSetting {
+  id             String   @id
+  label          String
+  settingsJson   Json     @map("settings_json")
+  modelsJson     Json     @map("models_json")
+  modelsVerified Boolean  @default(false) @map("models_verified")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("llm_providers")
+}
+
+model AppSetting {
+  key       String   @id
+  valueJson Json     @map("value_json")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model ModelPreset {
+  id            Int      @id @default(autoincrement())
+  name          String
+  parametersJson Json    @map("parameters_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("model_presets")
+}
+
+model ModelCapability {
+  providerId             String   @map("provider_id")
+  modelName              String   @map("model_name")
+  supportsImageInput     Boolean? @map("supports_image_input")
+  supportsFileInput      Boolean? @map("supports_file_input")
+  maxContextTokens       Int?     @map("max_context_tokens")
+  maxOutputTokens        Int?     @map("max_output_tokens")
+  inputCostPer1m         Float?   @map("input_cost_per_1m")
+  cachedInputCostPer1m   Float?   @map("cached_input_cost_per_1m")
+  outputCostPer1m        Float?   @map("output_cost_per_1m")
+  currency               String?
+  source                 String?  @default("discovered")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@id([providerId, modelName])
+  @@map("model_capabilities")
+}
+
+model ModelCapabilityOverride {
+  providerId             String   @map("provider_id")
+  modelName              String   @map("model_name")
+  supportsImageInput     Boolean? @map("supports_image_input")
+  supportsFileInput      Boolean? @map("supports_file_input")
+  maxContextTokens       Int?     @map("max_context_tokens")
+  maxOutputTokens        Int?     @map("max_output_tokens")
+  inputCostPer1m         Float?   @map("input_cost_per_1m")
+  cachedInputCostPer1m   Float?   @map("cached_input_cost_per_1m")
+  outputCostPer1m        Float?   @map("output_cost_per_1m")
+  currency               String?
+  notes                  String?
+  updatedBy              String?  @map("updated_by")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@id([providerId, modelName])
+  @@map("model_capability_overrides")
+}
+
+model UploadAttachment {
+  id         String   @id
+  name       String
+  mimeType   String   @map("mime_type")
+  sizeBytes  Int      @map("size_bytes")
+  content    Bytes
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("uploads")
+}
