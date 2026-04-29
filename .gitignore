@@ -13,3 +13,4 @@ dist/
 backend/data/
 
 .env.user
+backend3/prisma/backend3.sqlite
