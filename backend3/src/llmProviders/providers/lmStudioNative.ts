@@ -226,7 +226,14 @@ function safeRequestParams(params: Record<string, unknown> | undefined): Record<
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
     if (!key) continue;
-    if (key === 'model' || key === 'stream' || key === 'input' || key === 'messages' || key === 'prompt') {
+    if (
+      key === 'model' ||
+      key === 'stream' ||
+      key === 'input' ||
+      key === 'messages' ||
+      key === 'prompt' ||
+      key === 'embedding_model'
+    ) {
       continue;
     }
     out[key] = value;

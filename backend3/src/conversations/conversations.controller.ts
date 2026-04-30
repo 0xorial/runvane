@@ -14,11 +14,16 @@ import {
 } from '@nestjs/common';
 import { ConversationsService } from './conversations.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto.js';
+import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
+import { ConversationMessageDraftService } from './conversation-message-draft.service.js';
 
 @Controller('api/conversations')
 export class ConversationsController {
-  constructor(private readonly conversations: ConversationsService) {}
+  constructor(
+    private readonly conversations: ConversationsService,
+    private readonly messageDraft: ConversationMessageDraftService,
+  ) {}
 
   @Get()
   async list(@Query('deleted') deleted?: string) {
@@ -36,9 +41,9 @@ export class ConversationsController {
     @Param('conversationId') conversationId: string,
     @Body() body: UpdateConversationDto,
   ) {
-    const hasTitleUpdate = Object.prototype.hasOwnProperty.call(body, 'title');
-    const hasGroupIdUpdate = Object.prototype.hasOwnProperty.call(body, 'groupId');
-    const hasNewGroupNameUpdate = Object.prototype.hasOwnProperty.call(body, 'newGroupName');
+    const hasTitleUpdate = body.title !== undefined;
+    const hasGroupIdUpdate = body.groupId !== undefined;
+    const hasNewGroupNameUpdate = body.newGroupName !== undefined;
     if (!hasTitleUpdate && !hasGroupIdUpdate && !hasNewGroupNameUpdate) {
       throw new BadRequestException('title or group update is required');
     }
@@ -106,14 +111,17 @@ export class ConversationsController {
   async listMessages(@Param('conversationId') conversationId: string) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    return [];
+    return this.conversations.listMessages(conversationId);
   }
 
   @Post(':conversationId/messages')
-  async postMessage(@Param('conversationId') conversationId: string) {
+  async postMessage(
+    @Param('conversationId') conversationId: string,
+    @Body() body: PostConversationMessageDto,
+  ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    throw new NotImplementedException('conversation message processing is not implemented yet');
+    return this.messageDraft.sendMessage(conversationId, body);
   }
 
   @Post(':conversationId/active-leaf')

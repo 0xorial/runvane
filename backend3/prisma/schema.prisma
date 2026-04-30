@@ -19,8 +19,23 @@ model Conversation {
   cachedPromptTokensTotal Int               @default(0) @map("cached_prompt_tokens_total")
   completionTokensTotal   Int               @default(0) @map("completion_tokens_total")
   group                   ConversationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  chatEntries             ChatEntry[]
 
   @@map("conversations")
+}
+
+model ChatEntry {
+  id                String       @id
+  conversationId    String       @map("conversation_id")
+  conversationIndex Int          @map("conversation_index")
+  parentId          String?      @map("parent_id")
+  type              String
+  payloadJson       String       @map("payload_json")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, conversationIndex])
+  @@map("chat_entries")
 }
 
 model ConversationGroup {

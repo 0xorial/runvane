@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import type { ChatMessageEntryRow } from '../db/repositories/chat-entries.repo.js';
+import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import {
   toConversationGroupRow,
@@ -10,7 +12,10 @@ import {
 
 @Injectable()
 export class ConversationsService {
-  constructor(private readonly conversations: ConversationsRepo) {}
+  constructor(
+    private readonly conversations: ConversationsRepo,
+    private readonly chatEntries: ChatEntriesRepo,
+  ) {}
 
   async list(input: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
     const [rows, groups] = await Promise.all([
@@ -65,5 +70,9 @@ export class ConversationsService {
   async listGroups(): Promise<ConversationGroupRow[]> {
     const groups = await this.conversations.listGroups();
     return groups.map(toConversationGroupRow);
+  }
+
+  async listMessages(conversationId: string): Promise<ChatMessageEntryRow[]> {
+    return this.chatEntries.listMessages(conversationId);
   }
 }
