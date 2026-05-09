@@ -58,7 +58,16 @@ export type ThoughtLifecycleStarted = {
 };
 
 export type ReasonStepInput2 = {
+  conversationId: string;
+  thoughtId: string;
+  previousEntryId: string;
   preparedReasonStepInput: PreparedReasonStepInput;
+};
+
+export type DecisionStepInput2 = {
+  conversationId: string;
+  thoughtId: string;
+  preparedDecisionStepInput: unknown;
 };
 
 export type ThoughtPrepareEntry2 = {
@@ -66,7 +75,10 @@ export type ThoughtPrepareEntry2 = {
 };
 
 export type ThoughtTypeProvider2 = {
-  runPrepare: (input: ThoughtPrepareEntry2, signal: AbortSignal) => Promise<ReasonStepInput2>;
+  runPrepare: (input: ThoughtPrepareEntry2, signal: AbortSignal) => Promise<PreparedReasonStepInput>;
+  onReasonDelta: (input: ReasonStepInput2, signal: AbortSignal) => Promise<DecisionStepInput2>;
+  onReasonFinished: (input: ReasonStepInput2, signal: AbortSignal) => Promise<DecisionStepInput2>;
+  runDecision: (input: DecisionStepInput2, signal: AbortSignal) => Promise<void>;
 };
 
 export type ThoughtTypeProvider<

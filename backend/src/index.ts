@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 
+import "./infra/lang/arrayExtensions.js";
 import { createRuntime } from "./bootstrap/runtime.js";
 import { createApi } from "./api.js";
 import { openDatabase } from "./infra/db/client.js";

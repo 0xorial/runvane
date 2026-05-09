@@ -1,0 +1,3 @@
+- `extractAssistantOutputFromJsonLike()` and `parsePlannerOutput()` catch JSON parse errors and return fallback values.
+- This hides parse/runtime failures and violates the global error policy (no silent fallback on parse errors).
+- Suggested fix: avoid exception-driven parsing for partial streams, and for final planner output either validate explicitly and throw a typed error or surface a structured failure state through decision handling.

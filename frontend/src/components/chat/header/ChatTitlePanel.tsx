@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings, Square } from "lucide-react";
 import {
   cancelConversationProcessing,
+  getConversation,
   getModelCapabilities,
   renameConversation,
 } from "../../../api/client";
@@ -70,6 +71,25 @@ export function ChatTitlePanel({
     setTokenUsageByModel([]);
     setConversationUpdatedAt("");
     setStreamRawTitle("");
+    if (!conversationId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await getConversation(conversationId);
+        if (cancelled) return;
+        setTitle(row.title || "Untitled");
+        setTokenTotals(TokenUsageMapper.fromConversationTotals(row));
+        setTokenUsageByModel(row.tokenUsageByModel ?? []);
+        setConversationUpdatedAt(String(row.updatedAt ?? ""));
+      } catch (e) {
+        if (cancelled) return;
+        const detail = e instanceof Error ? e.message : String(e);
+        notifyError(`Failed to load conversation: ${detail}`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId]);
 
   useEffect(() => {

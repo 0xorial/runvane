@@ -10,7 +10,14 @@ import type { AutoTitlePrepareSeed, AutoTitleThought } from "./thoughtTypeProvid
 import type { PlannerPrepareSeed, PlannerThought } from "./thoughtTypeProviders/plannerProvider.js";
 import type { UserMessageEntry } from "../../types/chatEntry.js";
 
-export type { DecisionStepInput, PrepareStepInput, ReasonStepInput, ThoughtExecution, ThoughtType, ThoughtTypeProvider } from "./types.js";
+export type {
+  DecisionStepInput,
+  PrepareStepInput,
+  ReasonStepInput,
+  ThoughtExecution,
+  ThoughtType,
+  ThoughtTypeProvider,
+} from "./types.js";
 export type { ThoughtProcessingProviderDeps } from "./thoughtTypeProviders/index.js";
 export type { ThoughtRuntimeDeps } from "./steps/runtimeDeps.js";
 export { configureThoughtTypeProviders };
@@ -28,18 +35,21 @@ export type InitiateThoughtResult = {
   thoughtActionEntryId?: string | null;
 };
 
-export async function initiateThought(input: {
-  conversationId: string;
-  thoughtType: ThoughtType;
-}, opts?: {
-  signal?: AbortSignal;
-  onStarted?: (info: {
-    thoughtId: string;
-    prepareEntryId: string;
-    streamEntryId: string;
-    thoughtActionEntryId: string | null;
-  }) => void;
-}): Promise<InitiateThoughtResult> {
+export async function initiateThought(
+  input: {
+    conversationId: string;
+    thoughtType: ThoughtType;
+  },
+  opts?: {
+    signal?: AbortSignal;
+    onStarted?: (info: {
+      thoughtId: string;
+      prepareEntryId: string;
+      streamEntryId: string;
+      thoughtActionEntryId: string | null;
+    }) => void;
+  }
+): Promise<InitiateThoughtResult> {
   const deps = getThoughtRuntimeDeps();
   const entries = deps.chatEntries.listMessages(input.conversationId);
   if (input.thoughtType === "autoTitle") {
@@ -47,20 +57,24 @@ export async function initiateThought(input: {
     if (!firstUserMessage) {
       throw new Error(`autoTitle requires user message context: ${input.conversationId}`);
     }
-    return initiateThoughtWithSeed<AutoTitlePrepareSeed, AutoTitleThought>({
-      thoughtType: input.thoughtType,
-      thought: {
-        thoughtId: crypto.randomUUID(),
-        conversationId: input.conversationId,
-        streamEntryId: "",
+    return initiateThoughtWithSeed<AutoTitlePrepareSeed, AutoTitleThought>(
+      {
+        thoughtType: input.thoughtType,
+        thought: {
+          thoughtId: crypto.randomUUID(),
+          conversationId: input.conversationId,
+          streamEntryId: "",
+        },
+        seed: {
+          firstMessage: firstUserMessage.text,
+        },
       },
-      seed: {
-        firstMessage: firstUserMessage.text,
-      },
-    }, opts);
+      opts
+    );
   }
   if (input.thoughtType === "planner") {
-    const anchorUserMessage = [...entries].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message") ?? null;
+    const anchorUserMessage =
+      [...entries].reverse().find((entry): entry is UserMessageEntry => entry.type === "user-message") ?? null;
     if (!anchorUserMessage) {
       throw new Error(`planner requires user message context: ${input.conversationId}`);
     }
@@ -72,34 +86,36 @@ export async function initiateThought(input: {
       })
       .map((tool) => tool.getName());
     const anchorEntryId = entries.at(-1)?.id ?? anchorUserMessage.id;
-    return initiateThoughtWithSeed<PlannerPrepareSeed, PlannerThought>({
-      thoughtType: input.thoughtType,
-      thought: {
-        thoughtId: crypto.randomUUID(),
-        conversationId: input.conversationId,
-        streamEntryId: "",
+    return initiateThoughtWithSeed<PlannerPrepareSeed, PlannerThought>(
+      {
+        thoughtType: input.thoughtType,
+        thought: {
+          thoughtId: crypto.randomUUID(),
+          conversationId: input.conversationId,
+          streamEntryId: "",
+        },
+        seed: {
+          conversationId: input.conversationId,
+          anchorEntryId,
+          agentId: anchorUserMessage.agentId,
+          userText: anchorUserMessage.text,
+          systemPrompt: deps.agents.get(anchorUserMessage.agentId)?.system_prompt ?? "",
+          enabledToolIds,
+        },
       },
-      seed: {
-        conversationId: input.conversationId,
-        anchorEntryId,
-        agentId: anchorUserMessage.agentId,
-        userText: anchorUserMessage.text,
-        systemPrompt: deps.agents.get(anchorUserMessage.agentId)?.system_prompt ?? "",
-        enabledToolIds,
-      },
-    }, opts);
+      opts
+    );
   }
   throw new Error("toolParams requires explicit seed; use initiateThoughtWithSeed");
 }
 
-export async function initiateThoughtWithSeed<TSeed = unknown, TThought extends ThoughtExecution = ThoughtExecution>({
-  thoughtType,
-  thought,
-  seed,
-}: InitiateThoughtInput<TSeed, TThought>, opts?: {
-  signal?: AbortSignal;
-  onStarted?: (result: Required<InitiateThoughtResult>) => void;
-}): Promise<InitiateThoughtResult> {
+export async function initiateThoughtWithSeed<TSeed = unknown, TThought extends ThoughtExecution = ThoughtExecution>(
+  { thoughtType, thought, seed }: InitiateThoughtInput<TSeed, TThought>,
+  opts?: {
+    signal?: AbortSignal;
+    onStarted?: (result: Required<InitiateThoughtResult>) => void;
+  }
+): Promise<InitiateThoughtResult> {
   throwIfCancelled(opts?.signal);
   if (thought.thoughtType != null && thought.thoughtType !== thoughtType) {
     throw new Error(`thought type mismatch: expected ${thoughtType}, got ${thought.thoughtType}`);
@@ -121,16 +137,18 @@ export async function initiateThoughtWithSeed<TSeed = unknown, TThought extends 
       ...(lifecycleRequest.llmProviderId
         ? {}
         : { llmProviderId: deps.llmProviderSettings.getDocument().llm_configuration.provider_id }),
-      ...(lifecycleRequest.llmModel ? {} : { llmModel: deps.llmProviderSettings.getDocument().llm_configuration.model_name }),
+      ...(lifecycleRequest.llmModel
+        ? {}
+        : { llmModel: deps.llmProviderSettings.getDocument().llm_configuration.model_name }),
     };
     const started = lifecycleRequest.includeAction
       ? startThoughtLifecycle(
           { chatEntries: deps.chatEntries, hub: deps.hub },
-          { ...lifecycleInput, includeAction: true },
+          { ...lifecycleInput, includeAction: true }
         )
       : startThoughtLifecycle(
           { chatEntries: deps.chatEntries, hub: deps.hub },
-          { ...lifecycleInput, includeAction: false },
+          { ...lifecycleInput, includeAction: false }
         );
     const startedResult = {
       thoughtId: started.streamEntry.thoughtId,

@@ -1,9 +1,8 @@
-import { Module } from '@nestjs/common';
-import { SseController } from './sse.controller.js';
+import { Global, Module } from '@nestjs/common';
 import { SseHubService } from './sse-hub.service.js';
 
+@Global()
 @Module({
-  controllers: [SseController],
   providers: [SseHubService],
   exports: [SseHubService],
 })

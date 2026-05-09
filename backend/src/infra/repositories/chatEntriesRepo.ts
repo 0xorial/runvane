@@ -45,6 +45,7 @@ export type ChatEntryDbRow<TType extends ChatEntry["type"] = ChatEntry["type"]> 
 };
 
 type ThoughtEntry = ThoughtPrepareEntry | PlannerLlmStreamEntry | TitleLlmStreamEntry | ThoughtActionEntry;
+type ThoughtEntryType = ThoughtEntry["type"];
 
 export type ConversationModelTokenUsageRow = {
   conversation_id: string;
@@ -477,7 +478,7 @@ export class ChatEntriesRepo {
       ...(llmProviderId !== undefined ? { llmProviderId } : {}),
       ...(llmModel !== undefined ? { llmModel } : {}),
     };
-    const payload: Record<string, unknown> = {
+    const payload: Record<string, unknown> = {eee e
       requestText: entry.requestText,
       thoughtId,
       status: "completed",
@@ -929,6 +930,77 @@ export class ChatEntriesRepo {
       }) as ChatEntryDbRow[];
     // todo: validate db data
     return rows;
+  }
+
+  getThoughtEntry(entryId: string): ChatEntryDbRow<ThoughtEntryType>;
+  getThoughtEntry<TType extends ThoughtEntryType>(entryId: string, expectedType: TType): ChatEntryDbRow<TType>;
+  getThoughtEntry<TType extends ThoughtEntryType>(
+    entryId: string,
+    expectedType?: TType
+  ): ChatEntryDbRow<ThoughtEntryType> | ChatEntryDbRow<TType> {
+    const normalizedEntryId = String(entryId || "").trim();
+    if (!normalizedEntryId) {
+      throw new Error("entryId is required");
+    }
+    const row = this.db
+      .prepare(
+        `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+         FROM chat_entries
+         WHERE id = ?
+           AND type IN ('thought-prepare', 'planner_llm_stream', 'title_llm_stream', 'thought-action')
+         LIMIT 1`
+      )
+      .get(normalizedEntryId) as ChatEntryDbRow<ThoughtEntryType> | undefined;
+    if (!row) {
+      throw new Error(`thought entry not found: ${normalizedEntryId}`);
+    }
+    if (expectedType && row.type !== expectedType) {
+      throw new Error(
+        `thought entry type mismatch: expected=${expectedType} actual=${row.type} id=${normalizedEntryId}`
+      );
+    }
+    return row;
+  }
+
+  appendBranchedEntry<TType extends ChatEntry["type"]>(
+    conversationId: string,
+    thoughtId: string,
+    parentEntryId: string,
+    entryPayload: Extract<ChatEntry, { type: TType }>
+  ): ChatEntryDbRow<TType> {
+    const entryType: TType = entryPayload.type;
+    const id = entryPayload.id;
+    const createdAt = entryPayload.createdAt;
+    const {
+      type: _type,
+      id: _id,
+      createdAt: _createdAt,
+      ...payloadWithoutBase
+    } = entryPayload as Record<string, unknown>;
+    const payloadJson = JSON.stringify({
+      ...payloadWithoutBase,
+      thoughtId,
+    });
+
+    this.insertEntry({
+      id,
+      conversationId,
+      conversationIndex: entryPayload.conversationIndex,
+      parentId: parentEntryId,
+      type: entryType,
+      payloadJson,
+      createdAt,
+    });
+
+    return {
+      id,
+      conversation_id: conversationId,
+      conversation_index: entryPayload.conversationIndex,
+      parent_id: parentEntryId,
+      type: entryType,
+      payload_json: payloadJson,
+      created_at: entryPayload.createdAt,
+    };
   }
 
   listMessages(conversationId: string, options?: { activePathOnly?: boolean }): ChatEntry[] {

@@ -1,9 +1,14 @@
-import { resolveThoughtTypeProvider } from '../thoughtTypeProviders/index.js';
-import type { DecisionStepInput } from '../types.js';
-import { createStepHandle } from './stepHandle.js';
+import { Injectable } from '@nestjs/common';
+import type { DecisionStepInput, ThoughtTypeProvider } from '../types.js';
 
-export async function runDecisionStep(input: DecisionStepInput): Promise<void> {
-  const provider = resolveThoughtTypeProvider(input.thought.thoughtType);
-  const step = await createStepHandle('decision', input.thought as { conversationId?: string });
-  await provider.runDecision(step, input);
+@Injectable()
+export class DecisionStep {
+  async run(
+    provider: ThoughtTypeProvider<any, any, any, any>,
+    input: DecisionStepInput,
+    signal: AbortSignal,
+  ): Promise<void> {
+    signal.throwIfAborted();
+    await provider.runDecision('decision', input);
+  }
 }

@@ -18,6 +18,7 @@ export type ConversationRow = {
   promptTokensTotal: number;
   cachedPromptTokensTotal: number;
   completionTokensTotal: number;
+  activeLeafEntryId: string | null;
   tokenUsageByModel: ConversationUsageByModel[];
 };
 
@@ -45,6 +46,7 @@ export function toConversationRow(entity: ConversationEntity): ConversationRow {
     promptTokensTotal: entity.promptTokensTotal,
     cachedPromptTokensTotal: entity.cachedPromptTokensTotal,
     completionTokensTotal: entity.completionTokensTotal,
+    activeLeafEntryId: entity.activeLeafEntryId,
     tokenUsageByModel: [],
   };
 }

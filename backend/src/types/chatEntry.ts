@@ -201,6 +201,7 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   promptTokens?: number;
   cachedPromptTokens?: number;
   completionTokens?: number;
+  preparedDecisionStepInput?: unknown;
   parseResult?:
     | {
         status: "ok";
@@ -225,6 +226,7 @@ export const PlannerLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   promptTokens: z.number().finite().optional(),
   cachedPromptTokens: z.number().finite().optional(),
   completionTokens: z.number().finite().optional(),
+  preparedDecisionStepInput: z.unknown().optional(),
   parseResult: z
     .union([
       z.object({
@@ -279,6 +281,7 @@ export type TitleLlmStreamEntry = ChatEntryBase & {
   promptTokens?: number;
   cachedPromptTokens?: number;
   completionTokens?: number;
+  preparedDecisionStepInput?: unknown;
 };
 export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal("title_llm_stream"),
@@ -294,6 +297,7 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   promptTokens: z.number().finite().optional(),
   cachedPromptTokens: z.number().finite().optional(),
   completionTokens: z.number().finite().optional(),
+  preparedDecisionStepInput: z.unknown().optional(),
 });
 
 export type ThoughtActionEntry = ChatEntryBase & {

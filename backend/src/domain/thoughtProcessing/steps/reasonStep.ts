@@ -1,23 +1,84 @@
 import { resolveThoughtTypeProvider, type AnyThoughtTypeProvider } from "../thoughtTypeProviders/index.js";
-import type { DecisionStepInput, ReasonStepInput, ReasonStepInput2, ThoughtTypeProvider2 } from "../types.js";
-import { runDecisionStep } from "./decisionStep.js";
-import { getThoughtRuntimeDeps } from "./runtimeDeps.js";
+import type {
+  DecisionStepInput,
+  DecisionStepInput2,
+  ReasonStepInput,
+  ReasonStepInput2,
+  ThoughtTypeProvider2,
+} from "../types.js";
+import { runDecisionStep, runDecisionStep2 } from "./decisionStep.js";
+import { getThoughtRuntimeDeps, type ThoughtRuntimeDeps } from "./runtimeDeps.js";
 import { createStepHandle } from "./stepHandle.js";
 import { SseType } from "../../../types/sse.js";
-import type { PlannerLlmStreamEntry } from "../../../types/chatEntry.js";
+import type { ChatEntry, PlannerLlmStreamEntry } from "../../../types/chatEntry.js";
 import { isTaskCancelledError, throwIfCancelled } from "../../taskCancellation.js";
 import { updateThoughtActionEntryAndPublish } from "../../thoughtLifecycle.js";
 import { TokenUsageMapper } from "../../../types/tokenUsage.js";
 import { resolvePlannerReprocessContext } from "./reprocessPlannerContext.js";
+import type {
+  ChatEntriesRepo,
+  ChatEntryDbRow,
+  ChatEntryPayloadByType,
+} from "../../../infra/repositories/chatEntriesRepo.js";
+import { parseJsonObject } from "../../../infra/repositories/json.js";
+import type { ConversationEventHub } from "../../../events/conversationEventHub.js";
+
+export type ReasonStepDeps = {
+  chatEntries: ChatEntriesRepo;
+  hub: ConversationEventHub;
+};
 
 export async function runReasonStep2(
   input: ReasonStepInput2,
   provider: ThoughtTypeProvider2,
-  signal: AbortSignal
+  signal: AbortSignal,
+  deps: ReasonStepDeps
 ): Promise<void> {
-  const reasonInput = await provider.runReason(input, signal);
-  signal.throwIfAborted();
-  await runReasonDecisionPhase(input.thought.thoughtType, provider, reasonInput, { signal });
+  const thoughtEntries = deps.chatEntries.getThoughtEntries(input.conversationId, input.thoughtId);
+  const reasonEntry = thoughtEntries.single(
+    (entry): entry is ChatEntryDbRow<"planner_llm_stream" | "title_llm_stream"> =>
+      entry.type === "planner_llm_stream" || entry.type === "title_llm_stream"
+  );
+
+  deps.chatEntries.setEntryStatus(input.conversationId, reasonEntry.id, "running");
+  deps.hub.publish(input.conversationId, {
+    type: SseType.THOUGHT_REASON_STEP_STARTING,
+    chatEntryId: reasonEntry.id,
+  });
+  const currentJsonPayload = parseEntryPayload(reasonEntry, reasonEntry.type);
+  let decisionInput: DecisionStepInput2;
+  try {
+    await executeReasonRuntime(provider, decisionInput, opts);
+    deps.hub.publish(input.conversationId, {
+      type: SseType.THOUGHT_REASON_STEP_FINISHED,
+      chatEntryId: reasonEntry.id,
+      preparedDecisionStepInput: decisionInput.preparedDecisionStepInput,
+    });
+    deps.chatEntries.setEntryStatus(input.conversationId, reasonEntry.id, "completed");
+    deps.chatEntries.setEntryPayload(input.conversationId, reasonEntry.id, {
+      ...currentJsonPayload,
+      preparedDecisionStepInput: decisionInput.preparedDecisionStepInput,
+    });
+    signal.throwIfAborted();
+  } catch (error) {
+    if (isAbortLikeError(error, signal)) {
+      deps.chatEntries.setEntryStatus(input.conversationId, reasonEntry.id, "cancelled");
+      deps.hub.publish(input.conversationId, {
+        type: SseType.THOUGHT_REASON_STEP_CANCELLED,
+        chatEntryId: reasonEntry.id,
+      });
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    deps.chatEntries.setEntryStatus(input.conversationId, reasonEntry.id, "failed");
+    deps.hub.publish(input.conversationId, {
+      type: SseType.THOUGHT_REASON_STEP_FAILED,
+      chatEntryId: reasonEntry.id,
+      error: detail,
+    });
+    throw error;
+  }
+  await runDecisionStep2(decisionInput, provider, signal);
 }
 
 export async function runReasonStep(input: ReasonStepInput, opts?: { signal?: AbortSignal }): Promise<void> {
@@ -47,24 +108,22 @@ async function runReasonDecisionPhase(
   }
 }
 
-async function executeReasonRuntime(
-  provider: AnyThoughtTypeProvider,
-  decisionInput: DecisionStepInput,
-  opts?: { signal?: AbortSignal }
-): Promise<DecisionStepInput> {
-  const request = provider.getReasonLlmRequest?.(decisionInput);
-  if (!request) return decisionInput;
+async function buildLlmProvider(): Promise<LlmProvider> {
   const deps = getThoughtRuntimeDeps();
-  throwIfCancelled(opts?.signal);
+  const llmProvider = assertNotNull(deps.llmProviderSettings.getProvider(providerId));
+  return llmProvider;
+}
+
+async function executeReasonRuntime(
+  provider: ThoughtTypeProvider2,
+  decisionInput: DecisionStepInput,
+  deps: ThoughtRuntimeDeps,
+  signal: AbortSignal
+): Promise<DecisionStepInput> {
   const doc = deps.llmProviderSettings.getDocument();
   const { provider_id: providerId, model_name: model } = doc.llm_configuration;
-  const llmProvider = deps.llmProviderSettings.getProvider(providerId);
-  const providerSettings = deps.llmProviderSettings.getProviderSettings(providerId);
-  if (!llmProvider || !providerSettings) {
-    return provider.applyReasonLlmResult
-      ? provider.applyReasonLlmResult(decisionInput, { fullResponse: "", providerId, model })
-      : decisionInput;
-  }
+  const llmProvider = assertNotNull(deps.llmProviderSettings.getProvider(providerId));
+  const providerSettings = assertNotNull(deps.llmProviderSettings.getProviderSettings(providerId));
   let streamedResponse = "";
   const completion = await llmProvider.streamTextCompletion(
     providerSettings,
@@ -242,4 +301,30 @@ function persistReasonCancellation(thoughtType: string, decisionInput: DecisionS
       }
     );
   }
+}
+
+function parseEntryPayload<TType extends ChatEntry["type"]>(
+  entry: ChatEntryDbRow,
+  expectedType: TType
+): ChatEntryPayloadByType[TType] {
+  if (entry.type !== expectedType) {
+    throw new Error(`entry type mismatch: expected ${expectedType}, got ${entry.type}`);
+  }
+  const payload = parseJsonObject(entry.payload_json);
+  if (typeof payload !== "object" || payload == null || Array.isArray(payload)) {
+    throw new Error(`invalid payload json for ${expectedType}: ${entry.id}`);
+  }
+  return payload as ChatEntryPayloadByType[TType];
+}
+
+function isAbortLikeError(error: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted) return true;
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function assertNotNull<T>(value: T | null | undefined, message = "Expected non-null value"): NonNullable<T> {
+  if (value == null) {
+    throw new Error(message);
+  }
+  return value;
 }

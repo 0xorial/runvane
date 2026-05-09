@@ -41,7 +41,7 @@ export type AutoTitleThoughtTypeProviderDeps = {
 };
 
 export function createAutoTitleThoughtTypeProvider(
-  deps: AutoTitleThoughtTypeProviderDeps,
+  deps: AutoTitleThoughtTypeProviderDeps
 ): ThoughtTypeProvider<AutoTitlePrepareSeed, AutoTitlePrepareOutput, AutoTitleReasonOutput, AutoTitleThought> {
   return {
     runPrepare: async (_step, input) => ({
@@ -73,23 +73,26 @@ export function createAutoTitleThoughtTypeProvider(
       const current = deps.conversations.get(result.conversationId);
       const nextTitle = cleanTitle ?? result.fallbackTitle;
       const summary = cleanTitle ? `Generated title: ${cleanTitle}` : "Generated title was empty, fallback used";
-      finishThoughtLifecycle({ chatEntries: deps.chatEntries, hub: deps.hub }, {
-        conversationId: result.conversationId,
-        kind: "title",
-        streamEntryId: result.streamEntryId,
-        thoughtActionEntryId: result.thoughtActionEntryId,
-        llmRequest: result.prompt,
-        llmResponse: result.result.fullResponse,
-        thoughtMs: Math.max(0, Date.now() - result.requestStartedMs),
-        decision: null,
-        status: cleanTitle ? "completed" : "failed",
-        ...(cleanTitle ? {} : { error: summary }),
-        llmProviderId: result.result.providerId,
-        llmModel: result.result.model,
-        usage: result.result.usage,
-        summary,
-        action: cleanTitle ? "final_answer" : "failed",
-      });
+      finishThoughtLifecycle(
+        { chatEntries: deps.chatEntries, hub: deps.hub },
+        {
+          conversationId: result.conversationId,
+          kind: "title",
+          streamEntryId: result.streamEntryId,
+          thoughtActionEntryId: result.thoughtActionEntryId,
+          llmRequest: result.prompt,
+          llmResponse: result.result.fullResponse,
+          thoughtMs: Math.max(0, Date.now() - result.requestStartedMs),
+          decision: null,
+          status: cleanTitle ? "completed" : "failed",
+          ...(cleanTitle ? {} : { error: summary }),
+          llmProviderId: result.result.providerId,
+          llmModel: result.result.model,
+          usage: result.result.usage,
+          summary,
+          action: cleanTitle ? "final_answer" : "failed",
+        }
+      );
       if (!current || String(current.title || "").trim() !== "New chat") return;
       const updated = deps.conversations.updateTitle(result.conversationId, nextTitle);
       if (!updated) return;
@@ -106,7 +109,9 @@ export function createAutoTitleThoughtTypeProvider(
           promptTokensTotal: updated.prompt_tokens_total,
           cachedPromptTokensTotal: updated.cached_prompt_tokens_total,
           completionTokensTotal: updated.completion_tokens_total,
-          tokenUsageByModel: usageByConversationId(deps.chatEntries.listConversationTokenUsageByModel()).get(result.conversationId) ?? [],
+          tokenUsageByModel:
+            usageByConversationId(deps.chatEntries.listConversationTokenUsageByModel()).get(result.conversationId) ??
+            [],
         },
       });
     },
@@ -145,7 +150,9 @@ export function createAutoTitleThoughtTypeProvider(
 }
 
 function fallbackConversationTitle(firstMessage: string): string {
-  const text = String(firstMessage || "").replace(/\s+/g, " ").trim();
+  const text = String(firstMessage || "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!text) return "New chat";
   return text.length > 64 ? `${text.slice(0, 64).trim()}...` : text;
 }

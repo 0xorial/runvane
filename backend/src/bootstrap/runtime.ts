@@ -9,7 +9,10 @@ import {
 import { reprocessPlannerPrepareStep } from "../domain/thoughtProcessing/steps/prepareStep.js";
 import { reprocessPlannerReasonStep } from "../domain/thoughtProcessing/steps/reasonStep.js";
 import { RunToolTaskProcessor } from "../domain/runToolTaskProcessor.js";
-import type { ToolParamsPrepareSeed, ToolParamsThought } from "../domain/thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js";
+import type {
+  ToolParamsPrepareSeed,
+  ToolParamsThought,
+} from "../domain/thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js";
 import { ConversationEventHub } from "../events/conversationEventHub.js";
 import { logger } from "../infra/logger.js";
 import { AgentsRepo } from "../infra/repositories/agentsRepo.js";
@@ -98,12 +101,7 @@ export function createRuntime(opts: {
     }
   };
 
-  const runToolTaskProcessor = new RunToolTaskProcessor(
-    chatEntries,
-    hub,
-    tools,
-    toolExecutionLogs,
-  );
+  const runToolTaskProcessor = new RunToolTaskProcessor(chatEntries, hub, tools, toolExecutionLogs);
 
   configureThoughtRuntime({
     chatEntries,
@@ -177,7 +175,7 @@ export function createRuntime(opts: {
           conversationId,
           thoughtType: "planner",
         },
-        { signal: controller.signal },
+        { signal: controller.signal }
       );
     })()
       .catch((error) => {
@@ -317,14 +315,23 @@ export function createRuntime(opts: {
 
     const toolRequest = String((row.parameters as Record<string, unknown>)?.tool_request ?? "").trim();
     const storedParams = Object.fromEntries(
-      Object.entries(row.parameters).filter(([key]) =>
-        !["tool_request", "source", "planner_followup_mode", "planner_followup_user_text", "planner_followup_enabled_tool_ids"].includes(key)
+      Object.entries(row.parameters).filter(
+        ([key]) =>
+          ![
+            "tool_request",
+            "source",
+            "planner_followup_mode",
+            "planner_followup_user_text",
+            "planner_followup_enabled_tool_ids",
+          ].includes(key)
       )
     );
     const plannerFollowupMode = String((row.parameters as Record<string, unknown>)?.planner_followup_mode ?? "").trim();
-    const plannerFollowupUserText = String((row.parameters as Record<string, unknown>)?.planner_followup_user_text ?? "").trim();
-    const plannerFollowupEnabledToolIdsRaw =
-      (row.parameters as Record<string, unknown>)?.planner_followup_enabled_tool_ids;
+    const plannerFollowupUserText = String(
+      (row.parameters as Record<string, unknown>)?.planner_followup_user_text ?? ""
+    ).trim();
+    const plannerFollowupEnabledToolIdsRaw = (row.parameters as Record<string, unknown>)
+      ?.planner_followup_enabled_tool_ids;
     const plannerFollowupEnabledToolIds = Array.isArray(plannerFollowupEnabledToolIdsRaw)
       ? plannerFollowupEnabledToolIdsRaw.map((value) => String(value ?? "").trim()).filter(Boolean)
       : [];

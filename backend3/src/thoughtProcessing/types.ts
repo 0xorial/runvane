@@ -1,14 +1,25 @@
 import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 
-export type ThoughtType = 'autoTitle' | 'planner' | 'toolParams';
-
-export type ThoughtStepHandle = {
-  step: 'prepare' | 'reason' | 'decision';
-};
+export type ThoughtType = 'autoTitle' | 'planner';
+export type ThoughtStepName = 'prepare' | 'reason' | 'decision';
 
 export type ThoughtExecution = {
   thoughtType: ThoughtType;
   thoughtId: string;
+  conversationId: string;
+  prepareEntryId: string;
+  streamEntryId: string;
+  thoughtActionEntryId?: string;
+};
+
+export type ThoughtPreparedReasonInfo = {
+  requestText: string;
+  llmProviderId?: string;
+  llmModel?: string;
+};
+
+export type ThoughtInitiationInput = {
+  conversationId: string;
 };
 
 export type PrepareStepInput<TSeed = unknown, TThought extends ThoughtExecution = ThoughtExecution> = {
@@ -61,15 +72,16 @@ export type ThoughtTypeProvider<
   TReasonOutput = unknown,
   TThought extends ThoughtExecution = ThoughtExecution,
 > = {
+  createPrepareInput?: (input: ThoughtInitiationInput) => Promise<PrepareStepInput<TSeed, TThought> | null>;
   runPrepare: (
-    step: ThoughtStepHandle,
+    step: ThoughtStepName,
     input: PrepareStepInput<TSeed, TThought>,
   ) => Promise<ReasonStepInput<TPrepareOutput, TThought>>;
   runReason: (
-    step: ThoughtStepHandle,
+    step: ThoughtStepName,
     input: ReasonStepInput<TPrepareOutput, TThought>,
   ) => Promise<DecisionStepInput<TReasonOutput, TThought>>;
-  runDecision: (step: ThoughtStepHandle, input: DecisionStepInput<TReasonOutput, TThought>) => Promise<void>;
+  runDecision: (step: ThoughtStepName, input: DecisionStepInput<TReasonOutput, TThought>) => Promise<void>;
   getReasonLlmRequest?: (input: DecisionStepInput<TReasonOutput, TThought>) => ThoughtReasonLlmRequest | null;
   onReasonLlmDelta?: (input: DecisionStepInput<TReasonOutput, TThought>, delta: string) => void;
   applyReasonLlmResult?: (
@@ -81,4 +93,5 @@ export type ThoughtTypeProvider<
     input: PrepareStepInput<TSeed, TThought>,
     started: ThoughtLifecycleStarted,
   ) => PrepareStepInput<TSeed, TThought>;
+  getPreparedReasonInfo?: (input: ReasonStepInput<TPrepareOutput, TThought>) => ThoughtPreparedReasonInfo;
 };

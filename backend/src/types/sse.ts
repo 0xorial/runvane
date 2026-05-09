@@ -17,6 +17,10 @@ export const SseType = {
   THOUGHT_PREPARE_STEP_FINISHED: "thought_prepare_step_finished",
   THOUGHT_PREPARE_STEP_FAILED: "thought_prepare_step_failed",
   THOUGHT_PREPARE_STEP_CANCELLED: "thought_prepare_step_cancelled",
+  THOUGHT_REASON_STEP_STARTING: "thought_reason_step_starting",
+  THOUGHT_REASON_STEP_FINISHED: "thought_reason_step_finished",
+  THOUGHT_REASON_STEP_FAILED: "thought_reason_step_failed",
+  THOUGHT_REASON_STEP_CANCELLED: "thought_reason_step_cancelled",
   TOOL_INVOCATION_START: "tool_invocation_start", // "upsert", can be sent multiple times
   TOOL_INVOCATION_END: "tool_invocation_end",
   CHAT_ENTRY_UPSERT: "chat_entry_upsert",
@@ -227,10 +231,12 @@ export const TitleResponseSsePayloadSchema = z.object({
 export type ThoughtPrepareStepStartingSsePayload = {
   type: typeof SseType.THOUGHT_PREPARE_STEP_STARTING;
   chatEntryId: string;
+  thoughtId: string;
 };
 export const ThoughtPrepareStepStartingSsePayloadSchema = z.object({
   type: z.literal(SseType.THOUGHT_PREPARE_STEP_STARTING),
   chatEntryId: z.string(),
+  thoughtId: z.string(),
 });
 
 export type ThoughtPrepareStepFinishedSsePayload = {
@@ -261,6 +267,46 @@ export type ThoughtPrepareStepCancelledSsePayload = {
 };
 export const ThoughtPrepareStepCancelledSsePayloadSchema = z.object({
   type: z.literal(SseType.THOUGHT_PREPARE_STEP_CANCELLED),
+  chatEntryId: z.string(),
+});
+
+export type ThoughtReasonStepStartingSsePayload = {
+  type: typeof SseType.THOUGHT_REASON_STEP_STARTING;
+  chatEntryId: string;
+};
+export const ThoughtReasonStepStartingSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_REASON_STEP_STARTING),
+  chatEntryId: z.string(),
+});
+
+export type ThoughtReasonStepFinishedSsePayload = {
+  type: typeof SseType.THOUGHT_REASON_STEP_FINISHED;
+  chatEntryId: string;
+  preparedDecisionStepInput: unknown;
+};
+export const ThoughtReasonStepFinishedSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_REASON_STEP_FINISHED),
+  chatEntryId: z.string(),
+  preparedDecisionStepInput: z.unknown(),
+});
+
+export type ThoughtReasonStepFailedSsePayload = {
+  type: typeof SseType.THOUGHT_REASON_STEP_FAILED;
+  chatEntryId: string;
+  error: string;
+};
+export const ThoughtReasonStepFailedSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_REASON_STEP_FAILED),
+  chatEntryId: z.string(),
+  error: z.string(),
+});
+
+export type ThoughtReasonStepCancelledSsePayload = {
+  type: typeof SseType.THOUGHT_REASON_STEP_CANCELLED;
+  chatEntryId: string;
+};
+export const ThoughtReasonStepCancelledSsePayloadSchema = z.object({
+  type: z.literal(SseType.THOUGHT_REASON_STEP_CANCELLED),
   chatEntryId: z.string(),
 });
 
@@ -326,6 +372,10 @@ export type SsePayload =
   | ThoughtPrepareStepFinishedSsePayload
   | ThoughtPrepareStepFailedSsePayload
   | ThoughtPrepareStepCancelledSsePayload
+  | ThoughtReasonStepStartingSsePayload
+  | ThoughtReasonStepFinishedSsePayload
+  | ThoughtReasonStepFailedSsePayload
+  | ThoughtReasonStepCancelledSsePayload
   | ToolInvocationStartSsePayload
   | ToolInvocationEndSsePayload
   | ChatEntryUpsertSsePayload;
@@ -344,6 +394,10 @@ export const SsePayloadSchema = z.discriminatedUnion("type", [
   ThoughtPrepareStepFinishedSsePayloadSchema,
   ThoughtPrepareStepFailedSsePayloadSchema,
   ThoughtPrepareStepCancelledSsePayloadSchema,
+  ThoughtReasonStepStartingSsePayloadSchema,
+  ThoughtReasonStepFinishedSsePayloadSchema,
+  ThoughtReasonStepFailedSsePayloadSchema,
+  ThoughtReasonStepCancelledSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
   ChatEntryUpsertSsePayloadSchema,
@@ -433,6 +487,7 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.THOUGHT_PREPARE_STEP_STARTING),
     chatEntryId: z.string(),
+    thoughtId: z.string(),
   }),
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.THOUGHT_PREPARE_STEP_FINISHED),
@@ -446,6 +501,24 @@ export const SseConversationEventSchema = z.discriminatedUnion("type", [
   }),
   SseRuntimeEnvelopeSchema.extend({
     type: z.literal(SseType.THOUGHT_PREPARE_STEP_CANCELLED),
+    chatEntryId: z.string(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_REASON_STEP_STARTING),
+    chatEntryId: z.string(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_REASON_STEP_FINISHED),
+    chatEntryId: z.string(),
+    preparedDecisionStepInput: z.unknown(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_REASON_STEP_FAILED),
+    chatEntryId: z.string(),
+    error: z.string(),
+  }),
+  SseRuntimeEnvelopeSchema.extend({
+    type: z.literal(SseType.THOUGHT_REASON_STEP_CANCELLED),
     chatEntryId: z.string(),
   }),
   SseRuntimeEnvelopeSchema.extend({

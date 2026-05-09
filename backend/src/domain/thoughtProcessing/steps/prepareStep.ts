@@ -1,8 +1,14 @@
 import { startThoughtLifecycle } from "../../thoughtLifecycle.js";
 import { throwIfCancelled } from "../../taskCancellation.js";
-import type { PrepareStepInput, ReasonStepInput, ThoughtTypeProvider, ThoughtTypeProvider2 } from "../types.js";
+import type {
+  PrepareStepInput,
+  ReasonStepInput,
+  ReasonStepInput2,
+  ThoughtTypeProvider,
+  ThoughtTypeProvider2,
+} from "../types.js";
 import type { PlannerPrepareOutput, PlannerThought } from "../thoughtTypeProviders/plannerProvider.js";
-import { runReasonStep } from "./reasonStep.js";
+import { runReasonStep, runReasonStep2 } from "./reasonStep.js";
 import { getThoughtRuntimeDeps, type ThoughtRuntimeDeps } from "./runtimeDeps.js";
 import { resolvePlannerReprocessContext } from "./reprocessPlannerContext.js";
 import { createStepHandle } from "./stepHandle.js";
@@ -14,71 +20,110 @@ import type {
 } from "../../../infra/repositories/chatEntriesRepo.js";
 import { parseJsonObject } from "../../../infra/repositories/json.js";
 import { SseType } from "../../../types/sse.js";
-import type { ChatEntry } from "../../../types/chatEntry.js";
+import type { ChatEntry, PreparedReasonStepInput, ThoughtPrepareEntry } from "../../../types/chatEntry.js";
 
-type PrepareStepInput = {
-  conversationId: string;
-  thoughtId: string;
+export type PrepareStepInput2 = {
+  prepareEntryId: string;
 };
 
-type PrepareStepDeps = {
+export type PrepareStepDeps = {
   chatEntries: ChatEntriesRepo;
   hub: ConversationEventHub;
 };
 
 // thought entries must be pre-created before calling this
 export async function runPrepareStep(
-  input: PrepareStepInput,
+  input: PrepareStepInput2,
   provider: ThoughtTypeProvider2,
   signal: AbortSignal,
   deps: PrepareStepDeps
 ): Promise<void> {
   // try to see if "thought" already exists, meaning there are entries with the same thoughtId
-  const thoughtEntries = deps.chatEntries.getThoughtEntries(input.conversationId, input.thoughtId);
-  const prepareEntry = thoughtEntries.find(
-    (entry): entry is ChatEntryDbRow<"thought-prepare"> => entry.type === "thought-prepare"
-  );
-  if (!prepareEntry) {
-    throw new Error(`prepare entry not found for thought: ${input.thoughtId}`);
-  }
-  deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "running");
-  deps.hub.publish(input.conversationId, {
+  const prepareEntry = deps.chatEntries.getThoughtEntry(input.prepareEntryId, "thought-prepare");
+  const conversationId = prepareEntry.conversation_id;
+
+  deps.chatEntries.setEntryStatus(conversationId, prepareEntry.id, "running");
+  const currentJsonPayload = parseEntryPayload(prepareEntry, "thought-prepare") as ThoughtPrepareEntry;
+  const thoughtId = currentJsonPayload.thoughtId;
+  deps.hub.publish(conversationId, {
     type: SseType.THOUGHT_PREPARE_STEP_STARTING,
-    chatEntryId: prepareEntry.id,
+    chatEntryId: input.prepareEntryId,
+    thoughtId,
   });
-  const currentJsonPayload = parseEntryPayload(prepareEntry, "thought-prepare");
+
+  let preparedReasonStepInput: PreparedReasonStepInput;
   try {
-    const reasonInput = await provider.runPrepare({ prepareEntry }, signal);
-    deps.hub.publish(input.conversationId, {
+    preparedReasonStepInput = await provider.runPrepare({ prepareEntry: prepareEntry }, signal);
+
+    deps.hub.publish(conversationId, {
       type: SseType.THOUGHT_PREPARE_STEP_FINISHED,
       chatEntryId: prepareEntry.id,
-      preparedReasonStepInput: reasonInput.preparedReasonStepInput,
+      preparedReasonStepInput,
     });
-    deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "completed");
-    deps.chatEntries.setEntryPayload(input.conversationId, prepareEntry.id, {
+    deps.chatEntries.setEntryStatus(conversationId, prepareEntry.id, "completed");
+    deps.chatEntries.setEntryPayload(conversationId, prepareEntry.id, {
       ...currentJsonPayload,
-      preparedReasonStepInput: reasonInput.preparedReasonStepInput,
+      preparedReasonStepInput,
     });
     signal.throwIfAborted();
-    await runReasonStep(reasonInput);
   } catch (error) {
     if (isAbortLikeError(error, signal)) {
-      deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "cancelled");
-      deps.hub.publish(input.conversationId, {
+      deps.chatEntries.setEntryStatus(conversationId, prepareEntry.id, "cancelled");
+      deps.hub.publish(conversationId, {
         type: SseType.THOUGHT_PREPARE_STEP_CANCELLED,
         chatEntryId: prepareEntry.id,
       });
       return;
     }
     const detail = error instanceof Error ? error.message : String(error);
-    deps.chatEntries.setEntryStatus(input.conversationId, prepareEntry.id, "failed");
-    deps.hub.publish(input.conversationId, {
+    deps.chatEntries.setEntryStatus(conversationId, prepareEntry.id, "failed");
+    deps.hub.publish(conversationId, {
       type: SseType.THOUGHT_PREPARE_STEP_FAILED,
       chatEntryId: prepareEntry.id,
       error: detail,
     });
     throw error;
   }
+  const reasonInput = {
+    conversationId,
+    thoughtId,
+    previousEntryId: prepareEntry.id,
+    preparedReasonStepInput,
+  };
+  await runReasonStep2(reasonInput, provider, signal, deps);
+}
+
+// even though it is called 'reprocess', all the output is provided so we just need to create a 'branch' and call the next step
+export async function reprocessPlannerPrepareStep2(
+  parentEntryId: string,
+  input: ReasonStepInput2,
+  provider: ThoughtTypeProvider2,
+  signal: AbortSignal,
+  deps: PrepareStepDeps
+) {
+  const parentEntry = deps.chatEntries.getThoughtEntry(parentEntryId, "thought-prepare");
+  const entryPayload: ThoughtPrepareEntry = {
+    type: "thought-prepare",
+    id: crypto.randomUUID(),
+    conversationIndex: parentEntry.conversation_index,
+    createdAt: new Date().toISOString(),
+    parentId: parentEntryId,
+    thoughtId: input.thoughtId,
+    preparedReasonStepInput: input.preparedReasonStepInput,
+  };
+  const branchedEntry = deps.chatEntries.appendBranchedEntry<"thought-prepare">(
+    input.conversationId,
+    input.thoughtId,
+    parentEntryId,
+    entryPayload
+  );
+  const reasonInput = {
+    conversationId: input.conversationId,
+    thoughtId: input.thoughtId,
+    previousEntryId: branchedEntry.id,
+    preparedReasonStepInput: input.preparedReasonStepInput,
+  };
+  await runReasonStep2(reasonInput, provider, signal, deps);
 }
 
 function parseEntryPayload<TType extends ChatEntry["type"]>(

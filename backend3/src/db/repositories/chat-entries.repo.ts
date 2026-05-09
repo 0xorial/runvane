@@ -1,38 +1,33 @@
 import { Injectable } from '@nestjs/common';
+import type { ChatEntry } from '../../contracts/chatEntry.js';
+import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
+import { rowToChatMessage, type ChatEntryDbRow } from './chat-entries.payload.js';
+import type {
+  AssistantMessageEntryRow,
+  ChatMessageEntryRow,
+  ThoughtStepStatus,
+  UserMessageEntryRow,
+} from './chat-entries.types.js';
 
-export type UserMessageEntryRow = {
-  type: 'user-message';
-  id: string;
-  conversationIndex: number;
-  createdAt: string;
-  parentId: string | null;
-  text: string;
-  agentId: string;
-  llmProviderId?: string;
-  llmModel?: string;
-  modelPresetId?: number | null;
-};
+export type {
+  AssistantMessageEntryRow,
+  ChatMessageEntryRow,
+  ThoughtStepStatus,
+  UserMessageEntryRow,
+} from './chat-entries.types.js';
 
-export type AssistantMessageEntryRow = {
-  type: 'assistant-message';
-  id: string;
-  conversationIndex: number;
-  createdAt: string;
-  parentId: string | null;
-  text: string;
-};
-
-export type ChatMessageEntryRow = UserMessageEntryRow | AssistantMessageEntryRow;
-
-type ChatEntryDbRow = {
-  id: string;
-  conversation_id: string;
-  conversation_index: number;
-  parent_id: string | null;
+type AppendInput = {
   type: string;
-  payload_json: string;
-  created_at: string;
+  parentId?: string | null;
+  payload: Record<string, unknown>;
+};
+
+type AppendedRow = {
+  id: string;
+  conversationIndex: number;
+  createdAt: string;
+  parentId: string | null;
 };
 
 @Injectable()
@@ -49,27 +44,68 @@ export class ChatEntriesRepo {
     return Number(rows[0]?.max_idx ?? -1) + 1;
   }
 
-  private async getActiveLeafEntryId(conversationId: string): Promise<string | null> {
+  async getActiveLeafEntryId(conversationId: string): Promise<string | null> {
     const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT id
-       FROM chat_entries
-       WHERE conversation_id = ?
-       ORDER BY conversation_index DESC
-       LIMIT 1`,
+      `SELECT active_leaf_entry_id AS id
+       FROM conversations
+       WHERE id = ?`,
       conversationId,
-    )) as Array<{ id: string }>;
+    )) as Array<{ id: string | null }>;
     return rows[0]?.id ?? null;
   }
 
-  private async touchConversationActivity(conversationId: string): Promise<void> {
+  private async setActiveLeafEntryId(conversationId: string, entryId: string): Promise<void> {
     await this.prisma.$executeRawUnsafe(
-      `UPDATE conversations
-       SET last_message_at = ?, updated_at = ?
-       WHERE id = ?`,
-      new Date().toISOString(),
-      new Date().toISOString(),
+      `UPDATE conversations SET active_leaf_entry_id = ? WHERE id = ?`,
+      entryId,
       conversationId,
     );
+  }
+
+  private async insertEntry(
+    conversationId: string,
+    row: { id: string; conversationIndex: number; parentId: string | null; type: string; payload: Record<string, unknown>; createdAt: string },
+  ): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `INSERT INTO chat_entries (
+         id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      row.id,
+      conversationId,
+      row.conversationIndex,
+      row.parentId,
+      row.type,
+      JSON.stringify(row.payload),
+      row.createdAt,
+    );
+  }
+
+  private async touchConversationActivity(conversationId: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE conversations SET last_message_at = ?, updated_at = ? WHERE id = ?`,
+      now,
+      now,
+      conversationId,
+    );
+  }
+
+  private async appendEntry(conversationId: string, input: AppendInput): Promise<AppendedRow> {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const conversationIndex = await this.nextConversationIndex(conversationId);
+    const parentId = input.parentId !== undefined ? input.parentId : await this.getActiveLeafEntryId(conversationId);
+    await this.insertEntry(conversationId, {
+      id,
+      conversationIndex,
+      parentId,
+      type: input.type,
+      payload: input.payload,
+      createdAt,
+    });
+    await this.setActiveLeafEntryId(conversationId, id);
+    await this.touchConversationActivity(conversationId);
+    return { id, conversationIndex, createdAt, parentId };
   }
 
   async appendUserMessage(
@@ -80,115 +116,312 @@ export class ChatEntriesRepo {
       llmProviderId?: string;
       llmModel?: string;
       modelPresetId?: number;
+      parentId?: string | null;
     },
   ): Promise<UserMessageEntryRow> {
-    const row: UserMessageEntryRow = {
+    const payload: Record<string, unknown> = { text: input.text, agentId: input.agentId };
+    if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
+    if (input.llmModel) payload.llmModel = input.llmModel;
+    if (input.modelPresetId !== undefined) payload.modelPresetId = input.modelPresetId;
+    const row = await this.appendEntry(conversationId, {
       type: 'user-message',
-      id: crypto.randomUUID(),
-      conversationIndex: await this.nextConversationIndex(conversationId),
-      createdAt: new Date().toISOString(),
-      parentId: await this.getActiveLeafEntryId(conversationId),
+      parentId: input.parentId,
+      payload,
+    });
+    const result: UserMessageEntryRow = {
+      type: 'user-message',
+      id: row.id,
+      conversationIndex: row.conversationIndex,
+      createdAt: row.createdAt,
+      parentId: row.parentId,
       text: input.text,
       agentId: input.agentId,
-      ...(input.llmProviderId ? { llmProviderId: input.llmProviderId } : {}),
-      ...(input.llmModel ? { llmModel: input.llmModel } : {}),
-      ...(input.modelPresetId !== undefined ? { modelPresetId: input.modelPresetId } : {}),
     };
-    await this.prisma.$executeRawUnsafe(
-      `INSERT INTO chat_entries (
-         id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      row.id,
-      conversationId,
-      row.conversationIndex,
-      row.parentId,
-      row.type,
-      JSON.stringify({
-        text: row.text,
-        agentId: row.agentId,
-        ...(row.llmProviderId ? { llmProviderId: row.llmProviderId } : {}),
-        ...(row.llmModel ? { llmModel: row.llmModel } : {}),
-        ...(row.modelPresetId !== undefined ? { modelPresetId: row.modelPresetId } : {}),
-      }),
-      row.createdAt,
-    );
-    await this.touchConversationActivity(conversationId);
-    return row;
+    if (input.llmProviderId) result.llmProviderId = input.llmProviderId;
+    if (input.llmModel) result.llmModel = input.llmModel;
+    if (input.modelPresetId !== undefined) result.modelPresetId = input.modelPresetId;
+    return result;
   }
 
   async appendAssistantMessage(
     conversationId: string,
     input: { text: string; parentId: string | null },
   ): Promise<AssistantMessageEntryRow> {
-    const row: AssistantMessageEntryRow = {
+    const row = await this.appendEntry(conversationId, {
       type: 'assistant-message',
-      id: crypto.randomUUID(),
-      conversationIndex: await this.nextConversationIndex(conversationId),
-      createdAt: new Date().toISOString(),
       parentId: input.parentId,
+      payload: { text: input.text },
+    });
+    return {
+      type: 'assistant-message',
+      id: row.id,
+      conversationIndex: row.conversationIndex,
+      createdAt: row.createdAt,
+      parentId: row.parentId,
       text: input.text,
     };
-    await this.prisma.$executeRawUnsafe(
-      `INSERT INTO chat_entries (
-         id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      row.id,
+  }
+
+  async appendThoughtPrepareEntry(
+    conversationId: string,
+    input: {
+      thoughtId: string;
+      requestText: string;
+      parentId?: string | null;
+      status?: ThoughtStepStatus;
+      title?: string;
+      llmProviderId?: string;
+      llmModel?: string;
+    },
+  ): Promise<{ id: string }> {
+    const payload: Record<string, unknown> = {
+      thoughtId: input.thoughtId,
+      requestText: input.requestText,
+      status: input.status ?? 'running',
+    };
+    if (input.title) payload.title = input.title;
+    if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
+    if (input.llmModel) payload.llmModel = input.llmModel;
+    const row = await this.appendEntry(conversationId, {
+      type: 'thought-prepare',
+      parentId: input.parentId,
+      payload,
+    });
+    return { id: row.id };
+  }
+
+  async appendThoughtStreamEntry(
+    conversationId: string,
+    input: {
+      type: 'planner_llm_stream' | 'title_llm_stream';
+      thoughtId: string;
+      llmRequest: string;
+      parentId?: string | null;
+      status?: ThoughtStepStatus;
+      llmProviderId?: string;
+      llmModel?: string;
+    },
+  ): Promise<{ id: string }> {
+    const payload: Record<string, unknown> = {
+      thoughtId: input.thoughtId,
+      llmRequest: input.llmRequest,
+      llmResponse: '',
+      thoughtMs: null,
+      decision: null,
+      status: input.status ?? 'running',
+    };
+    if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
+    if (input.llmModel) payload.llmModel = input.llmModel;
+    const row = await this.appendEntry(conversationId, {
+      type: input.type,
+      parentId: input.parentId,
+      payload,
+    });
+    return { id: row.id };
+  }
+
+  async appendThoughtActionEntry(
+    conversationId: string,
+    input: {
+      thoughtId: string;
+      parentId?: string | null;
+      status?: ThoughtStepStatus;
+      summary?: string;
+    },
+  ): Promise<{ id: string }> {
+    const payload: Record<string, unknown> = {
+      thoughtId: input.thoughtId,
+      status: input.status ?? 'running',
+    };
+    if (input.summary) payload.summary = input.summary;
+    const row = await this.appendEntry(conversationId, {
+      type: 'thought-action',
+      parentId: input.parentId,
+      payload,
+    });
+    return { id: row.id };
+  }
+
+  async setActiveLeafEntry(conversationId: string, entryId: string): Promise<void> {
+    const trimmed = entryId.trim();
+    if (!trimmed) throw new Error('entryId is required');
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT 1 AS present FROM chat_entries WHERE conversation_id = ? AND id = ? LIMIT 1`,
       conversationId,
-      row.conversationIndex,
-      row.parentId,
-      row.type,
-      JSON.stringify({ text: row.text }),
-      row.createdAt,
-    );
-    await this.touchConversationActivity(conversationId);
-    return row;
+      trimmed,
+    )) as Array<{ present: number }>;
+    if (rows.length === 0) {
+      throw new Error(`entry not found in conversation: ${trimmed}`);
+    }
+    await this.setActiveLeafEntryId(conversationId, trimmed);
   }
 
   async listMessages(conversationId: string): Promise<ChatMessageEntryRow[]> {
-    const rows = (await this.prisma.$queryRawUnsafe(
+    const leafId = await this.getActiveLeafEntryId(conversationId);
+    const rows = leafId ? await this.fetchLineageRows(conversationId, leafId) : [];
+    if (rows.length === 0) return [];
+    return rows.flatMap((row) => {
+      const message = rowToChatMessage(row);
+      return message ? [message] : [];
+    });
+  }
+
+  async listChatEntries(conversationId: string, opts: { all?: boolean } = {}): Promise<ChatEntry[]> {
+    if (opts.all) {
+      const rows = await this.fetchAllRows(conversationId);
+      return rows.map(rowToChatEntry);
+    }
+    const leafId = await this.getActiveLeafEntryId(conversationId);
+    if (!leafId) return [];
+    const rows = await this.fetchLineageRows(conversationId, leafId);
+    return rows.map(rowToChatEntry);
+  }
+
+  private async fetchAllRows(conversationId: string): Promise<ChatEntryDbRow[]> {
+    return (await this.prisma.$queryRawUnsafe(
       `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
        FROM chat_entries
        WHERE conversation_id = ?
        ORDER BY conversation_index ASC`,
       conversationId,
     )) as ChatEntryDbRow[];
-    const out: ChatMessageEntryRow[] = [];
-    for (const row of rows) {
-      const payload = JSON.parse(row.payload_json) as unknown;
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error(`invalid chat entry payload: ${row.id}`);
-      }
-      const rec = payload as Record<string, unknown>;
-      if (row.type === 'user-message') {
-        const agentId = String(rec.agentId ?? '').trim();
-        if (!agentId) throw new Error(`invalid user-message payload: missing agentId (${row.id})`);
-        out.push({
-          type: 'user-message',
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          text: String(rec.text ?? ''),
-          agentId,
-          ...(typeof rec.llmProviderId === 'string' && rec.llmProviderId ? { llmProviderId: rec.llmProviderId } : {}),
-          ...(typeof rec.llmModel === 'string' && rec.llmModel ? { llmModel: rec.llmModel } : {}),
-          ...(typeof rec.modelPresetId === 'number' && Number.isFinite(rec.modelPresetId)
-            ? { modelPresetId: rec.modelPresetId }
-            : {}),
-        });
-        continue;
-      }
-      if (row.type === 'assistant-message') {
-        out.push({
-          type: 'assistant-message',
-          id: row.id,
-          conversationIndex: row.conversation_index,
-          createdAt: row.created_at,
-          parentId: row.parent_id,
-          text: String(rec.text ?? ''),
-        });
-      }
+  }
+
+  private async fetchLineageRows(conversationId: string, leafEntryId: string): Promise<ChatEntryDbRow[]> {
+    return (await this.prisma.$queryRawUnsafe(
+      `WITH RECURSIVE lineage(id, parent_id) AS (
+         SELECT id, parent_id FROM chat_entries
+         WHERE conversation_id = ? AND id = ?
+         UNION ALL
+         SELECT e.id, e.parent_id FROM chat_entries e
+         JOIN lineage l ON l.parent_id = e.id
+         WHERE e.conversation_id = ?
+       )
+       SELECT e.id, e.conversation_id, e.conversation_index, e.parent_id, e.type, e.payload_json, e.created_at
+       FROM chat_entries e
+       JOIN lineage l ON l.id = e.id
+       WHERE e.conversation_id = ?
+       ORDER BY e.conversation_index ASC`,
+      conversationId,
+      leafEntryId,
+      conversationId,
+      conversationId,
+    )) as ChatEntryDbRow[];
+  }
+
+  async isEntryOnActiveLineage(conversationId: string, entryId: string): Promise<boolean> {
+    const leafId = await this.getActiveLeafEntryId(conversationId);
+    if (!leafId) return false;
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `WITH RECURSIVE lineage(id, parent_id) AS (
+         SELECT id, parent_id FROM chat_entries
+         WHERE conversation_id = ? AND id = ?
+         UNION ALL
+         SELECT e.id, e.parent_id FROM chat_entries e
+         JOIN lineage l ON l.parent_id = e.id
+         WHERE e.conversation_id = ?
+       )
+       SELECT 1 AS present FROM lineage WHERE id = ? LIMIT 1`,
+      conversationId,
+      leafId,
+      conversationId,
+      entryId,
+    )) as Array<{ present: number }>;
+    return rows.length > 0;
+  }
+
+  async getMessage(conversationId: string, entryId: string): Promise<ChatMessageEntryRow | null> {
+    const row = await this.fetchEntryRow(conversationId, entryId);
+    return row ? rowToChatMessage(row) : null;
+  }
+
+  async getChatEntry(conversationId: string, entryId: string): Promise<ChatEntry | null> {
+    const row = await this.fetchEntryRow(conversationId, entryId);
+    return row ? rowToChatEntry(row) : null;
+  }
+
+  private async fetchEntryRow(conversationId: string, entryId: string): Promise<ChatEntryDbRow | null> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+       FROM chat_entries
+       WHERE conversation_id = ? AND id = ?
+       LIMIT 1`,
+      conversationId,
+      entryId,
+    )) as ChatEntryDbRow[];
+    return rows[0] ?? null;
+  }
+
+  async updateThoughtAction(
+    conversationId: string,
+    entryId: string,
+    patch: {
+      status?: ThoughtStepStatus;
+      summary?: string;
+      action?: string;
+      toolName?: string;
+      error?: string;
+    },
+  ): Promise<void> {
+    const row = await this.fetchEntryRow(conversationId, entryId);
+    if (!row || row.type !== 'thought-action') {
+      throw new Error(`thought-action entry not found: ${entryId}`);
     }
-    return out;
+    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+    if (patch.status) payload.status = patch.status;
+    if (patch.summary !== undefined) payload.summary = patch.summary;
+    if (patch.action !== undefined) payload.action = patch.action;
+    if (patch.toolName !== undefined) payload.toolName = patch.toolName;
+    if (patch.error !== undefined) payload.error = patch.error;
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ? AND type = 'thought-action'`,
+      JSON.stringify(payload),
+      conversationId,
+      entryId,
+    );
+  }
+
+  async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {
+    await this.mergeEntryPayload(conversationId, entryId, { status });
+  }
+
+  async mergeEntryPayload(
+    conversationId: string,
+    entryId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void> {
+    const row = await this.fetchEntryRow(conversationId, entryId);
+    if (!row) throw new Error(`chat entry not found: ${entryId}`);
+    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+    Object.assign(payload, patch);
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
+      JSON.stringify(payload),
+      conversationId,
+      entryId,
+    );
+  }
+
+  async updateAssistantMessage(
+    conversationId: string,
+    input: { id: string; text: string },
+  ): Promise<void> {
+    const existing = (await this.prisma.$queryRawUnsafe(
+      `SELECT 1 AS present
+       FROM chat_entries
+       WHERE conversation_id = ? AND id = ? AND type = 'assistant-message'
+       LIMIT 1`,
+      conversationId,
+      input.id,
+    )) as Array<{ present: number }>;
+    if (existing.length === 0) throw new Error(`assistant-message not found: ${input.id}`);
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE chat_entries
+       SET payload_json = ?
+       WHERE conversation_id = ? AND id = ? AND type = 'assistant-message'`,
+      JSON.stringify({ text: input.text }),
+      conversationId,
+      input.id,
+    );
   }
 }

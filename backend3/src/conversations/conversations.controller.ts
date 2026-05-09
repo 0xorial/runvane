@@ -12,17 +12,24 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { SseType } from '../contracts/sse.js';
+import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
+import { SseHubService } from '../sse/sse-hub.service.js';
+import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-helpers.js';
 import { ConversationsService } from './conversations.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
+import { SetActiveLeafDto } from './dto/set-active-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
-import { ConversationMessageDraftService } from './conversation-message-draft.service.js';
+import { ConversationProcessorService } from './conversation-processor.service.js';
 
 @Controller('api/conversations')
 export class ConversationsController {
   constructor(
     private readonly conversations: ConversationsService,
-    private readonly messageDraft: ConversationMessageDraftService,
+    private readonly conversationProcessor: ConversationProcessorService,
+    private readonly conversationsRepo: ConversationsRepo,
+    private readonly hub: SseHubService,
   ) {}
 
   @Get()
@@ -31,9 +38,24 @@ export class ConversationsController {
     return this.conversations.list({ deletedOnly });
   }
 
+  @Get(':conversationId')
+  async getOne(@Param('conversationId') conversationId: string) {
+    const row = await this.conversations.get(conversationId, { includeDeleted: true });
+    if (!row) throw new NotFoundException('conversation not found');
+    return row;
+  }
+
   @Post()
   async create(@Body() body: CreateConversationDto) {
-    return this.conversations.create({ title: body.title });
+    const created = await this.conversations.create({ title: body.title });
+    const entity = await this.conversationsRepo.get(created.id);
+    if (entity) {
+      this.hub.publish(created.id, {
+        type: SseType.CONVERSATION_CREATED,
+        conversation: toConversationSseRow(entity),
+      });
+    }
+    return created;
   }
 
   @Put(':conversationId')
@@ -82,6 +104,7 @@ export class ConversationsController {
       updated = groupUpdated;
     }
 
+    await publishConversationUpdated(this.hub, this.conversationsRepo, conversationId);
     return updated;
   }
 
@@ -89,6 +112,7 @@ export class ConversationsController {
   async softDelete(@Param('conversationId') conversationId: string) {
     const deleted = await this.conversations.softDelete(conversationId);
     if (!deleted) throw new NotFoundException('conversation not found or already deleted');
+    await publishConversationUpdated(this.hub, this.conversationsRepo, conversationId);
     return deleted;
   }
 
@@ -96,6 +120,7 @@ export class ConversationsController {
   async undelete(@Param('conversationId') conversationId: string) {
     const restored = await this.conversations.undelete(conversationId);
     if (!restored) throw new NotFoundException('conversation not found or not deleted');
+    await publishConversationUpdated(this.hub, this.conversationsRepo, conversationId);
     return restored;
   }
 
@@ -108,10 +133,13 @@ export class ConversationsController {
   }
 
   @Get(':conversationId/messages')
-  async listMessages(@Param('conversationId') conversationId: string) {
+  async listMessages(
+    @Param('conversationId') conversationId: string,
+    @Query('all') allRaw?: string,
+  ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    return this.conversations.listMessages(conversationId);
+    return this.conversations.listChatEntries(conversationId, { all: allRaw === '1' || allRaw === 'true' });
   }
 
   @Post(':conversationId/messages')
@@ -121,14 +149,28 @@ export class ConversationsController {
   ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    return this.messageDraft.sendMessage(conversationId, body);
+    await this.conversationProcessor.processMessage(conversationId, body);
+    return { conversationId };
   }
 
   @Post(':conversationId/active-leaf')
-  async setActiveLeaf(@Param('conversationId') conversationId: string) {
+  async setActiveLeaf(
+    @Param('conversationId') conversationId: string,
+    @Body() body: SetActiveLeafDto,
+  ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    throw new NotImplementedException('active-leaf mutation is not implemented yet');
+    try {
+      const updated = await this.conversations.setActiveLeaf(conversationId, body.entryId);
+      if (!updated || !updated.activeLeafEntryId) {
+        throw new NotFoundException('conversation not found');
+      }
+      return { conversationId, activeLeafEntryId: updated.activeLeafEntryId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'invalid entryId';
+      if (detail.startsWith('entry not found')) throw new NotFoundException(detail);
+      throw new BadRequestException(detail);
+    }
   }
 
   @Post(':conversationId/tool-invocations/:entryId/approve')
@@ -142,7 +184,8 @@ export class ConversationsController {
   async cancelProcessing(@Param('conversationId') conversationId: string) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    throw new NotImplementedException('conversation processing cancellation is not implemented yet');
+    const cancelledTasks = this.conversationProcessor.cancelProcessing(conversationId);
+    return { conversationId, cancelledTasks };
   }
 
   @Post(':conversationId/thoughts/:entryId/reprocess-reason')

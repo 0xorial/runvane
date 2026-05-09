@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ChatMessageEntryRow } from '../db/repositories/chat-entries.repo.js';
+import type { ChatEntry } from '../contracts/chatEntry.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import {
@@ -72,7 +72,13 @@ export class ConversationsService {
     return groups.map(toConversationGroupRow);
   }
 
-  async listMessages(conversationId: string): Promise<ChatMessageEntryRow[]> {
-    return this.chatEntries.listMessages(conversationId);
+  async listChatEntries(conversationId: string, opts: { all?: boolean } = {}): Promise<ChatEntry[]> {
+    return this.chatEntries.listChatEntries(conversationId, opts);
+  }
+
+  async setActiveLeaf(conversationId: string, entryId: string): Promise<ConversationRow | null> {
+    await this.chatEntries.setActiveLeafEntry(conversationId, entryId);
+    const updated = await this.conversations.get(conversationId);
+    return updated ? toConversationRow(updated) : null;
   }
 }

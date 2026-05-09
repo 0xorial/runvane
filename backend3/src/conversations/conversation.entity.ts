@@ -9,6 +9,7 @@ export type ConversationEntity = {
   promptTokensTotal: number;
   cachedPromptTokensTotal: number;
   completionTokensTotal: number;
+  activeLeafEntryId: string | null;
 };
 
 export type CreateConversationInput = {

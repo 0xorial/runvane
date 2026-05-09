@@ -1,36 +1,21 @@
 import { Injectable, MessageEvent } from '@nestjs/common';
-import { from, interval, merge, Observable, Subject } from 'rxjs';
+import { Observable, Subject, from, interval, merge } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
-import type {
-  AnySseEventEnvelope,
-  SseEventEnvelope,
-  SseEventPayloadByType,
-  SseEventType,
-} from '../contracts/sse.js';
-
-export type SseHubEvent<TType extends SseEventType = SseEventType> = SseEventEnvelope<TType>;
+import type { SseEvent, SsePayload } from '../contracts/sse.js';
 
 @Injectable()
 export class SseHubService {
-  private seq = 0;
-  private readonly bus = new Subject<AnySseEventEnvelope>();
-  private readonly history: AnySseEventEnvelope[] = [];
-  private readonly maxHistory = 1000;
+  private nextSeq = 1;
+  private readonly bus = new Subject<SseEvent>();
+  private readonly replay: SseEvent[] = [];
+  private readonly replayMax = 256;
 
-  publish<TType extends SseEventType>(input: {
-    conversationId: string;
-    type: TType;
-    payload: SseEventPayloadByType[TType];
-  }): SseHubEvent<TType> {
-    const event: SseHubEvent<TType> = {
-      seq: ++this.seq,
-      conversationId: input.conversationId,
-      type: input.type,
-      payload: input.payload,
-      createdAt: new Date().toISOString(),
-    };
-    this.history.push(event);
-    if (this.history.length > this.maxHistory) this.history.splice(0, this.history.length - this.maxHistory);
+  publish(conversationId: string, payload: SsePayload): SseEvent {
+    const event = { ...payload, conversationId, seq: this.nextSeq++ } as SseEvent;
+    this.replay.push(event);
+    if (this.replay.length > this.replayMax) {
+      this.replay.splice(0, this.replay.length - this.replayMax);
+    }
     this.bus.next(event);
     return event;
   }
@@ -38,32 +23,25 @@ export class SseHubService {
   stream(input?: { conversationId?: string; afterSeq?: number }): Observable<MessageEvent> {
     const afterSeq = input?.afterSeq ?? 0;
     const conversationId = input?.conversationId;
-    const inScope = (event: AnySseEventEnvelope): boolean =>
+    const inScope = (event: SseEvent): boolean =>
       conversationId ? event.conversationId === conversationId : true;
 
-    const replay$ = from(this.history).pipe(
+    const replay$ = from(this.replay).pipe(
       filter((event) => event.seq > afterSeq),
       filter(inScope),
-      map((event) => this.toMessageEvent(event)),
+      map((event) => this.toDefaultMessage(event)),
     );
     const live$ = this.bus.asObservable().pipe(
       filter(inScope),
-      map((event) => this.toMessageEvent(event)),
+      map((event) => this.toDefaultMessage(event)),
     );
     const keepAlive$ = interval(15000).pipe(
-      map((): MessageEvent => ({
-        type: 'ka',
-        data: {},
-      })),
+      map((): MessageEvent => ({ type: 'ka', data: '{}' })),
     );
     return merge(replay$, live$, keepAlive$);
   }
 
-  private toMessageEvent(event: AnySseEventEnvelope): MessageEvent {
-    return {
-      id: String(event.seq),
-      type: event.type,
-      data: event,
-    };
+  private toDefaultMessage(event: SseEvent): MessageEvent {
+    return { id: String(event.seq), data: event };
   }
 }

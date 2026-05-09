@@ -114,6 +114,12 @@ export function getConversations(options?: { deletedOnly?: boolean }): Promise<G
   return getJson(path).then(validateGetConversationsResponse);
 }
 
+export function getConversation(conversationId: string): Promise<ConversationRow> {
+  return getJson(`/api/conversations/${encodeURIComponent(conversationId)}`).then((data) =>
+    validateConversationRowResponse(data, "GET /api/conversations/:id"),
+  );
+}
+
 export function createConversation(body: { title?: string } = {}): Promise<ConversationRow> {
   return sendJson("/api/conversations", "POST", body).then(validatePostConversationsResponse);
 }

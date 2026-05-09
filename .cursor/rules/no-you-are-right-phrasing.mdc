@@ -1,0 +1,15 @@
+---
+description: Avoid validation phrasing like "you are right"
+alwaysApply: true
+---
+
+# Response phrasing
+
+- Do not say "you are right", "you're right", or equivalent validation phrasing.
+- Use neutral, action-oriented acknowledgements instead.
+- Keep acknowledgements short and proceed directly to the fix.
+
+## Examples
+
+- Bad: "You're right. I'll move this logic."
+- Good: "Moving this logic into `thought-processing.service.ts` now."
