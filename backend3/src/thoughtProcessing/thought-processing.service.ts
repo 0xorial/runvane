@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
 import { ProcessingLifecycleHandle } from '../conversations/processing-lifecycle-handle.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
@@ -6,21 +6,21 @@ import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-setting
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
+import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
 import type {
-  PrepareStepInput,
-  ThoughtInitiationInput,
+  ThoughtLifecycleEntries,
   ThoughtLifecycleStartRequest,
-  ThoughtLifecycleStarted,
   ThoughtType,
   ThoughtTypeProvider,
 } from './types.js';
 import { PrepareStep } from './steps/prepareStep.js';
 
-type AnyThoughtProvider = ThoughtTypeProvider<any, any, any, any>;
+type AnyThoughtProvider = ThoughtTypeProvider<any>;
 
-export type StartedThought = {
-  provider: AnyThoughtProvider;
-  input: PrepareStepInput;
+export type StartedThought<TInput = unknown> = {
+  provider: ThoughtTypeProvider<TInput>;
+  input: TInput;
+  lifecycle: ThoughtLifecycleEntries;
 };
 
 @Injectable()
@@ -33,56 +33,57 @@ export class ThoughtProcessingService {
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
     private readonly hub: SseHubService,
     private readonly autoTitleProvider: AutoTitleThoughtTypeProvider,
+    @Inject(forwardRef(() => PlannerThoughtTypeProvider))
     private readonly plannerProvider: PlannerThoughtTypeProvider,
+    private readonly toolParamsProvider: ToolParamsThoughtTypeProvider,
   ) {
     this.providers = {
       autoTitle: this.autoTitleProvider,
       planner: this.plannerProvider,
+      toolParams: this.toolParamsProvider,
     };
   }
 
-  async startThought(
+  async startThought<TInput>(
     conversationId: string,
     thoughtType: ThoughtType,
     signal: AbortSignal,
-  ): Promise<StartedThought> {
-    const provider = this.providers[thoughtType];
-    if (!provider.createPrepareInput) {
-      throw new Error(`provider ${thoughtType} cannot self-initiate (missing createPrepareInput)`);
-    }
-    if (!provider.getLifecycleStartRequest || !provider.applyLifecycleStart) {
-      throw new Error(`provider ${thoughtType} is missing lifecycle hooks`);
+  ): Promise<StartedThought<TInput>> {
+    const provider = this.providers[thoughtType] as ThoughtTypeProvider<TInput>;
+    if (!provider.buildInputFromConversation) {
+      throw new Error(`provider ${thoughtType} cannot self-initiate`);
     }
     signal.throwIfAborted();
-
-    const initialInput = await provider.createPrepareInput({ conversationId } satisfies ThoughtInitiationInput);
-    if (!initialInput) {
-      throw new Error(`provider ${thoughtType} returned no prepare input for conversation ${conversationId}`);
-    }
-    const lifecycleRequest = provider.getLifecycleStartRequest(initialInput);
-    if (!lifecycleRequest) {
-      throw new Error(`provider ${thoughtType} returned no lifecycle request`);
-    }
-    const started = await this.precreateStepEntries(lifecycleRequest);
-    const input = provider.applyLifecycleStart(initialInput, started);
-    return { provider, input };
+    const input = await provider.buildInputFromConversation(conversationId);
+    return this.startThoughtWithInput(provider, input, signal);
   }
 
-  async runThought(started: StartedThought, signal: AbortSignal): Promise<void> {
+  async startThoughtWithInput<TInput>(
+    provider: ThoughtTypeProvider<TInput>,
+    input: TInput,
+    signal: AbortSignal,
+  ): Promise<StartedThought<TInput>> {
     signal.throwIfAborted();
-    await this.prepareStep.run(started.provider, started.input, signal);
+    const lifecycleRequest = provider.getLifecycleStartRequest(input);
+    const lifecycle = await this.precreateStepEntries(lifecycleRequest);
+    return { provider, input, lifecycle };
   }
 
-  async initiateThought(
-    conversationId: string,
-    thoughtType: ThoughtType,
-    lifecycleHandle: ProcessingLifecycleHandle,
+  async runThought<TInput>(started: StartedThought<TInput>, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    await this.prepareStep.run(started.provider, started.input, started.lifecycle, signal);
+  }
+
+  async runThoughtWithInput<TInput>(
+    provider: ThoughtTypeProvider<TInput>,
+    input: TInput,
+    signal: AbortSignal,
   ): Promise<void> {
-    const started = await this.startThought(conversationId, thoughtType, lifecycleHandle.signal);
-    await this.runThought(started, lifecycleHandle.signal);
+    const started = await this.startThoughtWithInput(provider, input, signal);
+    await this.runThought(started, signal);
   }
 
-  private async precreateStepEntries(request: ThoughtLifecycleStartRequest): Promise<ThoughtLifecycleStarted> {
+  private async precreateStepEntries(request: ThoughtLifecycleStartRequest): Promise<ThoughtLifecycleEntries> {
     const thoughtId = crypto.randomUUID();
     const llmSettings = await this.llmProviderSettings.getDocument();
     const llmProviderId = request.llmProviderId ?? llmSettings.llm_configuration.provider_id;
@@ -139,12 +140,12 @@ export class ThoughtProcessingService {
     if (!request.includeAction) {
       return {
         thoughtId,
+        conversationId,
         prepareEntryId: prepareEntry.id,
         streamEntryId: streamEntry.id,
         thoughtActionEntryId: null,
       };
     }
-
     const thoughtActionEntry = await this.chatEntries.appendThoughtActionEntry(conversationId, {
       thoughtId,
       parentId: streamEntry.id,
@@ -155,6 +156,7 @@ export class ThoughtProcessingService {
 
     return {
       thoughtId,
+      conversationId,
       prepareEntryId: prepareEntry.id,
       streamEntryId: streamEntry.id,
       thoughtActionEntryId: thoughtActionEntry.id,

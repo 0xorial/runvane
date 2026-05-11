@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ChatEntry } from '../../contracts/chatEntry.js';
+import type { ChatEntry, ToolInvocationEntry } from '../../contracts/chatEntry.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
 import { rowToChatMessage, type ChatEntryDbRow } from './chat-entries.payload.js';
@@ -9,6 +9,8 @@ import type {
   ThoughtStepStatus,
   UserMessageEntryRow,
 } from './chat-entries.types.js';
+
+export type ToolInvocationState = ToolInvocationEntry['state'];
 
 export type {
   AssistantMessageEntryRow,
@@ -400,6 +402,58 @@ export class ChatEntriesRepo {
       conversationId,
       entryId,
     );
+  }
+
+  async appendToolInvocation(
+    conversationId: string,
+    input: {
+      toolId: string;
+      state: ToolInvocationState;
+      parameters: Record<string, unknown>;
+      result?: unknown;
+      parentId?: string | null;
+    },
+  ): Promise<{ id: string; parentId: string | null }> {
+    const payload: Record<string, unknown> = {
+      toolId: input.toolId,
+      state: input.state,
+      parameters: input.parameters,
+      result: input.result ?? null,
+    };
+    const row = await this.appendEntry(conversationId, {
+      type: 'tool-invocation',
+      parentId: input.parentId,
+      payload,
+    });
+    return { id: row.id, parentId: row.parentId };
+  }
+
+  async updateToolInvocation(
+    conversationId: string,
+    input: { id: string; state: ToolInvocationState; result?: unknown; parameters?: Record<string, unknown> },
+  ): Promise<void> {
+    const patch: Record<string, unknown> = { state: input.state };
+    if (input.result !== undefined) patch.result = input.result;
+    if (input.parameters !== undefined) patch.parameters = input.parameters;
+    await this.mergeEntryPayload(conversationId, input.id, patch);
+  }
+
+  async findPendingToolInvocation(
+    conversationId: string,
+    toolId: string,
+    toolRequest?: string,
+  ): Promise<ToolInvocationEntry | null> {
+    const entries = await this.listChatEntries(conversationId);
+    const pending = entries.filter(
+      (e): e is ToolInvocationEntry =>
+        e.type === 'tool-invocation' && e.toolId === toolId && (e.state === 'requested' || e.state === 'running'),
+    );
+    if (pending.length === 0) return null;
+    if (toolRequest) {
+      const match = pending.findLast((e) => String(e.parameters.tool_request ?? '').trim() === toolRequest);
+      if (match) return match;
+    }
+    return pending.at(-1) ?? null;
   }
 
   async updateAssistantMessage(

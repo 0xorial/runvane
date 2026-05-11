@@ -6,7 +6,9 @@ import { PrepareStep } from '../thoughtProcessing/steps/prepareStep.js';
 import { ReasonStep } from '../thoughtProcessing/steps/reasonStep.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import { ToolParamsThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
+import { RunToolService } from '../tools/run-tool.service.js';
 import { ToolsModule } from '../tools/tools.module.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
 import { ConversationsController } from './conversations.controller.js';
@@ -24,6 +26,8 @@ import { ConversationsService } from './conversations.service.js';
     DecisionStep,
     AutoTitleThoughtTypeProvider,
     PlannerThoughtTypeProvider,
+    ToolParamsThoughtTypeProvider,
+    RunToolService,
   ],
 })
 export class ConversationsModule {}

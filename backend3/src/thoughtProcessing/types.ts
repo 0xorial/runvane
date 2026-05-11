@@ -1,44 +1,14 @@
 import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 
-export type ThoughtType = 'autoTitle' | 'planner';
+export type ThoughtType = 'autoTitle' | 'planner' | 'toolParams';
 export type ThoughtStepName = 'prepare' | 'reason' | 'decision';
 
-export type ThoughtExecution = {
-  thoughtType: ThoughtType;
+export type ThoughtLifecycleEntries = {
   thoughtId: string;
   conversationId: string;
   prepareEntryId: string;
   streamEntryId: string;
-  thoughtActionEntryId?: string;
-};
-
-export type ThoughtPreparedReasonInfo = {
-  requestText: string;
-  llmProviderId?: string;
-  llmModel?: string;
-};
-
-export type ThoughtInitiationInput = {
-  conversationId: string;
-};
-
-export type PrepareStepInput<TSeed = unknown, TThought extends ThoughtExecution = ThoughtExecution> = {
-  thought: TThought;
-  seed: TSeed;
-};
-
-export type ReasonStepInput<TPrepareOutput = unknown, TThought extends ThoughtExecution = ThoughtExecution> = {
-  thought: TThought;
-  prepareOutput: TPrepareOutput;
-};
-
-export type DecisionStepInput<TReasonOutput = unknown, TThought extends ThoughtExecution = ThoughtExecution> = {
-  thought: TThought;
-  reasonOutput: TReasonOutput;
-};
-
-export type ThoughtReasonLlmRequest = {
-  prompt: string;
+  thoughtActionEntryId: string | null;
 };
 
 export type ThoughtReasonLlmResult = {
@@ -59,39 +29,20 @@ export type ThoughtLifecycleStartRequest = {
   summary?: string;
 };
 
-export type ThoughtLifecycleStarted = {
-  thoughtId: string;
-  prepareEntryId: string;
-  streamEntryId: string;
-  thoughtActionEntryId: string | null;
+export type PreparedReason = {
+  prompt: string;
 };
 
-export type ThoughtTypeProvider<
-  TSeed = unknown,
-  TPrepareOutput = unknown,
-  TReasonOutput = unknown,
-  TThought extends ThoughtExecution = ThoughtExecution,
-> = {
-  createPrepareInput?: (input: ThoughtInitiationInput) => Promise<PrepareStepInput<TSeed, TThought> | null>;
-  runPrepare: (
-    step: ThoughtStepName,
-    input: PrepareStepInput<TSeed, TThought>,
-  ) => Promise<ReasonStepInput<TPrepareOutput, TThought>>;
-  runReason: (
-    step: ThoughtStepName,
-    input: ReasonStepInput<TPrepareOutput, TThought>,
-  ) => Promise<DecisionStepInput<TReasonOutput, TThought>>;
-  runDecision: (step: ThoughtStepName, input: DecisionStepInput<TReasonOutput, TThought>) => Promise<void>;
-  getReasonLlmRequest?: (input: DecisionStepInput<TReasonOutput, TThought>) => ThoughtReasonLlmRequest | null;
-  onReasonLlmDelta?: (input: DecisionStepInput<TReasonOutput, TThought>, delta: string) => void;
-  applyReasonLlmResult?: (
-    input: DecisionStepInput<TReasonOutput, TThought>,
-    result: ThoughtReasonLlmResult,
-  ) => DecisionStepInput<TReasonOutput, TThought>;
-  getLifecycleStartRequest?: (input: PrepareStepInput<TSeed, TThought>) => ThoughtLifecycleStartRequest | null;
-  applyLifecycleStart?: (
-    input: PrepareStepInput<TSeed, TThought>,
-    started: ThoughtLifecycleStarted,
-  ) => PrepareStepInput<TSeed, TThought>;
-  getPreparedReasonInfo?: (input: ReasonStepInput<TPrepareOutput, TThought>) => ThoughtPreparedReasonInfo;
+export type ThoughtTypeProvider<TInput, TThoughtType extends ThoughtType = ThoughtType> = {
+  thoughtType: TThoughtType;
+  buildInputFromConversation?: (conversationId: string) => Promise<TInput>;
+  getLifecycleStartRequest: (input: TInput) => ThoughtLifecycleStartRequest;
+  runPrepare: (input: TInput) => PreparedReason;
+  onLlmDelta?: (input: TInput, lifecycle: ThoughtLifecycleEntries, delta: string) => void;
+  runDecision: (
+    input: TInput,
+    lifecycle: ThoughtLifecycleEntries,
+    llmResult: ThoughtReasonLlmResult,
+    signal: AbortSignal,
+  ) => Promise<void>;
 };
