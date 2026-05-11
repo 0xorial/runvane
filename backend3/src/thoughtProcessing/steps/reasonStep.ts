@@ -87,7 +87,6 @@ export class ReasonStep {
     this.hub.publish(lifecycle.conversationId, {
       type: SseType.THOUGHT_REASON_STEP_FINISHED,
       chatEntryId: lifecycle.streamEntryId,
-      preparedDecisionStepInput: {},
     });
     return result;
   }

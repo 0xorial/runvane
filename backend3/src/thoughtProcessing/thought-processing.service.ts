@@ -110,32 +110,7 @@ export class ThoughtProcessingService {
       llmProviderId,
       llmModel,
     });
-
-    const streamPayload = await this.chatEntries.getChatEntry(conversationId, streamEntry.id);
-    if (streamPayload) {
-      const startingPayload: {
-        type: typeof SseType.TITLE_STARTING | typeof SseType.PLANNER_STARTING;
-        chatEntryId: string;
-        thoughtId: string;
-        conversationIndex: number;
-        createdAt: string;
-        parentId: string | null;
-        requestText: string;
-        llmProviderId?: string;
-        llmModel?: string;
-      } = {
-        type: request.kind === 'title' ? SseType.TITLE_STARTING : SseType.PLANNER_STARTING,
-        chatEntryId: streamEntry.id,
-        thoughtId,
-        conversationIndex: streamPayload.conversationIndex,
-        createdAt: streamPayload.createdAt,
-        parentId: streamPayload.parentId,
-        requestText: request.llmRequest,
-      };
-      if (llmProviderId) startingPayload.llmProviderId = llmProviderId;
-      if (llmModel) startingPayload.llmModel = llmModel;
-      this.hub.publish(conversationId, startingPayload);
-    }
+    await this.publishUpsert(conversationId, streamEntry.id);
 
     if (!request.includeAction) {
       return {

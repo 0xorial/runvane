@@ -45,8 +45,9 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
   onLlmDelta = (input: AutoTitleInput, lifecycle: ThoughtLifecycleEntries, delta: string): void => {
     if (!delta) return;
     this.hub.publish(input.conversationId, {
-      type: SseType.TITLE_LLM_STREAM,
+      type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: lifecycle.streamEntryId,
+      field: 'llmResponse',
       delta,
     });
   };
@@ -65,7 +66,6 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
 
     await this.persistUsage(lifecycle, llmResult);
     await this.completeThoughtAction(lifecycle, nextTitle);
-    this.publishTitleResponse(lifecycle, nextTitle, llmResult);
     if (titleApplied) await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
   };
 
@@ -90,37 +90,6 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
       action: 'final_answer',
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.thoughtActionEntryId);
-  }
-
-  private publishTitleResponse(lifecycle: ThoughtLifecycleEntries, summary: string, llmResult: ThoughtReasonLlmResult): void {
-    const payload: {
-      type: typeof SseType.TITLE_RESPONSE;
-      chatEntryId: string;
-      summary: string;
-      finished: boolean;
-      action?: string;
-      llmProviderId?: string;
-      llmModel?: string;
-      promptTokens?: number;
-      cachedPromptTokens?: number;
-      completionTokens?: number;
-    } = {
-      type: SseType.TITLE_RESPONSE,
-      chatEntryId: lifecycle.streamEntryId,
-      summary,
-      finished: true,
-      action: 'final_answer',
-    };
-    if (llmResult.providerId) payload.llmProviderId = llmResult.providerId;
-    if (llmResult.model) payload.llmModel = llmResult.model;
-    if (llmResult.usage) {
-      payload.promptTokens = llmResult.usage.promptTokens;
-      payload.completionTokens = llmResult.usage.completionTokens;
-      if (typeof llmResult.usage.cachedPromptTokens === 'number') {
-        payload.cachedPromptTokens = llmResult.usage.cachedPromptTokens;
-      }
-    }
-    this.hub.publish(lifecycle.conversationId, payload);
   }
 }
 

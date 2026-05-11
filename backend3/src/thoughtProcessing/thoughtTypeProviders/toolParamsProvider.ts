@@ -50,8 +50,9 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
   onLlmDelta = (input: ToolParamsInput, lifecycle: ThoughtLifecycleEntries, delta: string): void => {
     if (!delta) return;
     this.hub.publish(input.conversationId, {
-      type: SseType.PLANNER_LLM_STREAM,
+      type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: lifecycle.streamEntryId,
+      field: 'llmResponse',
       delta,
     });
   };

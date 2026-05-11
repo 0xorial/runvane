@@ -98,8 +98,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     state.reconstructedReply += delta;
 
     this.hub.publish(input.conversationId, {
-      type: SseType.PLANNER_LLM_STREAM,
+      type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: lifecycle.streamEntryId,
+      field: 'llmResponse',
       delta,
     });
 
@@ -134,7 +135,6 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     await this.persistStreamEntryDecision(lifecycle, llmResult, parseResult, decision);
     const finalAssistantEntryId = await this.finalizeAssistantMessage(state ?? null, input.conversationId, lifecycle, assistantText);
     await this.finalizeThoughtAction(lifecycle, action, assistantText, parseResult);
-    this.publishPlannerResponse(lifecycle, llmResult, requestedToolCalls.length, assistantText);
     await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
 
     if (requestedToolCalls.length === 0) return;
@@ -213,9 +213,16 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       const upsert = await this.chatEntries.getChatEntry(conversationId, created.id);
       if (upsert) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry: upsert });
     }
-    const payload: { type: typeof SseType.ASSISTANT_STREAM; chatEntryId: string; delta: string; parentId?: string } = {
-      type: SseType.ASSISTANT_STREAM,
+    const payload: {
+      type: typeof SseType.CHAT_ENTRY_DELTA;
+      chatEntryId: string;
+      field: 'text';
+      delta: string;
+      parentId?: string;
+    } = {
+      type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: state.assistantEntryId,
+      field: 'text',
       delta,
     };
     if (lifecycle.thoughtActionEntryId) payload.parentId = lifecycle.thoughtActionEntryId;
@@ -278,41 +285,6 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.thoughtActionEntryId);
   }
 
-  private publishPlannerResponse(
-    lifecycle: ThoughtLifecycleEntries,
-    llmResult: ThoughtReasonLlmResult,
-    toolCallCount: number,
-    assistantText: string,
-  ): void {
-    const payload: {
-      type: typeof SseType.PLANNER_RESPONSE;
-      chatEntryId: string;
-      summary: string;
-      finished: boolean;
-      action?: string;
-      llmProviderId?: string;
-      llmModel?: string;
-      promptTokens?: number;
-      cachedPromptTokens?: number;
-      completionTokens?: number;
-    } = {
-      type: SseType.PLANNER_RESPONSE,
-      chatEntryId: lifecycle.streamEntryId,
-      summary: toolCallCount > 0 ? `Queued ${toolCallCount} tool call(s)` : assistantText || 'Completed',
-      finished: true,
-      action: toolCallCount > 0 ? 'tool_call' : 'final_answer',
-    };
-    if (llmResult.providerId) payload.llmProviderId = llmResult.providerId;
-    if (llmResult.model) payload.llmModel = llmResult.model;
-    if (llmResult.usage) {
-      payload.promptTokens = llmResult.usage.promptTokens;
-      payload.completionTokens = llmResult.usage.completionTokens;
-      if (typeof llmResult.usage.cachedPromptTokens === 'number') {
-        payload.cachedPromptTokens = llmResult.usage.cachedPromptTokens;
-      }
-    }
-    this.hub.publish(lifecycle.conversationId, payload);
-  }
 }
 
 function toPlannerParseResult(parsed: ParsedPlannerOutput): PlannerParseResult {

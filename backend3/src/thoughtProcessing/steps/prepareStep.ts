@@ -41,7 +41,6 @@ export class PrepareStep {
       this.hub.publish(conversationId, {
         type: SseType.THOUGHT_PREPARE_STEP_FINISHED,
         chatEntryId: prepareEntryId,
-        preparedReasonStepInput,
       });
     } catch (error) {
       await this.markFailed(lifecycle, error, signal);

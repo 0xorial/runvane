@@ -121,6 +121,7 @@ export class RunToolService {
     });
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_END,
+      chatEntryId: created.id,
       toolName: input.toolName,
       output: reason,
       ok: false,
@@ -169,6 +170,7 @@ export class RunToolService {
         type: SseType.TOOL_INVOCATION_START,
         chatEntryId: entryId,
         toolName: input.toolName,
+        state: 'requested',
         approvalRequired: true,
         ...(parentId ? { parentId } : {}),
         ...(input.toolRequest ? { argsPreview: input.toolRequest } : {}),
@@ -176,9 +178,11 @@ export class RunToolService {
     } else {
       this.hub.publish(input.conversationId, {
         type: SseType.TOOL_INVOCATION_END,
+        chatEntryId: entryId,
         toolName: input.toolName,
         output: reason,
         ok: false,
+        runContinues: false,
       });
     }
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
@@ -216,6 +220,7 @@ export class RunToolService {
       type: SseType.TOOL_INVOCATION_START,
       chatEntryId: entryId,
       toolName: input.toolName,
+      state: 'running',
       approvalRequired: false,
       ...(parentId ? { parentId } : {}),
       ...(input.toolRequest ? { argsPreview: input.toolRequest } : {}),
@@ -247,6 +252,7 @@ export class RunToolService {
     await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'done', result: envelope });
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_END,
+      chatEntryId: entryId,
       toolName: input.toolName,
       output: stringifyOutput(output),
       ok: true,
