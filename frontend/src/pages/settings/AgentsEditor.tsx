@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
 import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
@@ -113,7 +114,7 @@ export function AgentsEditor({
         ? (rec.rules as Record<string, unknown>)
         : {};
     return {
-      enabled: rec.enabled !== false,
+      enabled: rec.enabled === true,
       config,
     };
   }
@@ -357,28 +358,29 @@ export function AgentsEditor({
                         return [
                           <tr key={`${name}-row`}>
                             <td>
-                              <div className="inline-flex items-center gap-1.5">
-                                {cfg.enabled ? (
-                                  <button
-                                    type="button"
-                                    className="h-4 w-4 cursor-pointer border-0 bg-transparent p-0 text-[11px] text-muted-foreground hover:text-foreground"
-                                    disabled={!canEdit}
-                                    onClick={() => toggleToolExpanded(name)}
-                                    aria-label={expanded ? "Hide config" : "Show config"}
-                                    title={expanded ? "Hide config" : "Show config"}
-                                  >
-                                    {expanded ? "▾" : "▸"}
-                                  </button>
-                                ) : (
-                                  <span
-                                    className="inline-flex h-4 w-4 items-center justify-center text-[11px] text-transparent"
-                                    aria-hidden="true"
-                                  >
-                                    ▸
-                                  </span>
-                                )}
-                                <code>{name}</code>
-                              </div>
+                              {cfg.enabled ? (
+                                <button
+                                  type="button"
+                                  className="-mx-1 -my-0.5 inline-flex cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-0.5 text-left text-foreground hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
+                                  disabled={!canEdit}
+                                  onClick={() => toggleToolExpanded(name)}
+                                  aria-expanded={expanded}
+                                  aria-label={expanded ? "Hide config" : "Show config"}
+                                  title={expanded ? "Hide config" : "Show config"}
+                                >
+                                  {expanded ? (
+                                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                                  )}
+                                  <code>{name}</code>
+                                </button>
+                              ) : (
+                                <div className="inline-flex items-center gap-2">
+                                  <span className="inline-flex h-4 w-4 shrink-0" aria-hidden="true" />
+                                  <code className="text-muted-foreground">{name}</code>
+                                </div>
+                              )}
                             </td>
                             <td className="max-w-[360px] text-muted-foreground">
                               {row.description != null ? String(row.description) : "—"}

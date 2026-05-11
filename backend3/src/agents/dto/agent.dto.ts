@@ -19,13 +19,13 @@ export class AgentModelReferenceDto {
 }
 
 export class AgentDefaultLlmConfigurationDto {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  provider_id!: string;
+  provider_id?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  model_name!: string;
+  model_name?: string;
 
   @IsOptional()
   @IsString()
@@ -38,6 +38,10 @@ export class AgentDefaultLlmConfigurationDto {
   @IsOptional()
   @IsObject()
   model_settings?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  tools?: Record<string, { enabled?: boolean; rules?: Record<string, unknown> }>;
 }
 
 export class CreateAgentDto {

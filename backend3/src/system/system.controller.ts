@@ -1,7 +1,7 @@
 import { Controller, Get, Headers, MessageEvent, Query, Sse } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { SseHubService } from '../sse/sse-hub.service.js';
-import { LlmProviderRegistry } from '../llmProviders/registry.js';
+import { ToolRegistry } from '../tools/tool-registry.js';
 
 function parseAfterSeq(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
@@ -14,7 +14,7 @@ function parseAfterSeq(raw: string | undefined): number | undefined {
 export class SystemController {
   constructor(
     private readonly hub: SseHubService,
-    private readonly llmProviders: LlmProviderRegistry,
+    private readonly tools: ToolRegistry,
   ) {}
 
   @Get('types/ping')
@@ -23,14 +23,14 @@ export class SystemController {
   }
 
   @Get('tools')
-  tools() {
-    return this.llmProviders.list().map((provider) => ({
-      name: provider.id,
-      description: provider.label,
-      ai_description: provider.label,
-      params_schema: {},
-      rules_schema: {},
-      default_rules: {},
+  listTools() {
+    return this.tools.list().map((tool) => ({
+      name: tool.getName(),
+      description: tool.getHumanDescription(),
+      ai_description: tool.getAiDescription(),
+      params_schema: tool.getParamsSchema(),
+      rules_schema: tool.getRulesSchema(),
+      default_rules: tool.getDefaultRules(),
     }));
   }
 

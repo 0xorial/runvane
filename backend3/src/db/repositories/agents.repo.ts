@@ -6,7 +6,7 @@ type AgentDbRow = {
   id: string;
   name: string;
   system_prompt: string | null;
-  default_llm_configuration_json: string | null;
+  default_llm_configuration_json: unknown;
   default_model_preset_id: number | null;
   model_provider_id: string | null;
   model_name: string | null;
@@ -21,13 +21,13 @@ function asModelReference(providerId: string | null, modelName: string | null): 
   return { provider_id, model_name };
 }
 
-function parseDefaultConfig(raw: string | null): AgentDefaultLlmConfiguration | null {
-  if (!raw) return null;
-  const parsed = JSON.parse(raw) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+function parseDefaultConfig(raw: unknown): AgentDefaultLlmConfiguration | null {
+  if (raw == null) return null;
+  const value = typeof raw === 'string' ? (JSON.parse(raw) as unknown) : raw;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('agents: invalid default_llm_configuration_json');
   }
-  return parsed as AgentDefaultLlmConfiguration;
+  return value as AgentDefaultLlmConfiguration;
 }
 
 function toAgentEntity(row: AgentDbRow): AgentEntity {

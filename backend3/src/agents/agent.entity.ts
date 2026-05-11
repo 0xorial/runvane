@@ -1,9 +1,15 @@
+export type AgentToolConfig = {
+  enabled?: boolean;
+  rules?: Record<string, unknown>;
+};
+
 export type AgentDefaultLlmConfiguration = {
-  provider_id: string;
-  model_name: string;
+  provider_id?: string;
+  model_name?: string;
   tool_call_provider_id?: string;
   tool_call_model_name?: string;
   model_settings?: Record<string, unknown>;
+  tools?: Record<string, AgentToolConfig>;
 };
 
 export type AgentEntity = {

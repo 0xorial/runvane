@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AgenticPlannerOutput, LlmDecision } from '../../contracts/chatEntry.js';
+import type { AgentEntity } from '../../agents/agent.entity.js';
+import type { AgenticPlannerOutput, ChatEntry, LlmDecision } from '../../contracts/chatEntry.js';
 import { SseType } from '../../contracts/sse.js';
 import { AgentsRepo } from '../../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { incrementalDelta, publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
+import { ToolRegistry } from '../../tools/tool-registry.js';
+import { buildPlannerPrompt } from '../lib/plannerPrompt.js';
 import { extractAssistantOutputFromJsonLike, parsePlannerOutput, type ParsedPlannerOutput } from '../lib/plannerTextParsing.js';
 import type { ThoughtExecution, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
 
@@ -22,6 +25,8 @@ export type PlannerPrepareSeed = {
   userText: string;
   systemPrompt: string;
   enabledToolIds: string[];
+  entries: ChatEntry[];
+  triggerEntry: ChatEntry | null;
 };
 
 export type PlannerPrepareOutput = {
@@ -65,10 +70,11 @@ export class PlannerThoughtTypeProvider implements PlannerProviderContract {
     private readonly conversations: ConversationsRepo,
     private readonly agents: AgentsRepo,
     private readonly hub: SseHubService,
+    private readonly tools: ToolRegistry,
   ) {}
 
   createPrepareInput: NonNullable<PlannerProviderContract['createPrepareInput']> = async ({ conversationId }) => {
-    const entries = await this.chatEntries.listMessages(conversationId);
+    const entries = await this.chatEntries.listChatEntries(conversationId);
     const anchorUserMessage = [...entries].reverse().find((entry) => entry.type === 'user-message');
     if (!anchorUserMessage) {
       throw new Error(`planner requires a user-message in conversation ${conversationId}`);
@@ -94,10 +100,20 @@ export class PlannerThoughtTypeProvider implements PlannerProviderContract {
         agentId,
         userText: anchorUserMessage.text,
         systemPrompt: agent.system_prompt ?? '',
-        enabledToolIds: [],
+        enabledToolIds: this.resolveEnabledToolIds(agent),
+        entries,
+        triggerEntry: anchorUserMessage,
       },
     };
   };
+
+  private resolveEnabledToolIds(agent: AgentEntity): string[] {
+    const toolsCfg = agent.default_llm_configuration?.tools ?? {};
+    return this.tools
+      .list()
+      .filter((tool) => toolsCfg[tool.getName()]?.enabled === true)
+      .map((tool) => tool.getName());
+  }
 
   runPrepare: PlannerProviderContract['runPrepare'] = async (_step, input) => ({
     thought: input.thought,
@@ -107,7 +123,14 @@ export class PlannerThoughtTypeProvider implements PlannerProviderContract {
       thoughtActionEntryId: input.thought.thoughtActionEntryId ?? null,
       agentId: input.seed.agentId,
       userText: input.seed.userText,
-      llmRequest: buildPlannerPrompt(input.seed.systemPrompt, input.seed.userText, input.seed.enabledToolIds),
+      llmRequest: buildPlannerPrompt({
+        systemPrompt: input.seed.systemPrompt,
+        entries: input.seed.entries,
+        anchorUserText: input.seed.userText,
+        triggerEntry: input.seed.triggerEntry,
+        toolIds: input.seed.enabledToolIds,
+        priorToolResults: [],
+      }),
       enabledToolIds: input.seed.enabledToolIds,
     },
   });
@@ -354,15 +377,6 @@ export class PlannerThoughtTypeProvider implements PlannerProviderContract {
   }): Promise<void> {
     throw new Error('planner tool execution is not wired yet');
   }
-}
-
-function buildPlannerPrompt(systemPrompt: string, userText: string, toolIds: string[]): string {
-  return [
-    'You are a planner. Return JSON with assistant_output and optional tool_requests.',
-    `System prompt: ${systemPrompt || '(empty)'}`,
-    `Allowed tools: ${toolIds.join(', ') || '(none)'}`,
-    `User message: ${userText}`,
-  ].join('\n');
 }
 
 function toPlannerParseResult(parsed: ParsedPlannerOutput): PlannerParseResult {
