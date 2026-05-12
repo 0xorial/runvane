@@ -200,7 +200,7 @@ export class ConversationsController {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
     try {
-      const result = await this.conversationProcessor.reprocessReason({
+      const result = await this.conversationProcessor.startReprocessReason({
         conversationId,
         sourceEntryId: entryId,
         editedResponse: body.editedResponse,
@@ -222,7 +222,7 @@ export class ConversationsController {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
     try {
-      const result = await this.conversationProcessor.reprocessContext({
+      const result = await this.conversationProcessor.startReprocessContext({
         conversationId,
         sourceEntryId: entryId,
         editedRequestText: body.editedRequestText,

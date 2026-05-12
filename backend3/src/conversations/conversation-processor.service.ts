@@ -47,24 +47,24 @@ export class ConversationProcessorService {
     return 1;
   }
 
-  async reprocessContext(args: {
+  async startReprocessContext(args: {
     conversationId: string;
     sourceEntryId: string;
     editedRequestText: string;
   }): Promise<{ plannerEntryId: string }> {
     const scope = this.beginScope(args.conversationId);
-    const result = await this.thoughtProcessing.runReprocessContext(args, scope);
+    const result = await this.thoughtProcessing.startReprocessContext(args, scope);
     scope.rootDone();
     return result;
   }
 
-  async reprocessReason(args: {
+  async startReprocessReason(args: {
     conversationId: string;
     sourceEntryId: string;
     editedResponse: string;
   }): Promise<{ plannerEntryId: string }> {
     const scope = this.beginScope(args.conversationId);
-    const result = await this.thoughtProcessing.runReprocessReason(args, scope);
+    const result = await this.thoughtProcessing.startReprocessReason(args, scope);
     scope.rootDone();
     return result;
   }

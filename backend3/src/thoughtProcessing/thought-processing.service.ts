@@ -80,7 +80,7 @@ export class ThoughtProcessingService {
     });
   }
 
-  async runReprocessContext(
+  async startReprocessContext(
     args: { conversationId: string; sourceEntryId: string; editedRequestText: string },
     scope: LifecycleScope,
   ): Promise<{ plannerEntryId: string }> {
@@ -97,14 +97,16 @@ export class ThoughtProcessingService {
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, this.plannerProvider, editedRequestText);
     const plannerEntryId = ctx.streamEntryId;
 
-    const input = await this.plannerProvider.buildInputFromConversation(args.conversationId);
-    const prepared: PreparedReason = { prompt: editedRequestText };
-    const llmResult = await this.reasonStep.run(this.plannerProvider, input, ctx, prepared, scope);
-    await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
+    scope.spawn(async () => {
+      const input = await this.plannerProvider.buildInputFromConversation!(args.conversationId);
+      const prepared: PreparedReason = { prompt: editedRequestText };
+      const llmResult = await this.reasonStep.run(this.plannerProvider, input, ctx, prepared, scope);
+      await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
+    });
     return { plannerEntryId };
   }
 
-  async runReprocessReason(
+  async startReprocessReason(
     args: { conversationId: string; sourceEntryId: string; editedResponse: string },
     scope: LifecycleScope,
   ): Promise<{ plannerEntryId: string }> {
@@ -124,12 +126,13 @@ export class ThoughtProcessingService {
     ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, this.plannerProvider);
     const plannerEntryId = ctx.streamEntryId;
 
-    const input = await this.plannerProvider.buildInputFromConversation(args.conversationId);
-    const llmResult: ThoughtReasonLlmResult = { fullResponse: editedResponse };
-    if (source.llmProviderId) llmResult.providerId = source.llmProviderId;
-    if (source.llmModel) llmResult.model = source.llmModel;
-
-    await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
+    scope.spawn(async () => {
+      const input = await this.plannerProvider.buildInputFromConversation!(args.conversationId);
+      const llmResult: ThoughtReasonLlmResult = { fullResponse: editedResponse };
+      if (source.llmProviderId) llmResult.providerId = source.llmProviderId;
+      if (source.llmModel) llmResult.model = source.llmModel;
+      await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
+    });
     return { plannerEntryId };
   }
 
