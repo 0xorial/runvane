@@ -288,6 +288,31 @@ export async function reprocessThought(
   };
 }
 
+export async function reprocessUserMessage(
+  conversationId: string,
+  entryId: string,
+  editedText: string,
+): Promise<PostAcceptedResult<{ conversationId: string; userMessageEntryId: string }>> {
+  const result = await postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(entryId)}/reprocess`,
+    { editedText },
+  );
+  const data = result.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("POST /api/conversations/:id/messages/:entryId/reprocess: invalid response envelope");
+  }
+  const row = data as { conversationId?: unknown; userMessageEntryId?: unknown };
+  const conversationIdOut = String(row.conversationId ?? "").trim();
+  const userMessageEntryId = String(row.userMessageEntryId ?? "").trim();
+  if (!conversationIdOut || !userMessageEntryId) {
+    throw new Error("POST /api/conversations/:id/messages/:entryId/reprocess: invalid response fields");
+  }
+  return {
+    status: result.status,
+    data: { conversationId: conversationIdOut, userMessageEntryId },
+  };
+}
+
 export async function reprocessThoughtContext(
   conversationId: string,
   entryId: string,

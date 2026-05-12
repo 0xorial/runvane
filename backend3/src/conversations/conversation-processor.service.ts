@@ -72,6 +72,38 @@ export class ConversationProcessorService {
     return result;
   }
 
+  async reprocessUserMessage(args: {
+    conversationId: string;
+    sourceEntryId: string;
+    editedText: string;
+  }): Promise<{ userMessageEntryId: string }> {
+    const source = await this.chatEntries.getChatEntry(args.conversationId, args.sourceEntryId);
+    if (!source) throw new Error(`source entry not found: ${args.sourceEntryId}`);
+    if (source.type !== 'user-message') {
+      throw new Error(`reprocess target ${args.sourceEntryId} is not a user-message: ${source.type}`);
+    }
+
+    const scope = this.beginScope(args.conversationId);
+    const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
+      text: args.editedText,
+      agentId: source.agentId,
+      ...(source.llmProviderId ? { llmProviderId: source.llmProviderId } : {}),
+      ...(source.llmModel ? { llmModel: source.llmModel } : {}),
+      ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
+      parentId: source.parentId,
+    });
+    const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
+    if (!siblingPayload || siblingPayload.type !== 'user-message') {
+      throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
+    }
+    this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
+    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+
+    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, args.conversationId, scope);
+    scope.rootDone();
+    return { userMessageEntryId: sibling.id };
+  }
+
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const scope = this.beginScope(conversationId);
     const existingMessages = await this.chatEntries.listMessages(conversationId);

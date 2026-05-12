@@ -13,6 +13,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ReprocessReasonDto } from './dto/reprocess-reason.dto.js';
+import { ReprocessUserMessageDto } from './dto/reprocess-user-message.dto.js';
 import { SseType } from '../contracts/sse.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
@@ -208,6 +209,28 @@ export class ConversationsController {
       return { conversationId, plannerEntryId: result.plannerEntryId, queuedToolCalls: 0 };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'failed to reprocess thought';
+      throw new BadRequestException(detail);
+    }
+  }
+
+  @Post(':conversationId/messages/:entryId/reprocess')
+  @HttpCode(202)
+  async reprocessUserMessage(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+    @Body() body: ReprocessUserMessageDto,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+    try {
+      const result = await this.conversationProcessor.reprocessUserMessage({
+        conversationId,
+        sourceEntryId: entryId,
+        editedText: body.editedText,
+      });
+      return { conversationId, userMessageEntryId: result.userMessageEntryId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to reprocess user message';
       throw new BadRequestException(detail);
     }
   }
