@@ -8,6 +8,7 @@ import { ConversationSidebar } from "./components/ConversationSidebar";
 import { ErrorInboxButton } from "./components/ErrorInboxButton";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { ToastHost } from "./components/ToastHost";
+import { LlmSettingsProvider } from "./hooks/llmSettingsContext";
 import { ChatPage } from "./pages/ChatPage";
 import { ComponentsPlaygroundPage } from "./pages/playground/ComponentsPlaygroundPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -105,6 +106,7 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
+    <LlmSettingsProvider>
       <div className="flex h-full max-h-full min-h-0 flex-col overflow-hidden bg-background">
         <ToastHost />
         {showTopHeader ? (
@@ -186,6 +188,7 @@ export function App() {
           )}
         </div>
       </div>
+    </LlmSettingsProvider>
     </TooltipProvider>
   );
 }

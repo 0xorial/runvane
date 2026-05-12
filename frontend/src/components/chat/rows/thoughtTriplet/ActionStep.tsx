@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ThoughtActionEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+import { BranchSelector } from "../../BranchSelector";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -23,10 +24,13 @@ export function ActionStep({
 
   return (
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
-      <div className="text-[10px] text-muted-foreground">
-        {[statusLabel ? `status: ${statusLabel}` : "", action ? `action: ${action}` : "", actionEntry?.toolName ? `tool: ${actionEntry.toolName}` : ""]
-          .filter(Boolean)
-          .join(" · ")}
+      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>
+          {[statusLabel ? `status: ${statusLabel}` : "", action ? `action: ${action}` : "", actionEntry?.toolName ? `tool: ${actionEntry.toolName}` : ""]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+        <BranchSelector entryId={actionEntry?.id} />
       </div>
       <ReadOnlySection label="Summary" value={summary} />
       <ReadOnlySection label="Decision JSON" value={parseJson} />

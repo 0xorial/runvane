@@ -5,12 +5,12 @@ import type { AgentListItemResponse } from "../../../../backend/src/routes/agent
 import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getAgents, getLlmSettings, getModelPresets } from "../../api/client";
+import { getAgents, getModelPresets } from "../../api/client";
 import { ModelDropdown } from "../ui/ModelDropdown";
 import { ModelSelector } from "../ui/ModelSelector";
+import { useLlmSettings } from "../../hooks/llmSettingsContext";
 import { getAgentLlm } from "../../pages/settings/agentLlm";
-import { buildModelGroups, sortAgents } from "../../pages/settings/helpers";
-import type { ModelGroup } from "../../pages/settings/helpers";
+import { sortAgents } from "../../pages/settings/helpers";
 
 export function agentIdFromSearchParams(searchParams: URLSearchParams): string {
   return searchParams.get("agent")?.trim() || "";
@@ -52,16 +52,10 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
   const [urlParams, setUrlParams] = useSearchParams();
   const [allAgents, setAllAgents] = useState<AgentListItemResponse[] | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("");
-  const [allLlms, setAllLlms] = useState<ModelGroup[]>([]);
+  const { modelGroups: allLlms } = useLlmSettings();
   const [selectedLlm, setSelectedLlm] = useState<LlmSelection | null>(null);
   const [allPresets, setAllPresets] = useState<ModelPresetResponse[] | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(() => presetIdFromSearchParams(urlParams));
-
-  useEffect(() => {
-    getLlmSettings()
-      .then((llm) => setAllLlms(buildModelGroups(llm.providers)))
-      .catch(() => setAllLlms([]));
-  }, []);
 
   useEffect(() => {
     getAgents()

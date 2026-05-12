@@ -1,9 +1,10 @@
-import { useState } from "react";
 import { FileText, MessageSquare, Sparkles, Wrench } from "lucide-react";
 import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";
+import { useChatSessionContext, type ThoughtStage } from "@/hooks/chatSessionContext";
 import { ChatThreadIndent } from "../ChatMessageShell";
+import { BranchBadge } from "../BranchSelector";
 import { ActionStep } from "./thoughtTriplet/ActionStep";
 import { ContextStep } from "./thoughtTriplet/ContextStep";
 import { ReasoningStep } from "./thoughtTriplet/ReasoningStep";
@@ -17,15 +18,17 @@ type ThoughtTripletRowProps = {
   actionEntry?: ChatEntry | null;
 };
 
-type ThoughtStage = "context" | "reasoning" | "action";
-
 export function ThoughtTripletRow({ streamEntry$, conversationId, prepareEntry, actionEntry }: ThoughtTripletRowProps) {
   const stream = useObservableValue(streamEntry$);
-  const [expanded, setExpanded] = useState<ThoughtStage | null>(null);
+  const { expandedStageBySlotKey, setSlotExpandedStage } = useChatSessionContext();
 
   if (!isThoughtStreamEntry(stream)) return null;
   const prepareStepEntry = prepareEntry?.type === "thought-prepare" ? prepareEntry : null;
   const actionStepEntry = actionEntry?.type === "thought-action" ? actionEntry : null;
+  // Stable across both reasoning-branch (same prepare) and context-branch (sibling prepares share parent) switches.
+  const slotKey = prepareStepEntry?.parentId ?? stream.thoughtId;
+  const expanded = expandedStageBySlotKey.get(slotKey) ?? null;
+  const toggle = (stage: ThoughtStage) => setSlotExpandedStage(slotKey, expanded === stage ? null : stage);
   const contextTitle = String(prepareStepEntry?.title ?? "").trim() || "Preparation";
   const reasonMeta = reasonMetaLabel(stream);
   const actionMeta = actionMetaLabel(actionStepEntry, stream);
@@ -38,25 +41,28 @@ export function ThoughtTripletRow({ streamEntry$, conversationId, prepareEntry, 
           <StepChip
             icon={<FileText className="h-3 w-3" />}
             label={contextTitle}
+            badge={<BranchBadge entryId={prepareStepEntry?.id} />}
             active={expanded === "context"}
-            onClick={() => setExpanded((v) => (v === "context" ? null : "context"))}
+            onClick={() => toggle("context")}
           />
           <Connector />
           <StepChip
             icon={stream.status === "running" ? <TinyProgressCircle /> : <Sparkles className="h-3 w-3" />}
             label=""
             meta={reasonMeta}
+            badge={<BranchBadge entryId={stream.id} />}
             active={expanded === "reasoning"}
-            onClick={() => setExpanded((v) => (v === "reasoning" ? null : "reasoning"))}
+            onClick={() => toggle("reasoning")}
           />
           <Connector />
           <StepChip
             icon={actionMeta.usesTool ? <Wrench className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
             label={actionLabel}
             meta={actionMeta.status}
+            badge={<BranchBadge entryId={actionStepEntry?.id} />}
             active={expanded === "action"}
             align="right"
-            onClick={() => setExpanded((v) => (v === "action" ? null : "action"))}
+            onClick={() => toggle("action")}
           />
         </div>
 

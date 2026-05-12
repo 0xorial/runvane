@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
-import { getLlmSettings, reprocessThoughtContext } from "@/api/client";
+import { reprocessThoughtContext } from "@/api/client";
 import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
-import { buildModelGroups, type ModelGroup } from "@/pages/settings/helpers";
+import { useLlmSettings } from "@/hooks/llmSettingsContext";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { BranchSelector } from "../../BranchSelector";
 import { ReadOnlySection } from "./ReadOnlySection";
 
 export function ContextStep({
@@ -23,14 +24,8 @@ export function ContextStep({
   const [editedPrompt, setEditedPrompt] = useState(prompt);
   const [selectedProviderId, setSelectedProviderId] = useState(currentProviderId);
   const [selectedModel, setSelectedModel] = useState(currentModel);
-  const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
+  const { modelGroups } = useLlmSettings();
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    void getLlmSettings()
-      .then((llm) => setModelGroups(buildModelGroups(llm.providers)))
-      .catch(() => setModelGroups([]));
-  }, []);
 
   useEffect(() => {
     if (isEditing) return;
@@ -71,6 +66,7 @@ export function ContextStep({
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
       <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <span>{currentProviderId && currentModel ? `model: ${currentProviderId}/${currentModel}` : "model: unknown"}</span>
+        <BranchSelector entryId={prepareEntry?.id} />
         {canEdit ? (
           <button
             type="button"

@@ -3,6 +3,7 @@ import { Pencil } from "lucide-react";
 import { reprocessThought } from "@/api/client";
 import type { ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
+import { BranchSelector } from "../../BranchSelector";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -55,6 +56,7 @@ export function ReasoningStep({
           <span>completion: {completionTokens}t</span>
           <span>duration: {duration}</span>
         </div>
+        <BranchSelector entryId={stream.id} />
         {canEdit ? (
           <button
             type="button"

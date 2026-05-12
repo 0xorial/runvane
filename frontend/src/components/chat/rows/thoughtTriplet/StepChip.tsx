@@ -5,6 +5,7 @@ export function StepChip({
   icon,
   label,
   meta,
+  badge,
   active,
   align = "left",
   onClick,
@@ -12,6 +13,7 @@ export function StepChip({
   icon: React.ReactNode;
   label: string;
   meta?: string;
+  badge?: React.ReactNode;
   active: boolean;
   align?: "left" | "right";
   onClick: () => void;
@@ -32,6 +34,7 @@ export function StepChip({
         {label ? <span className="truncate font-medium">{label}</span> : null}
         {hasMeta ? <span className="truncate opacity-60">{label ? `· ${meta}` : meta}</span> : null}
       </span>
+      {badge ? <span className="shrink-0">{badge}</span> : null}
       <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 opacity-60 transition-transform", active ? "rotate-180" : "")} />
     </button>
   );

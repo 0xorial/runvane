@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Sparkles } from "lucide-react";
-import type { ChatEntry, PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import { ChevronRight, Pencil, Sparkles } from "lucide-react";
+import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { parseDbTimestampMs } from "@/utils/formatDuration";
 import { reprocessThought } from "@/api/client";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { notifyError } from "@/utils/toast";
-import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { ChatThreadIndent } from "../ChatMessageShell";
-
-function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
-  if (a.conversationIndex !== b.conversationIndex) return a.conversationIndex - b.conversationIndex;
-  return a.createdAt.localeCompare(b.createdAt);
-}
+import { BranchSelector } from "../BranchSelector";
 
 type QueriedModelStepProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
@@ -50,27 +44,6 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [switchingBranch, setSwitchingBranch] = useState(false);
-  const { allEntries, setActiveLeaf } = useChatSessionContext();
-
-  const sortedAll = useMemo(
-    () => allEntries.map((row$) => row$.get()).sort(byConversationIndexAsc),
-    [allEntries],
-  );
-  const childrenByParent = useMemo(() => {
-    const map = new Map<string | null, ChatEntry[]>();
-    for (const row of sortedAll) {
-      const list = map.get(row.parentId) ?? [];
-      list.push(row);
-      map.set(row.parentId, list);
-    }
-    return map;
-  }, [sortedAll]);
-  const siblings = useMemo(() => childrenByParent.get(entry.parentId) ?? [], [childrenByParent, entry.parentId]);
-  const activeSiblingIndex = useMemo(
-    () => siblings.findIndex((row) => row.id === entry.id),
-    [siblings, entry.id],
-  );
 
   const done = isDone(entry);
   const status = entry.status ?? "running";
@@ -89,7 +62,6 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const responseText = String(entry.llmResponse || "").trim();
   const errorText = String(entry.error || "").trim();
   const canEditResponse = entry.type === "planner_llm_stream" && done && Boolean(conversationId);
-  const hasSiblingBranches = siblings.length > 1 && activeSiblingIndex >= 0;
   const meta = `${modelLabel || "unknown model"} · ${completionTokens} out tok · ${formatDurationMs(durationMs)}`;
 
   useEffect(() => {
@@ -111,30 +83,6 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
     setEditedResponse(String(entry.llmResponse || ""));
   }, [editing, entry.llmResponse]);
 
-  function deepestDescendantId(entryId: string): string {
-    let cursor = entryId;
-    for (;;) {
-      const children = childrenByParent.get(cursor) ?? [];
-      if (children.length === 0) return cursor;
-      cursor = children[children.length - 1].id;
-    }
-  }
-
-  async function onSwitchSiblingBranch(offset: -1 | 1) {
-    if (!conversationId || !hasSiblingBranches || switchingBranch) return;
-    const nextIndex = (activeSiblingIndex + offset + siblings.length) % siblings.length;
-    const sibling = siblings[nextIndex];
-    if (!sibling) return;
-    setSwitchingBranch(true);
-    try {
-      await setActiveLeaf(deepestDescendantId(sibling.id));
-    } catch (e) {
-      notifyError(`Failed to switch branch: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setSwitchingBranch(false);
-    }
-  }
-
   void tick;
 
   return (
@@ -154,35 +102,9 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
             <span className="font-medium">Queried model</span>
             <span className="opacity-60">· {meta}</span>
           </button>
-          {hasSiblingBranches ? (
-            <div className="ml-1 inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground">
-              <button
-                type="button"
-                disabled={switchingBranch}
-                onClick={() => {
-                  void onSwitchSiblingBranch(-1);
-                }}
-                className="transition-colors hover:text-foreground disabled:opacity-50"
-                aria-label="Previous branch"
-              >
-                <ChevronLeft className="h-3 w-3" />
-              </button>
-              <span className="font-mono tabular-nums">
-                {activeSiblingIndex + 1}/{siblings.length}
-              </span>
-              <button
-                type="button"
-                disabled={switchingBranch}
-                onClick={() => {
-                  void onSwitchSiblingBranch(1);
-                }}
-                className="transition-colors hover:text-foreground disabled:opacity-50"
-                aria-label="Next branch"
-              >
-                <ChevronRight className="h-3 w-3" />
-              </button>
-            </div>
-          ) : null}
+          <div className="ml-1">
+            <BranchSelector entryId={entry.id} />
+          </div>
         </div>
 
         {open ? (

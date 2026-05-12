@@ -144,7 +144,6 @@ function ensureGlobalSse(options?: GlobalLiveOptions): void {
       if (typeof ev.seq === "number" && Number.isFinite(ev.seq)) {
         writeLastSeenSeq(ev.seq);
       }
-      rvInfo("[runvane:sse] parsed", ev.type);
       for (const sub of [...subscribers]) {
         sub.onSseEvent(ev);
       }

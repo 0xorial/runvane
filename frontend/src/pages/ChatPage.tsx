@@ -14,7 +14,7 @@ import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../compo
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
-import { ChatSessionContext } from "../hooks/chatSessionContext";
+import { ChatSessionContext, useThoughtExpandedStageState } from "../hooks/chatSessionContext";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import { isThoughtStreamEntry, type ChatAttachment } from "../protocol/chatEntry";
@@ -82,9 +82,18 @@ export function ChatPage({
 
   const { activePathEntries: chatEntries, allEntries, activeLeafId, setActiveLeaf, appendOptimisticUserMessage } =
     useChatSession(conversationId);
+  const { expandedStageBySlotKey, setSlotExpandedStage } = useThoughtExpandedStageState();
   const chatSessionContextValue = useMemo(
-    () => ({ conversationId, activePathEntries: chatEntries, allEntries, activeLeafId, setActiveLeaf }),
-    [conversationId, chatEntries, allEntries, activeLeafId, setActiveLeaf],
+    () => ({
+      conversationId,
+      activePathEntries: chatEntries,
+      allEntries,
+      activeLeafId,
+      setActiveLeaf,
+      expandedStageBySlotKey,
+      setSlotExpandedStage,
+    }),
+    [conversationId, chatEntries, allEntries, activeLeafId, setActiveLeaf, expandedStageBySlotKey, setSlotExpandedStage],
   );
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);

@@ -300,6 +300,39 @@ export const TitleLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
   preparedDecisionStepInput: z.unknown().optional(),
 });
 
+export type ToolParamsLlmStreamEntry = ChatEntryBase & {
+  type: "tool_params_llm_stream";
+  thoughtId: string;
+  llmRequest: string;
+  llmProviderId?: string;
+  llmResponse?: string;
+  thoughtMs?: number | null;
+  decision?: LlmDecision | null;
+  status?: "running" | "completed" | "failed" | "cancelled";
+  error?: string;
+  llmModel?: string;
+  promptTokens?: number;
+  cachedPromptTokens?: number;
+  completionTokens?: number;
+  preparedDecisionStepInput?: unknown;
+};
+export const ToolParamsLlmStreamEntrySchema = ChatEntryBaseSchema.extend({
+  type: z.literal("tool_params_llm_stream"),
+  thoughtId: z.string(),
+  llmRequest: z.string(),
+  llmProviderId: z.string().optional(),
+  llmResponse: z.string().optional(),
+  thoughtMs: z.number().finite().nullable().optional(),
+  decision: LlmDecisionSchema.nullable().optional(),
+  status: z.enum(["running", "completed", "failed", "cancelled"]).optional(),
+  error: z.string().optional(),
+  llmModel: z.string().optional(),
+  promptTokens: z.number().finite().optional(),
+  cachedPromptTokens: z.number().finite().optional(),
+  completionTokens: z.number().finite().optional(),
+  preparedDecisionStepInput: z.unknown().optional(),
+});
+
 export type ThoughtActionEntry = ChatEntryBase & {
   type: "thought-action";
   thoughtId: string;
@@ -370,6 +403,7 @@ export type ChatEntry =
   | PlannerLlmStreamEntry
   | ThoughtActionEntry
   | TitleLlmStreamEntry
+  | ToolParamsLlmStreamEntry
   | ToolInvocationEntry
   | AssistantMessageEntry;
 export const ChatEntrySchema = z.discriminatedUnion("type", [
@@ -378,6 +412,7 @@ export const ChatEntrySchema = z.discriminatedUnion("type", [
   PlannerLlmStreamEntrySchema,
   ThoughtActionEntrySchema,
   TitleLlmStreamEntrySchema,
+  ToolParamsLlmStreamEntrySchema,
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,
 ]);
