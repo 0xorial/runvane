@@ -1,3 +1,5 @@
+import type { ChatEntry, PlannerLlmStreamEntry } from "../../../backend3/src/contracts/chatEntry.js";
+
 export type {
   AssistantMessageEntry,
   ChatAttachment,
@@ -11,6 +13,8 @@ export type {
   TitleLlmStreamEntry,
   ToolInvocationEntry,
   UserMessageEntry,
-} from "../../../backend/src/types/chatEntry";
+} from "../../../backend3/src/contracts/chatEntry.js";
 
-export { isPlannerThinkingEntry } from "../../../backend/src/types/chatEntry";
+export function isPlannerThinkingEntry(e: ChatEntry): e is PlannerLlmStreamEntry {
+  return e.type === "planner_llm_stream";
+}

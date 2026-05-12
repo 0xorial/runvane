@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { SseType } from '../../contracts/sse.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
@@ -55,7 +56,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     input: ToolParamsInput,
     ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> => {
     let parsedParams: Record<string, unknown>;
     try {
@@ -79,7 +80,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
         plannerFollowup: input.plannerFollowup,
       },
-      signal,
+      scope,
     );
   };
 

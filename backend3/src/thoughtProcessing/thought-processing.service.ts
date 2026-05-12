@@ -1,4 +1,5 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-settings.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
@@ -45,38 +46,38 @@ export class ThoughtProcessingService {
   async runFullThought<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> {
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const conversationId = (input as { conversationId?: unknown }).conversationId;
     if (typeof conversationId !== 'string' || !conversationId) {
       throw new Error('runFullThought requires input.conversationId');
     }
     const ctx = await this.createContext(conversationId);
-    const prepared = await this.prepareStep.run(provider, input, ctx, signal);
-    const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, signal);
-    await this.decisionStep.run(provider, input, ctx, llmResult, signal);
+    const prepared = await this.prepareStep.run(provider, input, ctx, scope);
+    const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+    await this.decisionStep.run(provider, input, ctx, llmResult, scope);
   }
 
   async runFullThoughtByType(
     conversationId: string,
     thoughtType: ThoughtType,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> {
     const provider = this.providers[thoughtType];
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${thoughtType} cannot self-initiate`);
     }
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const input = await provider.buildInputFromConversation(conversationId);
-    await this.runFullThought(provider, input, signal);
+    await this.runFullThought(provider, input, scope);
   }
 
   async runReprocessContext(
     args: { conversationId: string; sourceEntryId: string; editedRequestText: string },
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<{ plannerEntryId: string }> {
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
     if (!editedRequestText) throw new Error('editedRequestText is required');
     const branchParentId = await this.resolveBranchedPrepareParentId(args.conversationId, args.sourceEntryId);
@@ -91,16 +92,16 @@ export class ThoughtProcessingService {
 
     const input = await this.plannerProvider.buildInputFromConversation(args.conversationId);
     const prepared: PreparedReason = { prompt: editedRequestText };
-    const llmResult = await this.reasonStep.run(this.plannerProvider, input, ctx, prepared, signal);
-    await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, signal);
+    const llmResult = await this.reasonStep.run(this.plannerProvider, input, ctx, prepared, scope);
+    await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
     return { plannerEntryId };
   }
 
   async runReprocessReason(
     args: { conversationId: string; sourceEntryId: string; editedResponse: string },
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<{ plannerEntryId: string }> {
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const editedResponse = args.editedResponse.trim();
     if (!editedResponse) throw new Error('editedResponse is required');
     const source = await this.resolvePlannerStreamSource(args.conversationId, args.sourceEntryId);
@@ -121,7 +122,7 @@ export class ThoughtProcessingService {
     if (source.llmProviderId) llmResult.providerId = source.llmProviderId;
     if (source.llmModel) llmResult.model = source.llmModel;
 
-    await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, signal);
+    await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
     return { plannerEntryId };
   }
 

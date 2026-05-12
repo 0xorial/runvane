@@ -49,7 +49,6 @@ export function ChatTitlePanel({
   settingsPressed = false,
 }: ChatTitlePanelProps) {
   const [title, setTitle] = useState("New chat");
-  const [streamRawTitle, setStreamRawTitle] = useState("");
   const [tokenTotals, setTokenTotals] = useState<EntryTokenUsage>({
     promptTokens: 0,
     cachedPromptTokens: 0,
@@ -70,7 +69,6 @@ export function ChatTitlePanel({
     setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
     setTokenUsageByModel([]);
     setConversationUpdatedAt("");
-    setStreamRawTitle("");
     if (!conversationId) return;
     let cancelled = false;
     void (async () => {
@@ -116,27 +114,14 @@ export function ChatTitlePanel({
     const dispose = subscribeGlobalLive({
       onSseEvent: (ev) => {
         if (ev.conversationId !== cid) return;
-        if (ev.type === SseType.TITLE_STARTING) {
-          setStreamRawTitle("");
-          return;
-        }
-        if (ev.type === SseType.TITLE_LLM_STREAM) {
-          setStreamRawTitle((prev) => `${prev}${ev.delta}`);
-          return;
-        }
-        if (ev.type === SseType.CONVERSATION_UPDATED) {
-          const currentMs = timestampMs(conversationUpdatedAt);
-          const incomingMs = timestampMs(ev.conversation.updatedAt);
-          if (currentMs != null && incomingMs != null && incomingMs < currentMs) {
-            return;
-          }
-          setStreamRawTitle("");
-          setTitle(String(ev.conversation.title || "Untitled"));
-          setTokenTotals(TokenUsageMapper.fromConversationTotals(ev.conversation));
-          setTokenUsageByModel(ev.conversation.tokenUsageByModel ?? []);
-          setConversationUpdatedAt(String(ev.conversation.updatedAt ?? ""));
-          return;
-        }
+        if (ev.type !== SseType.CONVERSATION_UPDATED) return;
+        const currentMs = timestampMs(conversationUpdatedAt);
+        const incomingMs = timestampMs(ev.conversation.updatedAt);
+        if (currentMs != null && incomingMs != null && incomingMs < currentMs) return;
+        setTitle(String(ev.conversation.title || "Untitled"));
+        setTokenTotals(TokenUsageMapper.fromConversationTotals(ev.conversation));
+        setTokenUsageByModel(ev.conversation.tokenUsageByModel ?? []);
+        setConversationUpdatedAt(String(ev.conversation.updatedAt ?? ""));
       },
     });
     return () => dispose();
@@ -148,7 +133,6 @@ export function ChatTitlePanel({
       const updated = await renameConversation(conversationId, {
         title: nextTitle,
       });
-      setStreamRawTitle("");
       setTitle(String(updated.title || nextTitle));
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
@@ -185,7 +169,7 @@ export function ChatTitlePanel({
       </Button>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <EditableConversationTitle title={streamRawTitle || title} disabled={!conversationId} onCommit={onCommit} />
+          <EditableConversationTitle title={title} disabled={!conversationId} onCommit={onCommit} />
           <LlmMetaBadge usage={tokenTotals} showTokenBreakdown estimatedCostUsd={estimatedCostUsd} />
         </div>
       </div>

@@ -7,12 +7,12 @@ import { publishConversationUpdated } from '../sse/sse-helpers.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import type { ThoughtType } from '../thoughtProcessing/types.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
-import { ProcessingLifecycleHandle } from './processing-lifecycle-handle.js';
+import { LifecycleScope } from './lifecycle-scope.js';
 
 @Injectable()
 export class ConversationProcessorService {
   private readonly logger = new Logger(ConversationProcessorService.name);
-  private readonly activeExecutions = new Map<string, ProcessingLifecycleHandle>();
+  private readonly activeExecutions = new Map<string, LifecycleScope>();
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -21,22 +21,29 @@ export class ConversationProcessorService {
     private readonly hub: SseHubService,
   ) {}
 
-  private beginExecution(conversationId: string): ProcessingLifecycleHandle {
+  private beginScope(conversationId: string): LifecycleScope {
     this.activeExecutions.get(conversationId)?.abort();
-    const handle = new ProcessingLifecycleHandle(() => {
-      if (this.activeExecutions.get(conversationId) === handle) {
-        this.activeExecutions.delete(conversationId);
-      }
-    });
-    this.activeExecutions.set(conversationId, handle);
-    return handle;
+    const scope = new LifecycleScope(
+      () => {
+        if (this.activeExecutions.get(conversationId) === scope) {
+          this.activeExecutions.delete(conversationId);
+        }
+      },
+      (error) => {
+        this.logger.error(
+          `lifecycle scope task failed: conversation=${conversationId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      },
+    );
+    this.activeExecutions.set(conversationId, scope);
+    return scope;
   }
 
   cancelProcessing(conversationId: string): number {
-    const handle = this.activeExecutions.get(conversationId);
-    if (!handle) return 0;
-    handle.abort();
-    handle.finish();
+    const scope = this.activeExecutions.get(conversationId);
+    if (!scope) return 0;
+    scope.abort();
     return 1;
   }
 
@@ -45,15 +52,10 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedRequestText: string;
   }): Promise<{ plannerEntryId: string }> {
-    const handle = this.beginExecution(args.conversationId);
-    try {
-      return await this.thoughtProcessing.runReprocessContext(args, handle.signal);
-    } catch (error) {
-      handle.abort();
-      throw error;
-    } finally {
-      handle.finish();
-    }
+    const scope = this.beginScope(args.conversationId);
+    const result = await this.thoughtProcessing.runReprocessContext(args, scope);
+    scope.rootDone();
+    return result;
   }
 
   async reprocessReason(args: {
@@ -61,51 +63,42 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedResponse: string;
   }): Promise<{ plannerEntryId: string }> {
-    const handle = this.beginExecution(args.conversationId);
-    try {
-      return await this.thoughtProcessing.runReprocessReason(args, handle.signal);
-    } catch (error) {
-      handle.abort();
-      throw error;
-    } finally {
-      handle.finish();
-    }
+    const scope = this.beginScope(args.conversationId);
+    const result = await this.thoughtProcessing.runReprocessReason(args, scope);
+    scope.rootDone();
+    return result;
   }
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
-    const handle = this.beginExecution(conversationId);
-    try {
-      const existingMessages = await this.chatEntries.listMessages(conversationId);
-      const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
-        text: body.message,
-        agentId: body.agentId,
-        llmProviderId: body.llmProviderId,
-        llmModel: body.llmModel,
-        modelPresetId: body.modelPresetId,
-      });
-      const userPayload = await this.chatEntries.getChatEntry(conversationId, userEntry.id);
-      if (!userPayload || userPayload.type !== 'user-message') {
-        throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
-      }
-      this.hub.publish(conversationId, { type: SseType.USER_MESSAGE, entry: userPayload });
-      await publishConversationUpdated(this.hub, this.conversations, conversationId);
-
-      const thoughtTypes: ThoughtType[] = existingMessages.length === 0 ? ['autoTitle', 'planner'] : ['planner'];
-      for (const thoughtType of thoughtTypes) {
-        try {
-          await this.thoughtProcessing.runFullThoughtByType(conversationId, thoughtType, handle.signal);
-        } catch (error) {
-          this.logger.error(
-            `thought processing failed: conversation=${conversationId} type=${thoughtType}`,
-            error instanceof Error ? error.stack : String(error),
-          );
-        }
-      }
-    } catch (error) {
-      handle.abort();
-      throw error;
-    } finally {
-      handle.finish();
+    const scope = this.beginScope(conversationId);
+    const existingMessages = await this.chatEntries.listMessages(conversationId);
+    const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
+      text: body.message,
+      agentId: body.agentId,
+      llmProviderId: body.llmProviderId,
+      llmModel: body.llmModel,
+      modelPresetId: body.modelPresetId,
+    });
+    const userPayload = await this.chatEntries.getChatEntry(conversationId, userEntry.id);
+    if (!userPayload || userPayload.type !== 'user-message') {
+      throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
     }
+    this.hub.publish(conversationId, { type: SseType.USER_MESSAGE, entry: userPayload });
+    await publishConversationUpdated(this.hub, this.conversations, conversationId);
+
+    const thoughtTypes: ThoughtType[] = existingMessages.length === 0 ? ['autoTitle', 'planner'] : ['planner'];
+    scope.spawn(async () => {
+      for (const thoughtType of thoughtTypes) {
+        await this.thoughtProcessing
+          .runFullThoughtByType(conversationId, thoughtType, scope)
+          .catch((error) => {
+            this.logger.error(
+              `thought processing failed: conversation=${conversationId} type=${thoughtType}`,
+              error instanceof Error ? error.stack : String(error),
+            );
+          });
+      }
+    });
+    scope.rootDone();
   }
 }

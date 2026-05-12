@@ -6,29 +6,12 @@ import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
 import { createObservableItemCollection } from "../utils/observableCollection";
-import { TokenUsageMapper } from "../../../backend/src/types/tokenUsage";
-
-function plannerResponseUsageFromEvent(ev: {
-  promptTokens?: number;
-  cachedPromptTokens?: number;
-  completionTokens?: number;
-}) {
-  return TokenUsageMapper.fromEntryFields({
-    promptTokens: ev.promptTokens,
-    cachedPromptTokens: ev.cachedPromptTokens,
-    completionTokens: ev.completionTokens,
-  });
-}
 
 export function useChatSession(conversationId: string | null | undefined) {
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
   const liveDisposeRef = useRef<(() => void) | null>(null);
   const pollDisposeRef = useRef<(() => void) | null>(null);
   const pendingUserByConversationRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
-  const pendingAssistantByEntryIdRef = useRef<Map<string, { delta: string; parentId: string | null }>>(new Map());
-  const pendingToolStartByEntryIdRef = useRef<
-    Map<string, { toolName: string; approvalRequired: boolean; argsPreview?: string; parentId: string | null }>
-  >(new Map());
 
   const mergePendingUsers = useCallback((cid: string, fetched: ChatEntry[]): ChatEntry[] => {
     const pending = pendingUserByConversationRef.current.get(cid) ?? [];
@@ -116,13 +99,13 @@ export function useChatSession(conversationId: string | null | undefined) {
         if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
           return;
         }
+        const store = storeRef.current;
         if (ev.type === SseType.USER_MESSAGE) {
-          const store = storeRef.current;
           if (reconcileIncomingUserMessage(cid, ev.entry)) return;
           store.append(ev.entry);
           return;
-        } else if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
-          const store = storeRef.current;
+        }
+        if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
           const row$ = store.getById(ev.entry.id);
           if (row$) {
             row$.mutate((next) => {
@@ -136,179 +119,22 @@ export function useChatSession(conversationId: string | null | undefined) {
           }
           store.append(ev.entry);
           return;
-        } else if (ev.type === SseType.PLANNER_STARTING || ev.type === SseType.TITLE_STARTING) {
-          const store = storeRef.current;
-          const thinkingType = ev.type === SseType.TITLE_STARTING ? "title_llm_stream" : "planner_llm_stream";
-          if (!store.getById(ev.chatEntryId)) {
-            const llmProviderId =
-              typeof ev.llmProviderId === "string" && ev.llmProviderId.trim() !== ""
-                ? ev.llmProviderId.trim()
-                : undefined;
-            const llmModel =
-              typeof ev.llmModel === "string" && ev.llmModel.trim() !== "" ? ev.llmModel.trim() : undefined;
-            store.append({
-              type: thinkingType,
-              id: ev.chatEntryId,
-              thoughtId: ev.thoughtId,
-              conversationIndex: ev.conversationIndex,
-              createdAt: ev.createdAt,
-              parentId: ev.parentId ?? null,
-              llmRequest: ev.requestText,
-              status: "running",
-              ...(llmProviderId !== undefined ? { llmProviderId } : {}),
-              ...(llmModel !== undefined ? { llmModel } : {}),
-            });
-          }
-          return;
-        } else if (ev.type === SseType.PLANNER_LLM_STREAM || ev.type === SseType.TITLE_LLM_STREAM) {
-          const store = storeRef.current;
+        }
+        if (ev.type === SseType.CHAT_ENTRY_DELTA) {
           const row$ = store.getById(ev.chatEntryId);
-          if (!row$) {
-            return;
-          }
+          if (!row$) return;
           row$.mutate((next) => {
-            if (next.type !== "planner_llm_stream" && next.type !== "title_llm_stream") {
-              console.warn("Expected planner_llm_stream row, got:", next.type);
-              return;
-            }
-            next.llmResponse = `${next.llmResponse ?? ""}${ev.delta}`;
-            next.status = "running";
-            delete next.error;
+            const target = next as Record<string, unknown>;
+            const current = typeof target[ev.field] === "string" ? (target[ev.field] as string) : "";
+            target[ev.field] = `${current}${ev.delta}`;
           });
           store.touchRows();
           return;
-        } else if (ev.type === SseType.ASSISTANT_STREAM) {
-          const store = storeRef.current;
-          const row$ = store.getById(ev.chatEntryId);
-          if (!row$) {
-            const pending = pendingAssistantByEntryIdRef.current.get(ev.chatEntryId);
-            const parentId = ev.parentId ?? pending?.parentId ?? null;
-            const delta = `${pending?.delta ?? ""}${ev.delta}`;
-            pendingAssistantByEntryIdRef.current.delete(ev.chatEntryId);
-            store.append({
-              type: "assistant-message",
-              id: ev.chatEntryId,
-              conversationIndex: store.getRows().length,
-              createdAt: new Date().toISOString(),
-              parentId,
-              text: delta,
-            });
-            return;
-          }
-          row$.mutate((next) => {
-            if (next.type !== "assistant-message") return;
-            next.text = `${next.text}${ev.delta}`;
-          });
-          store.touchRows();
+        }
+        if (ev.type === SseType.TOOL_INVOCATION_START || ev.type === SseType.TOOL_INVOCATION_END) {
           return;
-        } else if (ev.type === SseType.PLANNER_RESPONSE || ev.type === SseType.TITLE_RESPONSE) {
-          const store = storeRef.current;
-          const row$ = store.getById(ev.chatEntryId);
-
-          if (row$) {
-            row$.mutate((next) => {
-              if (next.type !== "planner_llm_stream" && next.type !== "title_llm_stream") {
-                console.warn("Expected planner_llm_stream row, got:", next.type);
-                return;
-              }
-              next.decision =
-                ev.type === SseType.PLANNER_RESPONSE && ev.action === "tool_call" && ev.toolName
-                  ? {
-                      type: "tool-invocation",
-                      toolId: ev.toolName,
-                      parameters: {},
-                    }
-                  : ev.summary.trim()
-                  ? {
-                      type: "user-response",
-                      text: ev.summary.trim(),
-                    }
-                  : next.decision ?? null;
-              const createdAtMs = Date.parse(next.createdAt);
-              next.thoughtMs =
-                ev.finished && Number.isFinite(createdAtMs)
-                  ? Math.max(0, Date.now() - createdAtMs)
-                  : next.thoughtMs ?? null;
-              if (ev.action === "failed") {
-                next.status = "failed";
-                next.error = ev.summary;
-              } else if (ev.action === "cancelled") {
-                next.status = "cancelled";
-                next.error = ev.summary;
-              } else if (ev.finished) {
-                next.status = "completed";
-                delete next.error;
-              }
-              const modelWire = typeof ev.llmModel === "string" ? ev.llmModel.trim() : "";
-              const providerWire = typeof ev.llmProviderId === "string" ? ev.llmProviderId.trim() : "";
-              if (providerWire) next.llmProviderId = providerWire;
-              if (modelWire) next.llmModel = modelWire;
-              const usage = plannerResponseUsageFromEvent(ev);
-              if (usage) {
-                next.promptTokens = usage.promptTokens;
-                next.completionTokens = usage.completionTokens;
-                if (usage.cachedPromptTokens !== undefined) {
-                  next.cachedPromptTokens = usage.cachedPromptTokens;
-                }
-              }
-            });
-            store.touchRows();
-          }
-          return;
-        } else if (ev.type === SseType.TOOL_INVOCATION_START) {
-          const store = storeRef.current;
-          const existing = store.getById(ev.chatEntryId);
-          if (existing) {
-            existing.mutate((next) => {
-              if (next.type !== "tool-invocation") return;
-              next.toolId = ev.toolName;
-              next.state = ev.approvalRequired ? "requested" : "running";
-              if (typeof ev.parentId === "string" && ev.parentId.trim() !== "") {
-                next.parentId = ev.parentId;
-              }
-              next.parameters = ev.argsPreview ? { argsPreview: ev.argsPreview } : next.parameters;
-            });
-            store.touchRows();
-            return;
-          }
-          const pending = pendingToolStartByEntryIdRef.current.get(ev.chatEntryId);
-          const parentId = ev.parentId ?? pending?.parentId ?? null;
-          const toolName = ev.toolName || pending?.toolName || "unknown";
-          const approvalRequired = ev.approvalRequired ?? pending?.approvalRequired ?? false;
-          const argsPreview = ev.argsPreview ?? pending?.argsPreview;
-          pendingToolStartByEntryIdRef.current.delete(ev.chatEntryId);
-          store.append({
-            type: "tool-invocation",
-            id: ev.chatEntryId,
-            conversationIndex: store.getRows().length,
-            createdAt: new Date().toISOString(),
-            parentId,
-            toolId: toolName,
-            state: approvalRequired ? "requested" : "running",
-            parameters: argsPreview ? { argsPreview } : {},
-            result: null,
-          });
-          return;
-        } else if (ev.type === SseType.TOOL_INVOCATION_END) {
-          const store = storeRef.current;
-          const rows = store.getRows();
-          const idx = store.findLastIndex(
-            (e) =>
-              e.type === "tool-invocation" &&
-              e.toolId === ev.toolName &&
-              (e.state === "requested" || e.state === "running")
-          );
-          if (idx < 0) return;
-          const row$ = rows[idx];
-          const row = row$.get();
-          if (row.type !== "tool-invocation") return;
-          row$.mutate((next) => {
-            if (next.type !== "tool-invocation") return;
-            next.state = ev.ok ? "done" : "error";
-            next.result = ev.output;
-          });
-          store.touchRows();
-        } else assertNever(ev);
+        }
+        assertNever(ev);
       },
     });
     pollDisposeRef.current = subscribeGlobalPoll(async () => false);

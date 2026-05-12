@@ -1,5 +1,6 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import type { AgentEntity } from '../../agents/agent.entity.js';
+import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import type { AgenticPlannerOutput, ChatEntry, LlmDecision } from '../../contracts/chatEntry.js';
 import { SseType } from '../../contracts/sse.js';
 import { AgentsRepo } from '../../db/repositories/agents.repo.js';
@@ -110,7 +111,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     input: PlannerInput,
     ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> => {
     if (!ctx.streamEntryId) throw new Error('planner runDecision requires ctx.streamEntryId');
     const streamEntryId = ctx.streamEntryId;
@@ -135,10 +136,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (!agent) throw new Error(`planner: agent not found for tool execution: ${input.agentId}`);
     const continuationAnchorId = finalAssistantEntryId ?? ctx.thoughtActionEntryId ?? streamEntryId;
     for (const requested of requestedToolCalls) {
-      signal.throwIfAborted();
+      scope.throwIfAborted();
       await this.spawnToolParamsThought(
         { input, agent, requested, continuationAnchorId, followup: parsed.followup },
-        signal,
+        scope,
       );
     }
   };
@@ -159,7 +160,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       continuationAnchorId: string;
       followup: 'continue' | 'finalize';
     },
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> {
     const tool = this.tools.get(args.requested.toolName);
     if (!tool) throw new Error(`planner tool request references missing tool: ${args.requested.toolName}`);
@@ -175,7 +176,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
-    await this.thoughtProcessing.runFullThought(this.toolParamsProvider, toolParamsInput, signal);
+    await this.thoughtProcessing.runFullThought(this.toolParamsProvider, toolParamsInput, scope);
   }
 
   private ensureState(streamEntryId: string): StreamState {

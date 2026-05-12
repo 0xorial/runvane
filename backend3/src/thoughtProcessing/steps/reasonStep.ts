@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SseType } from '../../contracts/sse.js';
+import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
@@ -28,9 +28,9 @@ export class ReasonStep {
     input: TInput,
     ctx: ThoughtContext,
     prepared: PreparedReason,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<ThoughtReasonLlmResult> {
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, prepared.prompt));
     ctx.streamEntryId = streamEntryId;
 
@@ -38,16 +38,11 @@ export class ReasonStep {
       ctx.thoughtActionEntryId = await this.createActionEntry(provider, ctx);
     }
 
-    this.hub.publish(ctx.conversationId, {
-      type: SseType.THOUGHT_REASON_STEP_STARTING,
-      chatEntryId: streamEntryId,
-    });
-
     try {
-      signal.throwIfAborted();
-      return await this.streamLlm(provider, input, ctx, prepared.prompt, streamEntryId, signal);
+      scope.throwIfAborted();
+      return await this.streamLlm(provider, input, ctx, prepared.prompt, streamEntryId, scope);
     } catch (error) {
-      await this.markFailed(ctx, streamEntryId, error, signal);
+      await this.markFailed(ctx, streamEntryId, error, scope);
       throw error;
     }
   }
@@ -88,7 +83,7 @@ export class ReasonStep {
     ctx: ThoughtContext,
     prompt: string,
     streamEntryId: string,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<ThoughtReasonLlmResult> {
     const llmDoc = await this.llmProviderSettings.getDocument();
     const providerId = llmDoc.llm_configuration.provider_id;
@@ -108,12 +103,12 @@ export class ReasonStep {
       providerSettings,
       { model: modelName, prompt },
       (delta) => {
-        signal.throwIfAborted();
+        scope.throwIfAborted();
         streamedText += delta;
         provider.onLlmDelta?.(input, ctx, delta);
       },
     );
-    signal.throwIfAborted();
+    scope.throwIfAborted();
 
     const fullResponse = String(completion.text || streamedText);
     const result: ThoughtReasonLlmResult = { fullResponse, providerId, model: modelName };
@@ -125,10 +120,6 @@ export class ReasonStep {
       thoughtMs: Date.now() - startedAt,
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
-    this.hub.publish(ctx.conversationId, {
-      type: SseType.THOUGHT_REASON_STEP_FINISHED,
-      chatEntryId: streamEntryId,
-    });
     return result;
   }
 
@@ -136,19 +127,14 @@ export class ReasonStep {
     ctx: ThoughtContext,
     streamEntryId: string,
     error: unknown,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> {
-    const cancelled = signal.aborted || (error instanceof Error && error.name === 'AbortError');
+    const cancelled = scope.signal.aborted || (error instanceof Error && error.name === 'AbortError');
     const detail = error instanceof Error ? error.message : String(error);
     const patch: Record<string, unknown> = { status: cancelled ? 'cancelled' : 'failed' };
     if (!cancelled) patch.error = detail;
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, patch);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
-    this.hub.publish(ctx.conversationId, {
-      type: cancelled ? SseType.THOUGHT_REASON_STEP_CANCELLED : SseType.THOUGHT_REASON_STEP_FAILED,
-      chatEntryId: streamEntryId,
-      ...(cancelled ? {} : { error: detail }),
-    } as never);
   }
 }
 

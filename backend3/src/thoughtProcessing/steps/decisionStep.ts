@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SseType } from '../../contracts/sse.js';
+import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
@@ -17,42 +17,23 @@ export class DecisionStep {
     input: TInput,
     ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ): Promise<void> {
-    signal.throwIfAborted();
-    const actionEntryId = ctx.thoughtActionEntryId;
-    if (actionEntryId) {
-      this.hub.publish(ctx.conversationId, {
-        type: SseType.THOUGHT_DECISION_STEP_STARTING,
-        chatEntryId: actionEntryId,
-      });
-    }
+    scope.throwIfAborted();
     try {
-      await provider.runDecision(input, ctx, llmResult, signal);
-      if (actionEntryId) {
-        this.hub.publish(ctx.conversationId, {
-          type: SseType.THOUGHT_DECISION_STEP_FINISHED,
-          chatEntryId: actionEntryId,
-        });
-      }
+      await provider.runDecision(input, ctx, llmResult, scope);
     } catch (error) {
-      await this.markFailed(ctx, error, signal);
+      await this.markFailed(ctx, error, scope);
       throw error;
     }
   }
 
-  private async markFailed(ctx: ThoughtContext, error: unknown, signal: AbortSignal): Promise<void> {
+  private async markFailed(ctx: ThoughtContext, error: unknown, scope: LifecycleScope): Promise<void> {
     const actionEntryId = ctx.thoughtActionEntryId;
     if (!actionEntryId) return;
-    const cancelled = signal.aborted || (error instanceof Error && error.name === 'AbortError');
+    const cancelled = scope.signal.aborted || (error instanceof Error && error.name === 'AbortError');
+    if (cancelled) return;
     const detail = error instanceof Error ? error.message : String(error);
-    if (cancelled) {
-      this.hub.publish(ctx.conversationId, {
-        type: SseType.THOUGHT_DECISION_STEP_CANCELLED,
-        chatEntryId: actionEntryId,
-      });
-      return;
-    }
     await this.chatEntries.updateThoughtAction(ctx.conversationId, actionEntryId, {
       status: 'failed',
       action: 'failed',
@@ -60,10 +41,5 @@ export class DecisionStep {
       error: detail,
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, actionEntryId);
-    this.hub.publish(ctx.conversationId, {
-      type: SseType.THOUGHT_DECISION_STEP_FAILED,
-      chatEntryId: actionEntryId,
-      error: detail,
-    });
   }
 }

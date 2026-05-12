@@ -1,4 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { SseType } from '../contracts/sse.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
@@ -47,12 +48,12 @@ export class RunToolService {
     private readonly thoughtProcessing: ThoughtProcessingService,
   ) {}
 
-  async run(input: RunToolInput, signal: AbortSignal): Promise<RunToolResult> {
+  async run(input: RunToolInput, scope: LifecycleScope): Promise<RunToolResult> {
     if (input.sourceEntryId && !(await this.chatEntries.isEntryOnActiveLineage(input.conversationId, input.sourceEntryId))) {
       this.logger.log(`tool skipped: source entry not on active lineage (${input.conversationId}/${input.sourceEntryId})`);
       return { kind: 'skipped' };
     }
-    signal.throwIfAborted();
+    scope.throwIfAborted();
 
     const tool = this.tools.get(input.toolName);
     if (!tool) {
@@ -65,7 +66,7 @@ export class RunToolService {
     const parsedParams = tool.parseParams(input.params);
     const entries = await this.chatEntries.listChatEntries(input.conversationId);
 
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const ruleResults = await tool.evaluatePermission({
       conversationId: input.conversationId,
       agentId: input.agentId,
@@ -90,17 +91,17 @@ export class RunToolService {
       parsedRules,
       entries,
       existingEntryId: existing?.id ?? null,
-      signal,
+      scope,
     });
   }
 
-  async allowAndRun(input: RunToolInput, signal: AbortSignal): Promise<RunToolResult> {
+  async allowAndRun(input: RunToolInput, scope: LifecycleScope): Promise<RunToolResult> {
     const pending = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (!pending || pending.state !== 'requested') {
       this.logger.log(`allowAndRun skipped: no requested invocation (${input.conversationId}/${input.toolName})`);
       return { kind: 'skipped' };
     }
-    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, signal);
+    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, scope);
   }
 
   private async appendErrorEntry(input: RunToolInput, reason: string): Promise<string> {
@@ -196,9 +197,9 @@ export class RunToolService {
     parsedRules: Record<string, unknown>;
     entries: Awaited<ReturnType<ChatEntriesRepo['listChatEntries']>>;
     existingEntryId: string | null;
-    signal: AbortSignal;
+    scope: LifecycleScope;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, signal } = args;
+    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, scope } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
@@ -227,14 +228,14 @@ export class RunToolService {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
-    signal.throwIfAborted();
+    scope.throwIfAborted();
     const output = await tool.runTool(parsedParams, {
       conversationId: input.conversationId,
       agentId: input.agentId,
       entries,
       toolRules: parsedRules,
     });
-    signal.throwIfAborted();
+    scope.throwIfAborted();
 
     const finishedAt = new Date();
     const envelope: ToolEnvelope = {
@@ -261,8 +262,8 @@ export class RunToolService {
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
     if (input.plannerFollowup?.mode === 'continue') {
-      signal.throwIfAborted();
-      await this.thoughtProcessing.runFullThoughtByType(input.conversationId, 'planner', signal);
+      scope.throwIfAborted();
+      await this.thoughtProcessing.runFullThoughtByType(input.conversationId, 'planner', scope);
     }
     return { kind: 'completed', toolEntryId: entryId };
   }

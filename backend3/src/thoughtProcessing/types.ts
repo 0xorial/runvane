@@ -1,3 +1,4 @@
+import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 
 export type ThoughtType = 'autoTitle' | 'planner' | 'toolParams';
@@ -37,6 +38,6 @@ export type ThoughtTypeProvider<TInput, TThoughtType extends ThoughtType = Thoug
     input: TInput,
     ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
-    signal: AbortSignal,
+    scope: LifecycleScope,
   ) => Promise<void>;
 };

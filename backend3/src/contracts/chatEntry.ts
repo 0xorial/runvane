@@ -60,7 +60,7 @@ export type ThoughtPrepareEntry = ChatEntryBase & {
   thoughtId: string;
   status?: ThoughtStepStatus;
   error?: string;
-  requestText: string;
+  requestText?: string;
   title?: string;
   llmProviderId?: string;
   llmModel?: string;

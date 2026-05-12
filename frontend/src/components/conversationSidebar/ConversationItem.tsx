@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MessageSquare, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,8 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { subscribeGlobalLive } from "../../protocol/runLiveClient";
-import { SseType } from "../../protocol/sseTypes";
 import { formatExactChatTime, formatRelativeChatTime } from "../../utils/formatRelativeChatTime";
 import { LlmMetaBadge } from "../chat/LlmMetaBadge";
 import { NewGroupDialog } from "./NewGroupDialog";
@@ -61,7 +59,6 @@ export function ConversationItem({
 }: ConversationItemProps) {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-  const [streamedTitle, setStreamedTitle] = useState("");
   const timestampIso = conversation.lastMessageAt || conversation.createdAt || conversation.updatedAt;
   const stamp = formatRelativeChatTime(timestampIso);
   const stampExact = formatExactChatTime(timestampIso);
@@ -75,25 +72,6 @@ export function ConversationItem({
     setMoveDialogOpen(false);
     setNewGroupName("");
   }
-
-  useEffect(() => {
-    const dispose = subscribeGlobalLive({
-      onSseEvent: (ev) => {
-        if (ev.type === SseType.TITLE_STARTING && ev.conversationId === conversation.id) {
-          setStreamedTitle("");
-          return;
-        }
-        if (ev.type === SseType.TITLE_LLM_STREAM && ev.conversationId === conversation.id) {
-          setStreamedTitle((prev) => `${prev}${ev.delta}`);
-          return;
-        }
-        if (ev.type === SseType.CONVERSATION_UPDATED && ev.conversation.id === conversation.id) {
-          setStreamedTitle("");
-        }
-      },
-    });
-    return () => dispose();
-  }, [conversation.id]);
 
   return (
     <>
@@ -130,7 +108,7 @@ export function ConversationItem({
           <div className="flex items-center gap-2">
             <MessageSquare className="h-3 w-3 shrink-0" aria-hidden />
             <span className="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
-              {streamedTitle || conversation.title || "Untitled"}
+              {conversation.title || "Untitled"}
             </span>
           </div>
           {stamp ? (
