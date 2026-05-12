@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Activity, Bot, Dot, FileText, MessageSquare, Sparkles, User, Wrench } from "lucide-react";
+import { Activity, Bot, ChevronRight, Dot, FileText, MessageSquare, Sparkles, User, Wrench } from "lucide-react";
 import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
@@ -193,17 +193,16 @@ function BranchNode({
   const isActive = activePathIds.has(entry.id);
   const isLeaf = children.length === 0;
   const isSwitching = switchingToEntryId === entry.id;
+  const [userExpanded, setUserExpanded] = useState(false);
+  const isBranchPoint = hasSiblings && !isActive && children.length > 0;
+  const childrenVisible = !isBranchPoint || userExpanded;
+  const showToggle = isBranchPoint;
 
   return (
     <div>
-      <button
-        type="button"
-        disabled={isSwitching}
-        onClick={() => {
-          void onSelectEntry(entry.id);
-        }}
+      <div
         className={cn(
-          "flex w-full items-start gap-1.5 rounded px-1.5 py-1 text-left transition-colors",
+          "flex w-full items-start gap-1 rounded text-left transition-colors",
           isActive
             ? "bg-primary/10 text-foreground"
             : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
@@ -211,24 +210,50 @@ function BranchNode({
         )}
         style={{ paddingLeft: `${branchDepth * 12 + 6}px` }}
       >
-        <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry)}</span>
-        <span className="flex-1 truncate">{entryPreview(entry)}</span>
-        {isLeaf && activeLeafId === entry.id ? (
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-primary">head</span>
-        ) : null}
-      </button>
-      {children.map((child) => (
-        <BranchNode
-          key={child.id}
-          entry={child}
-          branchDepth={nextBranchDepth}
-          childrenByParent={childrenByParent}
-          activePathIds={activePathIds}
-          activeLeafId={activeLeafId}
-          switchingToEntryId={switchingToEntryId}
-          onSelectEntry={onSelectEntry}
-        />
-      ))}
+        {showToggle ? (
+          <button
+            type="button"
+            aria-label={userExpanded ? "Collapse branch" : "Expand branch"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setUserExpanded((v) => !v);
+            }}
+            className="mt-1 flex h-3 w-3 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight className={cn("h-3 w-3 transition-transform", userExpanded ? "rotate-90" : "")} />
+          </button>
+        ) : (
+          <span className="mt-1 h-3 w-3 shrink-0" />
+        )}
+        <button
+          type="button"
+          disabled={isSwitching}
+          onClick={() => {
+            void onSelectEntry(entry.id);
+          }}
+          className="flex flex-1 items-start gap-1.5 rounded px-1.5 py-1 text-left"
+        >
+          <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry)}</span>
+          <span className="flex-1 truncate">{entryPreview(entry)}</span>
+          {isLeaf && activeLeafId === entry.id ? (
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-primary">head</span>
+          ) : null}
+        </button>
+      </div>
+      {childrenVisible
+        ? children.map((child) => (
+            <BranchNode
+              key={child.id}
+              entry={child}
+              branchDepth={nextBranchDepth}
+              childrenByParent={childrenByParent}
+              activePathIds={activePathIds}
+              activeLeafId={activeLeafId}
+              switchingToEntryId={switchingToEntryId}
+              onSelectEntry={onSelectEntry}
+            />
+          ))
+        : null}
     </div>
   );
 }
