@@ -147,14 +147,9 @@ export function useChatSession(conversationId: string | null | undefined) {
     };
   }, [conversationId, reconcileIncomingUserMessage]);
 
-  useEffect(() => {
+  const refreshChat = useCallback(async () => {
     if (!conversationId) return;
-    const cid = String(conversationId);
-    const handler = () => {
-      void reloadMessages(cid);
-    };
-    window.addEventListener("runvane:refresh-chat", handler);
-    return () => window.removeEventListener("runvane:refresh-chat", handler);
+    await reloadMessages(String(conversationId));
   }, [conversationId, reloadMessages]);
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
@@ -204,5 +199,6 @@ export function useChatSession(conversationId: string | null | undefined) {
   return {
     chatEntries,
     appendOptimisticUserMessage,
+    refreshChat,
   };
 }

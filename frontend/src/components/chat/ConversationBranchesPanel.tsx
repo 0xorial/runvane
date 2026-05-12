@@ -6,6 +6,7 @@ import { subscribeGlobalLive } from "@/protocol/runLiveClient";
 import { SseType } from "@/protocol/sseTypes";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
+import { useChatSessionContext } from "@/hooks/chatSessionContext";
 
 type ConversationBranchesPanelProps = {
   conversationId: string | null;
@@ -99,6 +100,7 @@ export function ConversationBranchesPanel({
 }: ConversationBranchesPanelProps) {
   const [allEntries, setAllEntries] = useState<ChatEntry[]>([]);
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
+  const { refreshChat } = useChatSessionContext();
 
   const activePathIds = useMemo(() => new Set(activePathEntries.map((entry) => entry.id)), [activePathEntries]);
   const activeLeafId = activePathEntries[activePathEntries.length - 1]?.id ?? null;
@@ -177,7 +179,7 @@ export function ConversationBranchesPanel({
     try {
       await setConversationActiveLeaf(conversationId, targetLeafId);
       onAnchorEntrySelected?.(entryId);
-      window.dispatchEvent(new Event("runvane:refresh-chat"));
+      await refreshChat();
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       notifyError(`Failed to switch branch: ${detail}`);

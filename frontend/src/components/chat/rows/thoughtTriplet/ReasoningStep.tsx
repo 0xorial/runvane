@@ -3,6 +3,7 @@ import { Pencil } from "lucide-react";
 import { reprocessThought } from "@/api/client";
 import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
+import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -17,6 +18,7 @@ export function ReasoningStep({
   const [isEditing, setIsEditing] = useState(false);
   const [editedResponse, setEditedResponse] = useState(response);
   const [isSaving, setIsSaving] = useState(false);
+  const { refreshChat } = useChatSessionContext();
 
   useEffect(() => {
     if (!isEditing) setEditedResponse(response);
@@ -37,7 +39,7 @@ export function ReasoningStep({
     try {
       await reprocessThought(cid, stream.id, editedResponse.trim());
       setIsEditing(false);
-      window.dispatchEvent(new Event("runvane:refresh-chat"));
+      await refreshChat();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       notifyError(`Failed to reprocess thought: ${detail}`);

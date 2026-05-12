@@ -14,6 +14,7 @@ import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../compo
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
+import { ChatSessionContext } from "../hooks/chatSessionContext";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import type { ChatAttachment } from "../protocol/chatEntry";
@@ -79,7 +80,11 @@ export function ChatPage({
     setAgentSelection(selection);
   }, []);
 
-  const { chatEntries, appendOptimisticUserMessage } = useChatSession(conversationId);
+  const { chatEntries, appendOptimisticUserMessage, refreshChat } = useChatSession(conversationId);
+  const chatSessionContextValue = useMemo(
+    () => ({ conversationId, refreshChat }),
+    [conversationId, refreshChat],
+  );
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);
   const tripletStreamIdByThoughtId = useMemo(() => {
@@ -283,6 +288,7 @@ export function ChatPage({
   );
 
   return (
+    <ChatSessionContext.Provider value={chatSessionContextValue}>
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ChatTitlePanel
         conversationId={conversationId}
@@ -351,5 +357,6 @@ export function ChatPage({
         </div>
       )}
     </div>
+    </ChatSessionContext.Provider>
   );
 }

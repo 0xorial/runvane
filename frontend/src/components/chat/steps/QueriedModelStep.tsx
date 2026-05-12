@@ -6,6 +6,7 @@ import { getConversationMessages, reprocessThought, setConversationActiveLeaf } 
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/utils/toast";
+import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { ChatThreadIndent } from "../ChatMessageShell";
 
 type QueriedModelStepProps = {
@@ -48,6 +49,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const [siblings, setSiblings] = useState<ChatEntry[]>([]);
   const [activeSiblingIndex, setActiveSiblingIndex] = useState(-1);
   const [childrenByParent, setChildrenByParent] = useState<Map<string | null, ChatEntry[]>>(new Map());
+  const { refreshChat } = useChatSessionContext();
 
   const done = isDone(entry);
   const status = entry.status ?? "running";
@@ -143,7 +145,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
     try {
       const leafId = deepestDescendantId(sibling.id);
       await setConversationActiveLeaf(conversationId, leafId);
-      window.dispatchEvent(new Event("runvane:refresh-chat"));
+      await refreshChat();
     } catch (e) {
       notifyError(`Failed to switch branch: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -234,7 +236,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
                               try {
                                 await reprocessThought(conversationId, entry.id, editedResponse);
                                 setEditing(false);
-                                window.dispatchEvent(new Event("runvane:refresh-chat"));
+                                await refreshChat();
                               } catch (e) {
                                 setSubmitError(e instanceof Error ? e.message : String(e));
                               } finally {
