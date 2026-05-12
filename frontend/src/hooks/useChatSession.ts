@@ -1,99 +1,109 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { getConversationMessages } from "../api/client";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  getConversationActiveLeafEntryId,
+  getConversationMessages,
+  setConversationActiveLeaf,
+} from "../api/client";
 import { subscribeGlobalLive, subscribeGlobalPoll } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
-import { createObservableItemCollection } from "../utils/observableCollection";
+import {
+  createObservableItemCollection,
+  type ObservableItem,
+} from "../utils/observableCollection";
+
+type AppendOptimisticUserMessageInput = {
+  conversationId: string;
+  text: string;
+  agentId: string;
+  llmProviderId?: string;
+  llmModel?: string;
+  modelPresetId?: number | null;
+  attachments?: ChatAttachment[];
+};
+
+function buildOptimisticUserEntry(input: AppendOptimisticUserMessageInput, parentId: string | null): UserMessageEntry {
+  return {
+    type: "user-message",
+    id: `optimistic-user-${crypto.randomUUID()}`,
+    conversationIndex: -1,
+    createdAt: new Date().toISOString(),
+    parentId,
+    text: input.text,
+    agentId: input.agentId,
+    ...(input.llmProviderId ? { llmProviderId: input.llmProviderId } : {}),
+    ...(input.llmModel ? { llmModel: input.llmModel } : {}),
+    ...(input.modelPresetId != null ? { modelPresetId: input.modelPresetId } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+  };
+}
 
 export function useChatSession(conversationId: string | null | undefined) {
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
-  const liveDisposeRef = useRef<(() => void) | null>(null);
-  const pollDisposeRef = useRef<(() => void) | null>(null);
-  const pendingUserByConversationRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
-
-  const mergePendingUsers = useCallback((cid: string, fetched: ChatEntry[]): ChatEntry[] => {
-    const pending = pendingUserByConversationRef.current.get(cid) ?? [];
-    if (pending.length === 0) return fetched;
-    const fetchedUsers = fetched.filter((entry): entry is UserMessageEntry => entry.type === "user-message");
-    const fetchedCounts = new Map<string, number>();
-    for (const row of fetchedUsers) {
-      const key = row.text;
-      fetchedCounts.set(key, (fetchedCounts.get(key) ?? 0) + 1);
-    }
-    const remaining: UserMessageEntry[] = [];
-    for (const optimistic of pending) {
-      const count = fetchedCounts.get(optimistic.text) ?? 0;
-      if (count > 0) {
-        fetchedCounts.set(optimistic.text, count - 1);
-      } else {
-        remaining.push(optimistic);
-      }
-    }
-    if (remaining.length === 0) {
-      pendingUserByConversationRef.current.delete(cid);
-    } else {
-      pendingUserByConversationRef.current.set(cid, remaining);
-    }
-    if (remaining.length === 0) return fetched;
-    const startIndex = fetched.length;
-    const optimisticRows = remaining.map((row, idx) => ({
-      ...row,
-      conversationIndex: startIndex + idx,
-    }));
-    return [...fetched, ...optimisticRows];
-  }, []);
-
-  const reloadMessages = useCallback(
-    async (cid: string) => {
-      const data = await getConversationMessages(cid);
-      const fetched = mapApiMessagesToChatEntries(data);
-      storeRef.current.replace(mergePendingUsers(cid, fetched));
-    },
-    [mergePendingUsers]
-  );
-
-  const reconcileIncomingUserMessage = useCallback((cid: string, incoming: UserMessageEntry): boolean => {
-    const pending = pendingUserByConversationRef.current.get(cid) ?? [];
-    if (pending.length === 0) return false;
-    const matchIndex = pending.findIndex((p) => p.text === incoming.text);
-    if (matchIndex < 0) return false;
-
-    const matched = pending[matchIndex];
-    const nextPending = [...pending.slice(0, matchIndex), ...pending.slice(matchIndex + 1)];
-    if (nextPending.length === 0) pendingUserByConversationRef.current.delete(cid);
-    else pendingUserByConversationRef.current.set(cid, nextPending);
-
-    const current = storeRef.current.getRows().map((row$) => row$.get());
-    const rowIndex = current.findIndex((row) => row.id === matched.id);
-    if (rowIndex < 0) return false;
-    const next = current.map((row) => ({ ...row }));
-    next[rowIndex] = {
-      ...incoming,
-      conversationIndex: current[rowIndex].conversationIndex,
-    };
-    storeRef.current.replace(next);
-    return true;
-  }, []);
+  const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
+  const pendingOptimisticUsersRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
 
   useEffect(() => {
-    if (!conversationId) {
-      storeRef.current.replace(defaultChatEntries);
-      return;
-    }
-    void reloadMessages(String(conversationId));
-  }, [conversationId, reloadMessages]);
-
-  useEffect(() => {
-    liveDisposeRef.current?.();
-    liveDisposeRef.current = null;
-    pollDisposeRef.current?.();
-    pollDisposeRef.current = null;
+    storeRef.current.replace(defaultChatEntries);
+    setActiveLeafId(null);
     if (!conversationId) return;
 
     const cid = String(conversationId);
-    liveDisposeRef.current = subscribeGlobalLive({
+    let cancelled = false;
+    void (async () => {
+      const [entries, leafId] = await Promise.all([
+        getConversationMessages(cid, { all: true }),
+        getConversationActiveLeafEntryId(cid),
+      ]);
+      if (cancelled) return;
+      const store = storeRef.current;
+      for (const entry of mapApiMessagesToChatEntries(entries)) {
+        const existing = store.getById(entry.id);
+        if (existing) {
+          existing.mutate((next) => {
+            const target = next as Record<string, unknown>;
+            for (const key of Object.keys(target)) delete target[key];
+            Object.assign(target, entry as Record<string, unknown>);
+          });
+        } else {
+          store.append(entry);
+        }
+      }
+      store.touchRows();
+      setActiveLeafId(leafId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
+
+  const reconcileOptimisticUserMessage = useCallback(
+    (cid: string, incoming: UserMessageEntry): boolean => {
+      const pending = pendingOptimisticUsersRef.current.get(cid) ?? [];
+      const matchIndex = pending.findIndex((p) => p.text === incoming.text);
+      if (matchIndex < 0) return false;
+
+      const matched = pending[matchIndex];
+      const nextPending = [...pending.slice(0, matchIndex), ...pending.slice(matchIndex + 1)];
+      if (nextPending.length === 0) pendingOptimisticUsersRef.current.delete(cid);
+      else pendingOptimisticUsersRef.current.set(cid, nextPending);
+
+      const allRows = storeRef.current.getRows();
+      const filtered = allRows.filter((r) => r.id !== matched.id).map((r) => r.get());
+      filtered.push(incoming);
+      storeRef.current.replace(filtered);
+      setActiveLeafId(incoming.id);
+      return true;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const cid = String(conversationId);
+    const unsubscribeLive = subscribeGlobalLive({
       onSseEvent: (ev) => {
         if (ev.conversationId !== cid) return;
         if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
@@ -101,8 +111,8 @@ export function useChatSession(conversationId: string | null | undefined) {
         }
         const store = storeRef.current;
         if (ev.type === SseType.USER_MESSAGE) {
-          if (reconcileIncomingUserMessage(cid, ev.entry)) return;
-          store.append(ev.entry);
+          if (reconcileOptimisticUserMessage(cid, ev.entry)) return;
+          if (store.append(ev.entry)) setActiveLeafId(ev.entry.id);
           return;
         }
         if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
@@ -117,7 +127,7 @@ export function useChatSession(conversationId: string | null | undefined) {
             store.touchRows();
             return;
           }
-          store.append(ev.entry);
+          if (store.append(ev.entry)) setActiveLeafId(ev.entry.id);
           return;
         }
         if (ev.type === SseType.CHAT_ENTRY_DELTA) {
@@ -137,36 +147,47 @@ export function useChatSession(conversationId: string | null | undefined) {
         assertNever(ev);
       },
     });
-    pollDisposeRef.current = subscribeGlobalPoll(async () => false);
+    const unsubscribePoll = subscribeGlobalPoll(async () => false);
 
     return () => {
-      liveDisposeRef.current?.();
-      liveDisposeRef.current = null;
-      pollDisposeRef.current?.();
-      pollDisposeRef.current = null;
+      unsubscribeLive();
+      unsubscribePoll();
     };
-  }, [conversationId, reconcileIncomingUserMessage]);
-
-  const refreshChat = useCallback(async () => {
-    if (!conversationId) return;
-    await reloadMessages(String(conversationId));
-  }, [conversationId, reloadMessages]);
+  }, [conversationId, reconcileOptimisticUserMessage]);
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
   const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);
-  useSyncExternalStore(subscribeRows, getRowsVersion, getRowsVersion);
-  const chatEntries = storeRef.current.getRows();
+  const rowsVersion = useSyncExternalStore(subscribeRows, getRowsVersion, getRowsVersion);
+
+  const allEntries = useMemo(() => storeRef.current.getRows().slice(), [rowsVersion]);
+
+  const activePathEntries = useMemo<ObservableItem<ChatEntry>[]>(() => {
+    void rowsVersion;
+    if (!activeLeafId) return [];
+    const path: ObservableItem<ChatEntry>[] = [];
+    const seen = new Set<string>();
+    let cursorId: string | null = activeLeafId;
+    while (cursorId && !seen.has(cursorId)) {
+      seen.add(cursorId);
+      const node = storeRef.current.getById(cursorId);
+      if (!node) break;
+      path.push(node);
+      cursorId = node.get().parentId;
+    }
+    return path.reverse();
+  }, [activeLeafId, rowsVersion]);
+
+  const setActiveLeaf = useCallback(
+    async (entryId: string) => {
+      if (!conversationId) return;
+      setActiveLeafId(entryId);
+      await setConversationActiveLeaf(String(conversationId), entryId);
+    },
+    [conversationId],
+  );
 
   const appendOptimisticUserMessage = useCallback(
-    (input: {
-      conversationId: string;
-      text: string;
-      agentId: string;
-      llmProviderId?: string;
-      llmModel?: string;
-      modelPresetId?: number | null;
-      attachments?: ChatAttachment[];
-    }): string | null => {
+    (input: AppendOptimisticUserMessageInput): string | null => {
       const cid = String(input.conversationId || "").trim();
       if (!cid) return null;
       const text = String(input.text || "").trim();
@@ -175,30 +196,21 @@ export function useChatSession(conversationId: string | null | undefined) {
       if (!agentId) {
         throw new Error("appendOptimisticUserMessage requires agentId");
       }
-      const row: UserMessageEntry = {
-        type: "user-message",
-        id: `optimistic-user-${crypto.randomUUID()}`,
-        conversationIndex: storeRef.current.getRows().length,
-        createdAt: new Date().toISOString(),
-        parentId: null,
-        text,
-        agentId,
-        ...(input.llmProviderId ? { llmProviderId: input.llmProviderId } : {}),
-        ...(input.llmModel ? { llmModel: input.llmModel } : {}),
-        ...(input.modelPresetId != null ? { modelPresetId: input.modelPresetId } : {}),
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      };
-      const current = pendingUserByConversationRef.current.get(cid) ?? [];
-      pendingUserByConversationRef.current.set(cid, [...current, row]);
+      const row = buildOptimisticUserEntry({ ...input, text, agentId }, activeLeafId);
+      const current = pendingOptimisticUsersRef.current.get(cid) ?? [];
+      pendingOptimisticUsersRef.current.set(cid, [...current, row]);
       storeRef.current.append(row);
+      setActiveLeafId(row.id);
       return row.id;
     },
-    []
+    [activeLeafId],
   );
 
   return {
-    chatEntries,
+    activePathEntries,
+    allEntries,
+    activeLeafId,
+    setActiveLeaf,
     appendOptimisticUserMessage,
-    refreshChat,
   };
 }

@@ -14,7 +14,6 @@ import { approveToolInvocation } from "../../../api/client";
 import type { ToolInvocationEntry } from "../../../protocol/chatEntry";
 import { notifyError } from "../../../utils/toast";
 import { cn } from "@/lib/utils";
-import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { ChatThreadIndent } from "../ChatMessageShell";
 
 type ToolRunRowProps = {
@@ -28,7 +27,6 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
   const toolName = entry.toolId || "tool";
   const [expanded, setExpanded] = useState(entry.state === "requested");
   const [approving, setApproving] = useState(false);
-  const { refreshChat } = useChatSessionContext();
 
   const isAwaiting = entry.state === "requested";
   const isRunning = entry.state === "running";
@@ -69,7 +67,6 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
     setApproving(true);
     try {
       await approveToolInvocation(conversationId, entry.id);
-      await refreshChat();
     } catch (e) {
       notifyError(e instanceof Error ? e.message : "Failed to approve tool");
     } finally {

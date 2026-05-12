@@ -120,6 +120,19 @@ export function getConversation(conversationId: string): Promise<ConversationRow
   );
 }
 
+export async function getConversationActiveLeafEntryId(conversationId: string): Promise<string | null> {
+  const data = await getJson(`/api/conversations/${encodeURIComponent(conversationId)}`);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("GET /api/conversations/:id: invalid response envelope");
+  }
+  const raw = (data as { activeLeafEntryId?: unknown }).activeLeafEntryId;
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "string") {
+    throw new Error("GET /api/conversations/:id: activeLeafEntryId must be string or null");
+  }
+  return raw.length > 0 ? raw : null;
+}
+
 export function createConversation(body: { title?: string } = {}): Promise<ConversationRow> {
   return sendJson("/api/conversations", "POST", body).then(validatePostConversationsResponse);
 }

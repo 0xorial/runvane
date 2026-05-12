@@ -101,7 +101,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (!answerDelta) return;
     state.streamedAnswer = extracted;
     state.pending = state.pending
-      .then(() => this.streamAssistantDelta(state, input.conversationId, ctx, answerDelta))
+      .then(() => this.streamAssistantDelta(state, input.conversationId, answerDelta))
       .catch((error) => {
         this.logger.error(`assistant_stream pipe failed: ${error instanceof Error ? error.message : String(error)}`);
       });
@@ -127,7 +127,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const decision = toLlmDecision(parsed, requestedToolCalls);
 
     await this.persistStreamEntryDecision(ctx, llmResult, parseResult, decision);
-    const finalAssistantEntryId = await this.finalizeAssistantMessage(state ?? null, input.conversationId, ctx, assistantText);
+    const finalAssistantEntryId = await this.finalizeAssistantMessage(state ?? null, input.conversationId, assistantText);
     await this.finalizeThoughtAction(ctx, action, assistantText, parseResult);
     await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
 
@@ -195,38 +195,25 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   private async streamAssistantDelta(
     state: StreamState,
     conversationId: string,
-    ctx: ThoughtContext,
     delta: string,
   ): Promise<void> {
     if (!state.assistantEntryId) {
-      const created = await this.chatEntries.appendAssistantMessage(conversationId, {
-        text: '',
-        parentId: ctx.thoughtActionEntryId ?? null,
-      });
+      const created = await this.chatEntries.appendAssistantMessage(conversationId, { text: '' });
       state.assistantEntryId = created.id;
       const upsert = await this.chatEntries.getChatEntry(conversationId, created.id);
       if (upsert) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry: upsert });
     }
-    const payload: {
-      type: typeof SseType.CHAT_ENTRY_DELTA;
-      chatEntryId: string;
-      field: 'text';
-      delta: string;
-      parentId?: string;
-    } = {
+    this.hub.publish(conversationId, {
       type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: state.assistantEntryId,
       field: 'text',
       delta,
-    };
-    if (ctx.thoughtActionEntryId) payload.parentId = ctx.thoughtActionEntryId;
-    this.hub.publish(conversationId, payload);
+    });
   }
 
   private async finalizeAssistantMessage(
     state: StreamState | null,
     conversationId: string,
-    ctx: ThoughtContext,
     assistantText: string,
   ): Promise<string | null> {
     if (!assistantText) return state?.assistantEntryId ?? null;
@@ -236,10 +223,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
       return state.assistantEntryId;
     }
-    const created = await this.chatEntries.appendAssistantMessage(conversationId, {
-      text: assistantText,
-      parentId: ctx.thoughtActionEntryId ?? null,
-    });
+    const created = await this.chatEntries.appendAssistantMessage(conversationId, { text: assistantText });
     const entry = await this.chatEntries.getChatEntry(conversationId, created.id);
     if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
     return created.id;

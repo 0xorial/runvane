@@ -165,11 +165,10 @@ export class ChatEntriesRepo {
 
   async appendAssistantMessage(
     conversationId: string,
-    input: { text: string; parentId: string | null },
+    input: { text: string },
   ): Promise<AssistantMessageEntryRow> {
     const row = await this.appendEntry(conversationId, {
       type: 'assistant-message',
-      parentId: input.parentId,
       payload: { text: input.text },
     });
     return {

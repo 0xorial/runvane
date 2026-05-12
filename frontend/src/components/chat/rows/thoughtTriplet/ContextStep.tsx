@@ -5,7 +5,6 @@ import type { PlannerLlmStreamEntry, ThoughtPrepareEntry, TitleLlmStreamEntry } 
 import { notifyError } from "@/utils/toast";
 import { buildModelGroups, type ModelGroup } from "@/pages/settings/helpers";
 import { ModelSelector } from "@/components/ui/ModelSelector";
-import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { ReadOnlySection } from "./ReadOnlySection";
 
 export function ContextStep({
@@ -26,7 +25,6 @@ export function ContextStep({
   const [selectedModel, setSelectedModel] = useState(currentModel);
   const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const { refreshChat } = useChatSessionContext();
 
   useEffect(() => {
     void getLlmSettings()
@@ -61,7 +59,6 @@ export function ContextStep({
         llmModel: selectedModel.trim(),
       });
       setIsEditing(false);
-      await refreshChat();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       notifyError(`Failed to reprocess context: ${detail}`);

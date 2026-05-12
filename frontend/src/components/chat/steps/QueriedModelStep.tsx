@@ -2,12 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Sparkles } from "lucide-react";
 import type { ChatEntry, PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { parseDbTimestampMs } from "@/utils/formatDuration";
-import { getConversationMessages, reprocessThought, setConversationActiveLeaf } from "@/api/client";
+import { reprocessThought } from "@/api/client";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/utils/toast";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { ChatThreadIndent } from "../ChatMessageShell";
+
+function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
+  if (a.conversationIndex !== b.conversationIndex) return a.conversationIndex - b.conversationIndex;
+  return a.createdAt.localeCompare(b.createdAt);
+}
 
 type QueriedModelStepProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
@@ -46,10 +51,26 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [switchingBranch, setSwitchingBranch] = useState(false);
-  const [siblings, setSiblings] = useState<ChatEntry[]>([]);
-  const [activeSiblingIndex, setActiveSiblingIndex] = useState(-1);
-  const [childrenByParent, setChildrenByParent] = useState<Map<string | null, ChatEntry[]>>(new Map());
-  const { refreshChat } = useChatSessionContext();
+  const { allEntries, setActiveLeaf } = useChatSessionContext();
+
+  const sortedAll = useMemo(
+    () => allEntries.map((row$) => row$.get()).sort(byConversationIndexAsc),
+    [allEntries],
+  );
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string | null, ChatEntry[]>();
+    for (const row of sortedAll) {
+      const list = map.get(row.parentId) ?? [];
+      list.push(row);
+      map.set(row.parentId, list);
+    }
+    return map;
+  }, [sortedAll]);
+  const siblings = useMemo(() => childrenByParent.get(entry.parentId) ?? [], [childrenByParent, entry.parentId]);
+  const activeSiblingIndex = useMemo(
+    () => siblings.findIndex((row) => row.id === entry.id),
+    [siblings, entry.id],
+  );
 
   const done = isDone(entry);
   const status = entry.status ?? "running";
@@ -90,43 +111,6 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
     setEditedResponse(String(entry.llmResponse || ""));
   }, [editing, entry.llmResponse]);
 
-  useEffect(() => {
-    if (!conversationId) {
-      setSiblings([]);
-      setActiveSiblingIndex(-1);
-      setChildrenByParent(new Map());
-      return;
-    }
-    let cancelledLocal = false;
-    void (async () => {
-      try {
-        const rows = await getConversationMessages(conversationId, { all: true });
-        if (cancelledLocal) return;
-        rows.sort((a, b) =>
-          a.conversationIndex !== b.conversationIndex
-            ? a.conversationIndex - b.conversationIndex
-            : a.createdAt.localeCompare(b.createdAt),
-        );
-        const byParent = new Map<string | null, ChatEntry[]>();
-        for (const row of rows) {
-          const list = byParent.get(row.parentId) ?? [];
-          list.push(row);
-          byParent.set(row.parentId, list);
-        }
-        const sameParent = byParent.get(entry.parentId) ?? [];
-        setChildrenByParent(byParent);
-        setSiblings(sameParent);
-        setActiveSiblingIndex(sameParent.findIndex((row) => row.id === entry.id));
-      } catch (e) {
-        if (cancelledLocal) return;
-        notifyError(`Failed to load sibling branches: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    })();
-    return () => {
-      cancelledLocal = true;
-    };
-  }, [conversationId, entry.id, entry.parentId]);
-
   function deepestDescendantId(entryId: string): string {
     let cursor = entryId;
     for (;;) {
@@ -143,9 +127,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
     if (!sibling) return;
     setSwitchingBranch(true);
     try {
-      const leafId = deepestDescendantId(sibling.id);
-      await setConversationActiveLeaf(conversationId, leafId);
-      await refreshChat();
+      await setActiveLeaf(deepestDescendantId(sibling.id));
     } catch (e) {
       notifyError(`Failed to switch branch: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -236,7 +218,6 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
                               try {
                                 await reprocessThought(conversationId, entry.id, editedResponse);
                                 setEditing(false);
-                                await refreshChat();
                               } catch (e) {
                                 setSubmitError(e instanceof Error ? e.message : String(e));
                               } finally {

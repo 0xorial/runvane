@@ -1,16 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Activity, Bot, Dot, FileText, MessageSquare, Sparkles, User, Wrench } from "lucide-react";
-import { getConversationMessages, setConversationActiveLeaf } from "@/api/client";
 import type { ChatEntry } from "@/protocol/chatEntry";
-import { subscribeGlobalLive } from "@/protocol/runLiveClient";
-import { SseType } from "@/protocol/sseTypes";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
 
 type ConversationBranchesPanelProps = {
-  conversationId: string | null;
-  activePathEntries: ChatEntry[];
   onAnchorEntrySelected?: (entryId: string) => void;
 };
 
@@ -85,73 +80,28 @@ function deepestDescendantId(entryId: string, childrenByParent: Map<string | nul
   }
 }
 
-function upsertEntry(prev: ChatEntry[], next: ChatEntry): ChatEntry[] {
-  const idx = prev.findIndex((entry) => entry.id === next.id);
-  if (idx < 0) return [...prev, next].sort(byConversationIndexAsc);
-  const out = prev.slice();
-  out[idx] = next;
-  return out;
-}
-
-export function ConversationBranchesPanel({
-  conversationId,
-  activePathEntries,
-  onAnchorEntrySelected,
-}: ConversationBranchesPanelProps) {
-  const [allEntries, setAllEntries] = useState<ChatEntry[]>([]);
+export function ConversationBranchesPanel({ onAnchorEntrySelected }: ConversationBranchesPanelProps) {
+  const { conversationId, allEntries, activePathEntries, activeLeafId, setActiveLeaf } = useChatSessionContext();
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
-  const { refreshChat } = useChatSessionContext();
 
-  const activePathIds = useMemo(() => new Set(activePathEntries.map((entry) => entry.id)), [activePathEntries]);
-  const activeLeafId = activePathEntries[activePathEntries.length - 1]?.id ?? null;
+  const activePathIds = useMemo(
+    () => new Set(activePathEntries.map((row$) => row$.id)),
+    [activePathEntries],
+  );
 
-  const reloadAllEntries = useCallback(async () => {
-    if (!conversationId) {
-      setAllEntries([]);
-      return;
-    }
-    const rows = await getConversationMessages(conversationId, { all: true });
-    rows.sort(byConversationIndexAsc);
-    setAllEntries(rows);
-  }, [conversationId]);
+  const sortedAllEntries = useMemo(
+    () => allEntries.map((row$) => row$.get()).sort(byConversationIndexAsc),
+    [allEntries],
+  );
 
-  useEffect(() => {
-    void reloadAllEntries().catch((e) => {
-      const detail = e instanceof Error ? e.message : String(e);
-      notifyError(`Failed to load conversation branches: ${detail}`);
-    });
-  }, [reloadAllEntries]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-    const dispose = subscribeGlobalLive({
-      onSseEvent: (ev) => {
-        if (ev.conversationId !== conversationId) return;
-        if (ev.type === SseType.USER_MESSAGE) {
-          setAllEntries((prev) => upsertEntry(prev, ev.entry));
-          return;
-        }
-        if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
-          setAllEntries((prev) => upsertEntry(prev, ev.entry));
-        }
-      },
-    });
-    return () => dispose();
-  }, [conversationId]);
-
-  const mergedEntries = useMemo(() => {
-    const byId = new Map(allEntries.map((entry) => [entry.id, entry]));
-    for (const entry of activePathEntries) {
-      byId.set(entry.id, entry);
-    }
-    return [...byId.values()].sort(byConversationIndexAsc);
-  }, [allEntries, activePathEntries]);
-
-  const entriesById = useMemo(() => new Map(mergedEntries.map((entry) => [entry.id, entry])), [mergedEntries]);
+  const entriesById = useMemo(
+    () => new Map(sortedAllEntries.map((entry) => [entry.id, entry])),
+    [sortedAllEntries],
+  );
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string | null, ChatEntry[]>();
-    for (const entry of mergedEntries) {
+    for (const entry of sortedAllEntries) {
       const parentId = entry.parentId;
       if (parentId && !entriesById.has(parentId)) {
         const roots = map.get(null) ?? [];
@@ -167,7 +117,7 @@ export function ConversationBranchesPanel({
       list.sort(byConversationIndexAsc);
     }
     return map;
-  }, [mergedEntries, entriesById]);
+  }, [sortedAllEntries, entriesById]);
 
   const rootNodes = childrenByParent.get(null) ?? [];
 
@@ -177,9 +127,8 @@ export function ConversationBranchesPanel({
     if (!targetLeafId) return;
     setSwitchingToEntryId(targetLeafId);
     try {
-      await setConversationActiveLeaf(conversationId, targetLeafId);
+      await setActiveLeaf(targetLeafId);
       onAnchorEntrySelected?.(entryId);
-      await refreshChat();
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       notifyError(`Failed to switch branch: ${detail}`);

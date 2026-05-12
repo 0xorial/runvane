@@ -80,10 +80,11 @@ export function ChatPage({
     setAgentSelection(selection);
   }, []);
 
-  const { chatEntries, appendOptimisticUserMessage, refreshChat } = useChatSession(conversationId);
+  const { activePathEntries: chatEntries, allEntries, activeLeafId, setActiveLeaf, appendOptimisticUserMessage } =
+    useChatSession(conversationId);
   const chatSessionContextValue = useMemo(
-    () => ({ conversationId, refreshChat }),
-    [conversationId, refreshChat],
+    () => ({ conversationId, activePathEntries: chatEntries, allEntries, activeLeafId, setActiveLeaf }),
+    [conversationId, chatEntries, allEntries, activeLeafId, setActiveLeaf],
   );
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);
@@ -324,8 +325,6 @@ export function ChatPage({
           <ResizablePanel defaultSize={26} minSize={16} maxSize={45} className="min-h-0 min-w-0 overflow-hidden">
             <aside className="min-h-0 min-w-0 h-full overflow-y-auto border-l border-border bg-sidebar">
               <ConversationBranchesPanel
-                conversationId={conversationId}
-                activePathEntries={activePathEntries}
                 onAnchorEntrySelected={(entryId) => {
                   const visibleAnchorId = resolveVisibleAnchorEntryId(entryId);
                   setSelectedBranchAnchorEntryId(visibleAnchorId);

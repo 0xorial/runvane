@@ -1,8 +1,13 @@
 import { createContext, useContext } from "react";
+import type { ChatEntry } from "../protocol/chatEntry";
+import type { ObservableItem } from "../utils/observableCollection";
 
 export type ChatSessionContextValue = {
   conversationId: string | null;
-  refreshChat: () => Promise<void>;
+  activePathEntries: ObservableItem<ChatEntry>[];
+  allEntries: ObservableItem<ChatEntry>[];
+  activeLeafId: string | null;
+  setActiveLeaf: (entryId: string) => Promise<void>;
 };
 
 export const ChatSessionContext = createContext<ChatSessionContextValue | null>(null);
