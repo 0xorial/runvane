@@ -36,7 +36,7 @@ async function sendMessageToConversation(
     ...(modelPresetId != null ? { modelPresetId } : {}),
     ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
   });
-  return { ok: status === 200 || status === 202 };
+  return { ok: status >= 200 && status < 300 };
 }
 
 type ChatPageProps = {

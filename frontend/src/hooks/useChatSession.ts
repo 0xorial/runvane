@@ -128,7 +128,6 @@ export function useChatSession(conversationId: string | null | undefined) {
             const current = typeof target[ev.field] === "string" ? (target[ev.field] as string) : "";
             target[ev.field] = `${current}${ev.delta}`;
           });
-          store.touchRows();
           return;
         }
         if (ev.type === SseType.TOOL_INVOCATION_START || ev.type === SseType.TOOL_INVOCATION_END) {

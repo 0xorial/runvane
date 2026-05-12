@@ -5,8 +5,10 @@ import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { notifyError } from "@/utils/toast";
 
 function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
-  if (a.conversationIndex !== b.conversationIndex) return a.conversationIndex - b.conversationIndex;
-  return a.createdAt.localeCompare(b.createdAt);
+  const ai = typeof a.conversationIndex === "number" ? a.conversationIndex : 0;
+  const bi = typeof b.conversationIndex === "number" ? b.conversationIndex : 0;
+  if (ai !== bi) return ai - bi;
+  return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
 }
 
 function buildChildrenByParent(entries: ChatEntry[]): Map<string | null, ChatEntry[]> {
