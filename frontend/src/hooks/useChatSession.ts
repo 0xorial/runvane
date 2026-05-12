@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import {
-  getConversationActiveLeafEntryId,
-  getConversationMessages,
-  setConversationActiveLeaf,
-} from "../api/client";
+import { getConversationActiveLeafEntryId, getConversationMessages, setConversationActiveLeaf } from "../api/client";
 import { subscribeGlobalLive, subscribeGlobalPoll } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
-import {
-  createObservableItemCollection,
-  type ObservableItem,
-} from "../utils/observableCollection";
+import { createObservableItemCollection, type ObservableItem } from "../utils/observableCollection";
 
 type AppendOptimisticUserMessageInput = {
   conversationId: string;
@@ -79,26 +72,23 @@ export function useChatSession(conversationId: string | null | undefined) {
     };
   }, [conversationId]);
 
-  const reconcileOptimisticUserMessage = useCallback(
-    (cid: string, incoming: UserMessageEntry): boolean => {
-      const pending = pendingOptimisticUsersRef.current.get(cid) ?? [];
-      const matchIndex = pending.findIndex((p) => p.text === incoming.text);
-      if (matchIndex < 0) return false;
+  const reconcileOptimisticUserMessage = useCallback((cid: string, incoming: UserMessageEntry): boolean => {
+    const pending = pendingOptimisticUsersRef.current.get(cid) ?? [];
+    const matchIndex = pending.findIndex((p) => p.text === incoming.text);
+    if (matchIndex < 0) return false;
 
-      const matched = pending[matchIndex];
-      const nextPending = [...pending.slice(0, matchIndex), ...pending.slice(matchIndex + 1)];
-      if (nextPending.length === 0) pendingOptimisticUsersRef.current.delete(cid);
-      else pendingOptimisticUsersRef.current.set(cid, nextPending);
+    const matched = pending[matchIndex];
+    const nextPending = [...pending.slice(0, matchIndex), ...pending.slice(matchIndex + 1)];
+    if (nextPending.length === 0) pendingOptimisticUsersRef.current.delete(cid);
+    else pendingOptimisticUsersRef.current.set(cid, nextPending);
 
-      const allRows = storeRef.current.getRows();
-      const filtered = allRows.filter((r) => r.id !== matched.id).map((r) => r.get());
-      filtered.push(incoming);
-      storeRef.current.replace(filtered);
-      setActiveLeafId(incoming.id);
-      return true;
-    },
-    [],
-  );
+    const allRows = storeRef.current.getRows();
+    const filtered = allRows.filter((r) => r.id !== matched.id).map((r) => r.get());
+    filtered.push(incoming);
+    storeRef.current.replace(filtered);
+    setActiveLeafId(incoming.id);
+    return true;
+  }, []);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -183,7 +173,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       setActiveLeafId(entryId);
       await setConversationActiveLeaf(String(conversationId), entryId);
     },
-    [conversationId],
+    [conversationId]
   );
 
   const appendOptimisticUserMessage = useCallback(
@@ -203,7 +193,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       setActiveLeafId(row.id);
       return row.id;
     },
-    [activeLeafId],
+    [activeLeafId]
   );
 
   return {
