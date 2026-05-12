@@ -4,7 +4,7 @@ import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
-import type { ThoughtLifecycleEntries, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
 
 export type AutoTitleInput = {
   conversationId: string;
@@ -14,6 +14,9 @@ export type AutoTitleInput = {
 @Injectable()
 export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTitleInput, 'autoTitle'> {
   readonly thoughtType = 'autoTitle' as const;
+  readonly streamKind = 'title' as const;
+  readonly wantsAction = true;
+  readonly prepareTitle = 'Title generation';
 
   constructor(
     private readonly conversations: ConversationsRepo,
@@ -28,25 +31,17 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     return { conversationId, firstMessage: firstUserMessage.text };
   };
 
-  getLifecycleStartRequest = (input: AutoTitleInput) => ({
-    conversationId: input.conversationId,
-    llmRequest: input.firstMessage,
-    kind: 'title' as const,
-    includeAction: true,
-    summary: 'Title generation',
-  });
-
   runPrepare = (input: AutoTitleInput) => ({
     prompt:
       'Generate a short conversation title (3-6 words max). Return plain text only.\n\n' +
       `First message: ${input.firstMessage}`,
   });
 
-  onLlmDelta = (input: AutoTitleInput, lifecycle: ThoughtLifecycleEntries, delta: string): void => {
-    if (!delta) return;
-    this.hub.publish(input.conversationId, {
+  onLlmDelta = (_input: AutoTitleInput, ctx: ThoughtContext, delta: string): void => {
+    if (!delta || !ctx.streamEntryId) return;
+    this.hub.publish(ctx.conversationId, {
       type: SseType.CHAT_ENTRY_DELTA,
-      chatEntryId: lifecycle.streamEntryId,
+      chatEntryId: ctx.streamEntryId,
       field: 'llmResponse',
       delta,
     });
@@ -54,7 +49,7 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
 
   runDecision = async (
     input: AutoTitleInput,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
   ): Promise<void> => {
     const cleanTitle = normalizeGeneratedTitle(llmResult.fullResponse);
@@ -64,13 +59,13 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     const titleApplied = current.title === 'New chat';
     if (titleApplied) await this.conversations.updateTitle(input.conversationId, nextTitle);
 
-    await this.persistUsage(lifecycle, llmResult);
-    await this.completeThoughtAction(lifecycle, nextTitle);
+    await this.persistUsage(ctx, llmResult);
+    await this.completeThoughtAction(ctx, nextTitle);
     if (titleApplied) await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
   };
 
-  private async persistUsage(lifecycle: ThoughtLifecycleEntries, llmResult: ThoughtReasonLlmResult): Promise<void> {
-    if (!llmResult.usage) return;
+  private async persistUsage(ctx: ThoughtContext, llmResult: ThoughtReasonLlmResult): Promise<void> {
+    if (!llmResult.usage || !ctx.streamEntryId) return;
     const patch: Record<string, unknown> = {
       promptTokens: llmResult.usage.promptTokens,
       completionTokens: llmResult.usage.completionTokens,
@@ -78,18 +73,18 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     if (typeof llmResult.usage.cachedPromptTokens === 'number') {
       patch.cachedPromptTokens = llmResult.usage.cachedPromptTokens;
     }
-    await this.chatEntries.mergeEntryPayload(lifecycle.conversationId, lifecycle.streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.streamEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
   }
 
-  private async completeThoughtAction(lifecycle: ThoughtLifecycleEntries, summary: string): Promise<void> {
-    if (!lifecycle.thoughtActionEntryId) return;
-    await this.chatEntries.updateThoughtAction(lifecycle.conversationId, lifecycle.thoughtActionEntryId, {
+  private async completeThoughtAction(ctx: ThoughtContext, summary: string): Promise<void> {
+    if (!ctx.thoughtActionEntryId) return;
+    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
       status: 'completed',
       summary,
       action: 'final_answer',
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
   }
 }
 

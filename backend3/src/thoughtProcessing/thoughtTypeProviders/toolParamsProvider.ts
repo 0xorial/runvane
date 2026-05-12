@@ -5,7 +5,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
 import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
 import { buildToolParamsPrompt, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
-import type { ThoughtLifecycleEntries, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
 
 export type ToolParamsInput = {
   conversationId: string;
@@ -22,21 +22,15 @@ export type ToolParamsInput = {
 @Injectable()
 export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolParamsInput, 'toolParams'> {
   readonly thoughtType = 'toolParams' as const;
+  readonly streamKind = 'planner' as const;
+  readonly wantsAction = true;
+  readonly prepareTitle = 'Resolve tool parameters';
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
     private readonly hub: SseHubService,
     private readonly runTool: RunToolService,
   ) {}
-
-  getLifecycleStartRequest = (input: ToolParamsInput) => ({
-    conversationId: input.conversationId,
-    parentId: input.sourceEntryId,
-    llmRequest: this.runPrepare(input).prompt,
-    kind: 'planner' as const,
-    includeAction: true,
-    summary: `Resolve ${input.toolName} parameters`,
-  });
 
   runPrepare = (input: ToolParamsInput) => ({
     prompt: buildToolParamsPrompt({
@@ -47,11 +41,11 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     }),
   });
 
-  onLlmDelta = (input: ToolParamsInput, lifecycle: ThoughtLifecycleEntries, delta: string): void => {
-    if (!delta) return;
-    this.hub.publish(input.conversationId, {
+  onLlmDelta = (_input: ToolParamsInput, ctx: ThoughtContext, delta: string): void => {
+    if (!delta || !ctx.streamEntryId) return;
+    this.hub.publish(ctx.conversationId, {
       type: SseType.CHAT_ENTRY_DELTA,
-      chatEntryId: lifecycle.streamEntryId,
+      chatEntryId: ctx.streamEntryId,
       field: 'llmResponse',
       delta,
     });
@@ -59,7 +53,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
 
   runDecision = async (
     input: ToolParamsInput,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
     signal: AbortSignal,
   ): Promise<void> => {
@@ -68,11 +62,11 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       parsedParams = parseToolParamsJson(llmResult.fullResponse, `tool resolver response for ${input.toolName}`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      await this.markActionFailed(lifecycle, detail);
+      await this.markActionFailed(ctx, detail);
       throw new Error(`toolParams: ${detail}`, { cause: error });
     }
 
-    await this.markActionCompleted(lifecycle, input.toolName, parsedParams);
+    await this.markActionCompleted(ctx, input.toolName, parsedParams);
 
     await this.runTool.run(
       {
@@ -90,31 +84,31 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
   };
 
   private async markActionCompleted(
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     toolName: string,
     parsedParams: Record<string, unknown>,
   ): Promise<void> {
-    if (!lifecycle.thoughtActionEntryId) return;
-    await this.chatEntries.updateThoughtAction(lifecycle.conversationId, lifecycle.thoughtActionEntryId, {
+    if (!ctx.thoughtActionEntryId) return;
+    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
       status: 'completed',
       summary: `Resolved parameters for ${toolName}`,
       action: 'tool_call',
       toolName,
     });
-    await this.chatEntries.mergeEntryPayload(lifecycle.conversationId, lifecycle.thoughtActionEntryId, {
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtActionEntryId, {
       resolvedParameters: parsedParams,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
   }
 
-  private async markActionFailed(lifecycle: ThoughtLifecycleEntries, detail: string): Promise<void> {
-    if (!lifecycle.thoughtActionEntryId) return;
-    await this.chatEntries.updateThoughtAction(lifecycle.conversationId, lifecycle.thoughtActionEntryId, {
+  private async markActionFailed(ctx: ThoughtContext, detail: string): Promise<void> {
+    if (!ctx.thoughtActionEntryId) return;
+    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
       status: 'failed',
       summary: detail,
       action: 'failed',
       error: detail,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
   }
 }

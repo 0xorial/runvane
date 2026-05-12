@@ -12,6 +12,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { ReprocessReasonDto } from './dto/reprocess-reason.dto.js';
 import { SseType } from '../contracts/sse.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
@@ -19,6 +20,7 @@ import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-hel
 import { ConversationsService } from './conversations.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
+import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
 import { SetActiveLeafDto } from './dto/set-active-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
@@ -189,16 +191,46 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/thoughts/:entryId/reprocess-reason')
-  async reprocessReason(@Param('conversationId') conversationId: string) {
+  @HttpCode(202)
+  async reprocessReason(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+    @Body() body: ReprocessReasonDto,
+  ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    throw new NotImplementedException('thought reason reprocess is not implemented yet');
+    try {
+      const result = await this.conversationProcessor.reprocessReason({
+        conversationId,
+        sourceEntryId: entryId,
+        editedResponse: body.editedResponse,
+      });
+      return { conversationId, plannerEntryId: result.plannerEntryId, queuedToolCalls: 0 };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to reprocess thought';
+      throw new BadRequestException(detail);
+    }
   }
 
   @Post(':conversationId/thoughts/:entryId/reprocess-context')
-  async reprocessContext(@Param('conversationId') conversationId: string) {
+  @HttpCode(202)
+  async reprocessContext(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+    @Body() body: ReprocessContextDto,
+  ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    throw new NotImplementedException('thought context reprocess is not implemented yet');
+    try {
+      const result = await this.conversationProcessor.reprocessContext({
+        conversationId,
+        sourceEntryId: entryId,
+        editedRequestText: body.editedRequestText,
+      });
+      return { conversationId, plannerEntryId: result.plannerEntryId, queuedToolCalls: 0 };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to reprocess thought';
+      throw new BadRequestException(detail);
+    }
   }
 }

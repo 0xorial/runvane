@@ -5,8 +5,12 @@ import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-sett
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
-import type { PreparedReason, ThoughtLifecycleEntries, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
-import { DecisionStep } from './decisionStep.js';
+import type {
+  PreparedReason,
+  ThoughtContext,
+  ThoughtReasonLlmResult,
+  ThoughtTypeProvider,
+} from '../types.js';
 
 @Injectable()
 export class ReasonStep {
@@ -15,7 +19,6 @@ export class ReasonStep {
   constructor(
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
     private readonly llmProviders: LlmProviderRegistry,
-    private readonly decisionStep: DecisionStep,
     private readonly hub: SseHubService,
     private readonly chatEntries: ChatEntriesRepo,
   ) {}
@@ -23,34 +26,68 @@ export class ReasonStep {
   async run<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     prepared: PreparedReason,
     signal: AbortSignal,
-  ): Promise<void> {
-    this.hub.publish(lifecycle.conversationId, {
+  ): Promise<ThoughtReasonLlmResult> {
+    signal.throwIfAborted();
+    const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, prepared.prompt));
+    ctx.streamEntryId = streamEntryId;
+
+    if (provider.wantsAction && !ctx.thoughtActionEntryId) {
+      ctx.thoughtActionEntryId = await this.createActionEntry(provider, ctx);
+    }
+
+    this.hub.publish(ctx.conversationId, {
       type: SseType.THOUGHT_REASON_STEP_STARTING,
-      chatEntryId: lifecycle.streamEntryId,
+      chatEntryId: streamEntryId,
     });
-    let llmResult: ThoughtReasonLlmResult;
+
     try {
       signal.throwIfAborted();
-      llmResult = await this.streamLlm(provider, input, lifecycle, prepared.prompt, signal);
+      return await this.streamLlm(provider, input, ctx, prepared.prompt, streamEntryId, signal);
     } catch (error) {
-      await this.markFailed(lifecycle, error, signal);
+      await this.markFailed(ctx, streamEntryId, error, signal);
       throw error;
     }
-    void this.decisionStep.run(provider, input, lifecycle, llmResult, signal).catch((error) => {
-      this.logger.error(
-        `decision step failed for ${lifecycle.thoughtId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+  }
+
+  private async createStreamEntry<TInput>(
+    provider: ThoughtTypeProvider<TInput>,
+    ctx: ThoughtContext,
+    prompt: string,
+  ): Promise<string> {
+    const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
+      type: provider.streamKind === 'title' ? 'title_llm_stream' : 'planner_llm_stream',
+      thoughtId: ctx.thoughtId,
+      status: 'running',
+      llmProviderId: ctx.llmProviderId,
+      llmModel: ctx.llmModel,
     });
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest: prompt });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
+    return created.id;
+  }
+
+  private async createActionEntry<TInput>(
+    provider: ThoughtTypeProvider<TInput>,
+    ctx: ThoughtContext,
+  ): Promise<string> {
+    const created = await this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
+      thoughtId: ctx.thoughtId,
+      status: 'running',
+      summary: provider.initialActionSummary ?? 'Waiting for LLM output',
+    });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
+    return created.id;
   }
 
   private async streamLlm<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     prompt: string,
+    streamEntryId: string,
     signal: AbortSignal,
   ): Promise<ThoughtReasonLlmResult> {
     const llmDoc = await this.llmProviderSettings.getDocument();
@@ -61,6 +98,10 @@ export class ReasonStep {
     const providerSettings = await this.llmProviderSettings.getProviderSettings(providerId);
     if (!providerSettings) throw new Error(`llm provider settings not found: ${providerId}`);
 
+    this.logger.log(
+      `[reason-step] streamEntry=${streamEntryId} promptHash=${cheapHash(prompt)} promptLen=${prompt.length} promptHead=${JSON.stringify(prompt.slice(0, 120))}`,
+    );
+
     const startedAt = Date.now();
     let streamedText = '';
     const completion = await llmProvider.streamTextCompletion(
@@ -69,7 +110,7 @@ export class ReasonStep {
       (delta) => {
         signal.throwIfAborted();
         streamedText += delta;
-        provider.onLlmDelta?.(input, lifecycle, delta);
+        provider.onLlmDelta?.(input, ctx, delta);
       },
     );
     signal.throwIfAborted();
@@ -78,30 +119,41 @@ export class ReasonStep {
     const result: ThoughtReasonLlmResult = { fullResponse, providerId, model: modelName };
     if (completion.usage) result.usage = completion.usage;
 
-    await this.chatEntries.mergeEntryPayload(lifecycle.conversationId, lifecycle.streamEntryId, {
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
       status: 'completed',
       llmResponse: fullResponse,
       thoughtMs: Date.now() - startedAt,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.streamEntryId);
-    this.hub.publish(lifecycle.conversationId, {
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
+    this.hub.publish(ctx.conversationId, {
       type: SseType.THOUGHT_REASON_STEP_FINISHED,
-      chatEntryId: lifecycle.streamEntryId,
+      chatEntryId: streamEntryId,
     });
     return result;
   }
 
-  private async markFailed(lifecycle: ThoughtLifecycleEntries, error: unknown, signal: AbortSignal): Promise<void> {
+  private async markFailed(
+    ctx: ThoughtContext,
+    streamEntryId: string,
+    error: unknown,
+    signal: AbortSignal,
+  ): Promise<void> {
     const cancelled = signal.aborted || (error instanceof Error && error.name === 'AbortError');
     const detail = error instanceof Error ? error.message : String(error);
     const patch: Record<string, unknown> = { status: cancelled ? 'cancelled' : 'failed' };
     if (!cancelled) patch.error = detail;
-    await this.chatEntries.mergeEntryPayload(lifecycle.conversationId, lifecycle.streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.streamEntryId);
-    this.hub.publish(lifecycle.conversationId, {
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
+    this.hub.publish(ctx.conversationId, {
       type: cancelled ? SseType.THOUGHT_REASON_STEP_CANCELLED : SseType.THOUGHT_REASON_STEP_FAILED,
-      chatEntryId: lifecycle.streamEntryId,
+      chatEntryId: streamEntryId,
       ...(cancelled ? {} : { error: detail }),
     } as never);
   }
+}
+
+function cheapHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
 }

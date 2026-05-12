@@ -3,11 +3,13 @@ import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 export type ThoughtType = 'autoTitle' | 'planner' | 'toolParams';
 export type ThoughtStepName = 'prepare' | 'reason' | 'decision';
 
-export type ThoughtLifecycleEntries = {
+export type ThoughtContext = {
   thoughtId: string;
   conversationId: string;
-  prepareEntryId: string;
-  streamEntryId: string;
+  llmProviderId: string;
+  llmModel: string;
+  prepareEntryId: string | null;
+  streamEntryId: string | null;
   thoughtActionEntryId: string | null;
 };
 
@@ -18,30 +20,22 @@ export type ThoughtReasonLlmResult = {
   usage?: StreamTextCompletionUsage;
 };
 
-export type ThoughtLifecycleStartRequest = {
-  conversationId: string;
-  parentId?: string | null;
-  llmRequest: string;
-  llmProviderId?: string;
-  llmModel?: string;
-  kind: 'planner' | 'title';
-  includeAction: boolean;
-  summary?: string;
-};
-
 export type PreparedReason = {
   prompt: string;
 };
 
 export type ThoughtTypeProvider<TInput, TThoughtType extends ThoughtType = ThoughtType> = {
   thoughtType: TThoughtType;
+  streamKind: 'planner' | 'title';
+  wantsAction: boolean;
+  prepareTitle: string;
+  initialActionSummary?: string;
   buildInputFromConversation?: (conversationId: string) => Promise<TInput>;
-  getLifecycleStartRequest: (input: TInput) => ThoughtLifecycleStartRequest;
   runPrepare: (input: TInput) => PreparedReason;
-  onLlmDelta?: (input: TInput, lifecycle: ThoughtLifecycleEntries, delta: string) => void;
+  onLlmDelta?: (input: TInput, ctx: ThoughtContext, delta: string) => void;
   runDecision: (
     input: TInput,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
     signal: AbortSignal,
   ) => Promise<void>;

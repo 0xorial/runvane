@@ -4,7 +4,7 @@ import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated } from '../sse/sse-helpers.js';
-import { ThoughtProcessingService, type StartedThought } from '../thoughtProcessing/thought-processing.service.js';
+import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import type { ThoughtType } from '../thoughtProcessing/types.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { ProcessingLifecycleHandle } from './processing-lifecycle-handle.js';
@@ -40,9 +40,40 @@ export class ConversationProcessorService {
     return 1;
   }
 
+  async reprocessContext(args: {
+    conversationId: string;
+    sourceEntryId: string;
+    editedRequestText: string;
+  }): Promise<{ plannerEntryId: string }> {
+    const handle = this.beginExecution(args.conversationId);
+    try {
+      return await this.thoughtProcessing.runReprocessContext(args, handle.signal);
+    } catch (error) {
+      handle.abort();
+      throw error;
+    } finally {
+      handle.finish();
+    }
+  }
+
+  async reprocessReason(args: {
+    conversationId: string;
+    sourceEntryId: string;
+    editedResponse: string;
+  }): Promise<{ plannerEntryId: string }> {
+    const handle = this.beginExecution(args.conversationId);
+    try {
+      return await this.thoughtProcessing.runReprocessReason(args, handle.signal);
+    } catch (error) {
+      handle.abort();
+      throw error;
+    } finally {
+      handle.finish();
+    }
+  }
+
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const handle = this.beginExecution(conversationId);
-    let backgroundStarted = false;
     try {
       const existingMessages = await this.chatEntries.listMessages(conversationId);
       const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
@@ -60,41 +91,19 @@ export class ConversationProcessorService {
       await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
       const thoughtTypes: ThoughtType[] = existingMessages.length === 0 ? ['autoTitle', 'planner'] : ['planner'];
-      backgroundStarted = true;
-      void this.runBackgroundThoughts(conversationId, thoughtTypes, handle);
+      for (const thoughtType of thoughtTypes) {
+        try {
+          await this.thoughtProcessing.runFullThoughtByType(conversationId, thoughtType, handle.signal);
+        } catch (error) {
+          this.logger.error(
+            `thought processing failed: conversation=${conversationId} type=${thoughtType}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+      }
     } catch (error) {
       handle.abort();
-      handle.finish();
       throw error;
-    }
-    if (!backgroundStarted) {
-      handle.finish();
-    }
-  }
-
-  private async runBackgroundThoughts(
-    conversationId: string,
-    thoughtTypes: ThoughtType[],
-    handle: ProcessingLifecycleHandle,
-  ): Promise<void> {
-    try {
-      const started: Array<{ thoughtType: ThoughtType; handle: StartedThought }> = [];
-      for (const thoughtType of thoughtTypes) {
-        started.push({
-          thoughtType,
-          handle: await this.thoughtProcessing.startThought(conversationId, thoughtType, handle.signal),
-        });
-      }
-      await Promise.all(
-        started.map(({ thoughtType, handle: startedHandle }) =>
-          this.thoughtProcessing.runThought(startedHandle, handle.signal).catch((error) => {
-            this.logger.error(
-              `thought processing failed: conversation=${conversationId} type=${thoughtType}`,
-              error instanceof Error ? error.stack : String(error),
-            );
-          }),
-        ),
-      );
     } finally {
       handle.finish();
     }

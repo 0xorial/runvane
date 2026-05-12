@@ -55,24 +55,18 @@ export type AgenticPlannerOutput = {
   followup: 'finalize' | 'continue';
 };
 
-export type PreparedReasonStepInput = {
-  requestText: string;
-  llmProviderId?: string;
-  llmModel?: string;
-};
-
 export type ThoughtPrepareEntry = ChatEntryBase & {
   type: 'thought-prepare';
   thoughtId: string;
+  status?: ThoughtStepStatus;
+  error?: string;
   requestText: string;
   title?: string;
   llmProviderId?: string;
   llmModel?: string;
-  preparedReasonStepInput?: PreparedReasonStepInput;
 };
 
-export type PlannerLlmStreamEntry = ChatEntryBase & {
-  type: 'planner_llm_stream';
+type ThoughtStreamEntryShape = {
   thoughtId: string;
   llmRequest: string;
   llmProviderId?: string;
@@ -85,26 +79,18 @@ export type PlannerLlmStreamEntry = ChatEntryBase & {
   promptTokens?: number;
   cachedPromptTokens?: number;
   completionTokens?: number;
-  preparedDecisionStepInput?: unknown;
-  parseResult?: { status: 'ok'; parsed: AgenticPlannerOutput } | { status: 'error'; error: string };
 };
 
-export type TitleLlmStreamEntry = ChatEntryBase & {
-  type: 'title_llm_stream';
-  thoughtId: string;
-  llmRequest: string;
-  llmProviderId?: string;
-  llmResponse?: string;
-  thoughtMs?: number | null;
-  decision?: LlmDecision | null;
-  status?: ThoughtStepStatus;
-  error?: string;
-  llmModel?: string;
-  promptTokens?: number;
-  cachedPromptTokens?: number;
-  completionTokens?: number;
-  preparedDecisionStepInput?: unknown;
-};
+export type PlannerLlmStreamEntry = ChatEntryBase &
+  ThoughtStreamEntryShape & {
+    type: 'planner_llm_stream';
+    parseResult?: { status: 'ok'; parsed: AgenticPlannerOutput } | { status: 'error'; error: string };
+  };
+
+export type TitleLlmStreamEntry = ChatEntryBase &
+  ThoughtStreamEntryShape & {
+    type: 'title_llm_stream';
+  };
 
 export type ThoughtActionEntry = ChatEntryBase & {
   type: 'thought-action';

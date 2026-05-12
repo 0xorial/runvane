@@ -262,8 +262,7 @@ export class RunToolService {
 
     if (input.plannerFollowup?.mode === 'continue') {
       signal.throwIfAborted();
-      const next = await this.thoughtProcessing.startThought(input.conversationId, 'planner', signal);
-      await this.thoughtProcessing.runThought(next, signal);
+      await this.thoughtProcessing.runFullThoughtByType(input.conversationId, 'planner', signal);
     }
     return { kind: 'completed', toolEntryId: entryId };
   }

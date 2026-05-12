@@ -36,16 +36,6 @@ type AppendedRow = {
 export class ChatEntriesRepo {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async nextConversationIndex(conversationId: string): Promise<number> {
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT COALESCE(MAX(conversation_index), -1) AS max_idx
-       FROM chat_entries
-       WHERE conversation_id = ?`,
-      conversationId,
-    )) as Array<{ max_idx: number | null }>;
-    return Number(rows[0]?.max_idx ?? -1) + 1;
-  }
-
   async getActiveLeafEntryId(conversationId: string): Promise<string | null> {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT active_leaf_entry_id AS id
@@ -64,50 +54,55 @@ export class ChatEntriesRepo {
     );
   }
 
-  private async insertEntry(
-    conversationId: string,
-    row: { id: string; conversationIndex: number; parentId: string | null; type: string; payload: Record<string, unknown>; createdAt: string },
-  ): Promise<void> {
-    await this.prisma.$executeRawUnsafe(
-      `INSERT INTO chat_entries (
-         id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      row.id,
-      conversationId,
-      row.conversationIndex,
-      row.parentId,
-      row.type,
-      JSON.stringify(row.payload),
-      row.createdAt,
-    );
-  }
-
-  private async touchConversationActivity(conversationId: string): Promise<void> {
-    const now = new Date().toISOString();
-    await this.prisma.$executeRawUnsafe(
-      `UPDATE conversations SET last_message_at = ?, updated_at = ? WHERE id = ?`,
-      now,
-      now,
-      conversationId,
-    );
-  }
-
   private async appendEntry(conversationId: string, input: AppendInput): Promise<AppendedRow> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    const conversationIndex = await this.nextConversationIndex(conversationId);
-    const parentId = input.parentId !== undefined ? input.parentId : await this.getActiveLeafEntryId(conversationId);
-    await this.insertEntry(conversationId, {
-      id,
-      conversationIndex,
-      parentId,
-      type: input.type,
-      payload: input.payload,
-      createdAt,
+    const explicitParentProvided = input.parentId !== undefined;
+    const explicitParent = input.parentId ?? null;
+    const payloadJson = JSON.stringify(input.payload);
+    return this.prisma.$transaction(async (tx) => {
+      const idxRows = (await tx.$queryRawUnsafe(
+        `SELECT COALESCE(MAX(conversation_index), -1) + 1 AS idx
+         FROM chat_entries
+         WHERE conversation_id = ?`,
+        conversationId,
+      )) as Array<{ idx: number }>;
+      const conversationIndex = Number(idxRows[0]?.idx ?? 0);
+
+      let parentId: string | null;
+      if (explicitParentProvided) {
+        parentId = explicitParent;
+      } else {
+        const leafRows = (await tx.$queryRawUnsafe(
+          `SELECT active_leaf_entry_id AS id FROM conversations WHERE id = ?`,
+          conversationId,
+        )) as Array<{ id: string | null }>;
+        parentId = leafRows[0]?.id ?? null;
+      }
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO chat_entries (
+           id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        conversationId,
+        conversationIndex,
+        parentId,
+        input.type,
+        payloadJson,
+        createdAt,
+      );
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET active_leaf_entry_id = ?, last_message_at = ?, updated_at = ?
+         WHERE id = ?`,
+        id,
+        createdAt,
+        createdAt,
+        conversationId,
+      );
+      return { id, conversationIndex, createdAt, parentId };
     });
-    await this.setActiveLeafEntryId(conversationId, id);
-    await this.touchConversationActivity(conversationId);
-    return { id, conversationIndex, createdAt, parentId };
   }
 
   async appendUserMessage(
@@ -168,9 +163,9 @@ export class ChatEntriesRepo {
     conversationId: string,
     input: {
       thoughtId: string;
-      requestText: string;
       parentId?: string | null;
       status?: ThoughtStepStatus;
+      requestText?: string;
       title?: string;
       llmProviderId?: string;
       llmModel?: string;
@@ -178,7 +173,7 @@ export class ChatEntriesRepo {
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
       thoughtId: input.thoughtId,
-      requestText: input.requestText,
+      requestText: input.requestText ?? '',
       status: input.status ?? 'running',
     };
     if (input.title) payload.title = input.title;
@@ -197,7 +192,6 @@ export class ChatEntriesRepo {
     input: {
       type: 'planner_llm_stream' | 'title_llm_stream';
       thoughtId: string;
-      llmRequest: string;
       parentId?: string | null;
       status?: ThoughtStepStatus;
       llmProviderId?: string;
@@ -206,7 +200,7 @@ export class ChatEntriesRepo {
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
       thoughtId: input.thoughtId,
-      llmRequest: input.llmRequest,
+      llmRequest: '',
       llmResponse: '',
       thoughtMs: null,
       decision: null,

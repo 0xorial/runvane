@@ -11,12 +11,11 @@ import { ToolRegistry } from '../../tools/tool-registry.js';
 import { buildPlannerPrompt } from '../lib/plannerPrompt.js';
 import { extractAssistantOutputFromJsonLike, parsePlannerOutput, type ParsedPlannerOutput } from '../lib/plannerTextParsing.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
-import type { ThoughtLifecycleEntries, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
 import { ToolParamsThoughtTypeProvider, type ToolParamsInput } from './toolParamsProvider.js';
 
 export type PlannerInput = {
   conversationId: string;
-  anchorEntryId: string;
   agentId: string;
   userText: string;
   systemPrompt: string;
@@ -37,6 +36,9 @@ type PlannerParseResult = { status: 'ok'; parsed: AgenticPlannerOutput };
 @Injectable()
 export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerInput, 'planner'> {
   readonly thoughtType = 'planner' as const;
+  readonly streamKind = 'planner' as const;
+  readonly wantsAction = true;
+  readonly prepareTitle = 'Decision planning';
   private readonly logger = new Logger(PlannerThoughtTypeProvider.name);
   private readonly liveStreamState = new Map<string, StreamState>();
 
@@ -55,14 +57,11 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const entries = await this.chatEntries.listChatEntries(conversationId);
     const anchorUserMessage = [...entries].reverse().find((entry) => entry.type === 'user-message');
     if (!anchorUserMessage) throw new Error(`planner requires a user-message in conversation ${conversationId}`);
-    const leafEntryId = await this.chatEntries.getActiveLeafEntryId(conversationId);
-    if (!leafEntryId) throw new Error(`planner requires an active leaf entry in conversation ${conversationId}`);
     const agentId = anchorUserMessage.agentId;
     const agent = await this.agents.get(agentId);
     if (!agent) throw new Error(`planner agent not found: ${agentId}`);
     return {
       conversationId,
-      anchorEntryId: leafEntryId,
       agentId,
       userText: anchorUserMessage.text,
       systemPrompt: agent.system_prompt ?? '',
@@ -71,15 +70,6 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       triggerEntry: anchorUserMessage,
     };
   };
-
-  getLifecycleStartRequest = (input: PlannerInput) => ({
-    conversationId: input.conversationId,
-    parentId: input.anchorEntryId,
-    llmRequest: input.userText,
-    kind: 'planner' as const,
-    includeAction: true,
-    summary: 'Decision planning',
-  });
 
   runPrepare = (input: PlannerInput) => ({
     prompt: buildPlannerPrompt({
@@ -92,14 +82,15 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     }),
   });
 
-  onLlmDelta = (input: PlannerInput, lifecycle: ThoughtLifecycleEntries, delta: string): void => {
-    if (!delta) return;
-    const state = this.ensureState(lifecycle.streamEntryId);
+  onLlmDelta = (input: PlannerInput, ctx: ThoughtContext, delta: string): void => {
+    if (!delta || !ctx.streamEntryId) return;
+    const streamEntryId = ctx.streamEntryId;
+    const state = this.ensureState(streamEntryId);
     state.reconstructedReply += delta;
 
     this.hub.publish(input.conversationId, {
       type: SseType.CHAT_ENTRY_DELTA,
-      chatEntryId: lifecycle.streamEntryId,
+      chatEntryId: streamEntryId,
       field: 'llmResponse',
       delta,
     });
@@ -109,7 +100,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (!answerDelta) return;
     state.streamedAnswer = extracted;
     state.pending = state.pending
-      .then(() => this.streamAssistantDelta(state, input.conversationId, lifecycle, answerDelta))
+      .then(() => this.streamAssistantDelta(state, input.conversationId, ctx, answerDelta))
       .catch((error) => {
         this.logger.error(`assistant_stream pipe failed: ${error instanceof Error ? error.message : String(error)}`);
       });
@@ -117,13 +108,15 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
 
   runDecision = async (
     input: PlannerInput,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
     signal: AbortSignal,
   ): Promise<void> => {
-    const state = this.liveStreamState.get(lifecycle.streamEntryId);
+    if (!ctx.streamEntryId) throw new Error('planner runDecision requires ctx.streamEntryId');
+    const streamEntryId = ctx.streamEntryId;
+    const state = this.liveStreamState.get(streamEntryId);
     if (state) await state.pending.catch(() => undefined);
-    this.liveStreamState.delete(lifecycle.streamEntryId);
+    this.liveStreamState.delete(streamEntryId);
 
     const parsed = parsePlannerOutput(llmResult.fullResponse);
     const requestedToolCalls = parsed.toolRequests.filter((t) => input.enabledToolIds.includes(t.toolName));
@@ -132,15 +125,15 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const parseResult = toPlannerParseResult(parsed);
     const decision = toLlmDecision(parsed, requestedToolCalls);
 
-    await this.persistStreamEntryDecision(lifecycle, llmResult, parseResult, decision);
-    const finalAssistantEntryId = await this.finalizeAssistantMessage(state ?? null, input.conversationId, lifecycle, assistantText);
-    await this.finalizeThoughtAction(lifecycle, action, assistantText, parseResult);
+    await this.persistStreamEntryDecision(ctx, llmResult, parseResult, decision);
+    const finalAssistantEntryId = await this.finalizeAssistantMessage(state ?? null, input.conversationId, ctx, assistantText);
+    await this.finalizeThoughtAction(ctx, action, assistantText, parseResult);
     await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
 
     if (requestedToolCalls.length === 0) return;
     const agent = await this.agents.get(input.agentId);
     if (!agent) throw new Error(`planner: agent not found for tool execution: ${input.agentId}`);
-    const continuationAnchorId = finalAssistantEntryId ?? lifecycle.thoughtActionEntryId ?? lifecycle.streamEntryId;
+    const continuationAnchorId = finalAssistantEntryId ?? ctx.thoughtActionEntryId ?? streamEntryId;
     for (const requested of requestedToolCalls) {
       signal.throwIfAborted();
       await this.spawnToolParamsThought(
@@ -182,7 +175,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
-    await this.thoughtProcessing.runThoughtWithInput(this.toolParamsProvider, toolParamsInput, signal);
+    await this.thoughtProcessing.runFullThought(this.toolParamsProvider, toolParamsInput, signal);
   }
 
   private ensureState(streamEntryId: string): StreamState {
@@ -201,13 +194,13 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   private async streamAssistantDelta(
     state: StreamState,
     conversationId: string,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     delta: string,
   ): Promise<void> {
     if (!state.assistantEntryId) {
       const created = await this.chatEntries.appendAssistantMessage(conversationId, {
         text: '',
-        parentId: lifecycle.thoughtActionEntryId ?? null,
+        parentId: ctx.thoughtActionEntryId ?? null,
       });
       state.assistantEntryId = created.id;
       const upsert = await this.chatEntries.getChatEntry(conversationId, created.id);
@@ -225,14 +218,14 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       field: 'text',
       delta,
     };
-    if (lifecycle.thoughtActionEntryId) payload.parentId = lifecycle.thoughtActionEntryId;
+    if (ctx.thoughtActionEntryId) payload.parentId = ctx.thoughtActionEntryId;
     this.hub.publish(conversationId, payload);
   }
 
   private async finalizeAssistantMessage(
     state: StreamState | null,
     conversationId: string,
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     assistantText: string,
   ): Promise<string | null> {
     if (!assistantText) return state?.assistantEntryId ?? null;
@@ -244,7 +237,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     }
     const created = await this.chatEntries.appendAssistantMessage(conversationId, {
       text: assistantText,
-      parentId: lifecycle.thoughtActionEntryId ?? null,
+      parentId: ctx.thoughtActionEntryId ?? null,
     });
     const entry = await this.chatEntries.getChatEntry(conversationId, created.id);
     if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
@@ -252,11 +245,12 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   }
 
   private async persistStreamEntryDecision(
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     llmResult: ThoughtReasonLlmResult,
     parseResult: PlannerParseResult,
     decision: LlmDecision | null,
   ): Promise<void> {
+    if (!ctx.streamEntryId) throw new Error('persistStreamEntryDecision requires ctx.streamEntryId');
     const usage = llmResult.usage;
     const patch: Record<string, unknown> = { parseResult, decision };
     if (usage) {
@@ -264,27 +258,26 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       patch.completionTokens = usage.completionTokens;
       if (typeof usage.cachedPromptTokens === 'number') patch.cachedPromptTokens = usage.cachedPromptTokens;
     }
-    await this.chatEntries.mergeEntryPayload(lifecycle.conversationId, lifecycle.streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.streamEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
   }
 
   private async finalizeThoughtAction(
-    lifecycle: ThoughtLifecycleEntries,
+    ctx: ThoughtContext,
     action: 'tool_call' | 'final_answer',
     assistantText: string,
     parseResult: PlannerParseResult,
   ): Promise<void> {
-    if (!lifecycle.thoughtActionEntryId) return;
+    if (!ctx.thoughtActionEntryId) return;
     const summary = action === 'tool_call' ? 'Queued tool call(s)' : assistantText || 'Completed';
-    await this.chatEntries.updateThoughtAction(lifecycle.conversationId, lifecycle.thoughtActionEntryId, {
+    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
       status: 'completed',
       summary,
       action,
     });
-    await this.chatEntries.mergeEntryPayload(lifecycle.conversationId, lifecycle.thoughtActionEntryId, { parseResult });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, lifecycle.conversationId, lifecycle.thoughtActionEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtActionEntryId, { parseResult });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
   }
-
 }
 
 function toPlannerParseResult(parsed: ParsedPlannerOutput): PlannerParseResult {

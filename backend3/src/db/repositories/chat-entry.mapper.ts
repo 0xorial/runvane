@@ -73,17 +73,6 @@ function mapThoughtPrepare(base: ChatEntryBase, payload: Record<string, unknown>
   if (llmProviderId !== undefined) out.llmProviderId = llmProviderId;
   const llmModel = optionalString(payload, 'llmModel', ctx);
   if (llmModel !== undefined) out.llmModel = llmModel;
-  if (payload.preparedReasonStepInput !== undefined) {
-    const prep = requireRecord(payload.preparedReasonStepInput, `${ctx}.preparedReasonStepInput`);
-    const prepared: { requestText: string; llmProviderId?: string; llmModel?: string } = {
-      requestText: requireString(prep, 'requestText', `${ctx}.preparedReasonStepInput`),
-    };
-    const prepProvider = optionalString(prep, 'llmProviderId', `${ctx}.preparedReasonStepInput`);
-    if (prepProvider !== undefined) prepared.llmProviderId = prepProvider;
-    const prepModel = optionalString(prep, 'llmModel', `${ctx}.preparedReasonStepInput`);
-    if (prepModel !== undefined) prepared.llmModel = prepModel;
-    out.preparedReasonStepInput = prepared;
-  }
   return out;
 }
 
