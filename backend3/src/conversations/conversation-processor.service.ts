@@ -5,7 +5,8 @@ import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated } from '../sse/sse-helpers.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
-import type { ThoughtType } from '../thoughtProcessing/types.js';
+import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
+import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { LifecycleScope } from './lifecycle-scope.js';
 
@@ -19,6 +20,8 @@ export class ConversationProcessorService {
     private readonly thoughtProcessing: ThoughtProcessingService,
     private readonly conversations: ConversationsRepo,
     private readonly hub: SseHubService,
+    private readonly autoTitleProvider: AutoTitleThoughtTypeProvider,
+    private readonly plannerProvider: PlannerThoughtTypeProvider,
   ) {}
 
   private beginScope(conversationId: string): LifecycleScope {
@@ -86,10 +89,10 @@ export class ConversationProcessorService {
     this.hub.publish(conversationId, { type: SseType.USER_MESSAGE, entry: userPayload });
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
-    const thoughtTypes: ThoughtType[] = existingMessages.length === 0 ? ['autoTitle', 'planner'] : ['planner'];
-    for (const thoughtType of thoughtTypes) {
-      this.thoughtProcessing.startFullThoughtByType(conversationId, thoughtType, scope);
+    if (existingMessages.length === 0) {
+      this.thoughtProcessing.startSelfInitiatedThought(this.autoTitleProvider, conversationId, scope);
     }
+    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, conversationId, scope);
     scope.rootDone();
   }
 }

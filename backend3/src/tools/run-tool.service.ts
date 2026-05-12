@@ -5,6 +5,7 @@ import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
+import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
 
@@ -46,6 +47,8 @@ export class RunToolService {
     private readonly hub: SseHubService,
     @Inject(forwardRef(() => ThoughtProcessingService))
     private readonly thoughtProcessing: ThoughtProcessingService,
+    @Inject(forwardRef(() => PlannerThoughtTypeProvider))
+    private readonly plannerProvider: PlannerThoughtTypeProvider,
   ) {}
 
   async run(input: RunToolInput, scope: LifecycleScope): Promise<RunToolResult> {
@@ -263,7 +266,7 @@ export class RunToolService {
 
     if (input.plannerFollowup?.mode === 'continue') {
       scope.throwIfAborted();
-      this.thoughtProcessing.startFullThoughtByType(input.conversationId, 'planner', scope);
+      this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, input.conversationId, scope);
     }
     return { kind: 'completed', toolEntryId: entryId };
   }

@@ -1,10 +1,10 @@
-import type { PlannerLlmStreamEntry, ThoughtActionEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import type { ThoughtActionEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
 
 export function displayStatus(status: string): string {
   return status === "completed" ? "" : status;
 }
 
-export function reasonMetaLabel(stream: PlannerLlmStreamEntry | TitleLlmStreamEntry): string {
+export function reasonMetaLabel(stream: ThoughtStreamEntry): string {
   const provider = String(stream.llmProviderId || "").trim() || "unknown-provider";
   const model = String(stream.llmModel || "").trim() || "unknown-model";
   const status = displayStatus(stream.status ?? "running");
@@ -19,11 +19,12 @@ export function reasonMetaLabel(stream: PlannerLlmStreamEntry | TitleLlmStreamEn
 
 export function actionMetaLabel(
   actionEntry: ThoughtActionEntry | null,
-  stream: PlannerLlmStreamEntry | TitleLlmStreamEntry,
+  stream: ThoughtStreamEntry,
 ): { usesTool: boolean; status: string; toolName: string | null } {
   const toolName = String(actionEntry?.toolName || "").trim();
   const action = String(actionEntry?.action || "").trim();
-  const streamToolName = stream.decision?.type === "tool-invocation" ? String(stream.decision.toolId || "").trim() : "";
+  const decision = stream.type === "planner_llm_stream" ? stream.decision ?? null : null;
+  const streamToolName = decision?.type === "tool-invocation" ? String(decision.toolId || "").trim() : "";
   const streamTool = streamToolName.length > 0;
   const usesTool = Boolean(toolName) || action === "tool_call" || streamTool;
   return {

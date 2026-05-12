@@ -7,12 +7,12 @@ import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
-import type {
-  PreparedReason,
-  ThoughtContext,
-  ThoughtReasonLlmResult,
-  ThoughtType,
-  ThoughtTypeProvider,
+import {
+  isThoughtStreamEntry,
+  type PreparedReason,
+  type ThoughtContext,
+  type ThoughtReasonLlmResult,
+  type ThoughtTypeProvider,
 } from './types.js';
 import { DecisionStep } from './steps/decisionStep.js';
 import { PrepareStep } from './steps/prepareStep.js';
@@ -22,7 +22,7 @@ type AnyThoughtProvider = ThoughtTypeProvider<any>;
 
 @Injectable()
 export class ThoughtProcessingService {
-  private readonly providers: Record<ThoughtType, AnyThoughtProvider>;
+  private readonly providers: AnyThoughtProvider[];
 
   constructor(
     private readonly prepareStep: PrepareStep,
@@ -31,16 +31,12 @@ export class ThoughtProcessingService {
     private readonly chatEntries: ChatEntriesRepo,
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
     private readonly hub: SseHubService,
-    private readonly autoTitleProvider: AutoTitleThoughtTypeProvider,
+    autoTitleProvider: AutoTitleThoughtTypeProvider,
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
-    private readonly plannerProvider: PlannerThoughtTypeProvider,
-    private readonly toolParamsProvider: ToolParamsThoughtTypeProvider,
+    plannerProvider: PlannerThoughtTypeProvider,
+    toolParamsProvider: ToolParamsThoughtTypeProvider,
   ) {
-    this.providers = {
-      autoTitle: this.autoTitleProvider,
-      planner: this.plannerProvider,
-      toolParams: this.toolParamsProvider,
-    };
+    this.providers = [autoTitleProvider, plannerProvider, toolParamsProvider];
   }
 
   startFullThought<TInput>(
@@ -61,18 +57,18 @@ export class ThoughtProcessingService {
     });
   }
 
-  startFullThoughtByType(
+  startSelfInitiatedThought<TInput>(
+    provider: ThoughtTypeProvider<TInput>,
     conversationId: string,
-    thoughtType: ThoughtType,
     scope: LifecycleScope,
   ): void {
-    const provider = this.providers[thoughtType];
     if (!provider.buildInputFromConversation) {
-      throw new Error(`provider ${thoughtType} cannot self-initiate`);
+      throw new Error(`provider ${provider.constructor.name} cannot self-initiate`);
     }
+    const buildInput = provider.buildInputFromConversation;
     scope.throwIfAborted();
     scope.spawn(async () => {
-      const input = await provider.buildInputFromConversation!(conversationId);
+      const input = await buildInput(conversationId);
       const ctx = await this.createContext(conversationId);
       const prepared = await this.prepareStep.run(provider, input, ctx, scope);
       const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
@@ -87,21 +83,22 @@ export class ThoughtProcessingService {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
     if (!editedRequestText) throw new Error('editedRequestText is required');
-    const branchParentId = await this.resolveBranchedPrepareParentId(args.conversationId, args.sourceEntryId);
-    if (!this.plannerProvider.buildInputFromConversation) {
-      throw new Error('plannerProvider cannot build input from conversation');
+    const branch = await this.resolveBranchedPrepareSource(args.conversationId, args.sourceEntryId);
+    const provider = await this.resolveProviderForPrepare(args.conversationId, branch.prepareEntryId);
+    if (!provider.buildInputFromConversation) {
+      throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
     }
 
     const ctx = await this.createContext(args.conversationId);
-    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, branchParentId, editedRequestText);
-    ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, this.plannerProvider, editedRequestText);
+    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, branch.parentId, editedRequestText);
+    ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, editedRequestText);
     const plannerEntryId = ctx.streamEntryId;
 
     scope.spawn(async () => {
-      const input = await this.plannerProvider.buildInputFromConversation!(args.conversationId);
+      const input = await provider.buildInputFromConversation!(args.conversationId);
       const prepared: PreparedReason = { prompt: editedRequestText };
-      const llmResult = await this.reasonStep.run(this.plannerProvider, input, ctx, prepared, scope);
-      await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
+      const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
     });
     return { plannerEntryId };
   }
@@ -113,25 +110,26 @@ export class ThoughtProcessingService {
     scope.throwIfAborted();
     const editedResponse = args.editedResponse.trim();
     if (!editedResponse) throw new Error('editedResponse is required');
-    const source = await this.resolvePlannerStreamSource(args.conversationId, args.sourceEntryId);
-    if (!this.plannerProvider.buildInputFromConversation) {
-      throw new Error('plannerProvider cannot build input from conversation');
+    const source = await this.resolveStreamSource(args.conversationId, args.sourceEntryId);
+    const provider = source.provider;
+    if (!provider.buildInputFromConversation) {
+      throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
     }
 
     const ctx = await this.createContext(args.conversationId, { thoughtId: source.thoughtId });
     if (source.llmProviderId) ctx.llmProviderId = source.llmProviderId;
     if (source.llmModel) ctx.llmModel = source.llmModel;
     ctx.prepareEntryId = source.prepareEntryId;
-    ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, source.prepareEntryId, source.llmRequest, editedResponse);
-    ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, this.plannerProvider);
+    ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.prepareEntryId, source.llmRequest, editedResponse);
+    ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
     const plannerEntryId = ctx.streamEntryId;
 
     scope.spawn(async () => {
-      const input = await this.plannerProvider.buildInputFromConversation!(args.conversationId);
+      const input = await provider.buildInputFromConversation!(args.conversationId);
       const llmResult: ThoughtReasonLlmResult = { fullResponse: editedResponse };
       if (source.llmProviderId) llmResult.providerId = source.llmProviderId;
       if (source.llmModel) llmResult.model = source.llmModel;
-      await this.decisionStep.run(this.plannerProvider, input, ctx, llmResult, scope);
+      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
     });
     return { plannerEntryId };
   }
@@ -152,20 +150,45 @@ export class ThoughtProcessingService {
     };
   }
 
-  private async resolveBranchedPrepareParentId(conversationId: string, sourceEntryId: string): Promise<string | null> {
+  private async resolveBranchedPrepareSource(
+    conversationId: string,
+    sourceEntryId: string,
+  ): Promise<{ prepareEntryId: string; parentId: string | null }> {
     const sourceEntry = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
     if (!sourceEntry) throw new Error(`source entry not found: ${sourceEntryId}`);
-    if (sourceEntry.type === 'thought-prepare') return sourceEntry.parentId;
-    if (!sourceEntry.parentId) return null;
-    const parent = await this.chatEntries.getChatEntry(conversationId, sourceEntry.parentId);
-    if (parent?.type === 'thought-prepare') return parent.parentId;
-    return sourceEntry.parentId;
+    if (sourceEntry.type === 'thought-prepare') {
+      return { prepareEntryId: sourceEntry.id, parentId: sourceEntry.parentId };
+    }
+    if (sourceEntry.parentId) {
+      const parent = await this.chatEntries.getChatEntry(conversationId, sourceEntry.parentId);
+      if (parent?.type === 'thought-prepare') {
+        return { prepareEntryId: parent.id, parentId: parent.parentId };
+      }
+    }
+    throw new Error(`reprocess-context source ${sourceEntryId} is not a thought-prepare or its child`);
   }
 
-  private async resolvePlannerStreamSource(
+  private async resolveProviderForPrepare(
+    conversationId: string,
+    prepareEntryId: string,
+  ): Promise<AnyThoughtProvider> {
+    const all = await this.chatEntries.listChatEntries(conversationId, { all: true });
+    const streamChild = all.find((e) => e.parentId === prepareEntryId && isThoughtStreamEntry(e));
+    if (!streamChild) {
+      throw new Error(`thought-prepare ${prepareEntryId} has no stream child to identify provider`);
+    }
+    const provider = this.providers.find((p) => p.streamEntryType === streamChild.type);
+    if (!provider) {
+      throw new Error(`no provider registered for stream entry type ${streamChild.type}`);
+    }
+    return provider;
+  }
+
+  private async resolveStreamSource(
     conversationId: string,
     sourceEntryId: string,
   ): Promise<{
+    provider: AnyThoughtProvider;
     thoughtId: string;
     prepareEntryId: string;
     llmRequest: string;
@@ -174,17 +197,23 @@ export class ThoughtProcessingService {
   }> {
     const source = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
     if (!source) throw new Error(`source entry not found: ${sourceEntryId}`);
-    if (source.type !== 'planner_llm_stream') {
-      throw new Error(`reprocess-reason requires a planner_llm_stream source, got ${source.type}`);
+    if (!isThoughtStreamEntry(source)) {
+      throw new Error(`reprocess-reason source entry is not a stream entry: ${source.type}`);
     }
-    if (!source.parentId) throw new Error(`planner_llm_stream ${sourceEntryId} has no parent`);
+    const provider = this.providers.find((p) => p.streamEntryType === source.type);
+    if (!provider) {
+      throw new Error(`no provider registered for stream entry type ${source.type}`);
+    }
+    if (!source.parentId) throw new Error(`${source.type} ${sourceEntryId} has no parent`);
     const out: {
+      provider: AnyThoughtProvider;
       thoughtId: string;
       prepareEntryId: string;
       llmRequest: string;
       llmProviderId?: string;
       llmModel?: string;
     } = {
+      provider,
       thoughtId: source.thoughtId,
       prepareEntryId: source.parentId,
       llmRequest: source.llmRequest,
@@ -196,6 +225,7 @@ export class ThoughtProcessingService {
 
   private async appendCompletedPrepareEntry(
     ctx: ThoughtContext,
+    provider: AnyThoughtProvider,
     parentId: string | null,
     requestText: string,
   ): Promise<string> {
@@ -204,7 +234,7 @@ export class ThoughtProcessingService {
       parentId,
       status: 'completed',
       requestText,
-      title: this.plannerProvider.prepareTitle,
+      title: provider.prepareTitle,
       llmProviderId: ctx.llmProviderId,
       llmModel: ctx.llmModel,
     });
@@ -218,7 +248,7 @@ export class ThoughtProcessingService {
     llmRequest: string,
   ): Promise<string> {
     const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-      type: provider.streamKind === 'title' ? 'title_llm_stream' : 'planner_llm_stream',
+      type: provider.streamEntryType,
       thoughtId: ctx.thoughtId,
       status: 'running',
       llmProviderId: ctx.llmProviderId,
@@ -244,12 +274,13 @@ export class ThoughtProcessingService {
 
   private async appendCompletedStreamEntry(
     ctx: ThoughtContext,
+    provider: AnyThoughtProvider,
     parentId: string,
     llmRequest: string,
     llmResponse: string,
   ): Promise<string> {
     const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-      type: 'planner_llm_stream',
+      type: provider.streamEntryType,
       thoughtId: ctx.thoughtId,
       parentId,
       status: 'completed',

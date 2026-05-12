@@ -35,9 +35,8 @@ type StreamState = {
 type PlannerParseResult = { status: 'ok'; parsed: AgenticPlannerOutput };
 
 @Injectable()
-export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerInput, 'planner'> {
-  readonly thoughtType = 'planner' as const;
-  readonly streamKind = 'planner' as const;
+export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerInput> {
+  readonly streamEntryType = 'planner_llm_stream' as const;
   readonly wantsAction = true;
   readonly prepareTitle = 'Decision planning';
   private readonly logger = new Logger(PlannerThoughtTypeProvider.name);

@@ -92,6 +92,11 @@ export type TitleLlmStreamEntry = ChatEntryBase &
     type: 'title_llm_stream';
   };
 
+export type ToolParamsLlmStreamEntry = ChatEntryBase &
+  ThoughtStreamEntryShape & {
+    type: 'tool_params_llm_stream';
+  };
+
 export type ThoughtActionEntry = ChatEntryBase & {
   type: 'thought-action';
   thoughtId: string;
@@ -122,5 +127,6 @@ export type ChatEntry =
   | PlannerLlmStreamEntry
   | ThoughtActionEntry
   | TitleLlmStreamEntry
+  | ToolParamsLlmStreamEntry
   | ToolInvocationEntry
   | AssistantMessageEntry;

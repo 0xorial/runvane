@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FileText, MessageSquare, Sparkles, Wrench } from "lucide-react";
-import type { ChatEntry } from "@/protocol/chatEntry";
+import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";
 import { ChatThreadIndent } from "../ChatMessageShell";
@@ -23,7 +23,7 @@ export function ThoughtTripletRow({ streamEntry$, conversationId, prepareEntry, 
   const stream = useObservableValue(streamEntry$);
   const [expanded, setExpanded] = useState<ThoughtStage | null>(null);
 
-  if (stream.type !== "planner_llm_stream" && stream.type !== "title_llm_stream") return null;
+  if (!isThoughtStreamEntry(stream)) return null;
   const prepareStepEntry = prepareEntry?.type === "thought-prepare" ? prepareEntry : null;
   const actionStepEntry = actionEntry?.type === "thought-action" ? actionEntry : null;
   const contextTitle = String(prepareStepEntry?.title ?? "").trim() || "Preparation";

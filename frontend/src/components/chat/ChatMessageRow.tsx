@@ -1,4 +1,4 @@
-import type { ChatEntry } from "../../protocol/chatEntry";
+import { isThoughtStreamEntry, type ChatEntry } from "../../protocol/chatEntry";
 import type { ObservableItem } from "../../utils/observableCollection";
 import { useObservableValue } from "../../hooks/useObservable";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
@@ -27,7 +27,7 @@ export function ChatMessageRow({ entry$, conversationId, thoughtTripletsById }: 
   if (entry.type === "user-message") {
     return <UserMessageRow entry={entry} />;
   }
-  if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
+  if (isThoughtStreamEntry(entry)) {
     const refs = thoughtTripletsById?.get(entry.thoughtId);
     return (
       <ThoughtTripletRow

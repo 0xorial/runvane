@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { reprocessThought } from "@/api/client";
-import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import type { ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
@@ -10,7 +10,7 @@ export function ReasoningStep({
   stream,
   conversationId,
 }: {
-  stream: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+  stream: ThoughtStreamEntry;
   conversationId: string | null;
 }) {
   const response = String(stream.llmResponse || "").trim();

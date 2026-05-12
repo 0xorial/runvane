@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { getLlmSettings, reprocessThoughtContext } from "@/api/client";
-import type { PlannerLlmStreamEntry, ThoughtPrepareEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
+import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { buildModelGroups, type ModelGroup } from "@/pages/settings/helpers";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -13,7 +13,7 @@ export function ContextStep({
   conversationId,
 }: {
   prepareEntry: ThoughtPrepareEntry | null;
-  stream: PlannerLlmStreamEntry | TitleLlmStreamEntry;
+  stream: ThoughtStreamEntry;
   conversationId: string | null;
 }) {
   const prompt = useMemo(() => (prepareEntry?.requestText ?? stream.llmRequest ?? "").trim(), [prepareEntry?.requestText, stream.llmRequest]);

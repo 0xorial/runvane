@@ -12,9 +12,8 @@ export type AutoTitleInput = {
 };
 
 @Injectable()
-export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTitleInput, 'autoTitle'> {
-  readonly thoughtType = 'autoTitle' as const;
-  readonly streamKind = 'title' as const;
+export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTitleInput> {
+  readonly streamEntryType = 'title_llm_stream' as const;
   readonly wantsAction = true;
   readonly prepareTitle = 'Title generation';
 

@@ -4,7 +4,9 @@ import type {
   PlannerLlmStreamEntry,
   ThoughtStepStatus,
   TitleLlmStreamEntry,
+  ToolParamsLlmStreamEntry,
 } from '../../contracts/chatEntry.js';
+import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import type { ChatEntryDbRow } from './chat-entries.payload.js';
 
 const STEP_STATUSES: readonly ThoughtStepStatus[] = ['running', 'completed', 'failed', 'cancelled'];
@@ -30,9 +32,9 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
     case 'thought-action':
       return mapThoughtAction(base, payload, ctx);
     case 'planner_llm_stream':
-      return mapStream(base, payload, 'planner_llm_stream', ctx);
     case 'title_llm_stream':
-      return mapStream(base, payload, 'title_llm_stream', ctx);
+    case 'tool_params_llm_stream':
+      return mapStream(base, payload, row.type, ctx);
     case 'tool-invocation':
       return mapToolInvocation(base, payload, ctx);
     default:
@@ -97,9 +99,9 @@ function mapThoughtAction(base: ChatEntryBase, payload: Record<string, unknown>,
 function mapStream(
   base: ChatEntryBase,
   payload: Record<string, unknown>,
-  type: 'planner_llm_stream' | 'title_llm_stream',
+  type: ThoughtStreamEntryType,
   ctx: string,
-): ChatEntry {
+): PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry {
   const stream: PlannerLlmStreamEntry = {
     ...base,
     type: 'planner_llm_stream',
@@ -123,9 +125,18 @@ function mapStream(
   if (payload.promptTokens !== undefined) stream.promptTokens = requireFiniteNumber(payload, 'promptTokens', ctx);
   if (payload.completionTokens !== undefined) stream.completionTokens = requireFiniteNumber(payload, 'completionTokens', ctx);
   if (payload.cachedPromptTokens !== undefined) stream.cachedPromptTokens = requireFiniteNumber(payload, 'cachedPromptTokens', ctx);
-  if (type === 'planner_llm_stream') return stream;
-  const title: TitleLlmStreamEntry = { ...stream, type: 'title_llm_stream' };
-  return title;
+  switch (type) {
+    case 'planner_llm_stream':
+      return stream;
+    case 'title_llm_stream':
+      return { ...stream, type: 'title_llm_stream' } satisfies TitleLlmStreamEntry;
+    case 'tool_params_llm_stream':
+      return { ...stream, type: 'tool_params_llm_stream' } satisfies ToolParamsLlmStreamEntry;
+    default: {
+      const exhaustive: never = type;
+      throw new Error(`${ctx}: unhandled stream entry type ${String(exhaustive)}`);
+    }
+  }
 }
 
 function mapToolInvocation(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ChatEntry, ToolInvocationEntry } from '../../contracts/chatEntry.js';
+import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
 import { rowToChatMessage, type ChatEntryDbRow } from './chat-entries.payload.js';
@@ -212,7 +213,7 @@ export class ChatEntriesRepo {
   async appendThoughtStreamEntry(
     conversationId: string,
     input: {
-      type: 'planner_llm_stream' | 'title_llm_stream';
+      type: ThoughtStreamEntryType;
       thoughtId: string;
       parentId?: string | null;
       status?: ThoughtStepStatus;

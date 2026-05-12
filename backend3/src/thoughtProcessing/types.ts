@@ -1,8 +1,24 @@
+import type {
+  ChatEntry,
+  PlannerLlmStreamEntry,
+  TitleLlmStreamEntry,
+  ToolParamsLlmStreamEntry,
+} from '../contracts/chatEntry.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 
-export type ThoughtType = 'autoTitle' | 'planner' | 'toolParams';
-export type ThoughtStepName = 'prepare' | 'reason' | 'decision';
+export type ThoughtStreamEntry = PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry;
+export type ThoughtStreamEntryType = ThoughtStreamEntry['type'];
+
+const THOUGHT_STREAM_ENTRY_TYPES: ReadonlySet<ThoughtStreamEntryType> = new Set<ThoughtStreamEntryType>([
+  'planner_llm_stream',
+  'title_llm_stream',
+  'tool_params_llm_stream',
+]);
+
+export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEntry {
+  return THOUGHT_STREAM_ENTRY_TYPES.has(entry.type as ThoughtStreamEntryType);
+}
 
 export type ThoughtContext = {
   thoughtId: string;
@@ -25,9 +41,8 @@ export type PreparedReason = {
   prompt: string;
 };
 
-export type ThoughtTypeProvider<TInput, TThoughtType extends ThoughtType = ThoughtType> = {
-  thoughtType: TThoughtType;
-  streamKind: 'planner' | 'title';
+export type ThoughtTypeProvider<TInput> = {
+  streamEntryType: ThoughtStreamEntryType;
   wantsAction: boolean;
   prepareTitle: string;
   initialActionSummary?: string;

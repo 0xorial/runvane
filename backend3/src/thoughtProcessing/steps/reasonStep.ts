@@ -53,7 +53,7 @@ export class ReasonStep {
     prompt: string,
   ): Promise<string> {
     const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-      type: provider.streamKind === 'title' ? 'title_llm_stream' : 'planner_llm_stream',
+      type: provider.streamEntryType,
       thoughtId: ctx.thoughtId,
       status: 'running',
       llmProviderId: ctx.llmProviderId,

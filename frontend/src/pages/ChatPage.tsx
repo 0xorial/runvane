@@ -17,7 +17,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../compone
 import { ChatSessionContext } from "../hooks/chatSessionContext";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
-import type { ChatAttachment } from "../protocol/chatEntry";
+import { isThoughtStreamEntry, type ChatAttachment } from "../protocol/chatEntry";
 
 async function sendMessageToConversation(
   conversationId: string,
@@ -91,7 +91,7 @@ export function ChatPage({
   const tripletStreamIdByThoughtId = useMemo(() => {
     const map = new Map<string, string>();
     for (const entry of activePathEntries) {
-      if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
+      if (isThoughtStreamEntry(entry)) {
         map.set(entry.thoughtId, entry.id);
       }
     }
@@ -100,7 +100,7 @@ export function ChatPage({
   const thoughtTripletsById = new Map<string, ThoughtTripletRefs>();
   for (const entry$ of chatEntries) {
     const entry = entry$.get();
-    if (entry.type !== "planner_llm_stream" && entry.type !== "title_llm_stream" && entry.type !== "thought-prepare" && entry.type !== "thought-action") {
+    if (!isThoughtStreamEntry(entry) && entry.type !== "thought-prepare" && entry.type !== "thought-action") {
       continue;
     }
     const current = thoughtTripletsById.get(entry.thoughtId) ?? {};

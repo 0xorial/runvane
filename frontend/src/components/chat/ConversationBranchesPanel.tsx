@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Activity, Bot, Dot, FileText, MessageSquare, Sparkles, User, Wrench } from "lucide-react";
-import type { ChatEntry } from "@/protocol/chatEntry";
+import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
@@ -53,7 +53,7 @@ function entryIcon(entry: ChatEntry) {
   if (entry.type === "assistant-message") return <Bot className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "tool-invocation") return <Wrench className="mt-0.5 h-3 w-3 shrink-0" />;
   if (entry.type === "thought-prepare") return <FileText className="mt-0.5 h-3 w-3 shrink-0" />;
-  if (entry.type === "planner_llm_stream" || entry.type === "title_llm_stream") {
+  if (isThoughtStreamEntry(entry)) {
     return <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />;
   }
   if (entry.type === "thought-action") {

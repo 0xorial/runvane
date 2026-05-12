@@ -36,12 +36,18 @@ function summarizeEntry(entry: ChatEntry): string {
       return `THINKING: ${entry.llmResponse ?? ''}`;
     case 'title_llm_stream':
       return `TITLE_THINKING: ${entry.llmResponse ?? ''}`;
+    case 'tool_params_llm_stream':
+      return `TOOL_PARAMS_THINKING: ${entry.llmResponse ?? ''}`;
     case 'thought-prepare':
       return `PREPARE_REQUEST: ${entry.requestText}`;
     case 'thought-action':
       return `TAKE_ACTION: status=${entry.status} action=${entry.action ?? ''} summary=${entry.summary ?? ''} error=${entry.error ?? ''}`;
     case 'tool-invocation':
       return `TOOL: id=${entry.toolId} state=${entry.state} parameters=${stringify(entry.parameters)} result=${stringify(entry.result)}`;
+    default: {
+      const exhaustive: never = entry;
+      throw new Error(`summarizeEntry: unhandled chat entry type ${(exhaustive as ChatEntry).type}`);
+    }
   }
 }
 
