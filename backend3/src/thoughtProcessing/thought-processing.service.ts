@@ -43,34 +43,41 @@ export class ThoughtProcessingService {
     };
   }
 
-  async runFullThought<TInput>(
+  startFullThought<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
     scope: LifecycleScope,
-  ): Promise<void> {
+  ): void {
     scope.throwIfAborted();
     const conversationId = (input as { conversationId?: unknown }).conversationId;
     if (typeof conversationId !== 'string' || !conversationId) {
-      throw new Error('runFullThought requires input.conversationId');
+      throw new Error('startFullThought requires input.conversationId');
     }
-    const ctx = await this.createContext(conversationId);
-    const prepared = await this.prepareStep.run(provider, input, ctx, scope);
-    const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
-    await this.decisionStep.run(provider, input, ctx, llmResult, scope);
+    scope.spawn(async () => {
+      const ctx = await this.createContext(conversationId);
+      const prepared = await this.prepareStep.run(provider, input, ctx, scope);
+      const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
+    });
   }
 
-  async runFullThoughtByType(
+  startFullThoughtByType(
     conversationId: string,
     thoughtType: ThoughtType,
     scope: LifecycleScope,
-  ): Promise<void> {
+  ): void {
     const provider = this.providers[thoughtType];
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${thoughtType} cannot self-initiate`);
     }
     scope.throwIfAborted();
-    const input = await provider.buildInputFromConversation(conversationId);
-    await this.runFullThought(provider, input, scope);
+    scope.spawn(async () => {
+      const input = await provider.buildInputFromConversation!(conversationId);
+      const ctx = await this.createContext(conversationId);
+      const prepared = await this.prepareStep.run(provider, input, ctx, scope);
+      const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
+    });
   }
 
   async runReprocessContext(
@@ -128,11 +135,11 @@ export class ThoughtProcessingService {
 
   private async createContext(
     conversationId: string,
-    opts?: { thoughtId?: string },
+    opts: { thoughtId?: string } = {},
   ): Promise<ThoughtContext> {
     const llmDoc = await this.llmProviderSettings.getDocument();
     return {
-      thoughtId: opts?.thoughtId ?? crypto.randomUUID(),
+      thoughtId: opts.thoughtId ?? crypto.randomUUID(),
       conversationId,
       llmProviderId: llmDoc.llm_configuration.provider_id,
       llmModel: llmDoc.llm_configuration.model_name,

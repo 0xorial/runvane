@@ -137,7 +137,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const continuationAnchorId = finalAssistantEntryId ?? ctx.thoughtActionEntryId ?? streamEntryId;
     for (const requested of requestedToolCalls) {
       scope.throwIfAborted();
-      await this.spawnToolParamsThought(
+      this.startToolParamsThought(
         { input, agent, requested, continuationAnchorId, followup: parsed.followup },
         scope,
       );
@@ -152,7 +152,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       .map((tool) => tool.getName());
   }
 
-  private async spawnToolParamsThought(
+  private startToolParamsThought(
     args: {
       input: PlannerInput;
       agent: AgentEntity;
@@ -161,7 +161,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       followup: 'continue' | 'finalize';
     },
     scope: LifecycleScope,
-  ): Promise<void> {
+  ): void {
     const tool = this.tools.get(args.requested.toolName);
     if (!tool) throw new Error(`planner tool request references missing tool: ${args.requested.toolName}`);
     const toolParamsInput: ToolParamsInput = {
@@ -176,7 +176,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
-    await this.thoughtProcessing.runFullThought(this.toolParamsProvider, toolParamsInput, scope);
+    this.thoughtProcessing.startFullThought(this.toolParamsProvider, toolParamsInput, scope);
   }
 
   private ensureState(streamEntryId: string): StreamState {

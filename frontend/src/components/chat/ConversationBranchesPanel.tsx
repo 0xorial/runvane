@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, Bot, Dot, FileText, MessageSquare, Sparkles, User, Wrench } from "lucide-react";
 import { getConversationMessages, setConversationActiveLeaf } from "@/api/client";
 import type { ChatEntry } from "@/protocol/chatEntry";
+import { subscribeGlobalLive } from "@/protocol/runLiveClient";
+import { SseType } from "@/protocol/sseTypes";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +84,14 @@ function deepestDescendantId(entryId: string, childrenByParent: Map<string | nul
   }
 }
 
+function upsertEntry(prev: ChatEntry[], next: ChatEntry): ChatEntry[] {
+  const idx = prev.findIndex((entry) => entry.id === next.id);
+  if (idx < 0) return [...prev, next].sort(byConversationIndexAsc);
+  const out = prev.slice();
+  out[idx] = next;
+  return out;
+}
+
 export function ConversationBranchesPanel({
   conversationId,
   activePathEntries,
@@ -109,6 +119,23 @@ export function ConversationBranchesPanel({
       notifyError(`Failed to load conversation branches: ${detail}`);
     });
   }, [reloadAllEntries]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const dispose = subscribeGlobalLive({
+      onSseEvent: (ev) => {
+        if (ev.conversationId !== conversationId) return;
+        if (ev.type === SseType.USER_MESSAGE) {
+          setAllEntries((prev) => upsertEntry(prev, ev.entry));
+          return;
+        }
+        if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
+          setAllEntries((prev) => upsertEntry(prev, ev.entry));
+        }
+      },
+    });
+    return () => dispose();
+  }, [conversationId]);
 
   const mergedEntries = useMemo(() => {
     const byId = new Map(allEntries.map((entry) => [entry.id, entry]));

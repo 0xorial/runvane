@@ -87,18 +87,9 @@ export class ConversationProcessorService {
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
     const thoughtTypes: ThoughtType[] = existingMessages.length === 0 ? ['autoTitle', 'planner'] : ['planner'];
-    scope.spawn(async () => {
-      for (const thoughtType of thoughtTypes) {
-        await this.thoughtProcessing
-          .runFullThoughtByType(conversationId, thoughtType, scope)
-          .catch((error) => {
-            this.logger.error(
-              `thought processing failed: conversation=${conversationId} type=${thoughtType}`,
-              error instanceof Error ? error.stack : String(error),
-            );
-          });
-      }
-    });
+    for (const thoughtType of thoughtTypes) {
+      this.thoughtProcessing.startFullThoughtByType(conversationId, thoughtType, scope);
+    }
     scope.rootDone();
   }
 }

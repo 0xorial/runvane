@@ -263,7 +263,7 @@ export class RunToolService {
 
     if (input.plannerFollowup?.mode === 'continue') {
       scope.throwIfAborted();
-      await this.thoughtProcessing.runFullThoughtByType(input.conversationId, 'planner', scope);
+      this.thoughtProcessing.startFullThoughtByType(input.conversationId, 'planner', scope);
     }
     return { kind: 'completed', toolEntryId: entryId };
   }

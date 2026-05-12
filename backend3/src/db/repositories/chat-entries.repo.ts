@@ -34,7 +34,28 @@ type AppendedRow = {
 
 @Injectable()
 export class ChatEntriesRepo {
+  /**
+   * Per-conversation append lock. Serializes leaf reads / inserts / leaf writes
+   * across concurrent thoughts so the resulting chain stays linear instead of
+   * branching every time two thoughts race on the same active leaf.
+   */
+  private readonly appendLocks = new Map<string, Promise<unknown>>();
+
   constructor(private readonly prisma: PrismaService) {}
+
+  private async withAppendLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.appendLocks.get(conversationId) ?? Promise.resolve();
+    const next = prev.then(fn, fn);
+    this.appendLocks.set(
+      conversationId,
+      next.finally(() => {
+        if (this.appendLocks.get(conversationId) === next) {
+          this.appendLocks.delete(conversationId);
+        }
+      }),
+    );
+    return next;
+  }
 
   async getActiveLeafEntryId(conversationId: string): Promise<string | null> {
     const rows = (await this.prisma.$queryRawUnsafe(
@@ -60,49 +81,51 @@ export class ChatEntriesRepo {
     const explicitParentProvided = input.parentId !== undefined;
     const explicitParent = input.parentId ?? null;
     const payloadJson = JSON.stringify(input.payload);
-    return this.prisma.$transaction(async (tx) => {
-      const idxRows = (await tx.$queryRawUnsafe(
-        `SELECT COALESCE(MAX(conversation_index), -1) + 1 AS idx
-         FROM chat_entries
-         WHERE conversation_id = ?`,
-        conversationId,
-      )) as Array<{ idx: number }>;
-      const conversationIndex = Number(idxRows[0]?.idx ?? 0);
-
-      let parentId: string | null;
-      if (explicitParentProvided) {
-        parentId = explicitParent;
-      } else {
-        const leafRows = (await tx.$queryRawUnsafe(
-          `SELECT active_leaf_entry_id AS id FROM conversations WHERE id = ?`,
+    return this.withAppendLock(conversationId, () =>
+      this.prisma.$transaction(async (tx) => {
+        const idxRows = (await tx.$queryRawUnsafe(
+          `SELECT COALESCE(MAX(conversation_index), -1) + 1 AS idx
+           FROM chat_entries
+           WHERE conversation_id = ?`,
           conversationId,
-        )) as Array<{ id: string | null }>;
-        parentId = leafRows[0]?.id ?? null;
-      }
+        )) as Array<{ idx: number }>;
+        const conversationIndex = Number(idxRows[0]?.idx ?? 0);
 
-      await tx.$executeRawUnsafe(
-        `INSERT INTO chat_entries (
-           id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        id,
-        conversationId,
-        conversationIndex,
-        parentId,
-        input.type,
-        payloadJson,
-        createdAt,
-      );
-      await tx.$executeRawUnsafe(
-        `UPDATE conversations
-         SET active_leaf_entry_id = ?, last_message_at = ?, updated_at = ?
-         WHERE id = ?`,
-        id,
-        createdAt,
-        createdAt,
-        conversationId,
-      );
-      return { id, conversationIndex, createdAt, parentId };
-    });
+        let parentId: string | null;
+        if (explicitParentProvided) {
+          parentId = explicitParent;
+        } else {
+          const leafRows = (await tx.$queryRawUnsafe(
+            `SELECT active_leaf_entry_id AS id FROM conversations WHERE id = ?`,
+            conversationId,
+          )) as Array<{ id: string | null }>;
+          parentId = leafRows[0]?.id ?? null;
+        }
+
+        await tx.$executeRawUnsafe(
+          `INSERT INTO chat_entries (
+             id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          id,
+          conversationId,
+          conversationIndex,
+          parentId,
+          input.type,
+          payloadJson,
+          createdAt,
+        );
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET active_leaf_entry_id = ?, last_message_at = ?, updated_at = ?
+           WHERE id = ?`,
+          id,
+          createdAt,
+          createdAt,
+          conversationId,
+        );
+        return { id, conversationIndex, createdAt, parentId };
+      }),
+    );
   }
 
   async appendUserMessage(
