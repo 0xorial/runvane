@@ -52,19 +52,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       ]);
       if (cancelled) return;
       const store = storeRef.current;
-      for (const entry of mapApiMessagesToChatEntries(entries)) {
-        const existing = store.getById(entry.id);
-        if (existing) {
-          existing.mutate((next) => {
-            const target = next as Record<string, unknown>;
-            for (const key of Object.keys(target)) delete target[key];
-            Object.assign(target, entry as Record<string, unknown>);
-          });
-        } else {
-          store.append(entry);
-        }
-      }
-      store.touchRows();
+      store.replace(mapApiMessagesToChatEntries(entries));
       setActiveLeafId(leafId);
     })();
     return () => {
@@ -109,12 +97,10 @@ export function useChatSession(conversationId: string | null | undefined) {
           const row$ = store.getById(ev.entry.id);
           if (row$) {
             row$.mutate((next) => {
-              Object.keys(next as Record<string, unknown>).forEach((key) => {
-                delete (next as Record<string, unknown>)[key];
-              });
-              Object.assign(next as Record<string, unknown>, ev.entry as Record<string, unknown>);
+              const target = next as Record<string, unknown>;
+              for (const key of Object.keys(target)) delete target[key];
+              Object.assign(target, ev.entry as Record<string, unknown>);
             });
-            store.touchRows();
             return;
           }
           if (store.append(ev.entry)) setActiveLeafId(ev.entry.id);

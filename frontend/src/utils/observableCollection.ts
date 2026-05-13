@@ -88,7 +88,6 @@ export type ObservableItemCollection<T extends { id: string }> = {
   getRows: () => ObservableItem<T>[];
   subscribeRows: (listener: () => void) => () => void;
   getRowsVersion: () => number;
-  touchRows: () => void;
   replace: (items: T[]) => void;
   append: (item: T) => boolean;
   getById: (id: string) => ObservableItem<T> | undefined;
@@ -154,7 +153,6 @@ export function createObservableItemCollection<T extends { id: string }>(
     getRows: () => rows,
     subscribeRows: rowsVersion$.subscribe,
     getRowsVersion: () => rowsVersion$.get().value,
-    touchRows: bumpRowsVersion,
     replace,
     append,
     getById: (id) => byId.get(id),
