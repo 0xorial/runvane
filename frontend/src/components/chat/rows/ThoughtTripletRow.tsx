@@ -13,7 +13,7 @@ import { Connector, StepChip, TinyProgressCircle } from "./thoughtTriplet/StepCh
 
 type ThoughtTripletRowProps = {
   prepareEntry: ChatEntry;
-  conversationId: string | null;
+  conversationId: string;
   streamEntry$?: ObservableItem<ChatEntry>;
   actionEntry?: ChatEntry | null;
 };
@@ -41,7 +41,7 @@ function ThoughtTripletRowWithStream({
 }: {
   prepareEntry: ThoughtPrepareEntry;
   streamEntry$: ObservableItem<ChatEntry>;
-  conversationId: string | null;
+  conversationId: string;
   actionEntry: ChatEntry | null;
 }) {
   const stream = useObservableValue(streamEntry$);

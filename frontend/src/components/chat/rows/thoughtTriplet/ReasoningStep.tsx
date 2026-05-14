@@ -12,7 +12,7 @@ export function ReasoningStep({
   conversationId,
 }: {
   stream: ThoughtStreamEntry;
-  conversationId: string | null;
+  conversationId: string;
 }) {
   const response = String(stream.llmResponse || "").trim();
   const [isEditing, setIsEditing] = useState(false);
@@ -28,15 +28,14 @@ export function ReasoningStep({
   const completionTokens = stream.completionTokens ?? 0;
   const duration = stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "running";
   const statusLabel = displayStatus(stream.status ?? "running");
-  const canEdit = Boolean(conversationId) && response.length > 0;
+  const canEdit = response.length > 0;
   const canApply = editedResponse.trim().length > 0 && !isSaving;
 
   const applyEdit = async () => {
-    const cid = conversationId;
-    if (!cid || !canApply) return;
+    if (!canApply) return;
     setIsSaving(true);
     try {
-      await reprocessThought(cid, stream.id, editedResponse.trim());
+      await reprocessThought(conversationId, stream.id, editedResponse.trim());
       setIsEditing(false);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

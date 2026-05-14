@@ -324,14 +324,16 @@ export function ChatPage({
                 className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
                 topAnchorEntryId={topAnchorEntryId}
               >
-                {visibleEntries.map((entry$) => {
-                  const entry = entry$.get();
-                  return (
-                    <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                      <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
-                    </div>
-                  );
-                })}
+                {conversationId
+                  ? visibleEntries.map((entry$) => {
+                      const entry = entry$.get();
+                      return (
+                        <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                          <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
+                        </div>
+                      );
+                    })
+                  : null}
               </AnchorTopScrollArea>
             </main>
             {composer}
@@ -357,14 +359,16 @@ export function ChatPage({
               className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
               topAnchorEntryId={topAnchorEntryId}
             >
-              {visibleEntries.map((entry$) => {
-                const entry = entry$.get();
-                return (
-                  <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                    <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
-                  </div>
-                );
-              })}
+              {conversationId
+                ? visibleEntries.map((entry$) => {
+                    const entry = entry$.get();
+                    return (
+                      <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                        <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
+                      </div>
+                    );
+                  })
+                : null}
             </AnchorTopScrollArea>
           </main>
           {composer}

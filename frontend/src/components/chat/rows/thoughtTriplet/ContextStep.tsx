@@ -13,13 +13,13 @@ export function ContextStep({
   stream,
   conversationId,
 }: {
-  prepareEntry: ThoughtPrepareEntry | null;
+  prepareEntry: ThoughtPrepareEntry;
   stream: ThoughtStreamEntry;
-  conversationId: string | null;
+  conversationId: string;
 }) {
-  const prompt = useMemo(() => (prepareEntry?.requestText ?? stream.llmRequest ?? "").trim(), [prepareEntry?.requestText, stream.llmRequest]);
-  const currentProviderId = String(prepareEntry?.llmProviderId ?? stream.llmProviderId ?? "").trim();
-  const currentModel = String(prepareEntry?.llmModel ?? stream.llmModel ?? "").trim();
+  const prompt = useMemo(() => (prepareEntry.requestText ?? stream.llmRequest ?? "").trim(), [prepareEntry.requestText, stream.llmRequest]);
+  const currentProviderId = String(prepareEntry.llmProviderId ?? stream.llmProviderId ?? "").trim();
+  const currentModel = String(prepareEntry.llmModel ?? stream.llmModel ?? "").trim();
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState(prompt);
   const [selectedProviderId, setSelectedProviderId] = useState(currentProviderId);
@@ -34,21 +34,17 @@ export function ContextStep({
     setSelectedModel(currentModel);
   }, [currentModel, currentProviderId, isEditing, prompt]);
 
-  const canEdit = Boolean(conversationId);
-  const canApply = Boolean(
-    conversationId &&
-      editedPrompt.trim().length > 0 &&
-      selectedProviderId.trim().length > 0 &&
-      selectedModel.trim().length > 0 &&
-      !isSaving,
-  );
+  const canApply =
+    editedPrompt.trim().length > 0 &&
+    selectedProviderId.trim().length > 0 &&
+    selectedModel.trim().length > 0 &&
+    !isSaving;
 
   const applyEdit = async () => {
-    const cid = conversationId;
-    if (!cid || !canApply) return;
+    if (!canApply) return;
     setIsSaving(true);
     try {
-      await reprocessThoughtContext(cid, stream.id, {
+      await reprocessThoughtContext(conversationId, prepareEntry.id, {
         editedRequestText: editedPrompt.trim(),
         llmProviderId: selectedProviderId.trim(),
         llmModel: selectedModel.trim(),
@@ -66,18 +62,16 @@ export function ContextStep({
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
       <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <span>{currentProviderId && currentModel ? `model: ${currentProviderId}/${currentModel}` : "model: unknown"}</span>
-        <BranchSelector entryId={prepareEntry?.id} />
-        {canEdit ? (
-          <button
-            type="button"
-            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            onClick={() => setIsEditing((v) => !v)}
-            title="Edit context and branch"
-          >
-            <Pencil className="h-3 w-3" />
-            {isEditing ? "Close edit" : "Edit"}
-          </button>
-        ) : null}
+        <BranchSelector entryId={prepareEntry.id} />
+        <button
+          type="button"
+          className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          onClick={() => setIsEditing((v) => !v)}
+          title="Edit context and branch"
+        >
+          <Pencil className="h-3 w-3" />
+          {isEditing ? "Close edit" : "Edit"}
+        </button>
       </div>
       {isEditing ? (
         <div className="space-y-1.5">

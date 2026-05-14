@@ -13,7 +13,7 @@ export type ThoughtTripletRefs = {
 
 type ChatMessageRowProps = {
   entry$: ObservableItem<ChatEntry>;
-  conversationId: string | null;
+  conversationId: string;
   thoughtTripletsById?: ReadonlyMap<string, ThoughtTripletRefs>;
 };
 

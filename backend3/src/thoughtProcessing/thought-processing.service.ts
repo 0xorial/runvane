@@ -117,8 +117,8 @@ export class ThoughtProcessingService {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
     if (!editedRequestText) throw new Error('editedRequestText is required');
-    const branch = await this.resolveBranchedPrepareSource(args.conversationId, args.sourceEntryId);
-    const provider = await this.resolveProviderForPrepare(args.conversationId, branch.prepareEntryId);
+    const branch = await this.resolvePrepareSource(args.conversationId, args.sourceEntryId);
+    const provider = await this.resolveProviderForThought(args.conversationId, branch.thoughtId);
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
     }
@@ -190,36 +190,36 @@ export class ThoughtProcessingService {
     };
   }
 
-  private async resolveBranchedPrepareSource(
+  private async resolvePrepareSource(
     conversationId: string,
     sourceEntryId: string,
-  ): Promise<{ prepareEntryId: string; parentId: string | null }> {
+  ): Promise<{ prepareEntryId: string; parentId: string | null; thoughtId: string }> {
     const sourceEntry = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
     if (!sourceEntry) throw new Error(`source entry not found: ${sourceEntryId}`);
-    if (sourceEntry.type === 'thought-prepare') {
-      return { prepareEntryId: sourceEntry.id, parentId: sourceEntry.parentId };
+    if (sourceEntry.type !== 'thought-prepare') {
+      throw new Error(`reprocess-context source ${sourceEntryId} is not a thought-prepare (got ${sourceEntry.type})`);
     }
-    if (sourceEntry.parentId) {
-      const parent = await this.chatEntries.getChatEntry(conversationId, sourceEntry.parentId);
-      if (parent?.type === 'thought-prepare') {
-        return { prepareEntryId: parent.id, parentId: parent.parentId };
-      }
-    }
-    throw new Error(`reprocess-context source ${sourceEntryId} is not a thought-prepare or its child`);
+    return { prepareEntryId: sourceEntry.id, parentId: sourceEntry.parentId, thoughtId: sourceEntry.thoughtId };
   }
 
-  private async resolveProviderForPrepare(
+  /**
+   * Provider for a thought is identified by the stream entry's type.
+   * With chain-interleaved appends the stream is no longer guaranteed to be
+   * the prepare's direct child, so we look up by `thoughtId` instead of
+   * walking parents.
+   */
+  private async resolveProviderForThought(
     conversationId: string,
-    prepareEntryId: string,
+    thoughtId: string,
   ): Promise<AnyThoughtProvider> {
     const all = await this.chatEntries.listChatEntries(conversationId, { all: true });
-    const streamChild = all.find((e) => e.parentId === prepareEntryId && isThoughtStreamEntry(e));
-    if (!streamChild) {
-      throw new Error(`thought-prepare ${prepareEntryId} has no stream child to identify provider`);
+    const streamEntry = all.find((e) => isThoughtStreamEntry(e) && e.thoughtId === thoughtId);
+    if (!streamEntry) {
+      throw new Error(`thought ${thoughtId} has no stream entry to identify provider`);
     }
-    const provider = this.providers.find((p) => p.streamEntryType === streamChild.type);
+    const provider = this.providers.find((p) => p.streamEntryType === streamEntry.type);
     if (!provider) {
-      throw new Error(`no provider registered for stream entry type ${streamChild.type}`);
+      throw new Error(`no provider registered for stream entry type ${streamEntry.type}`);
     }
     return provider;
   }
