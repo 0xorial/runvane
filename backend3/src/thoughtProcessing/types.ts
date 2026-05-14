@@ -6,7 +6,7 @@ import type {
 } from '../contracts/chatEntry.js';
 import type { ChatChain } from '../conversations/chat-chain.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
-import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../llmProviders/types.js';
 
 export type ThoughtStreamEntry = PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry;
 export type ThoughtStreamEntryType = ThoughtStreamEntry['type'];
@@ -38,29 +38,25 @@ export type ThoughtContext = {
   chain: ChatChain;
 };
 
-export type ThoughtReasonLlmResult = {
-  fullResponse: string;
-  providerId?: string;
-  model?: string;
-  usage?: StreamTextCompletionUsage;
-};
-
-export type PreparedReason = {
-  prompt: string;
-};
-
 export type ThoughtTypeProvider<TInput> = {
   streamEntryType: ThoughtStreamEntryType;
   wantsAction: boolean;
   prepareTitle: string;
   initialActionSummary?: string;
   buildInputFromConversation?: (conversationId: string) => Promise<TInput>;
-  runPrepare: (input: TInput) => PreparedReason;
-  onLlmDelta?: (input: TInput, ctx: ThoughtContext, delta: string) => void;
+  /**
+   * Returns the LLM request (messages, optional tools, response format).
+   * Model is resolved at the LLM-config layer and passed to the provider
+   * adapter separately, so it is intentionally absent from this shape.
+   * The display/edit surface on the prepare entry is the JSON.stringify
+   * of this request — what you see is exactly what hits the wire.
+   */
+  runPrepare: (input: TInput) => LlmRequest;
+  onLlmEvent?: (input: TInput, ctx: ThoughtContext, event: LlmStreamEvent) => void;
   runDecision: (
     input: TInput,
     ctx: ThoughtContext,
-    llmResult: ThoughtReasonLlmResult,
+    completion: LlmCompletion,
     scope: LifecycleScope,
   ) => Promise<void>;
 };

@@ -4,9 +4,11 @@ import { SseType } from '../../contracts/sse.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
+import { getCompletionText } from '../../llmProviders/types.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
-import { buildToolParamsPrompt, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
-import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
+import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
 export type ToolParamsInput = {
   conversationId: string;
@@ -31,8 +33,8 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     private readonly runTool: RunToolService,
   ) {}
 
-  runPrepare = (input: ToolParamsInput) => ({
-    prompt: buildToolParamsPrompt({
+  runPrepare = (input: ToolParamsInput): LlmRequest => ({
+    messages: buildToolParamsMessages({
       toolName: input.toolName,
       toolAiDescription: input.toolAiDescription,
       toolParamsSchema: input.toolParamsSchema,
@@ -40,25 +42,29 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     }),
   });
 
-  onLlmDelta = (_input: ToolParamsInput, ctx: ThoughtContext, delta: string): void => {
-    if (!delta || !ctx.streamEntryId) return;
+  onLlmEvent = (_input: ToolParamsInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
+    if (event.type !== 'text_delta' || !event.delta || !ctx.streamEntryId) return;
     this.hub.publish(ctx.conversationId, {
       type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: ctx.streamEntryId,
       field: 'llmResponse',
-      delta,
+      delta: event.delta,
     });
   };
 
   runDecision = async (
     input: ToolParamsInput,
     ctx: ThoughtContext,
-    llmResult: ThoughtReasonLlmResult,
+    completion: LlmCompletion,
     scope: LifecycleScope,
   ): Promise<void> => {
     let parsedParams: Record<string, unknown>;
     try {
-      parsedParams = parseToolParamsJson(llmResult.fullResponse, `tool resolver response for ${input.toolName}`);
+      parsedParams = parseToolParamsJson(
+        getCompletionText(completion),
+        input.toolName,
+        `tool resolver response for ${input.toolName}`,
+      );
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await this.markActionFailed(ctx, detail);

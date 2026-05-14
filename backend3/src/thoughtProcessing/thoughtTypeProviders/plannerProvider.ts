@@ -8,21 +8,21 @@ import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { incrementalDelta, publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
+import { getCompletionText } from '../../llmProviders/types.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
-import { buildPlannerPrompt } from '../lib/plannerPrompt.js';
+import { buildPlannerMessages } from '../lib/plannerPrompt.js';
 import { extractAssistantOutputFromJsonLike, parsePlannerOutput, type ParsedPlannerOutput } from '../lib/plannerTextParsing.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
-import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import { ToolParamsThoughtTypeProvider, type ToolParamsInput } from './toolParamsProvider.js';
 
 export type PlannerInput = {
   conversationId: string;
   agentId: string;
-  userText: string;
   systemPrompt: string;
   enabledToolIds: string[];
   entries: ChatEntry[];
-  triggerEntry: ChatEntry | null;
 };
 
 type StreamState = {
@@ -63,27 +63,23 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     return {
       conversationId,
       agentId,
-      userText: anchorUserMessage.text,
       systemPrompt: agent.system_prompt ?? '',
       enabledToolIds: this.resolveEnabledToolIds(agent),
       entries,
-      triggerEntry: anchorUserMessage,
     };
   };
 
-  runPrepare = (input: PlannerInput) => ({
-    prompt: buildPlannerPrompt({
+  runPrepare = (input: PlannerInput): LlmRequest => ({
+    messages: buildPlannerMessages({
       systemPrompt: input.systemPrompt,
       entries: input.entries,
-      anchorUserText: input.userText,
-      triggerEntry: input.triggerEntry,
       toolIds: input.enabledToolIds,
-      priorToolResults: [],
     }),
   });
 
-  onLlmDelta = (input: PlannerInput, ctx: ThoughtContext, delta: string): void => {
-    if (!delta || !ctx.streamEntryId) return;
+  onLlmEvent = (input: PlannerInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
+    if (event.type !== 'text_delta' || !event.delta || !ctx.streamEntryId) return;
+    const delta = event.delta;
     const streamEntryId = ctx.streamEntryId;
     const state = this.ensureState(streamEntryId);
     state.reconstructedReply += delta;
@@ -109,7 +105,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   runDecision = async (
     input: PlannerInput,
     ctx: ThoughtContext,
-    llmResult: ThoughtReasonLlmResult,
+    completion: LlmCompletion,
     scope: LifecycleScope,
   ): Promise<void> => {
     if (!ctx.streamEntryId) throw new Error('planner runDecision requires ctx.streamEntryId');
@@ -118,14 +114,14 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (state) await state.pending.catch(() => undefined);
     this.liveStreamState.delete(streamEntryId);
 
-    const parsed = parsePlannerOutput(llmResult.fullResponse);
+    const parsed = parsePlannerOutput(getCompletionText(completion));
     const requestedToolCalls = parsed.toolRequests.filter((t) => input.enabledToolIds.includes(t.toolName));
     const assistantText = parsed.assistantOutput.trim();
     const action = requestedToolCalls.length > 0 ? 'tool_call' : 'final_answer';
     const parseResult = toPlannerParseResult(parsed);
     const decision = toLlmDecision(parsed, requestedToolCalls);
 
-    await this.persistStreamEntryDecision(ctx, llmResult, parseResult, decision);
+    await this.persistStreamEntryDecision(ctx, completion, parseResult, decision);
     await this.finalizeAssistantMessage(state ?? null, ctx, assistantText);
     await this.finalizeThoughtAction(ctx, action, assistantText, parseResult);
     await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
@@ -238,12 +234,12 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
 
   private async persistStreamEntryDecision(
     ctx: ThoughtContext,
-    llmResult: ThoughtReasonLlmResult,
+    completion: LlmCompletion,
     parseResult: PlannerParseResult,
     decision: LlmDecision | null,
   ): Promise<void> {
     if (!ctx.streamEntryId) throw new Error('persistStreamEntryDecision requires ctx.streamEntryId');
-    const usage = llmResult.usage;
+    const usage = completion.usage;
     const patch: Record<string, unknown> = { parseResult, decision };
     if (usage) {
       patch.promptTokens = usage.promptTokens;

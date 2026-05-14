@@ -1,3 +1,5 @@
+import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from './types.js';
+
 export type ProviderSettingsDict = Record<string, unknown>;
 
 export type LlmProviderSettingSpec = {
@@ -13,35 +15,15 @@ export type ConnectivityResult = {
   detail: string | null;
 };
 
-export type StreamTextCompletionInput = {
-  model: string;
-  prompt: string;
-  requestParams?: Record<string, unknown>;
-  files?: Array<{
-    filename: string;
-    mimeType: string;
-    base64Data: string;
-  }>;
-};
-
-/** Token usage when the provider includes it (e.g. OpenAI `stream_options.include_usage`). */
-export type StreamTextCompletionUsage = {
-  promptTokens: number;
-  completionTokens: number;
-  cachedPromptTokens?: number;
-};
-
-export type StreamTextCompletionResult = {
-  text: string;
-  usage?: StreamTextCompletionUsage;
-};
+/** Re-exported for convenience; usage shape lives in types.ts. */
+export type { LlmUsage as StreamTextCompletionUsage } from './types.js';
 
 export class StreamInterruptedError extends Error {
   readonly partialText: string;
-  readonly usage?: StreamTextCompletionUsage;
+  readonly usage?: LlmUsage;
   readonly cause?: unknown;
 
-  constructor(input: { message: string; partialText: string; usage?: StreamTextCompletionUsage; cause?: unknown }) {
+  constructor(input: { message: string; partialText: string; usage?: LlmUsage; cause?: unknown }) {
     super(input.message);
     this.name = 'StreamInterruptedError';
     this.partialText = input.partialText;
@@ -57,9 +39,20 @@ export interface LlmProvider {
   getSettingsSpec(): LlmProviderSettingSpec[];
   checkConnectivity(settings: ProviderSettingsDict): Promise<ConnectivityResult>;
   listModels(settings: ProviderSettingsDict): Promise<string[]>;
-  streamTextCompletion(
+
+  /**
+   * Streams a completion. The promise resolves to the fully-accumulated
+   * `LlmCompletion` (parts, finishReason, usage). `onEvent` is called as
+   * deltas arrive; consumers may ignore it and rely on the resolved promise.
+   *
+   * `model` is passed separately because it is resolved at the LLM-config
+   * layer (not part of the prompt) and stamped onto the wire body by the
+   * adapter.
+   */
+  streamCompletion(
     settings: ProviderSettingsDict,
-    input: StreamTextCompletionInput,
-    onDelta: (delta: string) => void,
-  ): Promise<StreamTextCompletionResult>;
+    model: string,
+    request: LlmRequest,
+    onEvent: (event: LlmStreamEvent) => void,
+  ): Promise<LlmCompletion>;
 }

@@ -2,9 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { SseType } from '../../contracts/sse.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
+import { getCompletionText, textMessage } from '../../llmProviders/types.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
-import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
 export type AutoTitleInput = {
   conversationId: string;
@@ -30,47 +32,48 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     return { conversationId, firstMessage: firstUserMessage.text };
   };
 
-  runPrepare = (input: AutoTitleInput) => ({
-    prompt:
-      'Generate a short conversation title (3-6 words max). Return plain text only.\n\n' +
-      `First message: ${input.firstMessage}`,
+  runPrepare = (input: AutoTitleInput): LlmRequest => ({
+    messages: [
+      textMessage('system', 'Title this conversation in 3-6 words. Plain text, no quotes.'),
+      textMessage('user', input.firstMessage),
+    ],
   });
 
-  onLlmDelta = (_input: AutoTitleInput, ctx: ThoughtContext, delta: string): void => {
-    if (!delta || !ctx.streamEntryId) return;
+  onLlmEvent = (_input: AutoTitleInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
+    if (event.type !== 'text_delta' || !event.delta || !ctx.streamEntryId) return;
     this.hub.publish(ctx.conversationId, {
       type: SseType.CHAT_ENTRY_DELTA,
       chatEntryId: ctx.streamEntryId,
       field: 'llmResponse',
-      delta,
+      delta: event.delta,
     });
   };
 
   runDecision = async (
     input: AutoTitleInput,
     ctx: ThoughtContext,
-    llmResult: ThoughtReasonLlmResult,
+    completion: LlmCompletion,
   ): Promise<void> => {
-    const cleanTitle = normalizeGeneratedTitle(llmResult.fullResponse);
+    const cleanTitle = normalizeGeneratedTitle(getCompletionText(completion));
     const nextTitle = cleanTitle ?? fallbackConversationTitle(input.firstMessage);
     const current = await this.conversations.get(input.conversationId);
     if (!current) throw new Error(`conversation ${input.conversationId} disappeared mid-thought`);
     const titleApplied = current.title === 'New chat';
     if (titleApplied) await this.conversations.updateTitle(input.conversationId, nextTitle);
 
-    await this.persistUsage(ctx, llmResult);
+    await this.persistUsage(ctx, completion);
     await this.completeThoughtAction(ctx, nextTitle);
     if (titleApplied) await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
   };
 
-  private async persistUsage(ctx: ThoughtContext, llmResult: ThoughtReasonLlmResult): Promise<void> {
-    if (!llmResult.usage || !ctx.streamEntryId) return;
+  private async persistUsage(ctx: ThoughtContext, completion: LlmCompletion): Promise<void> {
+    if (!completion.usage || !ctx.streamEntryId) return;
     const patch: Record<string, unknown> = {
-      promptTokens: llmResult.usage.promptTokens,
-      completionTokens: llmResult.usage.completionTokens,
+      promptTokens: completion.usage.promptTokens,
+      completionTokens: completion.usage.completionTokens,
     };
-    if (typeof llmResult.usage.cachedPromptTokens === 'number') {
-      patch.cachedPromptTokens = llmResult.usage.cachedPromptTokens;
+    if (typeof completion.usage.cachedPromptTokens === 'number') {
+      patch.cachedPromptTokens = completion.usage.cachedPromptTokens;
     }
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);

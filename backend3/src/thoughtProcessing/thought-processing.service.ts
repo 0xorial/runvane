@@ -3,21 +3,21 @@ import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-settings.repo.js';
+import { parseEditedRequest, requestToDisplay } from '../llmProviders/messages.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
+import type { LlmCompletion } from '../llmProviders/types.js';
 import {
   isThoughtStreamEntry,
   type LlmRef,
-  type PreparedReason,
   type ThoughtContext,
-  type ThoughtReasonLlmResult,
   type ThoughtTypeProvider,
 } from './types.js';
 import { DecisionStep } from './steps/decisionStep.js';
-import { PrepareStep } from './steps/prepareStep.js';
+import { PrepareStep, type PreparedReason } from './steps/prepareStep.js';
 import { ReasonStep } from './steps/reasonStep.js';
 
 type AnyThoughtProvider = ThoughtTypeProvider<any>;
@@ -87,8 +87,8 @@ export class ThoughtProcessingService {
       ctx.prepareEntryId = prepareEntry.id;
       await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, prepareEntry.id);
       const prepared = await this.prepareStep.run(provider, input, ctx, scope);
-      const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
-      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
+      const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+      await this.decisionStep.run(provider, input, ctx, completion, scope);
     });
   }
 
@@ -114,6 +114,11 @@ export class ThoughtProcessingService {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
     if (!editedRequestText) throw new Error('editedRequestText is required');
+    // The editor surface is the JSON of the LlmRequest — what you see is what
+    // gets sent. Parse it eagerly so a malformed edit fails the API call
+    // before we mutate the chain.
+    const request = parseEditedRequest(editedRequestText);
+    const display = requestToDisplay(request);
     const branch = await this.resolvePrepareSource(args.conversationId, args.sourceEntryId);
     const provider = await this.resolveProviderForThought(args.conversationId, branch.thoughtId);
     if (!provider.buildInputFromConversation) {
@@ -122,15 +127,15 @@ export class ThoughtProcessingService {
     chain.setTip(branch.parentId);
 
     const ctx = this.createContext(args.conversationId, chain, llm);
-    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, editedRequestText);
-    ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, editedRequestText);
+    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display);
+    ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, display);
     const plannerEntryId = ctx.streamEntryId;
 
     scope.spawn(async () => {
       const input = await provider.buildInputFromConversation!(args.conversationId);
-      const prepared: PreparedReason = { prompt: editedRequestText };
-      const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
-      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
+      const prepared: PreparedReason = { request, display };
+      const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+      await this.decisionStep.run(provider, input, ctx, completion, scope);
     });
     return { plannerEntryId };
   }
@@ -161,10 +166,11 @@ export class ThoughtProcessingService {
 
     scope.spawn(async () => {
       const input = await provider.buildInputFromConversation!(args.conversationId);
-      const llmResult: ThoughtReasonLlmResult = { fullResponse: editedResponse };
-      if (source.llmProviderId) llmResult.providerId = source.llmProviderId;
-      if (source.llmModel) llmResult.model = source.llmModel;
-      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
+      const completion: LlmCompletion = {
+        parts: [{ kind: 'text', text: editedResponse }],
+        finishReason: 'stop',
+      };
+      await this.decisionStep.run(provider, input, ctx, completion, scope);
     });
     return { plannerEntryId };
   }

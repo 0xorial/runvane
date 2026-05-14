@@ -4,11 +4,10 @@ import type {
   LlmProvider,
   LlmProviderSettingSpec,
   ProviderSettingsDict,
-  StreamTextCompletionInput,
-  StreamTextCompletionResult,
-  StreamTextCompletionUsage,
 } from '../provider.js';
-import { StreamInterruptedError as StreamInterruptedErrorClass } from '../provider.js';
+import { StreamInterruptedError } from '../provider.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from '../types.js';
+import { OpenAiStreamAccumulator, buildOpenAiBody, ingestOpenAiChunk } from './openAiShared.js';
 
 function normalizeBaseUrl(settings: ProviderSettingsDict): string {
   const raw = String(settings.base_url ?? '').trim();
@@ -19,7 +18,7 @@ function apiKey(settings: ProviderSettingsDict): string {
   return String(settings.api_key ?? '').trim();
 }
 
-function usageFromOpenAiPayload(usage: unknown): StreamTextCompletionUsage | undefined {
+function usageFromOpenAiPayload(usage: unknown): LlmUsage | undefined {
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
   const rec = usage as Record<string, unknown>;
   const pt = rec.prompt_tokens;
@@ -59,39 +58,9 @@ function usageFromOpenAiPayload(usage: unknown): StreamTextCompletionUsage | und
   return undefined;
 }
 
-function safeRequestParams(params: Record<string, unknown> | undefined): Record<string, unknown> {
-  if (!params) return {};
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(params)) {
-    if (!key) continue;
-    if (
-      key === 'model' ||
-      key === 'messages' ||
-      key === 'stream' ||
-      key === 'stream_options' ||
-      key === 'input' ||
-      key === 'prompt'
-    ) {
-      continue;
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
 const DEFAULT_SPEC: LlmProviderSettingSpec[] = [
-  {
-    key: 'api_key',
-    label: 'API key',
-    type: 'secret',
-    required: true,
-  },
-  {
-    key: 'base_url',
-    label: 'Base URL',
-    type: 'url',
-    required: true,
-  },
+  { key: 'api_key', label: 'API key', type: 'secret', required: true },
+  { key: 'base_url', label: 'Base URL', type: 'url', required: true },
 ];
 
 type OpenAiCompatibleProviderOptions = {
@@ -104,19 +73,11 @@ function parseModelIdentifier(rawModel: unknown, opts: { requireLlmType: boolean
     id?: unknown;
     key?: unknown;
     type?: unknown;
-    status?: unknown;
-    state?: unknown;
-    loaded?: unknown;
     loaded_instances?: unknown;
   };
-
-  if (opts.requireLlmType && typeof rec.type === 'string' && rec.type && rec.type !== 'llm') {
-    return '';
-  }
-
+  if (opts.requireLlmType && typeof rec.type === 'string' && rec.type && rec.type !== 'llm') return '';
   if (typeof rec.id === 'string' && rec.id.trim()) return rec.id.trim();
   if (typeof rec.key === 'string' && rec.key.trim()) return rec.key.trim();
-
   if (Array.isArray(rec.loaded_instances) && rec.loaded_instances.length > 0) {
     const first = rec.loaded_instances[0];
     if (first != null && typeof first === 'object' && typeof (first as { id?: unknown }).id === 'string') {
@@ -144,11 +105,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     return DEFAULT_SPEC.map((spec) => (spec.key === 'api_key' ? { ...spec, required: false } : spec));
   }
 
-  private mergedSettings(settings: ProviderSettingsDict): ProviderSettingsDict {
-    return {
-      ...settings,
-      base_url: String(settings.base_url ?? this.defaultBaseUrl),
-    };
+  protected mergedSettings(settings: ProviderSettingsDict): ProviderSettingsDict {
+    return { ...settings, base_url: String(settings.base_url ?? this.defaultBaseUrl) };
   }
 
   async checkConnectivity(settingsIn: ProviderSettingsDict): Promise<ConnectivityResult> {
@@ -156,26 +114,15 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
     const requestUrl = `${baseUrl}/models`;
-
     if (!baseUrl) return { ok: false, detail: 'base_url is required' };
     if (this.requireApiKey && !key) return { ok: false, detail: 'api_key is required' };
-
     try {
-      this.logger.log({ providerId: this.id, baseUrl, requestUrl }, '[llm-provider] connectivity request formatted');
-      this.logger.log({ providerId: this.id }, '[llm-provider] connectivity request sending');
       const headers: Record<string, string> = {};
       if (key) headers.Authorization = `Bearer ${key}`;
-      const res = await fetch(requestUrl, {
-        method: 'GET',
-        headers,
-      });
-      this.logger.log({ providerId: this.id, status: res.status }, '[llm-provider] connectivity response received');
+      const res = await fetch(requestUrl, { method: 'GET', headers });
       if (!res.ok) {
         const body = await res.text();
-        return {
-          ok: false,
-          detail: `connectivity failed (${res.status}): ${body.slice(0, 300)}`,
-        };
+        return { ok: false, detail: `connectivity failed (${res.status}): ${body.slice(0, 300)}` };
       }
       return { ok: true, detail: null };
     } catch (e) {
@@ -189,18 +136,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
     const requestUrl = `${baseUrl}/models`;
-    this.logger.log({ providerId: this.id, baseUrl, requestUrl }, '[llm-provider] models request formatted');
-    this.logger.log({ providerId: this.id }, '[llm-provider] models request sending');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (key) headers.Authorization = `Bearer ${key}`;
-    const res = await fetch(requestUrl, {
-      method: 'GET',
-      headers,
-    });
-    this.logger.log({ providerId: this.id, status: res.status }, '[llm-provider] models response received');
-    if (!res.ok) {
-      throw new Error(`models fetch failed (${res.status})`);
-    }
+    const res = await fetch(requestUrl, { method: 'GET', headers });
+    if (!res.ok) throw new Error(`models fetch failed (${res.status})`);
     const raw = (await res.json()) as unknown;
     const openAiData =
       raw != null && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data)
@@ -214,16 +153,15 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       ...openAiData.map((x) => parseModelIdentifier(x, { requireLlmType: false })),
       ...lmStudioData.map((x) => parseModelIdentifier(x, { requireLlmType: true })),
     ].filter((x) => x.length > 0);
-    const uniqueModels = Array.from(new Set(models));
-    this.logger.log({ providerId: this.id, count: uniqueModels.length }, '[llm-provider] models parsed');
-    return uniqueModels;
+    return Array.from(new Set(models));
   }
 
-  async streamTextCompletion(
+  async streamCompletion(
     settingsIn: ProviderSettingsDict,
-    input: StreamTextCompletionInput,
-    onDelta: (delta: string) => void,
-  ): Promise<StreamTextCompletionResult> {
+    model: string,
+    request: LlmRequest,
+    onEvent: (event: LlmStreamEvent) => void,
+  ): Promise<LlmCompletion> {
     const settings = this.mergedSettings(settingsIn);
     const baseUrl = normalizeBaseUrl(settings);
     const key = apiKey(settings);
@@ -232,100 +170,53 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     if (this.requireApiKey && !key) throw new Error('api_key is required');
 
     this.logger.log(
-      { providerId: this.id, model: input.model, baseUrl, requestUrl },
+      { providerId: this.id, model, baseUrl, requestUrl, turns: request.messages.length },
       '[llm-provider] completion request sending',
     );
-    const contentParts: Array<Record<string, unknown>> = [{ type: 'text', text: input.prompt }];
-    for (const file of input.files ?? []) {
-      contentParts.push({
-        type: 'file',
-        file: {
-          filename: file.filename,
-          file_data: `data:${file.mimeType};base64,${file.base64Data}`,
-        },
-      });
-    }
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (key) headers.Authorization = `Bearer ${key}`;
-    const requestParams = safeRequestParams(input.requestParams);
     const res = await fetch(requestUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        ...requestParams,
-        model: input.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        messages: [{ role: 'user', content: contentParts }],
-      }),
+      body: JSON.stringify(buildOpenAiBody(model, request)),
     });
-    this.logger.log(
-      {
-        providerId: this.id,
-        model: input.model,
-        status: res.status,
-        hasBodyStream: Boolean(res.body),
-      },
-      '[llm-provider] completion response received',
-    );
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`llm request failed (${res.status}): ${body.slice(0, 300)}`);
     }
 
-    // Some providers may ignore `stream: true` and return regular JSON.
+    const acc = new OpenAiStreamAccumulator(onEvent);
+
+    // Some providers ignore `stream:true` and return a single JSON body.
     if (!res.body) {
-      const data = (await res.json()) as {
-        choices?: Array<{ message?: { content?: unknown } }>;
-        usage?: unknown;
-      };
-      const content = data.choices?.[0]?.message?.content;
-      const text = typeof content === 'string' ? content : '';
-      if (!text) throw new Error('llm returned empty response');
-      const usage = usageFromOpenAiPayload(data.usage);
+      const data = (await res.json()) as Parameters<typeof ingestOpenAiChunk>[0];
       try {
-        onDelta(text);
+        ingestOpenAiChunk(data, acc, usageFromOpenAiPayload);
       } catch (e) {
-        throw new StreamInterruptedErrorClass({
+        throw new StreamInterruptedError({
           message: 'stream interrupted during callback',
-          partialText: text,
-          usage,
+          partialText: acc.partialText(),
           cause: e,
         });
       }
-      return usage !== undefined ? { text, usage } : { text };
+      if (!acc.hasContent()) throw new Error('llm returned empty response');
+      return acc.finalize();
     }
 
     const decoder = new TextDecoder();
     let buffer = '';
-    let full = '';
-    let streamUsage: StreamTextCompletionUsage | undefined;
 
     const handleDataLine = (line: string) => {
       if (!line.startsWith('data:')) return;
       const payload = line.startsWith('data: ') ? line.slice(6) : line.slice(5);
       if (!payload || payload === '[DONE]') return;
-      const parsed = JSON.parse(payload) as {
-        choices?: Array<{
-          delta?: { content?: unknown };
-          message?: { content?: unknown };
-        }>;
-        usage?: unknown;
-      };
-      const u = usageFromOpenAiPayload(parsed.usage);
-      if (u) streamUsage = u;
-      const choice = parsed.choices?.[0];
-      const part = choice?.delta?.content ?? choice?.message?.content;
-      const delta = typeof part === 'string' ? part : '';
-      if (!delta) return;
-      full += delta;
+      const parsed = JSON.parse(payload) as Parameters<typeof ingestOpenAiChunk>[0];
       try {
-        onDelta(delta);
+        ingestOpenAiChunk(parsed, acc, usageFromOpenAiPayload);
       } catch (e) {
-        throw new StreamInterruptedErrorClass({
+        throw new StreamInterruptedError({
           message: 'stream interrupted during callback',
-          partialText: full,
-          usage: streamUsage,
+          partialText: acc.partialText(),
           cause: e,
         });
       }
@@ -342,10 +233,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         handleDataLine(line);
       }
     }
-
     if (buffer) handleDataLine(buffer.replace(/\r$/, ''));
-    if (!full) throw new Error('llm returned empty streamed response');
-    return streamUsage !== undefined ? { text: full, usage: streamUsage } : { text: full };
+    if (!acc.hasContent()) throw new Error('llm returned empty streamed response');
+    return acc.finalize();
   }
 }
 

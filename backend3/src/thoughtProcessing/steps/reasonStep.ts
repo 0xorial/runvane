@@ -3,14 +3,12 @@ import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
+import { getCompletionText } from '../../llmProviders/types.js';
+import type { LlmCompletion, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
-import type {
-  PreparedReason,
-  ThoughtContext,
-  ThoughtReasonLlmResult,
-  ThoughtTypeProvider,
-} from '../types.js';
+import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
+import type { PreparedReason } from './prepareStep.js';
 
 @Injectable()
 export class ReasonStep {
@@ -29,9 +27,9 @@ export class ReasonStep {
     ctx: ThoughtContext,
     prepared: PreparedReason,
     scope: LifecycleScope,
-  ): Promise<ThoughtReasonLlmResult> {
+  ): Promise<LlmCompletion> {
     scope.throwIfAborted();
-    const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, prepared.prompt));
+    const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, prepared.display));
     ctx.streamEntryId = streamEntryId;
 
     if (provider.wantsAction && !ctx.thoughtActionEntryId) {
@@ -40,7 +38,7 @@ export class ReasonStep {
 
     try {
       scope.throwIfAborted();
-      return await this.streamLlm(provider, input, ctx, prepared.prompt, streamEntryId, scope);
+      return await this.streamLlm(provider, input, ctx, prepared, streamEntryId, scope);
     } catch (error) {
       await this.markFailed(ctx, streamEntryId, error, scope);
       throw error;
@@ -50,7 +48,7 @@ export class ReasonStep {
   private async createStreamEntry<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     ctx: ThoughtContext,
-    prompt: string,
+    requestDisplay: string,
   ): Promise<string> {
     const created = await ctx.chain.append((parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
@@ -62,7 +60,7 @@ export class ReasonStep {
         llmModel: ctx.llmModel,
       }),
     );
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest: prompt });
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest: requestDisplay });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
@@ -87,46 +85,36 @@ export class ReasonStep {
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
     ctx: ThoughtContext,
-    prompt: string,
+    prepared: PreparedReason,
     streamEntryId: string,
     scope: LifecycleScope,
-  ): Promise<ThoughtReasonLlmResult> {
-    const llmDoc = await this.llmProviderSettings.getDocument();
-    const providerId = llmDoc.llm_configuration.provider_id;
-    const modelName = llmDoc.llm_configuration.model_name;
-    const llmProvider = this.llmProviders.get(providerId);
-    if (!llmProvider) throw new Error(`unknown llm provider: ${providerId}`);
-    const providerSettings = await this.llmProviderSettings.getProviderSettings(providerId);
-    if (!providerSettings) throw new Error(`llm provider settings not found: ${providerId}`);
+  ): Promise<LlmCompletion> {
+    const llmProvider = this.llmProviders.get(ctx.llmProviderId);
+    if (!llmProvider) throw new Error(`unknown llm provider: ${ctx.llmProviderId}`);
+    const providerSettings = await this.llmProviderSettings.getProviderSettings(ctx.llmProviderId);
+    if (!providerSettings) throw new Error(`llm provider settings not found: ${ctx.llmProviderId}`);
 
     this.logger.log(
-      `[reason-step] streamEntry=${streamEntryId} promptHash=${cheapHash(prompt)} promptLen=${prompt.length} promptHead=${JSON.stringify(prompt.slice(0, 120))}`,
+      `[reason-step] streamEntry=${streamEntryId} model=${ctx.llmModel} turns=${prepared.request.messages.length} tools=${prepared.request.tools?.length ?? 0}`,
     );
 
     const startedAt = Date.now();
-    let streamedText = '';
-    const completion = await llmProvider.streamTextCompletion(
-      providerSettings,
-      { model: modelName, prompt },
-      (delta) => {
-        scope.throwIfAborted();
-        streamedText += delta;
-        provider.onLlmDelta?.(input, ctx, delta);
-      },
-    );
+    const onEvent = (event: LlmStreamEvent) => {
+      scope.throwIfAborted();
+      provider.onLlmEvent?.(input, ctx, event);
+    };
+
+    const completion = await llmProvider.streamCompletion(providerSettings, ctx.llmModel, prepared.request, onEvent);
     scope.throwIfAborted();
 
-    const fullResponse = String(completion.text || streamedText);
-    const result: ThoughtReasonLlmResult = { fullResponse, providerId, model: modelName };
-    if (completion.usage) result.usage = completion.usage;
-
+    const responseText = getCompletionText(completion);
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
       status: 'completed',
-      llmResponse: fullResponse,
+      llmResponse: responseText,
       thoughtMs: Date.now() - startedAt,
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
-    return result;
+    return completion;
   }
 
   private async markFailed(
@@ -142,10 +130,4 @@ export class ReasonStep {
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, patch);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
   }
-}
-
-function cheapHash(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(16);
 }

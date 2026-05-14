@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
+import { requestToDisplay } from '../../llmProviders/messages.js';
+import type { LlmRequest } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
-import type { PreparedReason, ThoughtContext, ThoughtTypeProvider } from '../types.js';
+import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
+
+export type PreparedReason = {
+  request: LlmRequest;
+  display: string;
+};
 
 @Injectable()
 export class PrepareStep {
@@ -24,10 +31,11 @@ export class PrepareStep {
     let prepared: PreparedReason;
     try {
       scope.throwIfAborted();
-      prepared = provider.runPrepare(input);
+      const request = provider.runPrepare(input);
+      prepared = { request, display: requestToDisplay(request) };
       await this.chatEntries.mergeEntryPayload(ctx.conversationId, prepareEntryId, {
         status: 'completed',
-        requestText: prepared.prompt,
+        requestText: prepared.display,
       });
       await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, prepareEntryId);
     } catch (error) {

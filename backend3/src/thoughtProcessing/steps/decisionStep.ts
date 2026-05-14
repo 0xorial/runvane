@@ -3,7 +3,8 @@ import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
-import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from '../types.js';
+import type { LlmCompletion } from '../../llmProviders/types.js';
+import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
 @Injectable()
 export class DecisionStep {
@@ -16,12 +17,12 @@ export class DecisionStep {
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
     ctx: ThoughtContext,
-    llmResult: ThoughtReasonLlmResult,
+    completion: LlmCompletion,
     scope: LifecycleScope,
   ): Promise<void> {
     scope.throwIfAborted();
     try {
-      await provider.runDecision(input, ctx, llmResult, scope);
+      await provider.runDecision(input, ctx, completion, scope);
     } catch (error) {
       await this.markFailed(ctx, error, scope);
       throw error;

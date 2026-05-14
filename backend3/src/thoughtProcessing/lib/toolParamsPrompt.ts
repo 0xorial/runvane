@@ -1,25 +1,29 @@
-export type BuildToolParamsPromptInput = {
+import { textMessage, type LlmMessage } from '../../llmProviders/types.js';
+
+export type BuildToolParamsMessagesInput = {
   toolName: string;
   toolAiDescription: string;
   toolParamsSchema: unknown;
   toolRequest: string;
 };
 
-export function buildToolParamsPrompt(input: BuildToolParamsPromptInput): string {
-  return `You produce ONLY JSON object parameters for one tool.
-
-Tool name: ${input.toolName}
-Tool AI description: ${input.toolAiDescription}
-Tool parameter JSON schema:
-${JSON.stringify(input.toolParamsSchema, null, 2)}
-
-Tool request:
-${input.toolRequest}
-
-Return ONLY valid JSON object for tool parameters.`;
+export function buildToolParamsMessages(input: BuildToolParamsMessagesInput): LlmMessage[] {
+  const system =
+    `Produce JSON args for tool "${input.toolName}".\n` +
+    `Reply with ONE JSON object whose top-level keys are the schema fields. ` +
+    `Do NOT wrap under the tool name. Do NOT add prose or code fences. ` +
+    `If the schema has no fields, reply with {}.\n` +
+    `Description: ${input.toolAiDescription}\n` +
+    `Schema: ${JSON.stringify(input.toolParamsSchema)}`;
+  return [textMessage('system', system), textMessage('user', input.toolRequest)];
 }
 
-export function parseToolParamsJson(text: string, context: string): Record<string, unknown> {
+/**
+ * Parse the LLM's tool-args JSON. LLMs frequently wrap args under the tool
+ * name (`{"<toolName>": {...}}`) despite explicit instructions; unwrap that
+ * single well-known shape rather than failing the call.
+ */
+export function parseToolParamsJson(text: string, toolName: string, context: string): Record<string, unknown> {
   const stripped = String(text ?? '')
     .trim()
     .replace(/^```json\s*/i, '')
@@ -30,5 +34,16 @@ export function parseToolParamsJson(text: string, context: string): Record<strin
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${context}: expected JSON object`);
   }
-  return parsed as Record<string, unknown>;
+  const obj = parsed as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  if (
+    keys.length === 1 &&
+    keys[0] === toolName &&
+    obj[toolName] !== null &&
+    typeof obj[toolName] === 'object' &&
+    !Array.isArray(obj[toolName])
+  ) {
+    return obj[toolName] as Record<string, unknown>;
+  }
+  return obj;
 }
