@@ -7,6 +7,7 @@ import { publishConversationUpdated } from '../sse/sse-helpers.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import { UploadsService } from '../uploads/uploads.service.js';
 import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { LifecycleScope } from './lifecycle-scope.js';
@@ -25,6 +26,7 @@ export class ConversationProcessorService {
     private readonly hub: SseHubService,
     private readonly autoTitleProvider: AutoTitleThoughtTypeProvider,
     private readonly plannerProvider: PlannerThoughtTypeProvider,
+    private readonly uploads: UploadsService,
   ) {}
 
   private beginRun(conversationId: string): ConversationRun {
@@ -97,6 +99,7 @@ export class ConversationProcessorService {
       ...(source.llmModel ? { llmModel: source.llmModel } : {}),
       ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
       parentId: source.parentId,
+      ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
     });
     await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
     chain.setTip(sibling.id);
@@ -126,6 +129,9 @@ export class ConversationProcessorService {
       throw new Error('parentId is required when conversation already has messages');
     }
     const parentId = body.parentId ?? null;
+    const attachments = body.attachmentIds && body.attachmentIds.length > 0
+      ? await this.uploads.resolveChatAttachments(body.attachmentIds)
+      : undefined;
     const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
       text: body.message,
       agentId: body.agentId,
@@ -133,6 +139,7 @@ export class ConversationProcessorService {
       llmModel: body.llmModel,
       modelPresetId: body.modelPresetId,
       parentId,
+      ...(attachments ? { attachments } : {}),
     });
     await this.chatEntries.setDefaultViewLeaf(conversationId, userEntry.id);
     chain.setTip(userEntry.id);
@@ -140,7 +147,11 @@ export class ConversationProcessorService {
     if (!userPayload || userPayload.type !== 'user-message') {
       throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
     }
-    this.hub.publish(conversationId, { type: SseType.USER_MESSAGE, entry: userPayload });
+    this.hub.publish(conversationId, {
+      type: SseType.USER_MESSAGE,
+      entry: userPayload,
+      ...(body.clientRequestId ? { clientRequestId: body.clientRequestId } : {}),
+    });
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
     if (existingMessages.length === 0) {

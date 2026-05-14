@@ -1,5 +1,5 @@
 import type { ChatEntry } from '../../contracts/chatEntry.js';
-import { textMessage, type LlmMessage } from '../../llmProviders/types.js';
+import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 
 export type BuildPlannerMessagesInput = {
   systemPrompt: string;
@@ -20,11 +20,29 @@ function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): str
   return parts.join('\n\n');
 }
 
-function userContentFromEntry(entry: Extract<ChatEntry, { type: 'user-message' }>): string {
-  const attachments = entry.attachments ?? [];
-  if (attachments.length === 0) return entry.text;
-  const summary = attachments.map((a) => `${a.name} (${a.mimeType}, ${a.sizeBytes}b)`).join(', ');
-  return `${entry.text}\n[attachments: ${summary}]`;
+/**
+ * Build the user message's content parts. Attachments are emitted as
+ * lightweight `attachment_ref`s in stable id-order; raw bytes are loaded
+ * later by the reason step before hitting the provider adapter.
+ */
+function userMessageParts(entry: Extract<ChatEntry, { type: 'user-message' }>): LlmContentPart[] {
+  const parts: LlmContentPart[] = [{ kind: 'text', text: entry.text }];
+  const ordered = [...(entry.attachments ?? [])].sort((a, b) => a.id.localeCompare(b.id));
+  for (const att of ordered) {
+    parts.push({
+      kind: 'attachment_ref',
+      attachmentId: att.id,
+      mime: att.mimeType,
+      filename: att.name,
+      sizeBytes: att.sizeBytes,
+    });
+  }
+  return parts;
+}
+
+function stringify(value: unknown): string {
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
 }
 
 /**
@@ -34,8 +52,7 @@ function userContentFromEntry(entry: Extract<ChatEntry, { type: 'user-message' }
  *
  * The planner currently emits tool requests as text JSON (no native
  * tool_calls in the model output), so we synthesize the assistant turn
- * here using the chat-entry id as a stable callId. Adapters that don't
- * support native tools fall back to text via their own translation.
+ * here using the chat-entry id as a stable callId.
  */
 function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation' }>): LlmMessage[] {
   const callId = entry.id;
@@ -46,7 +63,7 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
     },
     {
       role: 'tool',
-      parts: [{ kind: 'tool_result', callId, ok: entry.state === 'done', payload: entry.result }],
+      parts: [{ kind: 'tool_result', callId, ok: entry.state === 'done', payload: stringify(entry.result) }],
     },
   ];
 }
@@ -54,7 +71,7 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
 function entryToMessages(entry: ChatEntry): LlmMessage[] {
   switch (entry.type) {
     case 'user-message':
-      return [textMessage('user', userContentFromEntry(entry))];
+      return [{ role: 'user', parts: userMessageParts(entry) }];
     case 'assistant-message':
       return [textMessage('assistant', entry.text)];
     case 'tool-invocation':

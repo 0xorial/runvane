@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
-import type { UploadAttachment } from '../../uploads/uploads.types.js';
+import { uploadContentUrl, type UploadAttachment } from '../../uploads/uploads.types.js';
 
 type UploadDbRow = {
   id: string;
@@ -18,6 +18,7 @@ function toUploadAttachment(row: UploadDbRow): UploadAttachment {
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     createdAt: row.created_at,
+    url: uploadContentUrl(row.id),
   };
 }
 

@@ -16,6 +16,20 @@ export type LlmContentPart =
   | { kind: 'text'; text: string }
   | { kind: 'image'; mime: string; data: { base64: string } | { url: string } }
   | { kind: 'file'; filename: string; mime: string; base64: string }
+  | {
+      /**
+       * Lightweight reference to a stored upload. Carries metadata only —
+       * never raw bytes — so it stays small in `requestText`, on the SSE
+       * wire, and in the prepare-entry editor. The reason step expands
+       * each ref to the corresponding `image`/`file` part right before
+       * calling the provider adapter; adapters never see this kind.
+       */
+      kind: 'attachment_ref';
+      attachmentId: string;
+      mime: string;
+      filename: string;
+      sizeBytes: number;
+    }
   | { kind: 'tool_call'; callId: string; toolName: string; args: unknown }
   | { kind: 'tool_result'; callId: string; ok: boolean; payload: unknown }
   | { kind: 'thinking'; text: string };

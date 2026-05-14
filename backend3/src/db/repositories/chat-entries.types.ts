@@ -1,3 +1,5 @@
+import type { ChatAttachment } from '../../contracts/chatEntry.js';
+
 export type UserMessageEntryRow = {
   type: 'user-message';
   id: string;
@@ -9,6 +11,7 @@ export type UserMessageEntryRow = {
   llmProviderId?: string;
   llmModel?: string;
   modelPresetId?: number | null;
+  attachments?: ChatAttachment[];
 };
 
 export type AssistantMessageEntryRow = {

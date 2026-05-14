@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ChatEntry, ToolInvocationEntry } from '../../contracts/chatEntry.js';
+import type { ChatAttachment, ChatEntry, ToolInvocationEntry } from '../../contracts/chatEntry.js';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
@@ -147,12 +147,14 @@ export class ChatEntriesRepo {
       llmModel?: string;
       modelPresetId?: number;
       parentId: string | null;
+      attachments?: ChatAttachment[];
     },
   ): Promise<UserMessageEntryRow> {
     const payload: Record<string, unknown> = { text: input.text, agentId: input.agentId };
     if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
     if (input.llmModel) payload.llmModel = input.llmModel;
     if (input.modelPresetId !== undefined) payload.modelPresetId = input.modelPresetId;
+    if (input.attachments && input.attachments.length > 0) payload.attachments = input.attachments;
     const row = await this.appendEntry(conversationId, {
       type: 'user-message',
       parentId: input.parentId,
@@ -170,6 +172,7 @@ export class ChatEntriesRepo {
     if (input.llmProviderId) result.llmProviderId = input.llmProviderId;
     if (input.llmModel) result.llmModel = input.llmModel;
     if (input.modelPresetId !== undefined) result.modelPresetId = input.modelPresetId;
+    if (input.attachments && input.attachments.length > 0) result.attachments = input.attachments;
     return result;
   }
 

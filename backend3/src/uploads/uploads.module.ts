@@ -7,5 +7,6 @@ import { UploadsService } from './uploads.service.js';
   imports: [DatabaseModule],
   controllers: [UploadsController],
   providers: [UploadsService],
+  exports: [UploadsService],
 })
 export class UploadsModule {}

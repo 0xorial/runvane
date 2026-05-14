@@ -39,4 +39,14 @@ export class PostConversationMessageDto {
   @IsString()
   @MinLength(1)
   parentId?: string;
+
+  /**
+   * Opaque client-generated correlation token. The server echoes it on the
+   * resulting USER_MESSAGE SSE event so the originating client can swap its
+   * optimistic UI row for the canonical entry without text-matching.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  clientRequestId?: string;
 }

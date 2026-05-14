@@ -108,6 +108,8 @@ export type PostConversationMessageInput = {
   attachmentIds?: string[];
   /** The entry the user wants this message attached to. Required when the conversation is non-empty. */
   parentId?: string | null;
+  /** Echoed back on the resulting USER_MESSAGE SSE event for optimistic reconciliation. */
+  clientRequestId?: string;
 };
 
 export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {

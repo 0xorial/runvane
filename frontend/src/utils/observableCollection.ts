@@ -11,6 +11,9 @@ function createObservableItem<T extends { id: string }>(initial: T): ObservableI
 }
 
 function replaceObject<T extends object>(target: T, next: T) {
+  // Aliased call: caller passed the observable's own internal value as `next`.
+  // Wiping `target` would also wipe `next` (same reference) and destroy the row.
+  if (target === next) return;
   const tgt = target as Record<string, unknown>;
   for (const key of Object.keys(tgt)) delete tgt[key];
   Object.assign(target, next);
@@ -90,6 +93,14 @@ export type ObservableItemCollection<T extends { id: string }> = {
   getRowsVersion: () => number;
   replace: (items: T[]) => void;
   append: (item: T) => boolean;
+  removeById: (id: string) => boolean;
+  /**
+   * Re-key an existing row: the wrapper's identity is preserved (so subscribers
+   * keep the same `ObservableItem` reference), but its `id` and underlying
+   * value are replaced with `next`. Returns false if `oldId` is unknown or if
+   * `next.id` collides with another row.
+   */
+  replaceById: (oldId: string, next: T) => boolean;
   getById: (id: string) => ObservableItem<T> | undefined;
   findLastIndex: (predicate: (item: T, index: number) => boolean) => number;
 };
@@ -140,6 +151,30 @@ export function createObservableItemCollection<T extends { id: string }>(
     return true;
   }
 
+  function removeById(id: string): boolean {
+    if (!byId.has(id)) return false;
+    byId.delete(id);
+    rows = rows.filter((r) => r.id !== id);
+    bumpRowsVersion();
+    return true;
+  }
+
+  function replaceById(oldId: string, next: T): boolean {
+    const existing = byId.get(oldId);
+    if (!existing) return false;
+    if (next.id !== oldId && byId.has(next.id)) {
+      throw new Error(`replaceById: target id ${next.id} already present`);
+    }
+    existing.mutate((current) => replaceObject(current, next));
+    existing.id = next.id;
+    if (next.id !== oldId) {
+      byId.delete(oldId);
+      byId.set(next.id, existing);
+    }
+    bumpRowsVersion();
+    return true;
+  }
+
   function findLastIndex(predicate: (item: T, index: number) => boolean): number {
     for (let i = rows.length - 1; i >= 0; i -= 1) {
       if (predicate(rows[i].get(), i)) return i;
@@ -155,6 +190,8 @@ export function createObservableItemCollection<T extends { id: string }>(
     getRowsVersion: () => rowsVersion$.get().value,
     replace,
     append,
+    removeById,
+    replaceById,
     getById: (id) => byId.get(id),
     findLastIndex,
   };

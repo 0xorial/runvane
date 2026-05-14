@@ -10,12 +10,13 @@ import { ToolParamsThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeP
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { ToolsModule } from '../tools/tools.module.js';
+import { UploadsModule } from '../uploads/uploads.module.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
 import { ConversationsController } from './conversations.controller.js';
 import { ConversationsService } from './conversations.service.js';
 
 @Module({
-  imports: [DatabaseModule, LlmProvidersModule, ToolsModule],
+  imports: [DatabaseModule, LlmProvidersModule, ToolsModule, UploadsModule],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,

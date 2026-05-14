@@ -18,6 +18,13 @@ const LlmContentPartSchema = z.discriminatedUnion('kind', [
     data: z.union([z.object({ base64: z.string() }), z.object({ url: z.string() })]),
   }),
   z.object({ kind: z.literal('file'), filename: z.string(), mime: z.string(), base64: z.string() }),
+  z.object({
+    kind: z.literal('attachment_ref'),
+    attachmentId: z.string().min(1),
+    mime: z.string().min(1),
+    filename: z.string(),
+    sizeBytes: z.number().finite().nonnegative(),
+  }),
   z.object({ kind: z.literal('tool_call'), callId: z.string(), toolName: z.string(), args: z.unknown() }),
   z.object({ kind: z.literal('tool_result'), callId: z.string(), ok: z.boolean(), payload: z.unknown() }),
   z.object({ kind: z.literal('thinking'), text: z.string() }),

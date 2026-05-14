@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pencil } from "lucide-react";
 import type { UserMessageEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
-import { reprocessUserMessage } from "@/api/client";
+import { API_BASE_URL, reprocessUserMessage } from "@/api/client";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { notifyError } from "@/utils/toast";
 import { formatExactChatTime, formatRelativeChatTime } from "../../../utils/formatRelativeChatTime";
@@ -110,23 +110,28 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
       ) : null}
       {!isEditing && attachments.length > 0 ? (
         <div className="grid gap-2">
-          {attachments.map((file) => (
-            <a
-              key={file.id}
-              className={cn("grid gap-1 rounded-md border border-border bg-card/50 p-2 text-inherit no-underline")}
-              href={file.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {file.mimeType.startsWith("image/") ? (
-                <img className="max-h-40 max-w-[240px] rounded-sm object-cover" src={file.url} alt={file.name} />
-              ) : null}
-              <span className="break-words font-semibold">{file.name}</span>
-              <span className="break-words text-xs opacity-75">
-                {file.mimeType} - {formatBytes(file.sizeBytes)}
-              </span>
-            </a>
-          ))}
+          {attachments.map((file) => {
+            // Backend returns a path relative to the API origin (e.g. `/api/uploads/<id>/content`).
+            // Resolve it against the API base so the browser doesn't try to load it from the dev server.
+            const href = `${API_BASE_URL}${file.url}`;
+            return (
+              <a
+                key={file.id}
+                className={cn("grid gap-1 rounded-md border border-border bg-card/50 p-2 text-inherit no-underline")}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {file.mimeType.startsWith("image/") ? (
+                  <img className="max-h-40 max-w-[240px] rounded-sm object-cover" src={href} alt={file.name} />
+                ) : null}
+                <span className="break-words font-semibold">{file.name}</span>
+                <span className="break-words text-xs opacity-75">
+                  {file.mimeType} - {formatBytes(file.sizeBytes)}
+                </span>
+              </a>
+            );
+          })}
         </div>
       ) : null}
     </ChatMessageShell>

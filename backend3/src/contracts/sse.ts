@@ -31,7 +31,17 @@ export type ConversationSseRow = {
   }>;
 };
 
-export type UserMessageSsePayload = { type: typeof SseType.USER_MESSAGE; entry: UserMessageEntry };
+export type UserMessageSsePayload = {
+  type: typeof SseType.USER_MESSAGE;
+  entry: UserMessageEntry;
+  /**
+   * Echoed back from the POST that produced this entry. Lets the originating
+   * client correlate its in-flight optimistic row with the canonical server
+   * entry without resorting to text matching. Absent for entries created by
+   * other clients (or any flow that did not supply one).
+   */
+  clientRequestId?: string;
+};
 export type ConversationCreatedSsePayload = { type: typeof SseType.CONVERSATION_CREATED; conversation: ConversationSseRow };
 export type ConversationUpdatedSsePayload = { type: typeof SseType.CONVERSATION_UPDATED; conversation: ConversationSseRow };
 

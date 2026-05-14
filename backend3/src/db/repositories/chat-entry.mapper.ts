@@ -1,4 +1,5 @@
 import type {
+  ChatAttachment,
   ChatEntry,
   ChatEntryBase,
   PlannerLlmStreamEntry,
@@ -59,7 +60,32 @@ function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, c
     }
     out.modelPresetId = payload.modelPresetId as number | null;
   }
+  const attachments = parseAttachments(payload.attachments, ctx);
+  if (attachments) out.attachments = attachments;
   return out;
+}
+
+function parseAttachments(value: unknown, ctx: string): ChatAttachment[] | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) throw new Error(`${ctx}: attachments must be an array`);
+  return value.map((raw, i) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`${ctx}: attachments[${i}] must be an object`);
+    }
+    const rec = raw as Record<string, unknown>;
+    return {
+      id: requireString(rec, 'id', `${ctx}.attachments[${i}]`),
+      name: requireString(rec, 'name', `${ctx}.attachments[${i}]`),
+      mimeType: requireString(rec, 'mimeType', `${ctx}.attachments[${i}]`),
+      sizeBytes:
+        typeof rec.sizeBytes === 'number' && Number.isFinite(rec.sizeBytes)
+          ? rec.sizeBytes
+          : (() => {
+              throw new Error(`${ctx}.attachments[${i}].sizeBytes must be a finite number`);
+            })(),
+      url: requireString(rec, 'url', `${ctx}.attachments[${i}]`),
+    };
+  });
 }
 
 function mapThoughtPrepare(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {

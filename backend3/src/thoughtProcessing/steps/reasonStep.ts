@@ -3,10 +3,12 @@ import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
+import { expandAttachmentRefs } from '../../llmProviders/expandAttachments.js';
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
+import { UploadsService } from '../../uploads/uploads.service.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import type { PreparedReason } from './prepareStep.js';
 
@@ -19,6 +21,7 @@ export class ReasonStep {
     private readonly llmProviders: LlmProviderRegistry,
     private readonly hub: SseHubService,
     private readonly chatEntries: ChatEntriesRepo,
+    private readonly uploads: UploadsService,
   ) {}
 
   async run<TInput>(
@@ -94,8 +97,18 @@ export class ReasonStep {
     const providerSettings = await this.llmProviderSettings.getProviderSettings(ctx.llmProviderId);
     if (!providerSettings) throw new Error(`llm provider settings not found: ${ctx.llmProviderId}`);
 
+    const wireRequest = await expandAttachmentRefs(prepared.request, async (id) => {
+      const content = await this.uploads.readContentById(id);
+      if (!content) return null;
+      return {
+        filename: content.attachment.name,
+        mime: content.attachment.mimeType || 'application/octet-stream',
+        bytes: content.data,
+      };
+    });
+
     this.logger.log(
-      `[reason-step] streamEntry=${streamEntryId} model=${ctx.llmModel} turns=${prepared.request.messages.length} tools=${prepared.request.tools?.length ?? 0}`,
+      `[reason-step] streamEntry=${streamEntryId} model=${ctx.llmModel} turns=${wireRequest.messages.length} tools=${wireRequest.tools?.length ?? 0}`,
     );
 
     const startedAt = Date.now();
@@ -104,7 +117,7 @@ export class ReasonStep {
       provider.onLlmEvent?.(input, ctx, event);
     };
 
-    const completion = await llmProvider.streamCompletion(providerSettings, ctx.llmModel, prepared.request, onEvent);
+    const completion = await llmProvider.streamCompletion(providerSettings, ctx.llmModel, wireRequest, onEvent);
     scope.throwIfAborted();
 
     const responseText = getCompletionText(completion);

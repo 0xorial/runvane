@@ -28,6 +28,7 @@ async function sendMessageToConversation(
   modelPresetId: number | null,
   attachmentIds: string[],
   parentId: string | null,
+  clientRequestId: string,
 ): Promise<AsyncResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
@@ -37,6 +38,7 @@ async function sendMessageToConversation(
     ...(modelPresetId != null ? { modelPresetId } : {}),
     ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
     parentId,
+    clientRequestId,
   });
   return { ok: status >= 200 && status < 300 };
 }
@@ -251,20 +253,19 @@ export function ChatPage({
           }
           let cid = conversationId;
           const parentLeafIdAtSend = cid ? activeLeafId : null;
+          const optimisticInput = {
+            text,
+            agentId: agentSelection.agentId,
+            llmProviderId: agentSelection.llmProviderId,
+            llmModel: agentSelection.llmModel,
+            modelPresetId: agentSelection.modelPresetId,
+            attachments: uploadedAttachments,
+          };
+          let optimistic: { rowId: string; clientRequestId: string } | null;
           if (!cid) {
             const created = await createConversation();
             cid = created.id;
-            const rowId = appendOptimisticUserMessage({
-              conversationId: cid,
-              text,
-              agentId: agentSelection.agentId,
-              llmProviderId: agentSelection.llmProviderId,
-              llmModel: agentSelection.llmModel,
-              modelPresetId: agentSelection.modelPresetId,
-              attachments: uploadedAttachments,
-            });
-            setSelectedBranchAnchorEntryId(null);
-            setTopAnchorEntryId(rowId);
+            optimistic = appendOptimisticUserMessage({ conversationId: cid, ...optimisticInput });
             const q = searchParams.toString();
             navigate(
               {
@@ -274,18 +275,11 @@ export function ChatPage({
               { replace: true },
             );
           } else {
-            const rowId = appendOptimisticUserMessage({
-              conversationId: cid,
-              text,
-              agentId: agentSelection.agentId,
-              llmProviderId: agentSelection.llmProviderId,
-              llmModel: agentSelection.llmModel,
-              modelPresetId: agentSelection.modelPresetId,
-              attachments: uploadedAttachments,
-            });
-            setSelectedBranchAnchorEntryId(null);
-            setTopAnchorEntryId(rowId);
+            optimistic = appendOptimisticUserMessage({ conversationId: cid, ...optimisticInput });
           }
+          if (!optimistic) return { ok: false };
+          setSelectedBranchAnchorEntryId(null);
+          setTopAnchorEntryId(optimistic.rowId);
           setInput("");
           setSelectedFiles([]);
           return sendMessageToConversation(
@@ -297,6 +291,7 @@ export function ChatPage({
             agentSelection.modelPresetId,
             uploadedAttachments.map((x) => x.id),
             parentLeafIdAtSend,
+            optimistic.clientRequestId,
           );
         })();
       }}

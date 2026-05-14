@@ -7,6 +7,13 @@ import { SseType } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
 import { createObservableItemCollection, type ObservableItem } from "../utils/observableCollection";
 
+export type OptimisticUserMessage = {
+  /** Ephemeral row id used in the local store until the server entry arrives. */
+  rowId: string;
+  /** Correlation token to send with the POST so SSE can re-key this row. */
+  clientRequestId: string;
+};
+
 type AppendOptimisticUserMessageInput = {
   conversationId: string;
   text: string;
@@ -17,10 +24,14 @@ type AppendOptimisticUserMessageInput = {
   attachments?: ChatAttachment[];
 };
 
-function buildOptimisticUserEntry(input: AppendOptimisticUserMessageInput, parentId: string | null): UserMessageEntry {
+function buildOptimisticUserEntry(
+  input: AppendOptimisticUserMessageInput,
+  rowId: string,
+  parentId: string | null,
+): UserMessageEntry {
   return {
     type: "user-message",
-    id: `optimistic-user-${crypto.randomUUID()}`,
+    id: rowId,
     conversationIndex: -1,
     createdAt: new Date().toISOString(),
     parentId,
@@ -36,11 +47,14 @@ function buildOptimisticUserEntry(input: AppendOptimisticUserMessageInput, paren
 export function useChatSession(conversationId: string | null | undefined) {
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
-  const pendingOptimisticUsersRef = useRef<Map<string, UserMessageEntry[]>>(new Map());
+  // clientRequestId -> ephemeral local row id. Lives only for the round-trip
+  // between POST and the matching USER_MESSAGE SSE event.
+  const pendingByClientRequestIdRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     storeRef.current.replace(defaultChatEntries);
     setActiveLeafId(null);
+    pendingByClientRequestIdRef.current.clear();
     if (!conversationId) return;
 
     const cid = String(conversationId);
@@ -51,8 +65,7 @@ export function useChatSession(conversationId: string | null | undefined) {
         getConversationDefaultViewLeafEntryId(cid),
       ]);
       if (cancelled) return;
-      const store = storeRef.current;
-      store.replace(mapApiMessagesToChatEntries(entries));
+      storeRef.current.replace(mapApiMessagesToChatEntries(entries));
       setActiveLeafId(leafId);
     })();
     return () => {
@@ -60,23 +73,23 @@ export function useChatSession(conversationId: string | null | undefined) {
     };
   }, [conversationId]);
 
-  const reconcileOptimisticUserMessage = useCallback((cid: string, incoming: UserMessageEntry): boolean => {
-    const pending = pendingOptimisticUsersRef.current.get(cid) ?? [];
-    const matchIndex = pending.findIndex((p) => p.text === incoming.text);
-    if (matchIndex < 0) return false;
-
-    const matched = pending[matchIndex];
-    const nextPending = [...pending.slice(0, matchIndex), ...pending.slice(matchIndex + 1)];
-    if (nextPending.length === 0) pendingOptimisticUsersRef.current.delete(cid);
-    else pendingOptimisticUsersRef.current.set(cid, nextPending);
-
-    const allRows = storeRef.current.getRows();
-    const filtered = allRows.filter((r) => r.id !== matched.id).map((r) => r.get());
-    filtered.push(incoming);
-    storeRef.current.replace(filtered);
-    setActiveLeafId(incoming.id);
-    return true;
-  }, []);
+  const reconcileOptimisticUserMessage = useCallback(
+    (clientRequestId: string | undefined, incoming: UserMessageEntry): boolean => {
+      if (!clientRequestId) return false;
+      const optimisticRowId = pendingByClientRequestIdRef.current.get(clientRequestId);
+      if (!optimisticRowId) return false;
+      pendingByClientRequestIdRef.current.delete(clientRequestId);
+      const reKeyed = storeRef.current.replaceById(optimisticRowId, incoming);
+      if (!reKeyed) {
+        // Optimistic row was already evicted (e.g. by a conversation switch) —
+        // fall back to a plain append so we don't drop the canonical entry.
+        storeRef.current.append(incoming);
+      }
+      setActiveLeafId((prev) => (prev === optimisticRowId ? incoming.id : prev ?? incoming.id));
+      return true;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!conversationId) return;
@@ -89,7 +102,7 @@ export function useChatSession(conversationId: string | null | undefined) {
         }
         const store = storeRef.current;
         if (ev.type === SseType.USER_MESSAGE) {
-          if (reconcileOptimisticUserMessage(cid, ev.entry)) return;
+          if (reconcileOptimisticUserMessage(ev.clientRequestId, ev.entry)) return;
           if (store.append(ev.entry)) setActiveLeafId(ev.entry.id);
           return;
         }
@@ -162,7 +175,7 @@ export function useChatSession(conversationId: string | null | undefined) {
   );
 
   const appendOptimisticUserMessage = useCallback(
-    (input: AppendOptimisticUserMessageInput): string | null => {
+    (input: AppendOptimisticUserMessageInput): OptimisticUserMessage | null => {
       const cid = String(input.conversationId || "").trim();
       if (!cid) return null;
       const text = String(input.text || "").trim();
@@ -171,12 +184,13 @@ export function useChatSession(conversationId: string | null | undefined) {
       if (!agentId) {
         throw new Error("appendOptimisticUserMessage requires agentId");
       }
-      const row = buildOptimisticUserEntry({ ...input, text, agentId }, activeLeafId);
-      const current = pendingOptimisticUsersRef.current.get(cid) ?? [];
-      pendingOptimisticUsersRef.current.set(cid, [...current, row]);
+      const clientRequestId = crypto.randomUUID();
+      const rowId = `optimistic-user-${clientRequestId}`;
+      const row = buildOptimisticUserEntry({ ...input, text, agentId }, rowId, activeLeafId);
+      pendingByClientRequestIdRef.current.set(clientRequestId, rowId);
       storeRef.current.append(row);
-      setActiveLeafId(row.id);
-      return row.id;
+      setActiveLeafId(rowId);
+      return { rowId, clientRequestId };
     },
     [activeLeafId]
   );
