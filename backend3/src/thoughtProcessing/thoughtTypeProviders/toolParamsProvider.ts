@@ -10,7 +10,6 @@ import type { ThoughtContext, ThoughtReasonLlmResult, ThoughtTypeProvider } from
 
 export type ToolParamsInput = {
   conversationId: string;
-  sourceEntryId: string;
   agentId: string;
   toolName: string;
   toolAiDescription: string;
@@ -71,7 +70,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     await this.runTool.run(
       {
         conversationId: input.conversationId,
-        sourceEntryId: input.sourceEntryId,
         agentId: input.agentId,
         toolName: input.toolName,
         params: parsedParams,
@@ -80,6 +78,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         plannerFollowup: input.plannerFollowup,
       },
       scope,
+      ctx.chain,
     );
   };
 

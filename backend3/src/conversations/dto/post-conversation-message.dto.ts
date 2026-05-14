@@ -28,4 +28,15 @@ export class PostConversationMessageDto {
   @IsArray()
   @IsString({ each: true })
   attachmentIds?: string[];
+
+  /**
+   * Where the user wants this message attached. Required for non-empty
+   * conversations; pass `null`/omit only on the very first message.
+   * Branching is driven exclusively by this field — the server does not
+   * derive parents from any persisted "default view" hint.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  parentId?: string;
 }

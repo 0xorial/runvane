@@ -18,7 +18,7 @@ model Conversation {
   promptTokensTotal       Int               @default(0) @map("prompt_tokens_total")
   cachedPromptTokensTotal Int               @default(0) @map("cached_prompt_tokens_total")
   completionTokensTotal   Int               @default(0) @map("completion_tokens_total")
-  activeLeafEntryId       String?           @map("active_leaf_entry_id")
+  defaultViewLeafEntryId  String?           @map("default_view_leaf_entry_id")
   group                   ConversationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   chatEntries             ChatEntry[]
 

@@ -52,13 +52,16 @@ export class ReasonStep {
     ctx: ThoughtContext,
     prompt: string,
   ): Promise<string> {
-    const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-      type: provider.streamEntryType,
-      thoughtId: ctx.thoughtId,
-      status: 'running',
-      llmProviderId: ctx.llmProviderId,
-      llmModel: ctx.llmModel,
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
+        type: provider.streamEntryType,
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'running',
+        llmProviderId: ctx.llmProviderId,
+        llmModel: ctx.llmModel,
+      }),
+    );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest: prompt });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
@@ -68,11 +71,14 @@ export class ReasonStep {
     provider: ThoughtTypeProvider<TInput>,
     ctx: ThoughtContext,
   ): Promise<string> {
-    const created = await this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
-      thoughtId: ctx.thoughtId,
-      status: 'running',
-      summary: provider.initialActionSummary ?? 'Waiting for LLM output',
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'running',
+        summary: provider.initialActionSummary ?? 'Waiting for LLM output',
+      }),
+    );
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }

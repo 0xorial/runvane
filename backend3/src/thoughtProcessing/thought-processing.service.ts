@@ -1,4 +1,5 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-settings.repo.js';
@@ -43,6 +44,7 @@ export class ThoughtProcessingService {
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
     scope: LifecycleScope,
+    chain: ChatChain,
   ): void {
     scope.throwIfAborted();
     const conversationId = (input as { conversationId?: unknown }).conversationId;
@@ -50,7 +52,7 @@ export class ThoughtProcessingService {
       throw new Error('startFullThought requires input.conversationId');
     }
     scope.spawn(async () => {
-      const ctx = await this.createContext(conversationId);
+      const ctx = await this.createContext(conversationId, chain);
       const prepared = await this.prepareStep.run(provider, input, ctx, scope);
       const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
       await this.decisionStep.run(provider, input, ctx, llmResult, scope);
@@ -61,6 +63,7 @@ export class ThoughtProcessingService {
     provider: ThoughtTypeProvider<TInput>,
     conversationId: string,
     scope: LifecycleScope,
+    chain: ChatChain,
   ): void {
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${provider.constructor.name} cannot self-initiate`);
@@ -69,7 +72,7 @@ export class ThoughtProcessingService {
     scope.throwIfAborted();
     scope.spawn(async () => {
       const input = await buildInput(conversationId);
-      const ctx = await this.createContext(conversationId);
+      const ctx = await this.createContext(conversationId, chain);
       const prepared = await this.prepareStep.run(provider, input, ctx, scope);
       const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
       await this.decisionStep.run(provider, input, ctx, llmResult, scope);
@@ -79,6 +82,7 @@ export class ThoughtProcessingService {
   async startReprocessContext(
     args: { conversationId: string; sourceEntryId: string; editedRequestText: string },
     scope: LifecycleScope,
+    chain: ChatChain,
   ): Promise<{ plannerEntryId: string }> {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
@@ -88,9 +92,10 @@ export class ThoughtProcessingService {
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
     }
+    chain.setTip(branch.parentId);
 
-    const ctx = await this.createContext(args.conversationId);
-    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, branch.parentId, editedRequestText);
+    const ctx = await this.createContext(args.conversationId, chain);
+    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, editedRequestText);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, editedRequestText);
     const plannerEntryId = ctx.streamEntryId;
 
@@ -106,6 +111,7 @@ export class ThoughtProcessingService {
   async startReprocessReason(
     args: { conversationId: string; sourceEntryId: string; editedResponse: string },
     scope: LifecycleScope,
+    chain: ChatChain,
   ): Promise<{ plannerEntryId: string }> {
     scope.throwIfAborted();
     const editedResponse = args.editedResponse.trim();
@@ -115,12 +121,13 @@ export class ThoughtProcessingService {
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
     }
+    chain.setTip(source.prepareEntryId);
 
-    const ctx = await this.createContext(args.conversationId, { thoughtId: source.thoughtId });
+    const ctx = await this.createContext(args.conversationId, chain, { thoughtId: source.thoughtId });
     if (source.llmProviderId) ctx.llmProviderId = source.llmProviderId;
     if (source.llmModel) ctx.llmModel = source.llmModel;
     ctx.prepareEntryId = source.prepareEntryId;
-    ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.prepareEntryId, source.llmRequest, editedResponse);
+    ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.llmRequest, editedResponse);
     ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
     const plannerEntryId = ctx.streamEntryId;
 
@@ -136,6 +143,7 @@ export class ThoughtProcessingService {
 
   private async createContext(
     conversationId: string,
+    chain: ChatChain,
     opts: { thoughtId?: string } = {},
   ): Promise<ThoughtContext> {
     const llmDoc = await this.llmProviderSettings.getDocument();
@@ -147,6 +155,7 @@ export class ThoughtProcessingService {
       prepareEntryId: null,
       streamEntryId: null,
       thoughtActionEntryId: null,
+      chain,
     };
   }
 
@@ -226,18 +235,19 @@ export class ThoughtProcessingService {
   private async appendCompletedPrepareEntry(
     ctx: ThoughtContext,
     provider: AnyThoughtProvider,
-    parentId: string | null,
     requestText: string,
   ): Promise<string> {
-    const created = await this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
-      thoughtId: ctx.thoughtId,
-      parentId,
-      status: 'completed',
-      requestText,
-      title: provider.prepareTitle,
-      llmProviderId: ctx.llmProviderId,
-      llmModel: ctx.llmModel,
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'completed',
+        requestText,
+        title: provider.prepareTitle,
+        llmProviderId: ctx.llmProviderId,
+        llmModel: ctx.llmModel,
+      }),
+    );
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
@@ -247,13 +257,16 @@ export class ThoughtProcessingService {
     provider: ThoughtTypeProvider<unknown>,
     llmRequest: string,
   ): Promise<string> {
-    const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-      type: provider.streamEntryType,
-      thoughtId: ctx.thoughtId,
-      status: 'running',
-      llmProviderId: ctx.llmProviderId,
-      llmModel: ctx.llmModel,
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
+        type: provider.streamEntryType,
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'running',
+        llmProviderId: ctx.llmProviderId,
+        llmModel: ctx.llmModel,
+      }),
+    );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
@@ -263,11 +276,14 @@ export class ThoughtProcessingService {
     ctx: ThoughtContext,
     provider: ThoughtTypeProvider<unknown>,
   ): Promise<string> {
-    const created = await this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
-      thoughtId: ctx.thoughtId,
-      status: 'running',
-      summary: provider.initialActionSummary ?? 'Waiting for LLM output',
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'running',
+        summary: provider.initialActionSummary ?? 'Waiting for LLM output',
+      }),
+    );
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
@@ -275,18 +291,19 @@ export class ThoughtProcessingService {
   private async appendCompletedStreamEntry(
     ctx: ThoughtContext,
     provider: AnyThoughtProvider,
-    parentId: string,
     llmRequest: string,
     llmResponse: string,
   ): Promise<string> {
-    const created = await this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-      type: provider.streamEntryType,
-      thoughtId: ctx.thoughtId,
-      parentId,
-      status: 'completed',
-      llmProviderId: ctx.llmProviderId,
-      llmModel: ctx.llmModel,
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
+        type: provider.streamEntryType,
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'completed',
+        llmProviderId: ctx.llmProviderId,
+        llmModel: ctx.llmModel,
+      }),
+    );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, {
       llmRequest,
       llmResponse,
@@ -295,5 +312,4 @@ export class ThoughtProcessingService {
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
-
 }

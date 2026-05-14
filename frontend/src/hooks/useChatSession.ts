@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { getConversationActiveLeafEntryId, getConversationMessages, setConversationActiveLeaf } from "../api/client";
+import { getConversationDefaultViewLeafEntryId, getConversationMessages, setConversationDefaultViewLeaf } from "../api/client";
 import { subscribeGlobalLive, subscribeGlobalPoll } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
@@ -48,7 +48,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     void (async () => {
       const [entries, leafId] = await Promise.all([
         getConversationMessages(cid, { all: true }),
-        getConversationActiveLeafEntryId(cid),
+        getConversationDefaultViewLeafEntryId(cid),
       ]);
       if (cancelled) return;
       const store = storeRef.current;
@@ -156,7 +156,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     async (entryId: string) => {
       if (!conversationId) return;
       setActiveLeafId(entryId);
-      await setConversationActiveLeaf(String(conversationId), entryId);
+      await setConversationDefaultViewLeaf(String(conversationId), entryId);
     },
     [conversationId]
   );

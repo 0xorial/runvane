@@ -15,16 +15,28 @@ Each row carries:
 - `conversation_index` — strictly increasing per conversation, assigned at insert.
 - `created_at` — wall-clock timestamp.
 
-`conversations.active_leaf_entry_id` points at the tip of the currently selected
-lineage. The "active path" shown in chat is the parent-chain walked from that leaf
-back to the root.
+`conversations.default_view_leaf_entry_id` is a **user anchor**: it stores
+the entry the user last selected. It is only ever written by user-driven
+actions (a posted user message, a reprocess that creates a new branch, an
+explicit branch switch via `POST /default-view-leaf`). Running thoughts and
+followups never touch it.
+
+When the API has to answer "what leaf should I render?" (`GET
+/api/conversations/:id`, internal `listMessages` / `listChatEntries`) the
+repo resolves the anchor to its current branch tip by walking children
+(`ORDER BY conversation_index DESC LIMIT 1`) until there are none. This
+means we don't have to update the anchor as new descendants arrive — the
+walk-down naturally yields the live tip.
+
+The "active path" shown in chat is the parent-chain walked from the resolved
+leaf back to the root.
 
 Why a parent-pointer DAG instead of a flat list:
 
 - Branching is a first-class feature (re-edit context / re-edit reasoning produces
   a true sibling branch rather than mutating history).
-- Switching the active branch is a single pointer flip
-  (`UPDATE conversations SET active_leaf_entry_id = ?`), no row mutations.
+- Switching the default view is a single pointer flip
+  (`UPDATE conversations SET default_view_leaf_entry_id = ?`), no row mutations.
 - Old branches stay queryable / re-selectable.
 
 ## 2. Lazy entry creation per step
@@ -38,52 +50,54 @@ Consequences:
 - A step that never runs (cancelled, error before start) leaves no orphan row.
 - The DB is always a faithful record of what actually happened.
 
-## 3. Leaf-based parents — explicit parents only at branch roots
+## 3. `parentId` is always explicit
 
-Inside `ChatEntriesRepo.appendEntry`:
+`ChatEntriesRepo.appendEntry` requires `parentId: string | null` from every
+caller. There is no implicit "parent = current leaf in the DB" fallback — that
+was the source of all branching races. Two rules:
 
-- If the caller does **not** pass `parentId`, the parent is the current
-  `active_leaf_entry_id` (read inside the same transaction).
-- If the caller passes an explicit `parentId`, it is honored verbatim.
+- **User-initiated appends** (POST `/messages`, reprocess endpoints) take the
+  parent from the request payload — the UI knows where the user wanted the
+  message attached.
+- **Forward-flow steps inside a running scope** parent at the run's `ChatChain`
+  tip (see §4). The chain is shared across all thoughts spawned in the run, so
+  concurrent thoughts interleave linearly instead of branching.
 
-Rule of thumb across the codebase:
+## 4. `ChatChain` — concurrent thoughts interleave linearly
 
-- **Normal forward flow** (user message, planner steps, tool invocations,
-  assistant message, autoTitle steps, …): no explicit `parentId`. The leaf is
-  the source of truth.
-- **Reprocess / explicit branching** (`startReprocessContext`,
-  `startReprocessReason`): the entry-point passes an explicit `parentId` to root
-  the new branch; everything that follows in that branch goes back to leaf-based
-  appends.
+A `ChatChain` is a per-run domain object owned by `ConversationProcessorService`
+(created in `beginRun` alongside the `LifecycleScope`). It holds:
 
-This rule is what keeps the active chain linear when multiple thoughts run in
-parallel. Any code that pins a forward-flow entry to a specific ancestor (e.g.
-"assistant-message child of my own thought-action") will create sibling branches
-the moment another thought races ahead — exactly the bug we hit with
-`appendAssistantMessage` and removed.
+- `tip: string | null` — current parent for the next forward-flow append.
+- a serializing mutex.
 
-## 4. Per-conversation append lock + transactional insert
+Forward-flow appends call `chain.append(parentId => repo.appendXxx({…, parentId}))`:
 
-`ChatEntriesRepo` holds an in-process `Map<conversationId, Promise<unknown>>`
-serializing all `appendEntry` calls for a single conversation. Inside the lock
-each append is one transaction that:
+1. Mutex acquires under FIFO order.
+2. The current `tip` is passed to the append callback as `parentId`.
+3. On success, `tip` advances to the new entry's id.
 
-1. Reads `MAX(conversation_index) + 1`.
-2. Reads `active_leaf_entry_id` (when no explicit parent).
-3. INSERTs the row.
-4. Updates `active_leaf_entry_id` and `last_message_at` on `conversations`.
+`ConversationProcessorService` seeds the tip after the user-message append
+(`chain.setTip(userEntry.id)`) and then spawns `autoTitle` + `planner`
+concurrently. Both append through `chain.append`, so whichever wins the mutex
+becomes the parent of the next, and the chain stays linear:
+`user → titlePrepare → plannerPrepare → titleStream → plannerStream → …`.
 
-Why:
+Reprocess entry points seed the chain tip to the chosen branch root before
+spawning the reprocess pipeline. Tool-execution and tool-params thoughts run
+under the same chain and chain through the same tip.
 
-- Without the lock, two concurrent thoughts both read leaf `L`, both insert with
-  `parent_id = L`, both bump `active_leaf_entry_id` — and you get a sibling
-  branch. The lock collapses that race into a strict order.
-- The transaction also fixes the second race: `conversation_index` collisions
-  from concurrent appends.
+`LifecycleScope` is intentionally separate — it only handles execution
+lifecycle (cancellation signal + spawned-task completion bookkeeping). It does
+not know about chat-entry lineage. The chain travels alongside the scope as a
+distinct parameter through the pipeline.
 
-Single-process assumption: this is an in-process mutex. If we ever shard the
-backend, this needs to move to a DB-level advisory lock or the conversation
-needs a stable owner.
+`ChatEntriesRepo` also keeps a per-conversation append lock, but its only job
+is preventing `MAX(conversation_index) + 1` collisions — lineage correctness
+is owned by `ChatChain`.
+
+Single-process assumption: both mutexes are in-process. If we ever shard the
+backend, both move to DB-level advisory locks or per-conversation owner.
 
 ## 5. Concurrency model: structured per-conversation scopes
 
@@ -91,32 +105,35 @@ needs a stable owner.
 (`beginScope(conversationId)`):
 
 - HTTP handlers (`processMessage`, `startReprocessContext`,
-  `startReprocessReason`) do **only** the synchronous prep — append the entry
-  point row, set up `ctx`, publish initial SSE — then return.
+  `startReprocessReason`, `reprocessUserMessage`) do **only** the synchronous
+  prep — append the entry-point row, set up `ctx`, publish initial SSE — then
+  return.
 - The rest of the work (LLM call, decision, downstream tool thoughts) runs via
   `scope.spawn(async () => …)`. Spawned tasks are tracked by the scope so
   cancellation / completion is visible to the parent.
 - `autoTitle` and `planner` for the very first user message run as two
-  independent `scope.spawn` tasks — concurrent on purpose, serialized at write
-  time by the append lock (see §4).
+  independent `scope.spawn` tasks — concurrent on purpose. They share the
+  run's `ChatChain`, so their appends interleave linearly off the user
+  message instead of forking into siblings.
 
-The HTTP layer never `await`s background work. It's an explicit invariant —
-clients get an immediate response and observe progress over SSE.
+The HTTP layer never `await`s background work. Clients get an immediate
+response and observe progress over SSE.
 
-## 6. Re-processing is the only place `parentId` is special
+## 6. Branching points
 
-Two re-process entry points:
+Every place that creates a sibling branch passes an explicit `parentId`:
 
-- `startReprocessContext` — user edited the prompt of a past thought. Creates a
-  fresh `thought-prepare` rooted at the original prepare's parent (sibling of
-  the original).
-- `startReprocessReason` — user edited the LLM response of a past thought.
-  Creates a fresh `planner_llm_stream` + `thought-action` rooted on the
-  original's `prepare` entry (sibling of the original stream).
+- `processMessage` — `parentId` from the client (the user's currently viewed
+  leaf at send time).
+- `reprocessUserMessage` — `parentId` = source user message's parent (sibling
+  of the source).
+- `startReprocessContext` — fresh `thought-prepare` rooted at the original
+  prepare's parent.
+- `startReprocessReason` — fresh `planner_llm_stream` + `thought-action` rooted
+  at the original prepare entry.
 
-Both then run the rest of the planner pipeline in `scope.spawn` using leaf-based
-appends, so the new branch grows linearly. No other code path supplies an
-explicit `parentId`.
+Everything else inside a running thought parents through `chain.append`, which
+serializes on the run's chain tip seeded by the entry point.
 
 ## 7. SSE contract
 
@@ -130,14 +147,16 @@ Two events do all the heavy lifting:
 Other, smaller events (`USER_MESSAGE`, `TOOL_INVOCATION_START/END`,
 `CONVERSATION_UPDATED`) are notifications that don't change chat-entry state.
 
-There is no per-step lifecycle event (`thought_*_started/finished`) — those were
-removed; status transitions happen via `CHAT_ENTRY_UPSERT` of the underlying
-entry.
+There is no per-step lifecycle event — status transitions happen via
+`CHAT_ENTRY_UPSERT` of the underlying entry.
 
 ## 8. Frontend mirror
 
 `useChatSession` keeps an `ObservableItemCollection` of **all** entries for the
-current conversation plus an `activeLeafId`. From those it derives:
+current conversation plus an `activeLeafId` (the user's currently viewed
+leaf). On initial load `activeLeafId` is seeded from the server's
+`defaultViewLeafEntryId` hint; from then on it's purely client state. From
+those it derives:
 
 - `activePathEntries` — walk from `activeLeafId` via `parentId` to the root,
   reversed.
@@ -148,9 +167,9 @@ Updates are SSE-driven:
 - `CHAT_ENTRY_UPSERT` → upsert the entry; if it's new, advance `activeLeafId`.
 - `CHAT_ENTRY_DELTA` → mutate the named field on the existing entry.
 
-There is no chat-wide "refresh" event. Branch switching calls `setActiveLeaf`
-which only flips the local `activeLeafId` (and PATCHes the conversation), the
-existing in-memory entries take care of the rest.
+When the user picks a branch in the panel, the UI flips `activeLeafId` locally
+and PATCHes the server's hint via `setConversationDefaultViewLeaf` so reload
+shows the same branch.
 
 ## 9. Internal data is trusted
 
@@ -163,9 +182,13 @@ row is malformed, the mapper / consumer throws. External boundaries
 
 If you add new code, keep these true:
 
-1. Forward-flow appends never pass `parentId`. Only reprocess entry points do.
-2. All appends go through `ChatEntriesRepo.appendEntry` (so they're locked +
-   transactional).
+1. Forward-flow appends go through `chain.append(parentId => …)`. Don't pass
+   a hand-picked `parentId` for forward flow — only branch roots (reprocess,
+   user message) do that, and they call `chain.setTip` once before spawning
+   the pipeline.
+2. Running scopes never write `default_view_leaf_entry_id`. Only user-driven
+   actions (post message, reprocess root, explicit branch-switch endpoint)
+   write the anchor; reads resolve it to the current leaf via walk-down.
 3. HTTP handlers don't `await` LLM / tool work — spawn into the
    per-conversation `LifecycleScope`.
 4. Each pipeline step owns the creation of its own entry (no upfront

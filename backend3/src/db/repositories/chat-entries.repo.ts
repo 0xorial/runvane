@@ -22,7 +22,7 @@ export type {
 
 type AppendInput = {
   type: string;
-  parentId?: string | null;
+  parentId: string | null;
   payload: Record<string, unknown>;
 };
 
@@ -58,29 +58,50 @@ export class ChatEntriesRepo {
     return next;
   }
 
-  async getActiveLeafEntryId(conversationId: string): Promise<string | null> {
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT active_leaf_entry_id AS id
+  /**
+   * Resolve the user's default-view branch to its current leaf.
+   *
+   * `default_view_leaf_entry_id` stores only the user's last-selected anchor
+   * — appended descendants don't update it. To render a branch we walk down
+   * children from the anchor, picking the latest descendant at each step
+   * (ties broken by `conversation_index DESC`). Reload after a run yields
+   * the same branch tip as the live SSE stream produced.
+   */
+  async resolveDefaultViewLeaf(conversationId: string): Promise<string | null> {
+    const anchorRows = (await this.prisma.$queryRawUnsafe(
+      `SELECT default_view_leaf_entry_id AS id
        FROM conversations
        WHERE id = ?`,
       conversationId,
     )) as Array<{ id: string | null }>;
-    return rows[0]?.id ?? null;
+    const anchor = anchorRows[0]?.id ?? null;
+    if (!anchor) return null;
+    return this.walkToLatestLeaf(conversationId, anchor);
   }
 
-  private async setActiveLeafEntryId(conversationId: string, entryId: string): Promise<void> {
-    await this.prisma.$executeRawUnsafe(
-      `UPDATE conversations SET active_leaf_entry_id = ? WHERE id = ?`,
-      entryId,
-      conversationId,
-    );
+  private async walkToLatestLeaf(conversationId: string, anchorId: string): Promise<string> {
+    let cursor = anchorId;
+    const visited = new Set<string>([cursor]);
+    for (;;) {
+      const childRows = (await this.prisma.$queryRawUnsafe(
+        `SELECT id FROM chat_entries
+         WHERE conversation_id = ? AND parent_id = ?
+         ORDER BY conversation_index DESC
+         LIMIT 1`,
+        conversationId,
+        cursor,
+      )) as Array<{ id: string }>;
+      const next = childRows[0]?.id;
+      if (!next || visited.has(next)) return cursor;
+      visited.add(next);
+      cursor = next;
+    }
   }
 
   private async appendEntry(conversationId: string, input: AppendInput): Promise<AppendedRow> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    const explicitParentProvided = input.parentId !== undefined;
-    const explicitParent = input.parentId ?? null;
+    const parentId = input.parentId;
     const payloadJson = JSON.stringify(input.payload);
     return this.withAppendLock(conversationId, () =>
       this.prisma.$transaction(async (tx) => {
@@ -91,17 +112,6 @@ export class ChatEntriesRepo {
           conversationId,
         )) as Array<{ idx: number }>;
         const conversationIndex = Number(idxRows[0]?.idx ?? 0);
-
-        let parentId: string | null;
-        if (explicitParentProvided) {
-          parentId = explicitParent;
-        } else {
-          const leafRows = (await tx.$queryRawUnsafe(
-            `SELECT active_leaf_entry_id AS id FROM conversations WHERE id = ?`,
-            conversationId,
-          )) as Array<{ id: string | null }>;
-          parentId = leafRows[0]?.id ?? null;
-        }
 
         await tx.$executeRawUnsafe(
           `INSERT INTO chat_entries (
@@ -117,9 +127,8 @@ export class ChatEntriesRepo {
         );
         await tx.$executeRawUnsafe(
           `UPDATE conversations
-           SET active_leaf_entry_id = ?, last_message_at = ?, updated_at = ?
+           SET last_message_at = ?, updated_at = ?
            WHERE id = ?`,
-          id,
           createdAt,
           createdAt,
           conversationId,
@@ -137,7 +146,7 @@ export class ChatEntriesRepo {
       llmProviderId?: string;
       llmModel?: string;
       modelPresetId?: number;
-      parentId?: string | null;
+      parentId: string | null;
     },
   ): Promise<UserMessageEntryRow> {
     const payload: Record<string, unknown> = { text: input.text, agentId: input.agentId };
@@ -166,10 +175,11 @@ export class ChatEntriesRepo {
 
   async appendAssistantMessage(
     conversationId: string,
-    input: { text: string },
+    input: { text: string; parentId: string | null },
   ): Promise<AssistantMessageEntryRow> {
     const row = await this.appendEntry(conversationId, {
       type: 'assistant-message',
+      parentId: input.parentId,
       payload: { text: input.text },
     });
     return {
@@ -186,7 +196,7 @@ export class ChatEntriesRepo {
     conversationId: string,
     input: {
       thoughtId: string;
-      parentId?: string | null;
+      parentId: string | null;
       status?: ThoughtStepStatus;
       requestText?: string;
       title?: string;
@@ -215,7 +225,7 @@ export class ChatEntriesRepo {
     input: {
       type: ThoughtStreamEntryType;
       thoughtId: string;
-      parentId?: string | null;
+      parentId: string | null;
       status?: ThoughtStepStatus;
       llmProviderId?: string;
       llmModel?: string;
@@ -243,7 +253,7 @@ export class ChatEntriesRepo {
     conversationId: string,
     input: {
       thoughtId: string;
-      parentId?: string | null;
+      parentId: string | null;
       status?: ThoughtStepStatus;
       summary?: string;
     },
@@ -261,7 +271,13 @@ export class ChatEntriesRepo {
     return { id: row.id };
   }
 
-  async setActiveLeafEntry(conversationId: string, entryId: string): Promise<void> {
+  /**
+   * Set the user's default-view leaf hint. Only the user's view drives this:
+   * the message-post path (so reload shows the just-sent message), the
+   * planner finalizing an answer (so reload shows the assistant message), or
+   * the explicit branch-switch endpoint. Running thoughts MUST NOT touch it.
+   */
+  async setDefaultViewLeaf(conversationId: string, entryId: string): Promise<void> {
     const trimmed = entryId.trim();
     if (!trimmed) throw new Error('entryId is required');
     const rows = (await this.prisma.$queryRawUnsafe(
@@ -272,11 +288,15 @@ export class ChatEntriesRepo {
     if (rows.length === 0) {
       throw new Error(`entry not found in conversation: ${trimmed}`);
     }
-    await this.setActiveLeafEntryId(conversationId, trimmed);
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE conversations SET default_view_leaf_entry_id = ? WHERE id = ?`,
+      trimmed,
+      conversationId,
+    );
   }
 
   async listMessages(conversationId: string): Promise<ChatMessageEntryRow[]> {
-    const leafId = await this.getActiveLeafEntryId(conversationId);
+    const leafId = await this.resolveDefaultViewLeaf(conversationId);
     const rows = leafId ? await this.fetchLineageRows(conversationId, leafId) : [];
     if (rows.length === 0) return [];
     return rows.flatMap((row) => {
@@ -290,7 +310,7 @@ export class ChatEntriesRepo {
       const rows = await this.fetchAllRows(conversationId);
       return rows.map(rowToChatEntry);
     }
-    const leafId = await this.getActiveLeafEntryId(conversationId);
+    const leafId = await this.resolveDefaultViewLeaf(conversationId);
     if (!leafId) return [];
     const rows = await this.fetchLineageRows(conversationId, leafId);
     return rows.map(rowToChatEntry);
@@ -328,8 +348,8 @@ export class ChatEntriesRepo {
     )) as ChatEntryDbRow[];
   }
 
-  async isEntryOnActiveLineage(conversationId: string, entryId: string): Promise<boolean> {
-    const leafId = await this.getActiveLeafEntryId(conversationId);
+  async isEntryOnDefaultViewLineage(conversationId: string, entryId: string): Promise<boolean> {
+    const leafId = await this.resolveDefaultViewLeaf(conversationId);
     if (!leafId) return false;
     const rows = (await this.prisma.$queryRawUnsafe(
       `WITH RECURSIVE lineage(id, parent_id) AS (
@@ -428,7 +448,7 @@ export class ChatEntriesRepo {
       state: ToolInvocationState;
       parameters: Record<string, unknown>;
       result?: unknown;
-      parentId?: string | null;
+      parentId: string | null;
     },
   ): Promise<{ id: string; parentId: string | null }> {
     const payload: Record<string, unknown> = {

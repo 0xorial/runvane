@@ -19,13 +19,16 @@ export class PrepareStep {
     scope: LifecycleScope,
   ): Promise<PreparedReason> {
     scope.throwIfAborted();
-    const created = await this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
-      thoughtId: ctx.thoughtId,
-      status: 'running',
-      title: provider.prepareTitle,
-      llmProviderId: ctx.llmProviderId,
-      llmModel: ctx.llmModel,
-    });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'running',
+        title: provider.prepareTitle,
+        llmProviderId: ctx.llmProviderId,
+        llmModel: ctx.llmModel,
+      }),
+    );
     ctx.prepareEntryId = created.id;
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
 

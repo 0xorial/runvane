@@ -100,7 +100,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (!answerDelta) return;
     state.streamedAnswer = extracted;
     state.pending = state.pending
-      .then(() => this.streamAssistantDelta(state, input.conversationId, answerDelta))
+      .then(() => this.streamAssistantDelta(state, ctx, answerDelta))
       .catch((error) => {
         this.logger.error(`assistant_stream pipe failed: ${error instanceof Error ? error.message : String(error)}`);
       });
@@ -126,20 +126,16 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const decision = toLlmDecision(parsed, requestedToolCalls);
 
     await this.persistStreamEntryDecision(ctx, llmResult, parseResult, decision);
-    const finalAssistantEntryId = await this.finalizeAssistantMessage(state ?? null, input.conversationId, assistantText);
+    await this.finalizeAssistantMessage(state ?? null, ctx, assistantText);
     await this.finalizeThoughtAction(ctx, action, assistantText, parseResult);
     await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
 
     if (requestedToolCalls.length === 0) return;
     const agent = await this.agents.get(input.agentId);
     if (!agent) throw new Error(`planner: agent not found for tool execution: ${input.agentId}`);
-    const continuationAnchorId = finalAssistantEntryId ?? ctx.thoughtActionEntryId ?? streamEntryId;
     for (const requested of requestedToolCalls) {
       scope.throwIfAborted();
-      this.startToolParamsThought(
-        { input, agent, requested, continuationAnchorId, followup: parsed.followup },
-        scope,
-      );
+      this.startToolParamsThought({ input, agent, requested, followup: parsed.followup }, ctx, scope);
     }
   };
 
@@ -156,16 +152,15 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       input: PlannerInput;
       agent: AgentEntity;
       requested: { toolName: string; toolRequest: string };
-      continuationAnchorId: string;
       followup: 'continue' | 'finalize';
     },
+    ctx: ThoughtContext,
     scope: LifecycleScope,
   ): void {
     const tool = this.tools.get(args.requested.toolName);
     if (!tool) throw new Error(`planner tool request references missing tool: ${args.requested.toolName}`);
     const toolParamsInput: ToolParamsInput = {
       conversationId: args.input.conversationId,
-      sourceEntryId: args.continuationAnchorId,
       agentId: args.input.agentId,
       toolName: args.requested.toolName,
       toolAiDescription: tool.getAiDescription(),
@@ -175,7 +170,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
-    this.thoughtProcessing.startFullThought(this.toolParamsProvider, toolParamsInput, scope);
+    this.thoughtProcessing.startFullThought(this.toolParamsProvider, toolParamsInput, scope, ctx.chain);
   }
 
   private ensureState(streamEntryId: string): StreamState {
@@ -193,11 +188,14 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
 
   private async streamAssistantDelta(
     state: StreamState,
-    conversationId: string,
+    ctx: ThoughtContext,
     delta: string,
   ): Promise<void> {
+    const conversationId = ctx.conversationId;
     if (!state.assistantEntryId) {
-      const created = await this.chatEntries.appendAssistantMessage(conversationId, { text: '' });
+      const created = await ctx.chain.append((parentId) =>
+        this.chatEntries.appendAssistantMessage(conversationId, { text: '', parentId }),
+      );
       state.assistantEntryId = created.id;
       const upsert = await this.chatEntries.getChatEntry(conversationId, created.id);
       if (upsert) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry: upsert });
@@ -212,9 +210,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
 
   private async finalizeAssistantMessage(
     state: StreamState | null,
-    conversationId: string,
+    ctx: ThoughtContext,
     assistantText: string,
   ): Promise<string | null> {
+    const conversationId = ctx.conversationId;
     if (!assistantText) return state?.assistantEntryId ?? null;
     if (state?.assistantEntryId) {
       await this.chatEntries.updateAssistantMessage(conversationId, { id: state.assistantEntryId, text: assistantText });
@@ -222,7 +221,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
       return state.assistantEntryId;
     }
-    const created = await this.chatEntries.appendAssistantMessage(conversationId, { text: assistantText });
+    const created = await ctx.chain.append((parentId) =>
+      this.chatEntries.appendAssistantMessage(conversationId, { text: assistantText, parentId }),
+    );
     const entry = await this.chatEntries.getChatEntry(conversationId, created.id);
     if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
     return created.id;

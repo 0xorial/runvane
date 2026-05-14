@@ -9,7 +9,7 @@ export type ConversationEntity = {
   promptTokensTotal: number;
   cachedPromptTokensTotal: number;
   completionTokensTotal: number;
-  activeLeafEntryId: string | null;
+  defaultViewLeafEntryId: string | null;
 };
 
 export type CreateConversationInput = {

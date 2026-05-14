@@ -1,4 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { SseType } from '../contracts/sse.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
@@ -51,9 +52,9 @@ export class RunToolService {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
   ) {}
 
-  async run(input: RunToolInput, scope: LifecycleScope): Promise<RunToolResult> {
-    if (input.sourceEntryId && !(await this.chatEntries.isEntryOnActiveLineage(input.conversationId, input.sourceEntryId))) {
-      this.logger.log(`tool skipped: source entry not on active lineage (${input.conversationId}/${input.sourceEntryId})`);
+  async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain): Promise<RunToolResult> {
+    if (input.sourceEntryId && !(await this.chatEntries.isEntryOnDefaultViewLineage(input.conversationId, input.sourceEntryId))) {
+      this.logger.log(`tool skipped: source entry not on default-view lineage (${input.conversationId}/${input.sourceEntryId})`);
       return { kind: 'skipped' };
     }
     scope.throwIfAborted();
@@ -61,7 +62,7 @@ export class RunToolService {
     const tool = this.tools.get(input.toolName);
     if (!tool) {
       const reason = `Tool not found: ${input.toolName}`;
-      const entryId = await this.appendErrorEntry(input, reason);
+      const entryId = await this.appendErrorEntry(input, reason, chain);
       throw new Error(reason + ` (entry=${entryId})`);
     }
 
@@ -84,7 +85,7 @@ export class RunToolService {
 
     const existing = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (permission === 'forbid' || (permission === 'ask_user' && input.approvalGranted !== true)) {
-      return this.recordBlocked({ input, permission, parsedParams, existingEntryId: existing?.id ?? null });
+      return this.recordBlocked({ input, permission, parsedParams, existingEntryId: existing?.id ?? null, chain });
     }
 
     return this.executeTool({
@@ -95,19 +96,20 @@ export class RunToolService {
       entries,
       existingEntryId: existing?.id ?? null,
       scope,
+      chain,
     });
   }
 
-  async allowAndRun(input: RunToolInput, scope: LifecycleScope): Promise<RunToolResult> {
+  async allowAndRun(input: RunToolInput, scope: LifecycleScope, chain: ChatChain): Promise<RunToolResult> {
     const pending = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (!pending || pending.state !== 'requested') {
       this.logger.log(`allowAndRun skipped: no requested invocation (${input.conversationId}/${input.toolName})`);
       return { kind: 'skipped' };
     }
-    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, scope);
+    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, scope, chain);
   }
 
-  private async appendErrorEntry(input: RunToolInput, reason: string): Promise<string> {
+  private async appendErrorEntry(input: RunToolInput, reason: string, chain: ChatChain): Promise<string> {
     const startedAt = new Date();
     const envelope: ToolEnvelope = {
       ok: false,
@@ -117,12 +119,15 @@ export class RunToolService {
       permission_state: 'forbid',
       timing: { started_at: startedAt.toISOString(), finished_at: startedAt.toISOString(), elapsed_ms: 0 },
     };
-    const created = await this.chatEntries.appendToolInvocation(input.conversationId, {
-      toolId: input.toolName,
-      state: 'error',
-      parameters: this.toParametersPayload(input, input.params),
-      result: envelope,
-    });
+    const created = await chain.append((parentId) =>
+      this.chatEntries.appendToolInvocation(input.conversationId, {
+        toolId: input.toolName,
+        state: 'error',
+        parameters: this.toParametersPayload(input, input.params),
+        result: envelope,
+        parentId,
+      }),
+    );
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_END,
       chatEntryId: created.id,
@@ -140,8 +145,9 @@ export class RunToolService {
     permission: ToolPermission;
     parsedParams: unknown;
     existingEntryId: string | null;
+    chain: ChatChain;
   }): Promise<RunToolResult> {
-    const { input, permission, parsedParams, existingEntryId } = args;
+    const { input, permission, parsedParams, existingEntryId, chain } = args;
     const startedAt = new Date();
     const reason = permission === 'ask_user' ? 'Tool requires user approval.' : 'Tool is forbidden by permission rules.';
     const envelope: ToolEnvelope = {
@@ -160,12 +166,15 @@ export class RunToolService {
     if (entryId) {
       await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state, result: envelope, parameters });
     } else {
-      const created = await this.chatEntries.appendToolInvocation(input.conversationId, {
-        toolId: input.toolName,
-        state,
-        parameters,
-        result: envelope,
-      });
+      const created = await chain.append((p) =>
+        this.chatEntries.appendToolInvocation(input.conversationId, {
+          toolId: input.toolName,
+          state,
+          parameters,
+          result: envelope,
+          parentId: p,
+        }),
+      );
       entryId = created.id;
       parentId = created.parentId;
     }
@@ -201,8 +210,9 @@ export class RunToolService {
     entries: Awaited<ReturnType<ChatEntriesRepo['listChatEntries']>>;
     existingEntryId: string | null;
     scope: LifecycleScope;
+    chain: ChatChain;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, scope } = args;
+    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, scope, chain } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
@@ -212,11 +222,14 @@ export class RunToolService {
     if (entryId) {
       await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'running', parameters });
     } else {
-      const created = await this.chatEntries.appendToolInvocation(input.conversationId, {
-        toolId: input.toolName,
-        state: 'running',
-        parameters,
-      });
+      const created = await chain.append((p) =>
+        this.chatEntries.appendToolInvocation(input.conversationId, {
+          toolId: input.toolName,
+          state: 'running',
+          parameters,
+          parentId: p,
+        }),
+      );
       entryId = created.id;
       parentId = created.parentId;
     }
@@ -266,7 +279,7 @@ export class RunToolService {
 
     if (input.plannerFollowup?.mode === 'continue') {
       scope.throwIfAborted();
-      this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, input.conversationId, scope);
+      this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, input.conversationId, scope, chain);
     }
     return { kind: 'completed', toolEntryId: entryId };
   }

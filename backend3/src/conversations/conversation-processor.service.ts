@@ -7,8 +7,11 @@ import { publishConversationUpdated } from '../sse/sse-helpers.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { LifecycleScope } from './lifecycle-scope.js';
+
+type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
 
 @Injectable()
 export class ConversationProcessorService {
@@ -24,7 +27,7 @@ export class ConversationProcessorService {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
   ) {}
 
-  private beginScope(conversationId: string): LifecycleScope {
+  private beginRun(conversationId: string): ConversationRun {
     this.activeExecutions.get(conversationId)?.abort();
     const scope = new LifecycleScope(
       () => {
@@ -40,7 +43,7 @@ export class ConversationProcessorService {
       },
     );
     this.activeExecutions.set(conversationId, scope);
-    return scope;
+    return { scope, chain: new ChatChain() };
   }
 
   cancelProcessing(conversationId: string): number {
@@ -55,8 +58,8 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedRequestText: string;
   }): Promise<{ plannerEntryId: string }> {
-    const scope = this.beginScope(args.conversationId);
-    const result = await this.thoughtProcessing.startReprocessContext(args, scope);
+    const { scope, chain } = this.beginRun(args.conversationId);
+    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
     scope.rootDone();
     return result;
   }
@@ -66,8 +69,8 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedResponse: string;
   }): Promise<{ plannerEntryId: string }> {
-    const scope = this.beginScope(args.conversationId);
-    const result = await this.thoughtProcessing.startReprocessReason(args, scope);
+    const { scope, chain } = this.beginRun(args.conversationId);
+    const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain);
     scope.rootDone();
     return result;
   }
@@ -83,7 +86,7 @@ export class ConversationProcessorService {
       throw new Error(`reprocess target ${args.sourceEntryId} is not a user-message: ${source.type}`);
     }
 
-    const scope = this.beginScope(args.conversationId);
+    const { scope, chain } = this.beginRun(args.conversationId);
     const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
       text: args.editedText,
       agentId: source.agentId,
@@ -92,6 +95,8 @@ export class ConversationProcessorService {
       ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
       parentId: source.parentId,
     });
+    await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
+    chain.setTip(sibling.id);
     const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
     if (!siblingPayload || siblingPayload.type !== 'user-message') {
       throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
@@ -99,21 +104,28 @@ export class ConversationProcessorService {
     this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
     await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
 
-    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, args.conversationId, scope);
+    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, args.conversationId, scope, chain);
     scope.rootDone();
     return { userMessageEntryId: sibling.id };
   }
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
-    const scope = this.beginScope(conversationId);
+    const { scope, chain } = this.beginRun(conversationId);
     const existingMessages = await this.chatEntries.listMessages(conversationId);
+    if (existingMessages.length > 0 && !body.parentId) {
+      throw new Error('parentId is required when conversation already has messages');
+    }
+    const parentId = body.parentId ?? null;
     const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
       text: body.message,
       agentId: body.agentId,
       llmProviderId: body.llmProviderId,
       llmModel: body.llmModel,
       modelPresetId: body.modelPresetId,
+      parentId,
     });
+    await this.chatEntries.setDefaultViewLeaf(conversationId, userEntry.id);
+    chain.setTip(userEntry.id);
     const userPayload = await this.chatEntries.getChatEntry(conversationId, userEntry.id);
     if (!userPayload || userPayload.type !== 'user-message') {
       throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
@@ -122,9 +134,9 @@ export class ConversationProcessorService {
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
     if (existingMessages.length === 0) {
-      this.thoughtProcessing.startSelfInitiatedThought(this.autoTitleProvider, conversationId, scope);
+      this.thoughtProcessing.startSelfInitiatedThought(this.autoTitleProvider, conversationId, scope, chain);
     }
-    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, conversationId, scope);
+    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, conversationId, scope, chain);
     scope.rootDone();
   }
 }

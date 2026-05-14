@@ -27,6 +27,7 @@ async function sendMessageToConversation(
   llmModel: string,
   modelPresetId: number | null,
   attachmentIds: string[],
+  parentId: string | null,
 ): Promise<AsyncResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
@@ -35,6 +36,7 @@ async function sendMessageToConversation(
     ...(llmModel.trim() ? { llmModel: llmModel.trim() } : {}),
     ...(modelPresetId != null ? { modelPresetId } : {}),
     ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+    parentId,
   });
   return { ok: status >= 200 && status < 300 };
 }
@@ -246,6 +248,7 @@ export function ChatPage({
             uploadedAttachments.push(uploaded.attachment);
           }
           let cid = conversationId;
+          const parentLeafIdAtSend = cid ? activeLeafId : null;
           if (!cid) {
             const created = await createConversation();
             cid = created.id;
@@ -291,6 +294,7 @@ export function ChatPage({
             agentSelection.llmModel,
             agentSelection.modelPresetId,
             uploadedAttachments.map((x) => x.id),
+            parentLeafIdAtSend,
           );
         })();
       }}

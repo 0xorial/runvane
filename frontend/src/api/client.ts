@@ -106,6 +106,8 @@ export type PostConversationMessageInput = {
   llmModel?: string;
   modelPresetId?: number;
   attachmentIds?: string[];
+  /** The entry the user wants this message attached to. Required when the conversation is non-empty. */
+  parentId?: string | null;
 };
 
 export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
@@ -120,15 +122,15 @@ export function getConversation(conversationId: string): Promise<ConversationRow
   );
 }
 
-export async function getConversationActiveLeafEntryId(conversationId: string): Promise<string | null> {
+export async function getConversationDefaultViewLeafEntryId(conversationId: string): Promise<string | null> {
   const data = await getJson(`/api/conversations/${encodeURIComponent(conversationId)}`);
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("GET /api/conversations/:id: invalid response envelope");
   }
-  const raw = (data as { activeLeafEntryId?: unknown }).activeLeafEntryId;
+  const raw = (data as { defaultViewLeafEntryId?: unknown }).defaultViewLeafEntryId;
   if (raw === null || raw === undefined) return null;
   if (typeof raw !== "string") {
-    throw new Error("GET /api/conversations/:id: activeLeafEntryId must be string or null");
+    throw new Error("GET /api/conversations/:id: defaultViewLeafEntryId must be string or null");
   }
   return raw.length > 0 ? raw : null;
 }
@@ -174,29 +176,29 @@ export function getConversationMessages(
   );
 }
 
-export async function setConversationActiveLeaf(
+export async function setConversationDefaultViewLeaf(
   conversationId: string,
   entryId: string,
-): Promise<{ conversationId: string; activeLeafEntryId: string }> {
-  const result = await postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/active-leaf`, {
+): Promise<{ conversationId: string; defaultViewLeafEntryId: string }> {
+  const result = await postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/default-view-leaf`, {
     entryId,
   });
   const data = result.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new Error("POST /api/conversations/:id/active-leaf: invalid response envelope");
+    throw new Error("POST /api/conversations/:id/default-view-leaf: invalid response envelope");
   }
   const row = data as {
     conversationId?: unknown;
-    activeLeafEntryId?: unknown;
+    defaultViewLeafEntryId?: unknown;
   };
   const nextConversationId = String(row.conversationId ?? "").trim();
-  const activeLeafEntryId = String(row.activeLeafEntryId ?? "").trim();
-  if (!nextConversationId || !activeLeafEntryId) {
-    throw new Error("POST /api/conversations/:id/active-leaf: invalid response fields");
+  const defaultViewLeafEntryId = String(row.defaultViewLeafEntryId ?? "").trim();
+  if (!nextConversationId || !defaultViewLeafEntryId) {
+    throw new Error("POST /api/conversations/:id/default-view-leaf: invalid response fields");
   }
   return {
     conversationId: nextConversationId,
-    activeLeafEntryId,
+    defaultViewLeafEntryId,
   };
 }
 

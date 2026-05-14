@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ChatEntry } from '../contracts/chatEntry.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
+import type { ConversationEntity } from './conversation.entity.js';
 import {
   toConversationGroupRow,
   toConversationRow,
@@ -22,45 +23,46 @@ export class ConversationsService {
       this.conversations.list({ deletedOnly: input.deletedOnly }),
       this.conversations.listGroups(),
     ]);
+    const conversations = await Promise.all(rows.map((row) => this.toApiRow(row)));
     return {
-      conversations: rows.map(toConversationRow),
+      conversations,
       groups: groups.map(toConversationGroupRow),
     };
   }
 
   async create(input: { title?: string }): Promise<ConversationRow> {
     const created = await this.conversations.create({ title: input.title });
-    return toConversationRow(created);
+    return this.toApiRow(created);
   }
 
   async get(conversationId: string, input?: { includeDeleted?: boolean }): Promise<ConversationRow | null> {
     const row = await this.conversations.get(conversationId, { includeDeleted: input?.includeDeleted });
-    return row ? toConversationRow(row) : null;
+    return row ? this.toApiRow(row) : null;
   }
 
   async updateTitle(conversationId: string, title: string): Promise<ConversationRow | null> {
     const updated = await this.conversations.updateTitle(conversationId, title);
-    return updated ? toConversationRow(updated) : null;
+    return updated ? this.toApiRow(updated) : null;
   }
 
   async updateGroupId(conversationId: string, groupId: string | null): Promise<ConversationRow | null> {
     const updated = await this.conversations.updateGroupId(conversationId, groupId);
-    return updated ? toConversationRow(updated) : null;
+    return updated ? this.toApiRow(updated) : null;
   }
 
   async updateGroupName(conversationId: string, groupName: string): Promise<ConversationRow | null> {
     const updated = await this.conversations.updateGroupName(conversationId, groupName);
-    return updated ? toConversationRow(updated) : null;
+    return updated ? this.toApiRow(updated) : null;
   }
 
   async softDelete(conversationId: string): Promise<ConversationRow | null> {
     const updated = await this.conversations.softDelete(conversationId);
-    return updated ? toConversationRow(updated) : null;
+    return updated ? this.toApiRow(updated) : null;
   }
 
   async undelete(conversationId: string): Promise<ConversationRow | null> {
     const updated = await this.conversations.undelete(conversationId);
-    return updated ? toConversationRow(updated) : null;
+    return updated ? this.toApiRow(updated) : null;
   }
 
   async hardDelete(conversationId: string): Promise<boolean> {
@@ -76,9 +78,21 @@ export class ConversationsService {
     return this.chatEntries.listChatEntries(conversationId, opts);
   }
 
-  async setActiveLeaf(conversationId: string, entryId: string): Promise<ConversationRow | null> {
-    await this.chatEntries.setActiveLeafEntry(conversationId, entryId);
+  async setDefaultViewLeaf(conversationId: string, entryId: string): Promise<ConversationRow | null> {
+    await this.chatEntries.setDefaultViewLeaf(conversationId, entryId);
     const updated = await this.conversations.get(conversationId);
-    return updated ? toConversationRow(updated) : null;
+    return updated ? this.toApiRow(updated) : null;
+  }
+
+  /**
+   * Map a conversation entity to its API row, replacing the stored anchor
+   * with the resolved branch leaf. Anchor is only ever written by user
+   * actions; resolution gives us the live tip of that branch.
+   */
+  private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
+    const row = toConversationRow(entity);
+    const resolved = await this.chatEntries.resolveDefaultViewLeaf(entity.id);
+    row.defaultViewLeafEntryId = resolved;
+    return row;
   }
 }

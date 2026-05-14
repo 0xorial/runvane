@@ -22,7 +22,7 @@ import { ConversationsService } from './conversations.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
-import { SetActiveLeafDto } from './dto/set-active-leaf.dto.js';
+import { SetDefaultViewLeafDto } from './dto/set-default-view-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
 
@@ -156,19 +156,19 @@ export class ConversationsController {
     return { conversationId };
   }
 
-  @Post(':conversationId/active-leaf')
-  async setActiveLeaf(
+  @Post(':conversationId/default-view-leaf')
+  async setDefaultViewLeaf(
     @Param('conversationId') conversationId: string,
-    @Body() body: SetActiveLeafDto,
+    @Body() body: SetDefaultViewLeafDto,
   ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
     try {
-      const updated = await this.conversations.setActiveLeaf(conversationId, body.entryId);
-      if (!updated || !updated.activeLeafEntryId) {
+      const updated = await this.conversations.setDefaultViewLeaf(conversationId, body.entryId);
+      if (!updated || !updated.defaultViewLeafEntryId) {
         throw new NotFoundException('conversation not found');
       }
-      return { conversationId, activeLeafEntryId: updated.activeLeafEntryId };
+      return { conversationId, defaultViewLeafEntryId: updated.defaultViewLeafEntryId };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'invalid entryId';
       if (detail.startsWith('entry not found')) throw new NotFoundException(detail);

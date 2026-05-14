@@ -1,6 +1,6 @@
 import { IsString, MinLength } from 'class-validator';
 
-export class SetActiveLeafDto {
+export class SetDefaultViewLeafDto {
   @IsString()
   @MinLength(1)
   entryId!: string;

@@ -4,6 +4,7 @@ import type {
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
 } from '../contracts/chatEntry.js';
+import type { ChatChain } from '../conversations/chat-chain.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 
@@ -28,6 +29,8 @@ export type ThoughtContext = {
   prepareEntryId: string | null;
   streamEntryId: string | null;
   thoughtActionEntryId: string | null;
+  /** Per-run chat-entry append cursor shared across thoughts in the same scope. */
+  chain: ChatChain;
 };
 
 export type ThoughtReasonLlmResult = {
