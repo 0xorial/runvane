@@ -170,7 +170,14 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
-    this.thoughtProcessing.startFullThought(this.toolParamsProvider, toolParamsInput, scope, ctx.chain);
+    this.thoughtProcessing.startThought({
+      provider: this.toolParamsProvider,
+      conversationId: toolParamsInput.conversationId,
+      scope,
+      chain: ctx.chain,
+      llm: { providerId: ctx.llmProviderId, model: ctx.llmModel },
+      input: toolParamsInput,
+    });
   }
 
   private ensureState(streamEntryId: string): StreamState {

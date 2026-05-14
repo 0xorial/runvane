@@ -79,6 +79,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       },
       scope,
       ctx.chain,
+      { providerId: ctx.llmProviderId, model: ctx.llmModel },
     );
   };
 

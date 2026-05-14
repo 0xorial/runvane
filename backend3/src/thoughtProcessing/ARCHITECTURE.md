@@ -78,9 +78,15 @@ Forward-flow appends call `chain.append(parentId => repo.appendXxx({…, parentI
 3. On success, `tip` advances to the new entry's id.
 
 `ConversationProcessorService` seeds the tip after the user-message append
-(`chain.setTip(userEntry.id)`) and then spawns `autoTitle` + `planner`
-concurrently. Both append through `chain.append`, so whichever wins the mutex
-becomes the parent of the next, and the chain stays linear:
+(`chain.setTip(userEntry.id)`) and then starts `autoTitle` + `planner`. The
+order of their **first** entries on the chain is deterministic, not racy:
+`startThought` calls `chain.append` for the prepare entry
+**synchronously** (before `scope.spawn`), so the mutex slot is captured at
+caller-call order rather than at microtask resolution time. To keep that call
+synchronous, the LLM provider/model is fetched once per run as `LlmRef` and
+passed in. Subsequent forward-flow appends (stream, action, assistant message,
+tool invocation) chain through the same `tip`, so concurrent thoughts
+interleave linearly:
 `user → titlePrepare → plannerPrepare → titleStream → plannerStream → …`.
 
 Reprocess entry points seed the chain tip to the chosen branch root before

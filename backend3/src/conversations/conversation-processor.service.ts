@@ -59,7 +59,8 @@ export class ConversationProcessorService {
     editedRequestText: string;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
-    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
+    const llm = await this.thoughtProcessing.getLlmRef();
+    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain, llm);
     scope.rootDone();
     return result;
   }
@@ -70,7 +71,8 @@ export class ConversationProcessorService {
     editedResponse: string;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
-    const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain);
+    const llm = await this.thoughtProcessing.getLlmRef();
+    const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
     scope.rootDone();
     return result;
   }
@@ -87,6 +89,7 @@ export class ConversationProcessorService {
     }
 
     const { scope, chain } = this.beginRun(args.conversationId);
+    const llm = await this.thoughtProcessing.getLlmRef();
     const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
       text: args.editedText,
       agentId: source.agentId,
@@ -104,13 +107,20 @@ export class ConversationProcessorService {
     this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
     await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
 
-    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, args.conversationId, scope, chain);
+    this.thoughtProcessing.startThought({
+      provider: this.plannerProvider,
+      conversationId: args.conversationId,
+      scope,
+      chain,
+      llm,
+    });
     scope.rootDone();
     return { userMessageEntryId: sibling.id };
   }
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const { scope, chain } = this.beginRun(conversationId);
+    const llm = await this.thoughtProcessing.getLlmRef();
     const existingMessages = await this.chatEntries.listMessages(conversationId);
     if (existingMessages.length > 0 && !body.parentId) {
       throw new Error('parentId is required when conversation already has messages');
@@ -134,9 +144,9 @@ export class ConversationProcessorService {
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
     if (existingMessages.length === 0) {
-      this.thoughtProcessing.startSelfInitiatedThought(this.autoTitleProvider, conversationId, scope, chain);
+      this.thoughtProcessing.startThought({ provider: this.autoTitleProvider, conversationId, scope, chain, llm });
     }
-    this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, conversationId, scope, chain);
+    this.thoughtProcessing.startThought({ provider: this.plannerProvider, conversationId, scope, chain, llm });
     scope.rootDone();
   }
 }

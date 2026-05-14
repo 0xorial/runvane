@@ -111,20 +111,22 @@ export function ChatPage({
   const thoughtTripletsById = new Map<string, ThoughtTripletRefs>();
   for (const entry$ of chatEntries) {
     const entry = entry$.get();
-    if (!isThoughtStreamEntry(entry) && entry.type !== "thought-prepare" && entry.type !== "thought-action") {
-      continue;
-    }
-    const current = thoughtTripletsById.get(entry.thoughtId) ?? {};
-    if (entry.type === "thought-prepare") {
-      current.prepareEntry = entry;
+    if (isThoughtStreamEntry(entry)) {
+      const current = thoughtTripletsById.get(entry.thoughtId) ?? {};
+      current.streamEntry$ = entry$;
+      thoughtTripletsById.set(entry.thoughtId, current);
     } else if (entry.type === "thought-action") {
+      const current = thoughtTripletsById.get(entry.thoughtId) ?? {};
       current.actionEntry = entry;
+      thoughtTripletsById.set(entry.thoughtId, current);
     }
-    thoughtTripletsById.set(entry.thoughtId, current);
   }
+  // Filter out stream + action entries so each thought is rendered exactly once,
+  // anchored at its thought-prepare slot. This makes chat order follow
+  // thought-start order even if subsequent stream/action appends race.
   const visibleEntries = chatEntries.filter((entry$) => {
     const entry = entry$.get();
-    return entry.type !== "thought-prepare" && entry.type !== "thought-action";
+    return !isThoughtStreamEntry(entry) && entry.type !== "thought-action";
   });
   const resolveVisibleAnchorEntryId = useCallback(
     (entryId: string): string => {

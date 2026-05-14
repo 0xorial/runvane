@@ -7,6 +7,7 @@ import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import type { LlmRef } from '../thoughtProcessing/types.js';
 import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
 
@@ -52,7 +53,7 @@ export class RunToolService {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
   ) {}
 
-  async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain): Promise<RunToolResult> {
+  async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
     if (input.sourceEntryId && !(await this.chatEntries.isEntryOnDefaultViewLineage(input.conversationId, input.sourceEntryId))) {
       this.logger.log(`tool skipped: source entry not on default-view lineage (${input.conversationId}/${input.sourceEntryId})`);
       return { kind: 'skipped' };
@@ -97,16 +98,17 @@ export class RunToolService {
       existingEntryId: existing?.id ?? null,
       scope,
       chain,
+      llm,
     });
   }
 
-  async allowAndRun(input: RunToolInput, scope: LifecycleScope, chain: ChatChain): Promise<RunToolResult> {
+  async allowAndRun(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
     const pending = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (!pending || pending.state !== 'requested') {
       this.logger.log(`allowAndRun skipped: no requested invocation (${input.conversationId}/${input.toolName})`);
       return { kind: 'skipped' };
     }
-    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, scope, chain);
+    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, scope, chain, llm);
   }
 
   private async appendErrorEntry(input: RunToolInput, reason: string, chain: ChatChain): Promise<string> {
@@ -211,8 +213,9 @@ export class RunToolService {
     existingEntryId: string | null;
     scope: LifecycleScope;
     chain: ChatChain;
+    llm: LlmRef;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, scope, chain } = args;
+    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, scope, chain, llm } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
@@ -279,7 +282,13 @@ export class RunToolService {
 
     if (input.plannerFollowup?.mode === 'continue') {
       scope.throwIfAborted();
-      this.thoughtProcessing.startSelfInitiatedThought(this.plannerProvider, input.conversationId, scope, chain);
+      this.thoughtProcessing.startThought({
+        provider: this.plannerProvider,
+        conversationId: input.conversationId,
+        scope,
+        chain,
+        llm,
+      });
     }
     return { kind: 'completed', toolEntryId: entryId };
   }

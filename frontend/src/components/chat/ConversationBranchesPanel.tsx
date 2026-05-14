@@ -4,6 +4,8 @@ import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
+import { useObservableValue } from "@/hooks/useObservable";
+import type { ObservableItem } from "@/utils/observableCollection";
 
 type ConversationBranchesPanelProps = {
   onAnchorEntrySelected?: (entryId: string) => void;
@@ -73,7 +75,7 @@ function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
   return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
 }
 
-function deepestDescendantId(entryId: string, childrenByParent: Map<string | null, ChatEntry[]>): string {
+function deepestDescendantId(entryId: string, childrenByParent: Map<string | null, ObservableItem<ChatEntry>[]>): string {
   let cursor = entryId;
   for (;;) {
     const children = childrenByParent.get(cursor) ?? [];
@@ -91,35 +93,28 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
     [activePathEntries],
   );
 
-  const sortedAllEntries = useMemo(
-    () => allEntries.map((row$) => row$.get()).sort(byConversationIndexAsc),
+  // Tree topology is derived from immutable fields (id, parentId,
+  // conversationIndex), so we sort once on the rows array. Per-entry mutable
+  // fields (status, tokens, text deltas) re-render via per-row subscription
+  // inside BranchNode (`useObservableValue(entry$)`).
+  const sortedRows = useMemo(
+    () =>
+      [...allEntries].sort((a, b) => byConversationIndexAsc(a.get(), b.get())),
     [allEntries],
   );
 
-  const entriesById = useMemo(
-    () => new Map(sortedAllEntries.map((entry) => [entry.id, entry])),
-    [sortedAllEntries],
-  );
-
   const childrenByParent = useMemo(() => {
-    const map = new Map<string | null, ChatEntry[]>();
-    for (const entry of sortedAllEntries) {
-      const parentId = entry.parentId;
-      if (parentId && !entriesById.has(parentId)) {
-        const roots = map.get(null) ?? [];
-        roots.push(entry);
-        map.set(null, roots);
-        continue;
-      }
-      const list = map.get(parentId) ?? [];
-      list.push(entry);
-      map.set(parentId, list);
-    }
-    for (const list of map.values()) {
-      list.sort(byConversationIndexAsc);
+    const idSet = new Set(sortedRows.map((row$) => row$.id));
+    const map = new Map<string | null, ObservableItem<ChatEntry>[]>();
+    for (const row$ of sortedRows) {
+      const parentId = row$.get().parentId;
+      const bucket = parentId && !idSet.has(parentId) ? null : parentId;
+      const list = map.get(bucket) ?? [];
+      list.push(row$);
+      map.set(bucket, list);
     }
     return map;
-  }, [sortedAllEntries, entriesById]);
+  }, [sortedRows]);
 
   const rootNodes = childrenByParent.get(null) ?? [];
 
@@ -154,10 +149,10 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Activity</h3>
       </div>
       <div className="text-[11px]">
-        {rootNodes.map((entry) => (
+        {rootNodes.map((row$) => (
           <BranchNode
-            key={entry.id}
-            entry={entry}
+            key={row$.id}
+            entry$={row$}
             branchDepth={0}
             childrenByParent={childrenByParent}
             activePathIds={activePathIds}
@@ -172,7 +167,7 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
 }
 
 function BranchNode({
-  entry,
+  entry$,
   branchDepth,
   childrenByParent,
   activePathIds,
@@ -180,14 +175,15 @@ function BranchNode({
   switchingToEntryId,
   onSelectEntry,
 }: {
-  entry: ChatEntry;
+  entry$: ObservableItem<ChatEntry>;
   branchDepth: number;
-  childrenByParent: Map<string | null, ChatEntry[]>;
+  childrenByParent: Map<string | null, ObservableItem<ChatEntry>[]>;
   activePathIds: Set<string>;
   activeLeafId: string | null;
   switchingToEntryId: string | null;
   onSelectEntry: (entryId: string) => void;
 }) {
+  const entry = useObservableValue(entry$);
   const children = childrenByParent.get(entry.id) ?? [];
   const siblings = childrenByParent.get(entry.parentId) ?? [];
   const hasSiblings = siblings.length > 1;
@@ -243,10 +239,10 @@ function BranchNode({
         </button>
       </div>
       {childrenVisible
-        ? children.map((child) => (
+        ? children.map((child$) => (
             <BranchNode
-              key={child.id}
-              entry={child}
+              key={child$.id}
+              entry$={child$}
               branchDepth={nextBranchDepth}
               childrenByParent={childrenByParent}
               activePathIds={activePathIds}

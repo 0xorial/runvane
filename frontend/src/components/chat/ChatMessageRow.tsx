@@ -7,7 +7,7 @@ import { ToolRunRow } from "./rows/ToolRunRow";
 import { UserMessageRow } from "./rows/UserMessageRow";
 
 export type ThoughtTripletRefs = {
-  prepareEntry?: ChatEntry;
+  streamEntry$?: ObservableItem<ChatEntry>;
   actionEntry?: ChatEntry;
 };
 
@@ -27,22 +27,23 @@ export function ChatMessageRow({ entry$, conversationId, thoughtTripletsById }: 
   if (entry.type === "user-message") {
     return <UserMessageRow entry={entry} />;
   }
-  if (isThoughtStreamEntry(entry)) {
+  // Triplets are anchored at the thought-prepare row so chat order matches
+  // thought-start order rather than stream-arrival order (which can race).
+  if (entry.type === "thought-prepare") {
     const refs = thoughtTripletsById?.get(entry.thoughtId);
     return (
       <ThoughtTripletRow
-        streamEntry$={entry$}
+        prepareEntry={entry}
+        streamEntry$={refs?.streamEntry$}
         conversationId={conversationId}
-        prepareEntry={refs?.prepareEntry}
         actionEntry={refs?.actionEntry}
       />
     );
   }
-  // These rows should be grouped/rendered only through ThoughtTripletRow.
-  // Keep this guard for safety and emit a dev warning if filtering regresses.
-  if (entry.type === "thought-prepare" || entry.type === "thought-action") {
+  // Stream and action entries are rendered inside their prepare-anchored triplet.
+  if (isThoughtStreamEntry(entry) || entry.type === "thought-action") {
     if (import.meta.env.DEV) {
-      console.warn("[chat] thought step row reached ChatMessageRow directly; expected ThoughtTripletRow grouping", {
+      console.warn("[chat] thought step row reached ChatMessageRow directly; expected prepare-anchored triplet grouping", {
         entryType: entry.type,
         entryId: entry.id,
         thoughtId: entry.thoughtId,

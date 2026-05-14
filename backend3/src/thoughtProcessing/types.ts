@@ -21,6 +21,11 @@ export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEn
   return THOUGHT_STREAM_ENTRY_TYPES.has(entry.type as ThoughtStreamEntryType);
 }
 
+export type LlmRef = {
+  providerId: string;
+  model: string;
+};
+
 export type ThoughtContext = {
   thoughtId: string;
   conversationId: string;

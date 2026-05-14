@@ -10,6 +10,7 @@ import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvid
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
 import {
   isThoughtStreamEntry,
+  type LlmRef,
   type PreparedReason,
   type ThoughtContext,
   type ThoughtReasonLlmResult,
@@ -40,49 +41,78 @@ export class ThoughtProcessingService {
     this.providers = [autoTitleProvider, plannerProvider, toolParamsProvider];
   }
 
-  startFullThought<TInput>(
-    provider: ThoughtTypeProvider<TInput>,
-    input: TInput,
-    scope: LifecycleScope,
-    chain: ChatChain,
-  ): void {
+  /**
+   * Synchronously fetches the active LLM reference. The conversation-processor
+   * calls this once per run and threads the result into the start* methods so
+   * each can call `chain.append` synchronously and preserve caller-order on
+   * the run's chain mutex.
+   */
+  async getLlmRef(): Promise<LlmRef> {
+    const llmDoc = await this.llmProviderSettings.getDocument();
+    return {
+      providerId: llmDoc.llm_configuration.provider_id,
+      model: llmDoc.llm_configuration.model_name,
+    };
+  }
+
+  /**
+   * Starts a thought on the run's chain.
+   *
+   * The prepare-entry append is enqueued on `chain` synchronously, before
+   * `scope.spawn`, so concurrent thoughts land on the chain in caller-call
+   * order rather than racing on microtask resolution.
+   *
+   * `input` is optional: when omitted, `provider.buildInputFromConversation`
+   * resolves it inside the spawned task (must be defined).
+   */
+  startThought<TInput>(args: {
+    provider: ThoughtTypeProvider<TInput>;
+    conversationId: string;
+    scope: LifecycleScope;
+    chain: ChatChain;
+    llm: LlmRef;
+    input?: TInput;
+  }): void {
+    const { provider, conversationId, scope, chain, llm } = args;
     scope.throwIfAborted();
-    const conversationId = (input as { conversationId?: unknown }).conversationId;
-    if (typeof conversationId !== 'string' || !conversationId) {
-      throw new Error('startFullThought requires input.conversationId');
+    const buildInput = provider.buildInputFromConversation;
+    if (args.input === undefined && !buildInput) {
+      throw new Error(`provider ${provider.constructor.name} cannot self-initiate; pass input explicitly`);
     }
+    const ctx = this.createContext(conversationId, chain, llm);
+    const prepareCreatePromise = this.appendPreparePlaceholder(ctx, provider);
     scope.spawn(async () => {
-      const ctx = await this.createContext(conversationId, chain);
+      const input = args.input ?? (await buildInput!(conversationId));
+      const prepareEntry = await prepareCreatePromise;
+      ctx.prepareEntryId = prepareEntry.id;
+      await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, prepareEntry.id);
       const prepared = await this.prepareStep.run(provider, input, ctx, scope);
       const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
       await this.decisionStep.run(provider, input, ctx, llmResult, scope);
     });
   }
 
-  startSelfInitiatedThought<TInput>(
-    provider: ThoughtTypeProvider<TInput>,
-    conversationId: string,
-    scope: LifecycleScope,
-    chain: ChatChain,
-  ): void {
-    if (!provider.buildInputFromConversation) {
-      throw new Error(`provider ${provider.constructor.name} cannot self-initiate`);
-    }
-    const buildInput = provider.buildInputFromConversation;
-    scope.throwIfAborted();
-    scope.spawn(async () => {
-      const input = await buildInput(conversationId);
-      const ctx = await this.createContext(conversationId, chain);
-      const prepared = await this.prepareStep.run(provider, input, ctx, scope);
-      const llmResult = await this.reasonStep.run(provider, input, ctx, prepared, scope);
-      await this.decisionStep.run(provider, input, ctx, llmResult, scope);
-    });
+  private appendPreparePlaceholder(
+    ctx: ThoughtContext,
+    provider: AnyThoughtProvider,
+  ): Promise<{ id: string }> {
+    return ctx.chain.append((parentId) =>
+      this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
+        thoughtId: ctx.thoughtId,
+        parentId,
+        status: 'running',
+        title: provider.prepareTitle,
+        llmProviderId: ctx.llmProviderId,
+        llmModel: ctx.llmModel,
+      }),
+    );
   }
 
   async startReprocessContext(
     args: { conversationId: string; sourceEntryId: string; editedRequestText: string },
     scope: LifecycleScope,
     chain: ChatChain,
+    llm: LlmRef,
   ): Promise<{ plannerEntryId: string }> {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
@@ -94,7 +124,7 @@ export class ThoughtProcessingService {
     }
     chain.setTip(branch.parentId);
 
-    const ctx = await this.createContext(args.conversationId, chain);
+    const ctx = this.createContext(args.conversationId, chain, llm);
     ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, editedRequestText);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, editedRequestText);
     const plannerEntryId = ctx.streamEntryId;
@@ -112,6 +142,7 @@ export class ThoughtProcessingService {
     args: { conversationId: string; sourceEntryId: string; editedResponse: string },
     scope: LifecycleScope,
     chain: ChatChain,
+    llm: LlmRef,
   ): Promise<{ plannerEntryId: string }> {
     scope.throwIfAborted();
     const editedResponse = args.editedResponse.trim();
@@ -123,7 +154,7 @@ export class ThoughtProcessingService {
     }
     chain.setTip(source.prepareEntryId);
 
-    const ctx = await this.createContext(args.conversationId, chain, { thoughtId: source.thoughtId });
+    const ctx = this.createContext(args.conversationId, chain, llm, { thoughtId: source.thoughtId });
     if (source.llmProviderId) ctx.llmProviderId = source.llmProviderId;
     if (source.llmModel) ctx.llmModel = source.llmModel;
     ctx.prepareEntryId = source.prepareEntryId;
@@ -141,17 +172,17 @@ export class ThoughtProcessingService {
     return { plannerEntryId };
   }
 
-  private async createContext(
+  private createContext(
     conversationId: string,
     chain: ChatChain,
+    llm: LlmRef,
     opts: { thoughtId?: string } = {},
-  ): Promise<ThoughtContext> {
-    const llmDoc = await this.llmProviderSettings.getDocument();
+  ): ThoughtContext {
     return {
       thoughtId: opts.thoughtId ?? crypto.randomUUID(),
       conversationId,
-      llmProviderId: llmDoc.llm_configuration.provider_id,
-      llmModel: llmDoc.llm_configuration.model_name,
+      llmProviderId: llm.providerId,
+      llmModel: llm.model,
       prepareEntryId: null,
       streamEntryId: null,
       thoughtActionEntryId: null,

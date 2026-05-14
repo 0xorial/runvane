@@ -19,30 +19,19 @@ export class PrepareStep {
     scope: LifecycleScope,
   ): Promise<PreparedReason> {
     scope.throwIfAborted();
-    const created = await ctx.chain.append((parentId) =>
-      this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
-        thoughtId: ctx.thoughtId,
-        parentId,
-        status: 'running',
-        title: provider.prepareTitle,
-        llmProviderId: ctx.llmProviderId,
-        llmModel: ctx.llmModel,
-      }),
-    );
-    ctx.prepareEntryId = created.id;
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
-
+    const prepareEntryId = ctx.prepareEntryId;
+    if (!prepareEntryId) throw new Error('PrepareStep.run requires ctx.prepareEntryId to be pre-allocated');
     let prepared: PreparedReason;
     try {
       scope.throwIfAborted();
       prepared = provider.runPrepare(input);
-      await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, {
+      await this.chatEntries.mergeEntryPayload(ctx.conversationId, prepareEntryId, {
         status: 'completed',
         requestText: prepared.prompt,
       });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
+      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, prepareEntryId);
     } catch (error) {
-      await this.markFailed(ctx, created.id, error, scope);
+      await this.markFailed(ctx, prepareEntryId, error, scope);
       throw error;
     }
     return prepared;
