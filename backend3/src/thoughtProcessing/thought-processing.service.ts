@@ -92,10 +92,7 @@ export class ThoughtProcessingService {
     });
   }
 
-  private appendPreparePlaceholder(
-    ctx: ThoughtContext,
-    provider: AnyThoughtProvider,
-  ): Promise<{ id: string }> {
+  private appendPreparePlaceholder(ctx: ThoughtContext, provider: AnyThoughtProvider): Promise<{ id: string }> {
     return ctx.chain.append((parentId) =>
       this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
@@ -208,10 +205,7 @@ export class ThoughtProcessingService {
    * the prepare's direct child, so we look up by `thoughtId` instead of
    * walking parents.
    */
-  private async resolveProviderForThought(
-    conversationId: string,
-    thoughtId: string,
-  ): Promise<AnyThoughtProvider> {
+  private async resolveProviderForThought(conversationId: string, thoughtId: string): Promise<AnyThoughtProvider> {
     const all = await this.chatEntries.listChatEntries(conversationId, { all: true });
     const streamEntry = all.find((e) => isThoughtStreamEntry(e) && e.thoughtId === thoughtId);
     if (!streamEntry) {
@@ -303,10 +297,7 @@ export class ThoughtProcessingService {
     return created.id;
   }
 
-  private async appendRunningActionEntry(
-    ctx: ThoughtContext,
-    provider: ThoughtTypeProvider<unknown>,
-  ): Promise<string> {
+  private async appendRunningActionEntry(ctx: ThoughtContext, provider: ThoughtTypeProvider<unknown>): Promise<string> {
     const created = await ctx.chain.append((parentId) =>
       this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
