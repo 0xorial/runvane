@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ReprocessReasonDto } from './dto/reprocess-reason.dto.js';
 import { ReprocessUserMessageDto } from './dto/reprocess-user-message.dto.js';
+import { SummarizeConversationDto } from './dto/summarize-conversation.dto.js';
 import { SseType } from '../contracts/sse.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
@@ -231,6 +232,26 @@ export class ConversationsController {
       return { conversationId, userMessageEntryId: result.userMessageEntryId };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'failed to reprocess user message';
+      throw new BadRequestException(detail);
+    }
+  }
+
+  @Post(':conversationId/summarize')
+  @HttpCode(202)
+  async summarize(
+    @Param('conversationId') conversationId: string,
+    @Body() body: SummarizeConversationDto,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+    try {
+      await this.conversationProcessor.startSummarize({
+        conversationId,
+        firstEntryToSummarize: body.firstEntryToSummarize,
+      });
+      return { conversationId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to summarize conversation';
       throw new BadRequestException(detail);
     }
   }

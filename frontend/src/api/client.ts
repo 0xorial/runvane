@@ -362,6 +362,24 @@ export async function reprocessThoughtContext(
   };
 }
 
+export async function summarizeConversation(
+  conversationId: string,
+  input: { firstEntryToSummarize: string },
+): Promise<{ conversationId: string }> {
+  const result = await postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/summarize`,
+    input,
+  );
+  const data = result.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("POST /api/conversations/:id/summarize: invalid response envelope");
+  }
+  const row = data as { conversationId?: unknown };
+  const out = String(row.conversationId ?? "").trim();
+  if (!out) throw new Error("POST /api/conversations/:id/summarize: invalid response fields");
+  return { conversationId: out };
+}
+
 export async function uploadFile(file: File): Promise<UploadFileResponse> {
   const form = new FormData();
   form.append("file", file);

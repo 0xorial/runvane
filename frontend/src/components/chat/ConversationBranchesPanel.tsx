@@ -33,6 +33,11 @@ function entryPreview(entry: ChatEntry): string {
     const body = [status, meta].filter((x) => x.length > 0).join(" ");
     return body ? `Decided: ${body}` : "Decided";
   }
+  if (entry.type === "checkpoint-summary") {
+    const head = entry.summaryText.trim().split(/\s+/).slice(0, 12).join(" ");
+    return head ? `Summary: ${head}…` : "Summary";
+  }
+  // remaining: thought stream entries (planner/title/toolParams/summarize)
   const status = displayStatus(String(entry.status || "running").trim());
   const promptTokens = typeof entry.promptTokens === "number" && Number.isFinite(entry.promptTokens) ? entry.promptTokens : 0;
   const cachedPromptTokens =

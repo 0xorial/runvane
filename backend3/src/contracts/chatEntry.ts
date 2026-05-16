@@ -129,6 +129,26 @@ export type AssistantMessageEntry = ChatEntryBase & {
   text: string;
 };
 
+export type SummarizeLlmStreamEntry = ChatEntryBase &
+  ThoughtStreamEntryShape & {
+    type: 'summarize_llm_stream';
+  };
+
+/**
+ * "Fold" entry: the conversation tail from `summarizedRange.fromEntryId`
+ * through `summarizedRange.toEntryId` (inclusive) was condensed into
+ * `summaryText`. Created on a sibling branch — its parent is the entry
+ * BEFORE `fromEntryId`, so the original tail stays intact on its own
+ * branch and is reachable via the branch selector. Prompt assembly
+ * naturally excludes the original turns because they're not on this
+ * chain; the planner sees `summaryText` injected in their place.
+ */
+export type CheckpointSummaryEntry = ChatEntryBase & {
+  type: 'checkpoint-summary';
+  summarizedRange: { fromEntryId: string; toEntryId: string };
+  summaryText: string;
+};
+
 export type ChatEntry =
   | UserMessageEntry
   | ThoughtPrepareEntry
@@ -136,5 +156,7 @@ export type ChatEntry =
   | ThoughtActionEntry
   | TitleLlmStreamEntry
   | ToolParamsLlmStreamEntry
+  | SummarizeLlmStreamEntry
   | ToolInvocationEntry
-  | AssistantMessageEntry;
+  | AssistantMessageEntry
+  | CheckpointSummaryEntry;

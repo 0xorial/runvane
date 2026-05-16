@@ -8,6 +8,7 @@ import { notifyError } from "@/utils/toast";
 import { formatExactChatTime, formatRelativeChatTime } from "../../../utils/formatRelativeChatTime";
 import { ChatMessageShell } from "../ChatMessageShell";
 import { BranchSelector } from "../BranchSelector";
+import { FoldFromHereButton } from "./FoldFromHereButton";
 
 function formatBytes(sizeBytes: number): string {
   if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${Math.max(0, Math.floor(sizeBytes || 0))} B`;
@@ -55,6 +56,9 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
             </span>
           ) : null}
           <BranchSelector entryId={entry.id} />
+          {conversationId && !isEditing ? (
+            <FoldFromHereButton conversationId={conversationId} entryId={entry.id} />
+          ) : null}
           {canEdit && !isEditing ? (
             <button
               type="button"

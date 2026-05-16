@@ -8,6 +8,7 @@ import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
+import { SummarizeThoughtTypeProvider } from './thoughtTypeProviders/summarizeProvider.js';
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
 import type { LlmCompletion } from '../llmProviders/types.js';
 import {
@@ -37,8 +38,9 @@ export class ThoughtProcessingService {
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
     plannerProvider: PlannerThoughtTypeProvider,
     toolParamsProvider: ToolParamsThoughtTypeProvider,
+    summarizeProvider: SummarizeThoughtTypeProvider,
   ) {
-    this.providers = [autoTitleProvider, plannerProvider, toolParamsProvider];
+    this.providers = [autoTitleProvider, plannerProvider, toolParamsProvider, summarizeProvider];
   }
 
   /**

@@ -1,6 +1,7 @@
 import type {
   ChatEntry,
   PlannerLlmStreamEntry,
+  SummarizeLlmStreamEntry,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
 } from '../contracts/chatEntry.js';
@@ -8,13 +9,18 @@ import type { ChatChain } from '../conversations/chat-chain.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../llmProviders/types.js';
 
-export type ThoughtStreamEntry = PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry;
+export type ThoughtStreamEntry =
+  | PlannerLlmStreamEntry
+  | TitleLlmStreamEntry
+  | ToolParamsLlmStreamEntry
+  | SummarizeLlmStreamEntry;
 export type ThoughtStreamEntryType = ThoughtStreamEntry['type'];
 
 const THOUGHT_STREAM_ENTRY_TYPES: ReadonlySet<ThoughtStreamEntryType> = new Set<ThoughtStreamEntryType>([
   'planner_llm_stream',
   'title_llm_stream',
   'tool_params_llm_stream',
+  'summarize_llm_stream',
 ]);
 
 export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEntry {

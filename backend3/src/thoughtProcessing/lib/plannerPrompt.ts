@@ -80,11 +80,18 @@ function entryToMessages(entry: ChatEntry): LlmMessage[] {
       return [textMessage('assistant', entry.text)];
     case 'tool-invocation':
       return toolInvocationAsPair(entry);
+    case 'checkpoint-summary':
+      // Inject the fold as a system-role context note in the order it appears
+      // in the chain. The summarized turns themselves live on a sibling
+      // branch and are naturally absent from this chain, so the planner
+      // sees just this condensed paragraph in their place.
+      return [textMessage('system', `[Earlier in this conversation, summarized]\n${entry.summaryText}`)];
     case 'thought-prepare':
     case 'thought-action':
     case 'planner_llm_stream':
     case 'title_llm_stream':
     case 'tool_params_llm_stream':
+    case 'summarize_llm_stream':
       return [];
     default: {
       const _exhaustive: never = entry;

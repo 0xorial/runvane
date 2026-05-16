@@ -10,7 +10,7 @@ import { ModelDropdown } from "../ui/ModelDropdown";
 import { ModelSelector } from "../ui/ModelSelector";
 import { useLlmSettings } from "../../hooks/llmSettingsContext";
 import { getAgentLlm } from "../../pages/settings/agentLlm";
-import { sortAgents } from "../../pages/settings/helpers";
+import { sortAgents, type ModelGroup } from "../../pages/settings/helpers";
 
 export function agentIdFromSearchParams(searchParams: URLSearchParams): string {
   return searchParams.get("agent")?.trim() || "";

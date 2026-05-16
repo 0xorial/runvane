@@ -2,6 +2,7 @@ import { isThoughtStreamEntry, type ChatEntry } from "../../protocol/chatEntry";
 import type { ObservableItem } from "../../utils/observableCollection";
 import { useObservableValue } from "../../hooks/useObservable";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
+import { CheckpointSummaryRow } from "./rows/CheckpointSummaryRow";
 import { ThoughtTripletRow } from "./rows/ThoughtTripletRow";
 import { ToolRunRow } from "./rows/ToolRunRow";
 import { UserMessageRow } from "./rows/UserMessageRow";
@@ -55,7 +56,10 @@ export function ChatMessageRow({ entry$, conversationId, thoughtTripletsById }: 
     return <ToolRunRow entry={entry} />;
   }
   if (entry.type === "assistant-message") {
-    return <AssistantMessageRow entry={entry} />;
+    return <AssistantMessageRow entry={entry} conversationId={conversationId} />;
+  }
+  if (entry.type === "checkpoint-summary") {
+    return <CheckpointSummaryRow entry={entry} />;
   }
   const _exhaustive: never = entry;
   void _exhaustive;

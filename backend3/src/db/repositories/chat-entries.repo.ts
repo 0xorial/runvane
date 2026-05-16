@@ -252,6 +252,25 @@ export class ChatEntriesRepo {
     return { id: row.id };
   }
 
+  async appendCheckpointSummary(
+    conversationId: string,
+    input: {
+      parentId: string | null;
+      summarizedRange: { fromEntryId: string; toEntryId: string };
+      summaryText: string;
+    },
+  ): Promise<{ id: string; parentId: string | null; conversationIndex: number; createdAt: string }> {
+    const row = await this.appendEntry(conversationId, {
+      type: 'checkpoint-summary',
+      parentId: input.parentId,
+      payload: {
+        summarizedRange: input.summarizedRange,
+        summaryText: input.summaryText,
+      },
+    });
+    return row;
+  }
+
   async appendThoughtActionEntry(
     conversationId: string,
     input: {

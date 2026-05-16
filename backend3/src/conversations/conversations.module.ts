@@ -6,6 +6,7 @@ import { PrepareStep } from '../thoughtProcessing/steps/prepareStep.js';
 import { ReasonStep } from '../thoughtProcessing/steps/reasonStep.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import { ToolParamsThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { RunToolService } from '../tools/run-tool.service.js';
@@ -28,6 +29,7 @@ import { ConversationsService } from './conversations.service.js';
     AutoTitleThoughtTypeProvider,
     PlannerThoughtTypeProvider,
     ToolParamsThoughtTypeProvider,
+    SummarizeThoughtTypeProvider,
     RunToolService,
   ],
 })

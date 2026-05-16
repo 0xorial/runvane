@@ -3,6 +3,7 @@ import type {
   ChatEntry,
   ChatEntryBase,
   PlannerLlmStreamEntry,
+  SummarizeLlmStreamEntry,
   ThoughtStepStatus,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
@@ -35,12 +36,32 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
     case 'planner_llm_stream':
     case 'title_llm_stream':
     case 'tool_params_llm_stream':
+    case 'summarize_llm_stream':
       return mapStream(base, payload, row.type, ctx);
     case 'tool-invocation':
       return mapToolInvocation(base, payload, ctx);
+    case 'checkpoint-summary':
+      return mapCheckpointSummary(base, payload, ctx);
     default:
       throw new Error(`${ctx}: unknown chat entry type`);
   }
+}
+
+function mapCheckpointSummary(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
+  const range = payload.summarizedRange;
+  if (!range || typeof range !== 'object' || Array.isArray(range)) {
+    throw new Error(`${ctx}: summarizedRange must be an object`);
+  }
+  const rec = range as Record<string, unknown>;
+  return {
+    ...base,
+    type: 'checkpoint-summary',
+    summaryText: requireString(payload, 'summaryText', ctx),
+    summarizedRange: {
+      fromEntryId: requireString(rec, 'fromEntryId', `${ctx}.summarizedRange`),
+      toEntryId: requireString(rec, 'toEntryId', `${ctx}.summarizedRange`),
+    },
+  };
 }
 
 function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
@@ -127,7 +148,7 @@ function mapStream(
   payload: Record<string, unknown>,
   type: ThoughtStreamEntryType,
   ctx: string,
-): PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry {
+): PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry | SummarizeLlmStreamEntry {
   const stream: PlannerLlmStreamEntry = {
     ...base,
     type: 'planner_llm_stream',
@@ -159,6 +180,8 @@ function mapStream(
       return { ...stream, type: 'title_llm_stream' } satisfies TitleLlmStreamEntry;
     case 'tool_params_llm_stream':
       return { ...stream, type: 'tool_params_llm_stream' } satisfies ToolParamsLlmStreamEntry;
+    case 'summarize_llm_stream':
+      return { ...stream, type: 'summarize_llm_stream' } satisfies SummarizeLlmStreamEntry;
     default: {
       const exhaustive: never = type;
       throw new Error(`${ctx}: unhandled stream entry type ${String(exhaustive)}`);
