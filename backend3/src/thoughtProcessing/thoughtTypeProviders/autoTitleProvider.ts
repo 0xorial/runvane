@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { SseType } from '../../contracts/sse.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
-import { publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
+import { publishChatEntryUpsert, publishConversationUpdated, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
 export type AutoTitleInput = {
@@ -34,26 +33,31 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
 
   runPrepare = (input: AutoTitleInput): LlmRequest => ({
     messages: [
-      textMessage('system', 'Title this conversation in 3-6 words. Plain text, no quotes.'),
+      textMessage(
+        'system',
+        'Your job is to title this conversation in 3-6 words based on the first user message. Plain text, no quotes.',
+      ),
       textMessage('user', input.firstMessage),
+      // Force-skip the model's reasoning phase by prefilling the assistant
+      // turn with an already-closed thinking block. This is the only
+      // workaround that reliably suppresses thinking for Qwen3.5 in
+      // LM Studio's OpenAI-compat endpoint — `/no_think` is silently
+      // ignored on 3.5, and `chat_template_kwargs.enable_thinking=false`
+      // is dropped by LM Studio's REST translation layer
+      // (lmstudio-ai/lmstudio-bug-tracker#1559, reproduced Apr 2026).
+      // Harmless on Anthropic (native prefill) and on non-reasoning models
+      // that just continue from the prefix; the response cleanup strips
+      // any leftover `<think>…</think>` from the title.
+      { role: 'assistant', parts: [{ kind: 'text', text: '<think></think>\n\n' }] },
     ],
   });
 
   onLlmEvent = (_input: AutoTitleInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (event.type !== 'text_delta' || !event.delta || !ctx.streamEntryId) return;
-    this.hub.publish(ctx.conversationId, {
-      type: SseType.CHAT_ENTRY_DELTA,
-      chatEntryId: ctx.streamEntryId,
-      field: 'llmResponse',
-      delta: event.delta,
-    });
+    if (!ctx.streamEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
   };
 
-  runDecision = async (
-    input: AutoTitleInput,
-    ctx: ThoughtContext,
-    completion: LlmCompletion,
-  ): Promise<void> => {
+  runDecision = async (input: AutoTitleInput, ctx: ThoughtContext, completion: LlmCompletion): Promise<void> => {
     const cleanTitle = normalizeGeneratedTitle(getCompletionText(completion));
     const nextTitle = cleanTitle ?? fallbackConversationTitle(input.firstMessage);
     const current = await this.conversations.get(input.conversationId);
@@ -91,13 +95,22 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
 }
 
 function fallbackConversationTitle(firstMessage: string): string {
-  const text = String(firstMessage || '').replace(/\s+/g, ' ').trim();
+  const text = String(firstMessage || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!text) return 'New chat';
   return text.length > 64 ? `${text.slice(0, 64).trim()}...` : text;
 }
 
 function normalizeGeneratedTitle(fullResponse: string): string | null {
-  const clean = fullResponse.replace(/\s+/g, ' ').replace(/^["'`]+|["'`]+$/g, '').trim();
+  const clean = fullResponse
+    // Some servers (or template configs) leave Qwen `<think>…</think>` blocks
+    // inline in `content` rather than routing them to `reasoning_content`.
+    // Strip any such block so it never leaks into the conversation title.
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
   if (!clean) return null;
   const bounded = clean.length > 80 ? clean.slice(0, 80).trim() : clean;
   if (!bounded) return null;

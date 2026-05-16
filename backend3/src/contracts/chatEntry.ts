@@ -71,6 +71,14 @@ type ThoughtStreamEntryShape = {
   llmRequest: string;
   llmProviderId?: string;
   llmResponse?: string;
+  /**
+   * Reasoning/thinking text emitted by the model alongside (typically before)
+   * the final answer. Streamed independently from `llmResponse` so we can
+   * show users incremental progress for chain-of-thought-heavy models like
+   * Qwen / DeepSeek-R1 that would otherwise appear stuck during the thinking
+   * phase.
+   */
+  thinkingText?: string;
   thoughtMs?: number | null;
   decision?: LlmDecision | null;
   status?: ThoughtStepStatus;

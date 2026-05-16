@@ -1,8 +1,9 @@
 import type { ConversationEntity } from '../conversations/conversation.entity.js';
 import type { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import type { ConversationsRepo } from '../db/repositories/conversations.repo.js';
-import type { ConversationSseRow, SseEvent } from '../contracts/sse.js';
+import type { ChatEntryDeltaField, ConversationSseRow, SseEvent } from '../contracts/sse.js';
 import { SseType } from '../contracts/sse.js';
+import type { LlmStreamEvent } from '../llmProviders/types.js';
 import type { SseHubService } from './sse-hub.service.js';
 
 export function incrementalDelta(prev: string, next: string): string {
@@ -50,5 +51,31 @@ export async function publishChatEntryUpsert(
   const entry = await chatEntries.getChatEntry(conversationId, entryId);
   if (!entry) throw new Error(`chat entry not found: ${conversationId}/${entryId}`);
   hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
+}
+
+/**
+ * Forward an LLM stream event onto a thought stream entry as a CHAT_ENTRY_DELTA.
+ * Currently routes:
+ *   - `text_delta`     → `llmResponse`
+ *   - `thinking_delta` → `thinkingText`
+ * Returns true if the event produced a delta (caller can chain extra side-effects
+ * on text deltas only, e.g. live assistant-message streaming in the planner).
+ */
+export function publishStreamFieldDelta(
+  hub: SseHubService,
+  conversationId: string,
+  chatEntryId: string,
+  event: LlmStreamEvent,
+): boolean {
+  const field = streamFieldFor(event);
+  if (!field || !('delta' in event) || !event.delta) return false;
+  hub.publish(conversationId, { type: SseType.CHAT_ENTRY_DELTA, chatEntryId, field, delta: event.delta });
+  return true;
+}
+
+function streamFieldFor(event: LlmStreamEvent): ChatEntryDeltaField | null {
+  if (event.type === 'text_delta') return 'llmResponse';
+  if (event.type === 'thinking_delta') return 'thinkingText';
+  return null;
 }
 

@@ -140,6 +140,7 @@ function mapStream(
   const llmModel = optionalString(payload, 'llmModel', ctx);
   if (llmModel !== undefined) stream.llmModel = llmModel;
   if (typeof payload.llmResponse === 'string') stream.llmResponse = payload.llmResponse;
+  if (typeof payload.thinkingText === 'string') stream.thinkingText = payload.thinkingText;
   if (payload.thoughtMs !== undefined) {
     if (payload.thoughtMs !== null && (typeof payload.thoughtMs !== 'number' || !Number.isFinite(payload.thoughtMs))) {
       throw new Error(`${ctx}: thoughtMs must be number or null`);

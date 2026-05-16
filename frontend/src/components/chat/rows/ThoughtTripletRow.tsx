@@ -90,7 +90,7 @@ function ThoughtTripletRowWithStream({
         </div>
 
         {expanded === "context" ? <ContextStep prepareEntry={prepareEntry} stream={stream} conversationId={conversationId} /> : null}
-        {expanded === "reasoning" ? <ReasoningStep stream={stream} conversationId={conversationId} /> : null}
+        {expanded === "reasoning" ? <ReasoningStep stream={stream} prepareEntry={prepareEntry} conversationId={conversationId} /> : null}
         {expanded === "action" ? <ActionStep actionEntry={actionStepEntry} stream={stream} /> : null}
       </div>
     </ChatThreadIndent>

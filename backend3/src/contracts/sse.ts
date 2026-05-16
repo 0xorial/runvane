@@ -47,7 +47,7 @@ export type ConversationUpdatedSsePayload = { type: typeof SseType.CONVERSATION_
 
 export type ChatEntryUpsertSsePayload = { type: typeof SseType.CHAT_ENTRY_UPSERT; entry: ChatEntry };
 
-export type ChatEntryDeltaField = 'llmResponse' | 'text';
+export type ChatEntryDeltaField = 'llmResponse' | 'thinkingText' | 'text';
 export type ChatEntryDeltaSsePayload = {
   type: typeof SseType.CHAT_ENTRY_DELTA;
   chatEntryId: string;

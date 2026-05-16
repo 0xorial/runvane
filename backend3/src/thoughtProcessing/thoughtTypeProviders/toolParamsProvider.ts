@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
-import { SseType } from '../../contracts/sse.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
-import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
+import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
@@ -43,13 +42,8 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
   });
 
   onLlmEvent = (_input: ToolParamsInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (event.type !== 'text_delta' || !event.delta || !ctx.streamEntryId) return;
-    this.hub.publish(ctx.conversationId, {
-      type: SseType.CHAT_ENTRY_DELTA,
-      chatEntryId: ctx.streamEntryId,
-      field: 'llmResponse',
-      delta: event.delta,
-    });
+    if (!ctx.streamEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
   };
 
   runDecision = async (

@@ -4,7 +4,7 @@ import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
 import { expandAttachmentRefs } from '../../llmProviders/expandAttachments.js';
-import { getCompletionText } from '../../llmProviders/types.js';
+import { getCompletionText, getCompletionThinking } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
@@ -121,9 +121,11 @@ export class ReasonStep {
     scope.throwIfAborted();
 
     const responseText = getCompletionText(completion);
+    const thinkingText = getCompletionThinking(completion);
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
       status: 'completed',
       llmResponse: responseText,
+      ...(thinkingText ? { thinkingText } : {}),
       thoughtMs: Date.now() - startedAt,
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);

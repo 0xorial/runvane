@@ -7,7 +7,12 @@ import { AgentsRepo } from '../../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
-import { incrementalDelta, publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
+import {
+  incrementalDelta,
+  publishChatEntryUpsert,
+  publishConversationUpdated,
+  publishStreamFieldDelta,
+} from '../../sse/sse-helpers.js';
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
@@ -78,18 +83,14 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   });
 
   onLlmEvent = (input: PlannerInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (event.type !== 'text_delta' || !event.delta || !ctx.streamEntryId) return;
-    const delta = event.delta;
+    if (!ctx.streamEntryId) return;
+    if (!publishStreamFieldDelta(this.hub, input.conversationId, ctx.streamEntryId, event)) return;
+    if (event.type !== 'text_delta') return;
+    // Only the visible answer (text_delta) feeds the live assistant-message
+    // mirror; thinking_delta is surfaced on the stream entry alone.
     const streamEntryId = ctx.streamEntryId;
     const state = this.ensureState(streamEntryId);
-    state.reconstructedReply += delta;
-
-    this.hub.publish(input.conversationId, {
-      type: SseType.CHAT_ENTRY_DELTA,
-      chatEntryId: streamEntryId,
-      field: 'llmResponse',
-      delta,
-    });
+    state.reconstructedReply += event.delta;
 
     const extracted = extractAssistantOutputFromJsonLike(state.reconstructedReply);
     const answerDelta = incrementalDelta(state.streamedAnswer, extracted);

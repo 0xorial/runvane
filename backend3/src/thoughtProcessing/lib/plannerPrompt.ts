@@ -12,9 +12,13 @@ function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): str
   if (agentSystemPrompt.trim().length > 0) parts.push(agentSystemPrompt.trim());
   parts.push(toolIds.length > 0 ? `Tools: ${toolIds.join(', ')}` : 'Tools: (none)');
   parts.push(
-    'Reply with one JSON object, no prose:\n' +
-      '{"assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string}], "followup": "finalize"|"continue"}\n' +
-      '`tool_request` is a natural-language brief; a separate step fills the JSON args. ' +
+    'Reply with one JSON object, no markedown, no prose:\n' +
+      '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string}], "followup": "finalize"|"continue"}\n' +
+      '`assistant_thinking` is a brief summary of your thoughts and plans for the next step. ' +
+      '`assistant_output` is the user-facing text of your response. ' +
+      '`tool_requests` is an array of tool requests. ' +
+      '`followup` is the mode for the next step: "finalize" if you need to finalize the conversation, "continue" if you need to continue the conversation. ' +
+      '`tool_request` is a natural-language brief; a separate agent will fills the JSON args. ' +
       'Use "continue" only if you need tool results before replying.',
   );
   return parts.join('\n\n');
