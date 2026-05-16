@@ -102,6 +102,12 @@ export class LlmProviderSettingsRepo {
       ...(typeof cfgDoc.tool_call_model_name === 'string' && cfgDoc.tool_call_model_name
         ? { tool_call_model_name: cfgDoc.tool_call_model_name }
         : {}),
+      ...(typeof cfgDoc.title_provider_id === 'string' && cfgDoc.title_provider_id
+        ? { title_provider_id: cfgDoc.title_provider_id }
+        : {}),
+      ...(typeof cfgDoc.title_model_name === 'string' && cfgDoc.title_model_name
+        ? { title_model_name: cfgDoc.title_model_name }
+        : {}),
       model_settings:
         cfgDoc.model_settings && typeof cfgDoc.model_settings === 'object' && !Array.isArray(cfgDoc.model_settings)
           ? (cfgDoc.model_settings as Record<string, unknown>)

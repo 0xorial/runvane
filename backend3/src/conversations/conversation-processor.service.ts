@@ -183,10 +183,8 @@ export class ConversationProcessorService {
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const { scope, chain } = this.beginRun(conversationId);
-    const [llm, systemLlm] = await Promise.all([
-      this.resolveLlmRef({ explicitProviderId: body.llmProviderId, explicitModel: body.llmModel, agentId: body.agentId }),
-      this.thoughtProcessing.getLlmRef(),
-    ]);
+    const llm = await this.resolveLlmRef({ explicitProviderId: body.llmProviderId, explicitModel: body.llmModel, agentId: body.agentId });
+    const titleLlm = await this.thoughtProcessing.getTitleLlmRef(llm);
     const existingMessages = await this.chatEntries.listMessages(conversationId);
     if (existingMessages.length > 0 && !body.parentId) {
       throw new Error('parentId is required when conversation already has messages');
@@ -218,7 +216,7 @@ export class ConversationProcessorService {
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
     if (existingMessages.length === 0) {
-      this.thoughtProcessing.startThought({ provider: this.autoTitleProvider, conversationId, scope, chain, llm: systemLlm });
+      this.thoughtProcessing.startThought({ provider: this.autoTitleProvider, conversationId, scope, chain, llm: titleLlm });
     }
     this.thoughtProcessing.startThought({ provider: this.plannerProvider, conversationId, scope, chain, llm });
     scope.rootDone();

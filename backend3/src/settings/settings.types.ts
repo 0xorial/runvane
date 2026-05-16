@@ -14,6 +14,8 @@ export type LlmConfiguration = {
   model_name: string;
   tool_call_provider_id?: string;
   tool_call_model_name?: string;
+  title_provider_id?: string;
+  title_model_name?: string;
   model_settings: Record<string, unknown>;
 };
 
