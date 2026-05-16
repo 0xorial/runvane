@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
+import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
@@ -8,6 +9,7 @@ import { ThoughtProcessingService } from '../thoughtProcessing/thought-processin
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
+import type { LlmRef } from '../thoughtProcessing/types.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
@@ -29,7 +31,29 @@ export class ConversationProcessorService {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
     private readonly summarizeProvider: SummarizeThoughtTypeProvider,
     private readonly uploads: UploadsService,
+    private readonly agents: AgentsRepo,
   ) {}
+
+  private async resolveLlmRef(opts: {
+    explicitProviderId?: string;
+    explicitModel?: string;
+    agentId?: string;
+  }): Promise<LlmRef> {
+    if (opts.explicitProviderId && opts.explicitModel) {
+      return { providerId: opts.explicitProviderId, model: opts.explicitModel };
+    }
+    if (opts.agentId) {
+      const agent = await this.agents.get(opts.agentId);
+      if (agent) {
+        const cfg = agent.default_llm_configuration;
+        const ref = agent.model_reference;
+        const providerId = String(cfg?.provider_id ?? ref?.provider_id ?? '').trim();
+        const model = String(cfg?.model_name ?? ref?.model_name ?? '').trim();
+        if (providerId && model) return { providerId, model };
+      }
+    }
+    return this.thoughtProcessing.getLlmRef();
+  }
 
   private beginRun(conversationId: string): ConversationRun {
     this.activeExecutions.get(conversationId)?.abort();
@@ -93,7 +117,11 @@ export class ConversationProcessorService {
     }
 
     const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
+    const llm = await this.resolveLlmRef({
+      explicitProviderId: source.llmProviderId,
+      explicitModel: source.llmModel,
+      agentId: source.agentId,
+    });
     const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
       text: args.editedText,
       agentId: source.agentId,
@@ -155,7 +183,10 @@ export class ConversationProcessorService {
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const { scope, chain } = this.beginRun(conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
+    const [llm, systemLlm] = await Promise.all([
+      this.resolveLlmRef({ explicitProviderId: body.llmProviderId, explicitModel: body.llmModel, agentId: body.agentId }),
+      this.thoughtProcessing.getLlmRef(),
+    ]);
     const existingMessages = await this.chatEntries.listMessages(conversationId);
     if (existingMessages.length > 0 && !body.parentId) {
       throw new Error('parentId is required when conversation already has messages');
@@ -187,7 +218,7 @@ export class ConversationProcessorService {
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
     if (existingMessages.length === 0) {
-      this.thoughtProcessing.startThought({ provider: this.autoTitleProvider, conversationId, scope, chain, llm });
+      this.thoughtProcessing.startThought({ provider: this.autoTitleProvider, conversationId, scope, chain, llm: systemLlm });
     }
     this.thoughtProcessing.startThought({ provider: this.plannerProvider, conversationId, scope, chain, llm });
     scope.rootDone();
