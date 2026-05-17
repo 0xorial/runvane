@@ -15,6 +15,8 @@ export type SummarizeInput = {
   toEntryId: string;
   /** Pre-resolved entries in the range, in conversation order. */
   rangeEntries: ChatEntry[];
+  /** Number of user-visible entries in the folded range. */
+  rangeEntryCount: number;
 };
 
 /**
@@ -64,6 +66,10 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
         parentId,
         summarizedRange: { fromEntryId: input.fromEntryId, toEntryId: input.toEntryId },
         summaryText,
+        rangeEntryCount: input.rangeEntryCount,
+        rangeInputTokens:
+          (completion.usage?.promptTokens ?? 0) + (completion.usage?.cachedPromptTokens ?? 0) || undefined,
+        summaryTokens: completion.usage?.completionTokens,
       }),
     );
     // Switch the user's default view to the freshly-folded branch so reload

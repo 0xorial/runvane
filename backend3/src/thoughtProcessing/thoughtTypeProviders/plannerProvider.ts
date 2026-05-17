@@ -240,13 +240,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     decision: LlmDecision | null,
   ): Promise<void> {
     if (!ctx.streamEntryId) throw new Error('persistStreamEntryDecision requires ctx.streamEntryId');
-    const usage = completion.usage;
     const patch: Record<string, unknown> = { parseResult, decision };
-    if (usage) {
-      patch.promptTokens = usage.promptTokens;
-      patch.completionTokens = usage.completionTokens;
-      if (typeof usage.cachedPromptTokens === 'number') patch.cachedPromptTokens = usage.cachedPromptTokens;
-    }
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
   }

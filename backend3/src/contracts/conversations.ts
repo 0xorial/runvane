@@ -193,6 +193,9 @@ export const ChatEntrySchema: z.ZodType<ChatEntry> = z.union([
     type: z.literal('checkpoint-summary'),
     summarizedRange: z.object({ fromEntryId: z.string(), toEntryId: z.string() }),
     summaryText: z.string(),
+    rangeEntryCount: z.number().optional(),
+    rangeInputTokens: z.number().optional(),
+    summaryTokens: z.number().optional(),
   }),
 ]) as z.ZodType<ChatEntry>;
 

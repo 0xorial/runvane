@@ -21,12 +21,26 @@ export class DecisionStep {
     scope: LifecycleScope,
   ): Promise<void> {
     scope.throwIfAborted();
+    await this.persistUsage(ctx, completion);
     try {
       await provider.runDecision(input, ctx, completion, scope);
     } catch (error) {
       await this.markFailed(ctx, error, scope);
       throw error;
     }
+  }
+
+  private async persistUsage(ctx: ThoughtContext, completion: LlmCompletion): Promise<void> {
+    if (!completion.usage || !ctx.streamEntryId) return;
+    const patch: Record<string, unknown> = {
+      promptTokens: completion.usage.promptTokens,
+      completionTokens: completion.usage.completionTokens,
+    };
+    if (typeof completion.usage.cachedPromptTokens === 'number') {
+      patch.cachedPromptTokens = completion.usage.cachedPromptTokens;
+    }
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
   }
 
   private async markFailed(ctx: ThoughtContext, error: unknown, scope: LifecycleScope): Promise<void> {

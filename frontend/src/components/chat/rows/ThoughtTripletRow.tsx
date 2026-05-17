@@ -1,14 +1,19 @@
+import type { ReactNode } from "react";
 import { FileText, MessageSquare, Sparkles, Wrench } from "lucide-react";
-import { isThoughtStreamEntry, type ChatEntry, type ThoughtPrepareEntry } from "@/protocol/chatEntry";
+import { isThoughtStreamEntry, type ChatEntry, type ThoughtPrepareEntry, type ThoughtStreamEntry } from "@/protocol/chatEntry";
 import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";
 import { useChatSessionContext, type ThoughtStage } from "@/hooks/chatSessionContext";
+import { usePricingMap } from "@/hooks/usePricingMap";
 import { ChatThreadIndent } from "../ChatMessageShell";
 import { ActionStep } from "./thoughtTriplet/ActionStep";
 import { ContextStep } from "./thoughtTriplet/ContextStep";
 import { ReasoningStep } from "./thoughtTriplet/ReasoningStep";
-import { actionMetaLabel, reasonMetaLabel } from "./thoughtTriplet/meta";
+import { actionMetaLabel, displayStatus } from "./thoughtTriplet/meta";
 import { Connector, StepChip, TinyProgressCircle } from "./thoughtTriplet/StepChip";
+import { TokenTooltip } from "@/components/ui/TokenTooltip";
+import { formatTokenCount } from "@/utils/formatTokenCount";
+import type { ModelPricing } from "@/lib/costEstimation";
 
 type ThoughtTripletRowProps = {
   prepareEntry: ChatEntry;
@@ -45,6 +50,7 @@ function ThoughtTripletRowWithStream({
 }) {
   const stream = useObservableValue(streamEntry$);
   const { expandedStageBySlotKey, setSlotExpandedStage } = useChatSessionContext();
+  const pricingByModel = usePricingMap();
 
   if (!isThoughtStreamEntry(stream)) return <ThoughtTripletRowPrepareOnly prepareEntry={prepareEntry} />;
   const actionStepEntry = actionEntry?.type === "thought-action" ? actionEntry : null;
@@ -52,7 +58,8 @@ function ThoughtTripletRowWithStream({
   const expanded = expandedStageBySlotKey.get(slotKey) ?? null;
   const toggle = (stage: ThoughtStage) => setSlotExpandedStage(slotKey, expanded === stage ? null : stage);
   const contextTitle = String(prepareEntry.title ?? "").trim() || "Preparation";
-  const reasonMeta = reasonMetaLabel(stream);
+  const modelLabel = String(stream.llmModel || "").trim();
+  const reasonMeta = buildReasonMetaNode(stream, pricingByModel.get(modelLabel));
   const actionMeta = actionMetaLabel(actionStepEntry, stream);
   const actionLabel = actionMeta.usesTool ? `call ${actionMeta.toolName ?? "tool"}` : "Reply";
 
@@ -93,6 +100,38 @@ function ThoughtTripletRowWithStream({
         {expanded === "action" ? <ActionStep actionEntry={actionStepEntry} stream={stream} /> : null}
       </div>
     </ChatThreadIndent>
+  );
+}
+
+function buildReasonMetaNode(stream: ThoughtStreamEntry, pricing: ModelPricing | undefined): ReactNode {
+  const provider = String(stream.llmProviderId || "").trim() || "unknown-provider";
+  const model = String(stream.llmModel || "").trim() || "unknown-model";
+  const status = displayStatus(stream.status ?? "running");
+  const promptTokens = stream.promptTokens ?? 0;
+  const cachedTokens = stream.cachedPromptTokens ?? 0;
+  const completionTokens = stream.completionTokens ?? 0;
+  const totalTokens = promptTokens + cachedTokens + completionTokens;
+  const durationLabel = stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "";
+
+  const parts: ReactNode[] = [];
+  if (totalTokens > 0) {
+    parts.push(
+      <TokenTooltip key="tok" promptTokens={promptTokens} cachedTokens={cachedTokens} completionTokens={completionTokens} pricing={pricing}>
+        {formatTokenCount(totalTokens)}
+      </TokenTooltip>,
+    );
+  }
+  if (durationLabel) parts.push(durationLabel);
+  parts.push(`${provider}/${model}`);
+  if (status) parts.push(status);
+
+  return (
+    <>
+      {parts.map((part, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: stable order
+        <span key={i}>{i > 0 ? " · " : ""}{part}</span>
+      ))}
+    </>
   );
 }
 

@@ -9,6 +9,7 @@ import { ChatMessageShell } from "../ChatMessageShell";
 import { BranchSelector, buildChildrenByParent, deepestDescendantId } from "../BranchSelector";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { notifyError } from "@/utils/toast";
+import { formatTokenCount } from "@/utils/formatTokenCount";
 
 const proseChat =
   "prose prose-sm max-w-none leading-relaxed text-foreground dark:prose-invert prose-p:my-2 prose-p:first:mt-0 prose-p:last:mb-0 prose-headings:my-2 prose-pre:my-2";
@@ -54,6 +55,14 @@ function ViewOriginalButton({ fromEntryId }: { fromEntryId: string }) {
 export function CheckpointSummaryRow({ entry }: { entry: CheckpointSummaryEntry }) {
   const relativeTime = formatRelativeChatTime(entry.createdAt);
   const exactTime = formatExactChatTime(entry.createdAt);
+
+  const rangeInputTokens = entry.rangeInputTokens ?? 0;
+  const summaryTokens = entry.summaryTokens ?? 0;
+
+  const entryCount = entry.rangeEntryCount;
+  const hasStats = entryCount !== undefined;
+  const hasTokens = rangeInputTokens > 0;
+
   return (
     <ChatMessageShell
       role="agent"
@@ -78,8 +87,17 @@ export function CheckpointSummaryRow({ entry }: { entry: CheckpointSummaryEntry 
       }
     >
       <div className="space-y-1">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Summary of earlier turns
+        <div className="text-[11px] text-muted-foreground">
+          {hasStats ? (
+            <span>
+              Summary of {entryCount} {entryCount === 1 ? "entry" : "entries"}
+              {hasTokens ? (
+                <> · {formatTokenCount(rangeInputTokens)} → {formatTokenCount(summaryTokens)}</>
+              ) : null}
+            </span>
+          ) : (
+            <span>Summary of earlier turns</span>
+          )}
         </div>
         {entry.summaryText ? (
           <div className={proseChat}>

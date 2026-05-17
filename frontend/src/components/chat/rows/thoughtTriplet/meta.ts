@@ -1,4 +1,5 @@
 import type { ThoughtActionEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+import { formatTokenCount } from "@/utils/formatTokenCount";
 
 export function displayStatus(status: string): string {
   return status === "completed" ? "" : status;
@@ -12,7 +13,7 @@ export function reasonMetaLabel(stream: ThoughtStreamEntry): string {
   const cachedPromptTokens = stream.cachedPromptTokens ?? 0;
   const completionTokens = stream.completionTokens ?? 0;
   const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
-  const tokenLabel = totalTokens > 0 ? `${totalTokens}t` : "";
+  const tokenLabel = totalTokens > 0 ? formatTokenCount(totalTokens) : "";
   const durationLabel = stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "";
   return [tokenLabel, durationLabel, `${provider}/${model}`, status].filter(Boolean).join(" · ");
 }

@@ -3,6 +3,7 @@ import { Pencil, RefreshCw } from "lucide-react";
 import { reprocessThought, reprocessThoughtContext } from "@/api/client";
 import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
+import { formatTokenCount } from "@/utils/formatTokenCount";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -80,9 +81,9 @@ export function ReasoningStep({
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
           {statusLabel ? <span>status: {statusLabel}</span> : null}
-          <span>prompt: {promptTokens}t</span>
-          <span>cached: {cachedPromptTokens}t</span>
-          <span>completion: {completionTokens}t</span>
+          <span>prompt: {formatTokenCount(promptTokens)}</span>
+          <span>cached: {formatTokenCount(cachedPromptTokens)}</span>
+          <span>completion: {formatTokenCount(completionTokens)}</span>
           <span>duration: {duration}</span>
         </div>
         <div className="ml-auto flex items-center gap-1">

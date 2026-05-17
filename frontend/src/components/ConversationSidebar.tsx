@@ -147,7 +147,6 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         agentId,
       });
 
-      void loadConversations();
       navigate({
         pathname: `/chat/${encodeURIComponent(id)}`,
         search: location.search,

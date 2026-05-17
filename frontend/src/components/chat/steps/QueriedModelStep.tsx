@@ -6,6 +6,9 @@ import { reprocessThought } from "@/api/client";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ChatThreadIndent } from "../ChatMessageShell";
+import { formatTokenCount } from "@/utils/formatTokenCount";
+import { usePricingMap } from "@/hooks/usePricingMap";
+import { TokenTooltip } from "@/components/ui/TokenTooltip";
 
 type QueriedModelStepProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
@@ -43,6 +46,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const pricingByModel = usePricingMap();
 
   const done = isDone(entry);
   const status = entry.status ?? "running";
@@ -61,7 +65,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const responseText = String(entry.llmResponse || "").trim();
   const errorText = String(entry.error || "").trim();
   const canEditResponse = entry.type === "planner_llm_stream" && done && Boolean(conversationId);
-  const meta = `${modelLabel || "unknown model"} · ${completionTokens} out tok · ${formatDurationMs(durationMs)}`;
+  const pricing = pricingByModel.get(modelLabel);
 
   useEffect(() => {
     if (done) return undefined;
@@ -99,7 +103,13 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
             <ChevronRight className={cn("h-3 w-3 transition-transform", open ? "rotate-90" : "")} />
             <Sparkles className="h-3 w-3" />
             <span className="font-medium">Queried model</span>
-            <span className="opacity-60">· {meta}</span>
+            <span className="opacity-60">
+              · {modelLabel || "unknown model"}
+              {totalTokens > 0 ? (
+                <> · <TokenTooltip promptTokens={promptTokens} cachedTokens={cachedPromptTokens} completionTokens={completionTokens} pricing={pricing}>{formatTokenCount(totalTokens)}</TokenTooltip></>
+              ) : null}
+              {" · "}{formatDurationMs(durationMs)}
+            </span>
           </button>
         </div>
 
@@ -181,10 +191,10 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
             ) : null}
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
               <span>status: {status}</span>
-              <span>prompt: {promptTokens}t</span>
-              <span>cached: {cachedPromptTokens}t</span>
-              <span>completion: {completionTokens}t</span>
-              <span>total: {totalTokens}t</span>
+              <span>prompt: {formatTokenCount(promptTokens)}</span>
+              <span>cached: {formatTokenCount(cachedPromptTokens)}</span>
+              <span>completion: {formatTokenCount(completionTokens)}</span>
+              <span>total: {formatTokenCount(totalTokens)}</span>
             </div>
             {failed && errorText ? <ReadOnlySection label="Error" value={errorText} danger /> : null}
           </div>

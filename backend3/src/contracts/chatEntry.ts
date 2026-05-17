@@ -147,6 +147,12 @@ export type CheckpointSummaryEntry = ChatEntryBase & {
   type: 'checkpoint-summary';
   summarizedRange: { fromEntryId: string; toEntryId: string };
   summaryText: string;
+  /** Number of user-visible entries in the folded range. */
+  rangeEntryCount?: number;
+  /** Total input tokens (prompt + cached) consumed by LLM calls in the folded range. */
+  rangeInputTokens?: number;
+  /** Completion tokens from the summarize LLM call — i.e. the token size of the summary text itself. */
+  summaryTokens?: number;
 };
 
 export type ChatEntry =

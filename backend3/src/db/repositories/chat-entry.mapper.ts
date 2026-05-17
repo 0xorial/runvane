@@ -2,12 +2,14 @@ import type {
   ChatAttachment,
   ChatEntry,
   ChatEntryBase,
+  CheckpointSummaryEntry,
   PlannerLlmStreamEntry,
   SummarizeLlmStreamEntry,
   ThoughtStepStatus,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
 } from '../../contracts/chatEntry.js';
+import { z } from 'zod';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import type { ChatEntryDbRow } from './chat-entries.payload.js';
 
@@ -47,21 +49,17 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
   }
 }
 
-function mapCheckpointSummary(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
-  const range = payload.summarizedRange;
-  if (!range || typeof range !== 'object' || Array.isArray(range)) {
-    throw new Error(`${ctx}: summarizedRange must be an object`);
-  }
-  const rec = range as Record<string, unknown>;
-  return {
-    ...base,
-    type: 'checkpoint-summary',
-    summaryText: requireString(payload, 'summaryText', ctx),
-    summarizedRange: {
-      fromEntryId: requireString(rec, 'fromEntryId', `${ctx}.summarizedRange`),
-      toEntryId: requireString(rec, 'toEntryId', `${ctx}.summarizedRange`),
-    },
-  };
+const CheckpointSummaryPayloadSchema = z.object({
+  summaryText: z.string(),
+  summarizedRange: z.object({ fromEntryId: z.string(), toEntryId: z.string() }),
+  rangeEntryCount: z.number().optional(),
+  rangeInputTokens: z.number().optional(),
+  summaryTokens: z.number().optional(),
+});
+
+function mapCheckpointSummary(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): CheckpointSummaryEntry {
+  const p = CheckpointSummaryPayloadSchema.parse(payload);
+  return { ...base, type: 'checkpoint-summary', ...p };
 }
 
 function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {

@@ -176,6 +176,7 @@ export class ConversationProcessorService {
         fromEntryId: range.fromEntryId,
         toEntryId: range.toEntryId,
         rangeEntries: range.rangeEntries,
+        rangeEntryCount: range.rangeEntryCount,
       },
     });
     scope.rootDone();
@@ -245,6 +246,7 @@ function resolveSummarizeRange(
   toEntryId: string;
   fromParentId: string;
   rangeEntries: import('../contracts/chatEntry.js').ChatEntry[];
+  rangeEntryCount: number;
 } {
   if (activeChain.length === 0) throw new Error('active chain is empty');
   const startIdx = activeChain.findIndex((e) => e.id === firstEntryToSummarize);
@@ -274,5 +276,6 @@ function resolveSummarizeRange(
     toEntryId: activeChain[activeChain.length - 1]!.id,
     fromParentId: parent.id,
     rangeEntries: visibleSlice,
+    rangeEntryCount: visibleSlice.length,
   };
 }

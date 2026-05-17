@@ -65,23 +65,9 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     const titleApplied = current.title === 'New chat';
     if (titleApplied) await this.conversations.updateTitle(input.conversationId, nextTitle);
 
-    await this.persistUsage(ctx, completion);
     await this.completeThoughtAction(ctx, nextTitle);
     if (titleApplied) await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
   };
-
-  private async persistUsage(ctx: ThoughtContext, completion: LlmCompletion): Promise<void> {
-    if (!completion.usage || !ctx.streamEntryId) return;
-    const patch: Record<string, unknown> = {
-      promptTokens: completion.usage.promptTokens,
-      completionTokens: completion.usage.completionTokens,
-    };
-    if (typeof completion.usage.cachedPromptTokens === 'number') {
-      patch.cachedPromptTokens = completion.usage.cachedPromptTokens;
-    }
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
-  }
 
   private async completeThoughtAction(ctx: ThoughtContext, summary: string): Promise<void> {
     if (!ctx.thoughtActionEntryId) return;

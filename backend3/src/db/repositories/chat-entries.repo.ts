@@ -270,15 +270,22 @@ export class ChatEntriesRepo {
       parentId: string | null;
       summarizedRange: { fromEntryId: string; toEntryId: string };
       summaryText: string;
+      rangeEntryCount?: number;
+      rangeInputTokens?: number;
+      summaryTokens?: number;
     },
   ): Promise<{ id: string; parentId: string | null; conversationIndex: number; createdAt: string }> {
+    const payload: Record<string, unknown> = {
+      summarizedRange: input.summarizedRange,
+      summaryText: input.summaryText,
+    };
+    if (input.rangeEntryCount !== undefined) payload.rangeEntryCount = input.rangeEntryCount;
+    if (input.rangeInputTokens !== undefined) payload.rangeInputTokens = input.rangeInputTokens;
+    if (input.summaryTokens !== undefined) payload.summaryTokens = input.summaryTokens;
     const row = await this.appendEntry(conversationId, {
       type: 'checkpoint-summary',
       parentId: input.parentId,
-      payload: {
-        summarizedRange: input.summarizedRange,
-        summaryText: input.summaryText,
-      },
+      payload,
     });
     return row;
   }
