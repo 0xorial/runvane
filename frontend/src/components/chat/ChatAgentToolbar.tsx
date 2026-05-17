@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bot, Cpu, SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
-import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
+import type { AgentListItemResponse } from "../../../../backend3/src/contracts/agents";
+import type { ModelPresetResponse } from "../../../../backend3/src/contracts/model-presets";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getAgents, getModelPresets } from "../../api/client";

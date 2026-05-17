@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { formatExactChatTime, formatRelativeChatTime } from "../../../utils/formatRelativeChatTime";
 import { ChatMessageShell } from "../ChatMessageShell";
+import { BranchSelector } from "../BranchSelector";
 import { FoldFromHereButton } from "./FoldFromHereButton";
 
 /* frontend2 body uses text-sm leading-relaxed; prose for markdown (slightly roomier than ultra-compact thread) */
@@ -32,6 +33,7 @@ export function AssistantMessageRow({
               {relativeTime}
             </span>
           ) : null}
+          <BranchSelector entryId={entry.id} />
           <FoldFromHereButton conversationId={conversationId} entryId={entry.id} />
           {entry.text ? <CopyButton value={entry.text} title="Copy message" /> : null}
         </div>

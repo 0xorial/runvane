@@ -1,4 +1,4 @@
-import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
+import type { AgentListItemResponse } from "../../../../backend3/src/contracts/agents";
 
 export type AgentLlmRow = { provider_id: string; model: string };
 

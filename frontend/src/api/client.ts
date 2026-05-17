@@ -4,51 +4,51 @@ import type {
   AgentListItemResponse,
   AgentUpsertRequest,
   DeleteAgentResponse,
-} from "../../../backend/src/routes/agents.types";
+} from "../../../backend3/src/contracts/agents";
 import {
   validateAgentResponse,
   validateDeleteAgentResponse,
   validateGetAgentsResponse,
-} from "../../../backend/src/routes/agents.types";
+} from "../../../backend3/src/contracts/agents";
 import type {
   ChatMessageEntry,
   ConversationRow,
   GetConversationsResponse,
   PostConversationMessageAcceptedResponse,
-} from "../../../backend/src/routes/conversations.types";
+} from "../../../backend3/src/contracts/conversations";
 import {
   validateConversationRowResponse,
   validateGetConversationMessagesResponse,
   validateGetConversationsResponse,
   validatePostConversationMessageResponse,
   validatePostConversationsResponse,
-} from "../../../backend/src/routes/conversations.types";
+} from "../../../backend3/src/contracts/conversations";
 import type {
   LlmProviderConnectionTestResponse,
   LlmProviderRow,
   LlmProviderSettingsDocument,
-} from "../../../backend/src/routes/settings.types";
-import type { ModelCapabilityRow } from "../../../backend/src/types/modelCatalog";
+} from "../../../backend3/src/contracts/settings";
+import type { ModelCapabilityRow } from "../../../backend3/src/contracts/model-catalog";
 import {
   validateGetLlmSettingsResponse,
   validateLlmProviderConnectionTestResponse,
   validateLlmProviderSettingsResponse,
-} from "../../../backend/src/routes/settings.types";
-import type { ToolCatalogItemResponse } from "../../../backend/src/routes/system.types";
-import { validateGetToolsResponse } from "../../../backend/src/routes/system.types";
-import type { UploadFileResponse } from "../../../backend/src/routes/uploads.types";
-import { validateUploadFileResponse } from "../../../backend/src/routes/uploads.types";
+} from "../../../backend3/src/contracts/settings";
+import type { ToolCatalogItemResponse } from "../../../backend3/src/contracts/system";
+import { validateGetToolsResponse } from "../../../backend3/src/contracts/system";
+import type { UploadFileResponse } from "../../../backend3/src/contracts/uploads";
+import { validateUploadFileResponse } from "../../../backend3/src/contracts/uploads";
 import type {
   ModelPresetResponse,
   ModelPresetUpsertRequest,
   DeleteModelPresetResponse,
-} from "../../../backend/src/routes/modelPresets.types";
+} from "../../../backend3/src/contracts/model-presets";
 import {
   validateDeleteModelPresetResponse,
   validateGetModelPresetsResponse,
   validateModelPresetResponse,
-} from "../../../backend/src/routes/modelPresets.types";
-export type { PostConversationMessageAcceptedResponse } from "../../../backend/src/routes/conversations.types";
+} from "../../../backend3/src/contracts/model-presets";
+export type { PostConversationMessageAcceptedResponse } from "../../../backend3/src/contracts/conversations";
 
 function errDetail(data: unknown, fallback: string): string {
   if (data && typeof data === "object" && "detail" in data) {

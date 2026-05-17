@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import type { ThoughtActionEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
-import { BranchSelector } from "../../BranchSelector";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -30,7 +29,6 @@ export function ActionStep({
             .filter(Boolean)
             .join(" · ")}
         </span>
-        <BranchSelector entryId={actionEntry?.id} />
       </div>
       <ReadOnlySection label="Summary" value={summary} />
       <ReadOnlySection label="Decision JSON" value={parseJson} />

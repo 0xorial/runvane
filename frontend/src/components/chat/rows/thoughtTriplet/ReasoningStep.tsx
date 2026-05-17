@@ -3,7 +3,6 @@ import { Pencil, RefreshCw } from "lucide-react";
 import { reprocessThought, reprocessThoughtContext } from "@/api/client";
 import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
-import { BranchSelector } from "../../BranchSelector";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -86,7 +85,6 @@ export function ReasoningStep({
           <span>completion: {completionTokens}t</span>
           <span>duration: {duration}</span>
         </div>
-        <BranchSelector entryId={stream.id} />
         <div className="ml-auto flex items-center gap-1">
           {canRetry ? (
             <button

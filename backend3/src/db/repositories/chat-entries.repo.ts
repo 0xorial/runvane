@@ -75,7 +75,7 @@ export class ChatEntriesRepo {
       conversationId,
     )) as Array<{ id: string | null }>;
     const anchor = anchorRows[0]?.id ?? null;
-    if (!anchor) return null;
+    if (!anchor) return this.resolveDeepestLeaf(conversationId);
     return this.walkToLatestLeaf(conversationId, anchor);
   }
 
@@ -96,6 +96,18 @@ export class ChatEntriesRepo {
       visited.add(next);
       cursor = next;
     }
+  }
+
+  private async resolveDeepestLeaf(conversationId: string): Promise<string | null> {
+    const roots = (await this.prisma.$queryRawUnsafe(
+      `SELECT id FROM chat_entries
+       WHERE conversation_id = ? AND parent_id IS NULL
+       ORDER BY conversation_index ASC
+       LIMIT 1`,
+      conversationId,
+    )) as Array<{ id: string }>;
+    if (!roots[0]) return null;
+    return this.walkToLatestLeaf(conversationId, roots[0].id);
   }
 
   private async appendEntry(conversationId: string, input: AppendInput): Promise<AppendedRow> {

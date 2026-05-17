@@ -5,7 +5,6 @@ import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEnt
 import { notifyError } from "@/utils/toast";
 import { useLlmSettings } from "@/hooks/llmSettingsContext";
 import { ModelSelector } from "@/components/ui/ModelSelector";
-import { BranchSelector } from "../../BranchSelector";
 import { ReadOnlySection } from "./ReadOnlySection";
 
 export function ContextStep({
@@ -62,7 +61,6 @@ export function ContextStep({
     <div className="mt-1.5 ml-1 space-y-2 text-xs">
       <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <span>{currentProviderId && currentModel ? `model: ${currentProviderId}/${currentModel}` : "model: unknown"}</span>
-        <BranchSelector entryId={prepareEntry.id} />
         <button
           type="button"
           className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"

@@ -17,7 +17,7 @@ import { LlmMetaBadge } from "../chat/LlmMetaBadge";
 import { NewGroupDialog } from "./NewGroupDialog";
 import type { ConversationGroupRow, ConversationRow } from "./types";
 import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
-import { TokenUsageMapper } from "../../../../backend/src/types/tokenUsage";
+import { TokenUsageMapper } from "../../../../backend3/src/contracts/token-usage";
 
 type ConversationItemProps = {
   conversation: ConversationRow;

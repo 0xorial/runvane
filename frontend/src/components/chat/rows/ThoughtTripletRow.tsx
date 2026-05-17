@@ -4,7 +4,6 @@ import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";
 import { useChatSessionContext, type ThoughtStage } from "@/hooks/chatSessionContext";
 import { ChatThreadIndent } from "../ChatMessageShell";
-import { BranchBadge } from "../BranchSelector";
 import { ActionStep } from "./thoughtTriplet/ActionStep";
 import { ContextStep } from "./thoughtTriplet/ContextStep";
 import { ReasoningStep } from "./thoughtTriplet/ReasoningStep";
@@ -64,7 +63,7 @@ function ThoughtTripletRowWithStream({
           <StepChip
             icon={<FileText className="h-3 w-3" />}
             label={contextTitle}
-            badge={<BranchBadge entryId={prepareEntry.id} />}
+            badge={null}
             active={expanded === "context"}
             onClick={() => toggle("context")}
           />
@@ -73,7 +72,7 @@ function ThoughtTripletRowWithStream({
             icon={stream.status === "running" ? <TinyProgressCircle /> : <Sparkles className="h-3 w-3" />}
             label=""
             meta={reasonMeta}
-            badge={<BranchBadge entryId={stream.id} />}
+            badge={null}
             active={expanded === "reasoning"}
             onClick={() => toggle("reasoning")}
           />
@@ -82,7 +81,7 @@ function ThoughtTripletRowWithStream({
             icon={actionMeta.usesTool ? <Wrench className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
             label={actionLabel}
             meta={actionMeta.status}
-            badge={<BranchBadge entryId={actionStepEntry?.id} />}
+            badge={null}
             active={expanded === "action"}
             align="right"
             onClick={() => toggle("action")}
@@ -107,7 +106,7 @@ function ThoughtTripletRowPrepareOnly({ prepareEntry }: { prepareEntry: ThoughtP
           <StepChip
             icon={<FileText className="h-3 w-3" />}
             label={contextTitle}
-            badge={<BranchBadge entryId={prepareEntry.id} />}
+            badge={null}
             active={false}
             onClick={noop}
           />

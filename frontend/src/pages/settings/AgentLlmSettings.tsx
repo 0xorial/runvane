@@ -1,5 +1,5 @@
-import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
-import type { ModelPresetResponse } from "../../../../backend/src/routes/modelPresets.types";
+import type { AgentListItemResponse } from "../../../../backend3/src/contracts/agents";
+import type { ModelPresetResponse } from "../../../../backend3/src/contracts/model-presets";
 import { ModelDropdown } from "../../components/ui/ModelDropdown";
 import { ModelSelector } from "../../components/ui/ModelSelector";
 import { getAgentLlm, patchAgentLlm } from "./agentLlm";

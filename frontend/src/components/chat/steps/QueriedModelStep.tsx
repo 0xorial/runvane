@@ -6,7 +6,6 @@ import { reprocessThought } from "@/api/client";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ChatThreadIndent } from "../ChatMessageShell";
-import { BranchSelector } from "../BranchSelector";
 
 type QueriedModelStepProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
@@ -102,9 +101,6 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
             <span className="font-medium">Queried model</span>
             <span className="opacity-60">· {meta}</span>
           </button>
-          <div className="ml-1">
-            <BranchSelector entryId={entry.id} />
-          </div>
         </div>
 
         {open ? (

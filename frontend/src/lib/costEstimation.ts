@@ -1,5 +1,5 @@
-import type { ModelCapabilityRow } from "../../../backend/src/types/modelCatalog";
-import { TokenUsageMapper, type EntryTokenUsage } from "../../../backend/src/types/tokenUsage";
+import type { ModelCapabilityRow } from "../../../backend3/src/contracts/model-catalog";
+import { TokenUsageMapper, type EntryTokenUsage } from "../../../backend3/src/contracts/token-usage";
 
 export type TokenUsageByModelRow = {
   modelName: string;

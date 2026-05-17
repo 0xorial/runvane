@@ -1,4 +1,4 @@
-import type { AgentListItemResponse } from "../../../../backend/src/routes/agents.types";
+import type { AgentListItemResponse } from "../../../../backend3/src/contracts/agents";
 import type { ProviderRow } from "../../types/llmSettings";
 
 export function sortAgents(list: AgentListItemResponse[] | null | undefined): AgentListItemResponse[] {

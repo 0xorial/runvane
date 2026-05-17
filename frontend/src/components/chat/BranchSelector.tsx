@@ -11,7 +11,7 @@ function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
   return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
 }
 
-function buildChildrenByParent(entries: ChatEntry[]): Map<string | null, ChatEntry[]> {
+export function buildChildrenByParent(entries: ChatEntry[]): Map<string | null, ChatEntry[]> {
   const map = new Map<string | null, ChatEntry[]>();
   for (const row of entries) {
     const list = map.get(row.parentId) ?? [];
@@ -21,7 +21,7 @@ function buildChildrenByParent(entries: ChatEntry[]): Map<string | null, ChatEnt
   return map;
 }
 
-function deepestDescendantId(start: string, childrenByParent: Map<string | null, ChatEntry[]>): string {
+export function deepestDescendantId(start: string, childrenByParent: Map<string | null, ChatEntry[]>): string {
   let cursor = start;
   for (;;) {
     const children = childrenByParent.get(cursor) ?? [];

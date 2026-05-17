@@ -60,13 +60,17 @@ export function useChatSession(conversationId: string | null | undefined) {
     const cid = String(conversationId);
     let cancelled = false;
     void (async () => {
-      const [entries, leafId] = await Promise.all([
-        getConversationMessages(cid, { all: true }),
-        getConversationDefaultViewLeafEntryId(cid),
-      ]);
-      if (cancelled) return;
-      storeRef.current.replace(mapApiMessagesToChatEntries(entries));
-      setActiveLeafId(leafId);
+      try {
+        const [entries, leafId] = await Promise.all([
+          getConversationMessages(cid, { all: true }),
+          getConversationDefaultViewLeafEntryId(cid),
+        ]);
+        if (cancelled) return;
+        storeRef.current.replace(mapApiMessagesToChatEntries(entries));
+        setActiveLeafId(leafId);
+      } catch (err) {
+        console.error("[useChatSession] Failed to load conversation messages:", err);
+      }
     })();
     return () => {
       cancelled = true;
