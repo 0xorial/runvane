@@ -1,5 +1,4 @@
 import {
-  useLayoutEffect,
   type ClipboardEvent,
   type KeyboardEvent,
   type MouseEvent,
@@ -70,7 +69,7 @@ export function MessageComposer({
         >
           <textarea
             ref={textareaRef}
-            rows={2}
+            rows={1}
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
             onPaste={onPaste}

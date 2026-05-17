@@ -34,10 +34,28 @@ function calculateAnchorScrollPlan({
   return { remainingContentHeight, spacerHeight, scrollTopTarget };
 }
 
+const SCROLL_DURATION_MS = 200;
+
+function smoothScrollTo(el: HTMLElement, to: number, animRafRef: React.MutableRefObject<number | null>): void {
+  if (animRafRef.current != null) cancelAnimationFrame(animRafRef.current);
+  const from = el.scrollTop;
+  const delta = to - from;
+  if (Math.abs(delta) < 1) return;
+  const start = performance.now();
+  const tick = (now: number) => {
+    const t = Math.min((now - start) / SCROLL_DURATION_MS, 1);
+    const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    el.scrollTop = from + delta * eased;
+    animRafRef.current = t < 1 ? requestAnimationFrame(tick) : null;
+  };
+  animRafRef.current = requestAnimationFrame(tick);
+}
+
 export function AnchorTopScrollArea({ className, topAnchorEntryId = null, children }: AnchorTopScrollAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
+  const animRafRef = useRef<number | null>(null);
   const triesRef = useRef(0);
   const lastAnchorIdRef = useRef<string | null>(null);
   const bottomSpacerRef = useRef(0);
@@ -48,9 +66,8 @@ export function AnchorTopScrollArea({ className, topAnchorEntryId = null, childr
   }, [bottomSpacerPx]);
 
   const cancelAlignRaf = useCallback(() => {
-    if (rafRef.current == null) return;
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
+    if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (animRafRef.current != null) { cancelAnimationFrame(animRafRef.current); animRafRef.current = null; }
   }, []);
 
   const getAnchor = useCallback((entryId: string): HTMLElement | null => {
@@ -100,9 +117,8 @@ export function AnchorTopScrollArea({ className, topAnchorEntryId = null, childr
         setBottomSpacerPx(plan.spacerHeight);
         return false;
       }
-      scrollEl.scrollTop = Math.max(0, plan.scrollTopTarget);
-      const deltaToTop = Math.abs(anchor.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top);
-      return deltaToTop <= 1;
+      smoothScrollTo(scrollEl, Math.max(0, plan.scrollTopTarget), animRafRef);
+      return true;
     },
     [getAnchor],
   );
