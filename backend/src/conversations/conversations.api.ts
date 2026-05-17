@@ -1,38 +1,12 @@
 import type { ConversationEntity, ConversationGroupEntity } from './conversation.entity.js';
+import type {
+  ConversationRow,
+  ConversationGroupRow,
+  GetConversationsResponse,
+} from '../contracts/conversations.js';
 
-export type ConversationUsageByModel = {
-  modelName: string;
-  promptTokens: number;
-  cachedPromptTokens: number;
-  completionTokens: number;
-};
-
-export type ConversationRow = {
-  id: string;
-  title: string;
-  groupId: string | null;
-  isDeleted: boolean;
-  createdAt: string;
-  updatedAt: string;
-  lastMessageAt: string;
-  promptTokensTotal: number;
-  cachedPromptTokensTotal: number;
-  completionTokensTotal: number;
-  defaultViewLeafEntryId: string | null;
-  tokenUsageByModel: ConversationUsageByModel[];
-};
-
-export type ConversationGroupRow = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GetConversationsResponse = {
-  conversations: ConversationRow[];
-  groups: ConversationGroupRow[];
-};
+// Re-export so consumers that currently import from this module don't break.
+export type { ConversationRow, ConversationGroupRow, GetConversationsResponse };
 
 export function toConversationRow(entity: ConversationEntity): ConversationRow {
   return {

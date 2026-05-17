@@ -1,16 +1,27 @@
-import { Injectable, MessageEvent } from '@nestjs/common';
+import { Injectable, Logger, MessageEvent } from '@nestjs/common';
 import { Observable, Subject, from, interval, merge } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import type { SseEvent, SsePayload } from '../contracts/sse.js';
+import { SsePayloadSchema } from '../contracts/sse.js';
 
 @Injectable()
 export class SseHubService {
+  private readonly logger = new Logger(SseHubService.name);
   private nextSeq = 1;
   private readonly bus = new Subject<SseEvent>();
   private readonly replay: SseEvent[] = [];
   private readonly replayMax = 256;
 
   publish(conversationId: string, payload: SsePayload): SseEvent {
+    const validation = SsePayloadSchema.safeParse(payload);
+    if (!validation.success) {
+      const details = validation.error.issues
+        .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
+        .join('; ');
+      this.logger.error(
+        `SSE payload validation failed (type=${payload.type}): ${details}\nPayload: ${JSON.stringify(payload)}`,
+      );
+    }
     const event = { ...payload, conversationId, seq: this.nextSeq++ } as SseEvent;
     this.replay.push(event);
     if (this.replay.length > this.replayMax) {

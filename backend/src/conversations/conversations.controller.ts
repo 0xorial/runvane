@@ -12,10 +12,17 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { z } from 'zod';
 import { ReprocessReasonDto } from './dto/reprocess-reason.dto.js';
 import { ReprocessUserMessageDto } from './dto/reprocess-user-message.dto.js';
 import { SummarizeConversationDto } from './dto/summarize-conversation.dto.js';
 import { SseType } from '../contracts/sse.js';
+import {
+  ChatEntrySchema,
+  ConversationRowSchema,
+  GetConversationsResponseSchema,
+  PostConversationMessageAcceptedResponseSchema,
+} from '../contracts/conversations.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-helpers.js';
@@ -26,6 +33,9 @@ import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
 import { SetDefaultViewLeafDto } from './dto/set-default-view-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
+import { ValidateResponse } from '../validation/validate-response.decorator.js';
+
+const ChatEntryArraySchema = z.array(ChatEntrySchema);
 
 @Controller('api/conversations')
 export class ConversationsController {
@@ -37,12 +47,14 @@ export class ConversationsController {
   ) {}
 
   @Get()
+  @ValidateResponse(GetConversationsResponseSchema)
   async list(@Query('deleted') deleted?: string) {
     const deletedOnly = deleted === 'only';
     return this.conversations.list({ deletedOnly });
   }
 
   @Get(':conversationId')
+  @ValidateResponse(ConversationRowSchema)
   async getOne(@Param('conversationId') conversationId: string) {
     const row = await this.conversations.get(conversationId, { includeDeleted: true });
     if (!row) throw new NotFoundException('conversation not found');
@@ -50,6 +62,7 @@ export class ConversationsController {
   }
 
   @Post()
+  @ValidateResponse(ConversationRowSchema)
   async create(@Body() body: CreateConversationDto) {
     const created = await this.conversations.create({ title: body.title });
     const entity = await this.conversationsRepo.get(created.id);
@@ -63,6 +76,7 @@ export class ConversationsController {
   }
 
   @Put(':conversationId')
+  @ValidateResponse(ConversationRowSchema)
   async update(
     @Param('conversationId') conversationId: string,
     @Body() body: UpdateConversationDto,
@@ -113,6 +127,7 @@ export class ConversationsController {
   }
 
   @Delete(':conversationId')
+  @ValidateResponse(ConversationRowSchema)
   async softDelete(@Param('conversationId') conversationId: string) {
     const deleted = await this.conversations.softDelete(conversationId);
     if (!deleted) throw new NotFoundException('conversation not found or already deleted');
@@ -121,6 +136,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/undelete')
+  @ValidateResponse(ConversationRowSchema)
   async undelete(@Param('conversationId') conversationId: string) {
     const restored = await this.conversations.undelete(conversationId);
     if (!restored) throw new NotFoundException('conversation not found or not deleted');
@@ -137,6 +153,7 @@ export class ConversationsController {
   }
 
   @Get(':conversationId/messages')
+  @ValidateResponse(ChatEntryArraySchema)
   async listMessages(
     @Param('conversationId') conversationId: string,
     @Query('all') allRaw?: string,
@@ -147,6 +164,7 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/messages')
+  @ValidateResponse(PostConversationMessageAcceptedResponseSchema)
   async postMessage(
     @Param('conversationId') conversationId: string,
     @Body() body: PostConversationMessageDto,

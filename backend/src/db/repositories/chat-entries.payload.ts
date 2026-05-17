@@ -7,7 +7,7 @@ export type ChatEntryDbRow = {
   parent_id: string | null;
   type: string;
   payload_json: string;
-  created_at: string;
+  created_at: Date;
 };
 
 function parsePayload(row: ChatEntryDbRow): Record<string, unknown> {
@@ -25,7 +25,7 @@ function parseUserMessageRow(row: ChatEntryDbRow, payload: Record<string, unknow
     type: 'user-message',
     id: row.id,
     conversationIndex: row.conversation_index,
-    createdAt: row.created_at,
+    createdAt: row.created_at.toISOString(),
     parentId: row.parent_id,
     text: String(payload.text ?? ''),
     agentId,
@@ -43,7 +43,7 @@ function parseAssistantMessageRow(row: ChatEntryDbRow, payload: Record<string, u
     type: 'assistant-message',
     id: row.id,
     conversationIndex: row.conversation_index,
-    createdAt: row.created_at,
+    createdAt: row.created_at.toISOString(),
     parentId: row.parent_id,
     text: String(payload.text ?? ''),
   };

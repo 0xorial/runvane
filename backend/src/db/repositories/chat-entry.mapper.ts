@@ -23,7 +23,7 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
   const base: ChatEntryBase = {
     id: row.id,
     conversationIndex: row.conversation_index,
-    createdAt: row.created_at,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     parentId: row.parent_id,
   };
   switch (row.type) {

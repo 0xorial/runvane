@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useLayoutEffect,
   type ClipboardEvent,
   type KeyboardEvent,
   type MouseEvent,
@@ -47,12 +47,6 @@ export function MessageComposer({
   selectionSlot,
   placeholder = "Send a message…",
 }: MessageComposerProps) {
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [value, textareaRef]);
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -83,7 +77,7 @@ export function MessageComposer({
             onKeyDown={onKeyDown}
             placeholder={placeholder}
             className={cn(
-              "scrollbar-thin min-h-[3.25rem] w-full max-h-[160px] resize-none bg-transparent px-1 py-1.5 text-sm leading-snug",
+              "scrollbar-thin min-h-[3.25rem] w-full max-h-[80px] resize-none bg-transparent px-1 py-1.5 text-sm leading-snug",
               "text-foreground placeholder:text-muted-foreground",
               "outline-none",
             )}

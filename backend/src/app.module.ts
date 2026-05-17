@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { ResponseValidationInterceptor } from './validation/response-validation.interceptor.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -34,6 +36,9 @@ import { UploadsModule } from './uploads/uploads.module.js';
     UploadsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_INTERCEPTOR, useClass: ResponseValidationInterceptor },
+  ],
 })
 export class AppModule {}

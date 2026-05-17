@@ -1,4 +1,5 @@
-import type { ChatEntry, UserMessageEntry } from './chatEntry.js';
+import { z } from 'zod';
+import { ChatEntrySchema, UserMessageEntrySchema } from './chatEntry.js';
 
 export const SseType = {
   USER_MESSAGE: 'user_message',
@@ -12,76 +13,97 @@ export const SseType = {
 
 export type SseEventType = (typeof SseType)[keyof typeof SseType];
 
-export type ConversationSseRow = {
-  id: string;
-  title: string;
-  groupId: string | null;
-  isDeleted: boolean;
-  createdAt: string;
-  updatedAt: string;
-  lastMessageAt: string;
-  promptTokensTotal: number;
-  cachedPromptTokensTotal: number;
-  completionTokensTotal: number;
-  tokenUsageByModel: Array<{
-    modelName: string;
-    promptTokens: number;
-    cachedPromptTokens: number;
-    completionTokens: number;
-  }>;
-};
+// ---- SSE payload schemas ----
 
-export type UserMessageSsePayload = {
-  type: typeof SseType.USER_MESSAGE;
-  entry: UserMessageEntry;
-  /**
-   * Echoed back from the POST that produced this entry. Lets the originating
-   * client correlate its in-flight optimistic row with the canonical server
-   * entry without resorting to text matching. Absent for entries created by
-   * other clients (or any flow that did not supply one).
-   */
-  clientRequestId?: string;
-};
-export type ConversationCreatedSsePayload = { type: typeof SseType.CONVERSATION_CREATED; conversation: ConversationSseRow };
-export type ConversationUpdatedSsePayload = { type: typeof SseType.CONVERSATION_UPDATED; conversation: ConversationSseRow };
+// ConversationSseRow is a leaner shape used in SSE events (no resolved leaf).
+export const ConversationSseRowSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  groupId: z.string().nullable(),
+  isDeleted: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastMessageAt: z.string(),
+  promptTokensTotal: z.number(),
+  cachedPromptTokensTotal: z.number(),
+  completionTokensTotal: z.number(),
+  tokenUsageByModel: z.array(
+    z.object({
+      modelName: z.string(),
+      promptTokens: z.number(),
+      cachedPromptTokens: z.number(),
+      completionTokens: z.number(),
+    }),
+  ),
+});
+export type ConversationSseRow = z.infer<typeof ConversationSseRowSchema>;
 
-export type ChatEntryUpsertSsePayload = { type: typeof SseType.CHAT_ENTRY_UPSERT; entry: ChatEntry };
+export const UserMessageSsePayloadSchema = z.object({
+  type: z.literal(SseType.USER_MESSAGE),
+  entry: UserMessageEntrySchema,
+  clientRequestId: z.string().optional(),
+});
+export type UserMessageSsePayload = z.infer<typeof UserMessageSsePayloadSchema>;
 
-export type ChatEntryDeltaField = 'llmResponse' | 'thinkingText' | 'text';
-export type ChatEntryDeltaSsePayload = {
-  type: typeof SseType.CHAT_ENTRY_DELTA;
-  chatEntryId: string;
-  field: ChatEntryDeltaField;
-  delta: string;
-  parentId?: string;
-};
+export const ConversationCreatedSsePayloadSchema = z.object({
+  type: z.literal(SseType.CONVERSATION_CREATED),
+  conversation: ConversationSseRowSchema,
+});
+export type ConversationCreatedSsePayload = z.infer<typeof ConversationCreatedSsePayloadSchema>;
 
-export type ToolInvocationStartSsePayload = {
-  type: typeof SseType.TOOL_INVOCATION_START;
-  chatEntryId: string;
-  toolName: string;
-  state: 'requested' | 'running';
-  approvalRequired: boolean;
-  parentId?: string;
-  argsPreview?: string;
-};
-export type ToolInvocationEndSsePayload = {
-  type: typeof SseType.TOOL_INVOCATION_END;
-  chatEntryId: string;
-  toolName: string;
-  ok: boolean;
-  output: string;
-  runContinues: boolean;
-};
+export const ConversationUpdatedSsePayloadSchema = z.object({
+  type: z.literal(SseType.CONVERSATION_UPDATED),
+  conversation: ConversationSseRowSchema,
+});
+export type ConversationUpdatedSsePayload = z.infer<typeof ConversationUpdatedSsePayloadSchema>;
 
-export type SsePayload =
-  | UserMessageSsePayload
-  | ConversationCreatedSsePayload
-  | ConversationUpdatedSsePayload
-  | ChatEntryUpsertSsePayload
-  | ChatEntryDeltaSsePayload
-  | ToolInvocationStartSsePayload
-  | ToolInvocationEndSsePayload;
+export const ChatEntryUpsertSsePayloadSchema = z.object({
+  type: z.literal(SseType.CHAT_ENTRY_UPSERT),
+  entry: ChatEntrySchema,
+});
+export type ChatEntryUpsertSsePayload = z.infer<typeof ChatEntryUpsertSsePayloadSchema>;
+
+export const ChatEntryDeltaSsePayloadSchema = z.object({
+  type: z.literal(SseType.CHAT_ENTRY_DELTA),
+  chatEntryId: z.string(),
+  field: z.enum(['llmResponse', 'thinkingText', 'text']),
+  delta: z.string(),
+  parentId: z.string().optional(),
+});
+export type ChatEntryDeltaField = z.infer<typeof ChatEntryDeltaSsePayloadSchema>['field'];
+export type ChatEntryDeltaSsePayload = z.infer<typeof ChatEntryDeltaSsePayloadSchema>;
+
+export const ToolInvocationStartSsePayloadSchema = z.object({
+  type: z.literal(SseType.TOOL_INVOCATION_START),
+  chatEntryId: z.string(),
+  toolName: z.string(),
+  state: z.enum(['requested', 'running']),
+  approvalRequired: z.boolean(),
+  parentId: z.string().optional(),
+  argsPreview: z.string().optional(),
+});
+export type ToolInvocationStartSsePayload = z.infer<typeof ToolInvocationStartSsePayloadSchema>;
+
+export const ToolInvocationEndSsePayloadSchema = z.object({
+  type: z.literal(SseType.TOOL_INVOCATION_END),
+  chatEntryId: z.string(),
+  toolName: z.string(),
+  ok: z.boolean(),
+  output: z.string(),
+  runContinues: z.boolean(),
+});
+export type ToolInvocationEndSsePayload = z.infer<typeof ToolInvocationEndSsePayloadSchema>;
+
+export const SsePayloadSchema = z.discriminatedUnion('type', [
+  UserMessageSsePayloadSchema,
+  ConversationCreatedSsePayloadSchema,
+  ConversationUpdatedSsePayloadSchema,
+  ChatEntryUpsertSsePayloadSchema,
+  ChatEntryDeltaSsePayloadSchema,
+  ToolInvocationStartSsePayloadSchema,
+  ToolInvocationEndSsePayloadSchema,
+]);
+export type SsePayload = z.infer<typeof SsePayloadSchema>;
 
 export type SseEvent = SsePayload & {
   conversationId: string;
