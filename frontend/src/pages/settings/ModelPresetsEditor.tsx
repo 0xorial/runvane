@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ModelPresetResponse } from "../../../../backend3/src/contracts/model-presets";
+import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
 import { cn } from "@/lib/utils";

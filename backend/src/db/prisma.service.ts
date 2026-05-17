@@ -7,7 +7,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL ?? 'file:./backend3.sqlite',
+          url: process.env.DATABASE_URL ?? 'file:./backend.sqlite',
         },
       },
     });

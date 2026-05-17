@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { LlmProviderRow } from "../../../backend3/src/contracts/settings";
+import type { LlmProviderRow } from "../../../backend/src/contracts/settings";
 import { getLlmSettings } from "../api/client";
 import { buildModelGroups, type ModelGroup } from "../pages/settings/helpers";
 

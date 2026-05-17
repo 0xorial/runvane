@@ -4,7 +4,7 @@ import type {
   SummarizeLlmStreamEntry,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
-} from "../../../backend3/src/contracts/chatEntry.js";
+} from "../../../backend/src/contracts/chatEntry.js";
 
 export type {
   AssistantMessageEntry,
@@ -22,7 +22,7 @@ export type {
   ToolInvocationEntry,
   ToolParamsLlmStreamEntry,
   UserMessageEntry,
-} from "../../../backend3/src/contracts/chatEntry.js";
+} from "../../../backend/src/contracts/chatEntry.js";
 
 export type ThoughtStreamEntry =
   | PlannerLlmStreamEntry

@@ -1,4 +1,4 @@
-import { SseType, type SseEvent, type SseEventType } from "../../../backend3/src/contracts/sse.js";
+import { SseType, type SseEvent, type SseEventType } from "../../../backend/src/contracts/sse.js";
 
 const KNOWN_TYPES: ReadonlySet<SseEventType> = new Set(Object.values(SseType));
 

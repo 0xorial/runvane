@@ -12,6 +12,6 @@ export {
   type ToolInvocationStartSsePayload,
   type ToolInvocationEndSsePayload,
   type UserMessageSsePayload,
-} from "../../../backend3/src/contracts/sse.js";
+} from "../../../backend/src/contracts/sse.js";
 
 export { isSseEvent, parseSseEvent, parseSseEventObject } from "./parseSseEventObject";

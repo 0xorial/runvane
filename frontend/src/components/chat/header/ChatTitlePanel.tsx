@@ -13,8 +13,8 @@ import { Button } from "../../ui/button";
 import { ThemeToggle } from "../../ThemeToggle";
 import { LlmMetaBadge } from "../LlmMetaBadge";
 import { EditableConversationTitle } from "./EditableConversationTitle";
-import type { EntryTokenUsage } from "../../../../../backend3/src/contracts/token-usage";
-import { TokenUsageMapper } from "../../../../../backend3/src/contracts/token-usage";
+import type { EntryTokenUsage } from "../../../../../backend/src/contracts/token-usage";
+import { TokenUsageMapper } from "../../../../../backend/src/contracts/token-usage";
 import {
   buildModelPricingByName,
   estimateConversationCostUsd,

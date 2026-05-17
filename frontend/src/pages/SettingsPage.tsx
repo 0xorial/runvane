@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import type { AgentListItemResponse } from "../../../backend3/src/contracts/agents";
-import type { LlmProviderSettingsDocument } from "../../../backend3/src/contracts/settings";
-import type { ModelPresetResponse } from "../../../backend3/src/contracts/model-presets";
+import type { AgentListItemResponse } from "../../../backend/src/contracts/agents";
+import type { LlmProviderSettingsDocument } from "../../../backend/src/contracts/settings";
+import type { ModelPresetResponse } from "../../../backend/src/contracts/model-presets";
 import {
   createAgent as createAgentApi,
   createModelPreset,

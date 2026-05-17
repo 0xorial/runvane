@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { TokenUsageMapper, type EntryTokenUsage } from "../../../../backend3/src/contracts/token-usage";
+import { TokenUsageMapper, type EntryTokenUsage } from "../../../../backend/src/contracts/token-usage";
 
 /** frontend2/src/components/chat/LLMRequestBadge.tsx — only renders when there is something to show */
 export type LlmMetaBadgeProps = {

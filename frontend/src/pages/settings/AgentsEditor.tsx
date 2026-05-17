@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import type { AgentListItemResponse } from "../../../../backend3/src/contracts/agents";
-import type { ModelPresetResponse } from "../../../../backend3/src/contracts/model-presets";
+import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
+import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
 import { AgentLlmSettings } from "./AgentLlmSettings";
