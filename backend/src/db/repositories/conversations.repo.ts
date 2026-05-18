@@ -138,4 +138,18 @@ export class ConversationsRepo {
     });
     return true;
   }
+
+  async addTokenUsage(
+    id: string,
+    tokens: { promptTokens: number; cachedPromptTokens: number; completionTokens: number },
+  ): Promise<ConversationEntity> {
+    return this.prisma.conversation.update({
+      where: { id },
+      data: {
+        promptTokensTotal: { increment: tokens.promptTokens },
+        cachedPromptTokensTotal: { increment: tokens.cachedPromptTokens },
+        completionTokensTotal: { increment: tokens.completionTokens },
+      },
+    });
+  }
 }

@@ -1,0 +1,3 @@
+- inline SSH
+- AI-generated session-persistent widgets
+- separate agent to support hosting backend inside container

@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
+import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
-import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
+import { publishChatEntryUpsert, publishConversationUpdated } from '../../sse/sse-helpers.js';
 import type { LlmCompletion } from '../../llmProviders/types.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
@@ -11,6 +12,7 @@ export class DecisionStep {
   constructor(
     private readonly hub: SseHubService,
     private readonly chatEntries: ChatEntriesRepo,
+    private readonly conversations: ConversationsRepo,
   ) {}
 
   async run<TInput>(
@@ -32,15 +34,17 @@ export class DecisionStep {
 
   private async persistUsage(ctx: ThoughtContext, completion: LlmCompletion): Promise<void> {
     if (!completion.usage || !ctx.streamEntryId) return;
-    const patch: Record<string, unknown> = {
-      promptTokens: completion.usage.promptTokens,
-      completionTokens: completion.usage.completionTokens,
-    };
-    if (typeof completion.usage.cachedPromptTokens === 'number') {
-      patch.cachedPromptTokens = completion.usage.cachedPromptTokens;
-    }
+    const { promptTokens, completionTokens, cachedPromptTokens } = completion.usage;
+    const patch: Record<string, unknown> = { promptTokens, completionTokens };
+    if (typeof cachedPromptTokens === 'number') patch.cachedPromptTokens = cachedPromptTokens;
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
+    await this.conversations.addTokenUsage(ctx.conversationId, {
+      promptTokens,
+      cachedPromptTokens: cachedPromptTokens ?? 0,
+      completionTokens,
+    });
+    await publishConversationUpdated(this.hub, this.conversations, ctx.conversationId);
   }
 
   private async markFailed(ctx: ThoughtContext, error: unknown, scope: LifecycleScope): Promise<void> {
