@@ -1,6 +1,7 @@
 export type AgentToolConfig = {
   enabled?: boolean;
   rules?: Record<string, unknown>;
+  guardrail?: boolean;
 };
 
 export type AgentDefaultLlmConfiguration = {
@@ -10,6 +11,11 @@ export type AgentDefaultLlmConfiguration = {
   tool_call_model_name?: string;
   model_settings?: Record<string, unknown>;
   tools?: Record<string, AgentToolConfig>;
+  guardrail?: {
+    provider_id: string;
+    model_name: string;
+    system_prompt: string;
+  };
 };
 
 export type AgentEntity = {

@@ -10,10 +10,12 @@ import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProv
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
+import { GuardrailService, type GuardrailConfig } from './guardrail.service.js';
 
 export type AgentToolConfigInput = {
   enabled?: boolean;
   rules?: Record<string, unknown>;
+  guardrail?: boolean;
 };
 
 export type RunToolInput = {
@@ -26,6 +28,7 @@ export type RunToolInput = {
   approvalGranted?: boolean;
   agentToolConfig?: AgentToolConfigInput;
   plannerFollowup?: { mode: 'continue' | 'finalize' };
+  guardrailConfig?: GuardrailConfig;
 };
 
 export type RunToolResult = { kind: 'skipped' } | { kind: 'completed'; toolEntryId: string } | { kind: 'blocked'; toolEntryId: string };
@@ -51,6 +54,7 @@ export class RunToolService {
     private readonly thoughtProcessing: ThoughtProcessingService,
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
     private readonly plannerProvider: PlannerThoughtTypeProvider,
+    private readonly guardrail: GuardrailService,
   ) {}
 
   async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
@@ -87,6 +91,30 @@ export class RunToolService {
     const existing = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (permission === 'forbid' || (permission === 'ask_user' && input.approvalGranted !== true)) {
       return this.recordBlocked({ input, permission, parsedParams, existingEntryId: existing?.id ?? null, chain });
+    }
+
+    const shouldRunGuardrail =
+      permission === 'allow' &&
+      input.agentToolConfig?.guardrail === true &&
+      input.guardrailConfig != null &&
+      input.approvalGranted !== true;
+
+    if (shouldRunGuardrail) {
+      const guardrailResult = await this.guardrail.evaluate({
+        toolName: input.toolName,
+        params: parsedParams,
+        guardrailConfig: input.guardrailConfig!,
+      });
+      if (guardrailResult.verdict === 'flag') {
+        return this.recordBlocked({
+          input,
+          permission: 'ask_user',
+          parsedParams,
+          existingEntryId: existing?.id ?? null,
+          chain,
+          guardrailReason: guardrailResult.reason,
+        });
+      }
     }
 
     return this.executeTool({
@@ -148,10 +176,12 @@ export class RunToolService {
     parsedParams: unknown;
     existingEntryId: string | null;
     chain: ChatChain;
+    guardrailReason?: string;
   }): Promise<RunToolResult> {
-    const { input, permission, parsedParams, existingEntryId, chain } = args;
+    const { input, permission, parsedParams, existingEntryId, chain, guardrailReason } = args;
     const startedAt = new Date();
-    const reason = permission === 'ask_user' ? 'Tool requires user approval.' : 'Tool is forbidden by permission rules.';
+    const baseReason = permission === 'ask_user' ? 'Tool requires user approval.' : 'Tool is forbidden by permission rules.';
+    const reason = guardrailReason ? `Guardrail flagged: ${guardrailReason}` : baseReason;
     const envelope: ToolEnvelope = {
       ok: false,
       toolId: input.toolName,

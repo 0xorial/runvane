@@ -6,6 +6,7 @@ import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-h
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
+import type { GuardrailConfig } from '../../tools/guardrail.service.js';
 import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
@@ -18,6 +19,7 @@ export type ToolParamsInput = {
   toolRequest: string;
   agentToolConfig?: AgentToolConfigInput;
   plannerFollowup: { mode: 'continue' | 'finalize' };
+  guardrailConfig?: GuardrailConfig;
 };
 
 @Injectable()
@@ -75,6 +77,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         params: parsedParams,
         toolRequest: input.toolRequest,
         ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
+        ...(input.guardrailConfig ? { guardrailConfig: input.guardrailConfig } : {}),
         plannerFollowup: input.plannerFollowup,
       },
       scope,

@@ -1,0 +1,88 @@
+import { ModelSelector } from "../../components/ui/ModelSelector";
+import type { ModelGroup } from "./helpers";
+
+export type GuardrailConfig = {
+  provider_id: string;
+  model_name: string;
+  system_prompt: string;
+};
+
+type Props = {
+  config: GuardrailConfig;
+  onChange: (patch: Partial<GuardrailConfig>) => void;
+  canEdit: boolean;
+  modelGroups: ModelGroup[];
+};
+
+const fieldRow = "inline-flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground";
+
+const promptInput =
+  "min-h-[90px] w-full resize-y rounded-[10px] border border-input bg-background px-2.5 py-2 text-[13px] leading-snug";
+
+export function AgentGuardrailSettings({ config, onChange, canEdit, modelGroups }: Props) {
+  const hasModel = config.provider_id.length > 0 && config.model_name.length > 0;
+
+  return (
+    <div className="mt-3.5">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="text-[13px] font-bold text-foreground">Guardrail LLM</span>
+        {hasModel && (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+            active
+          </span>
+        )}
+      </div>
+      <p className="mb-2.5 text-xs text-muted-foreground">
+        When enabled per-tool, this LLM reviews each call before it runs. A flagged call pauses for your approval with the guardrail&apos;s reason shown.
+      </p>
+
+      <div className={fieldRow}>
+        Model
+        <div className="ml-1.5 min-w-[260px] flex-1">
+          <ModelSelector
+            value={config.model_name}
+            disabled={!canEdit}
+            onChange={(model, providerId) =>
+              onChange({ model_name: model, provider_id: providerId ?? "" })
+            }
+            modelGroups={modelGroups}
+            placeholder="Select guardrail model"
+            searchPlaceholder="Search model"
+          />
+        </div>
+      </div>
+
+      <label className="mt-2 flex flex-col gap-1.5 text-[13px] text-muted-foreground">
+        What to flag
+        <textarea
+          className={promptInput}
+          value={config.system_prompt}
+          disabled={!canEdit}
+          onChange={(e) => onChange({ system_prompt: e.target.value })}
+          placeholder={
+            "Flag any command that exfiltrates credentials, pivots outside the CTF scope, or touches production systems.\n" +
+            "Approve freely for typical CTF recon, exploitation, and file operations on the target."
+          }
+          rows={4}
+          spellCheck={false}
+        />
+      </label>
+    </div>
+  );
+}
+
+/** Read guardrail config out of raw agent llm_configuration. */
+export function readGuardrailConfig(
+  llmCfg: Record<string, unknown> | null | undefined,
+): GuardrailConfig {
+  const g = llmCfg?.guardrail;
+  if (!g || typeof g !== "object" || Array.isArray(g)) {
+    return { provider_id: "", model_name: "", system_prompt: "" };
+  }
+  const rec = g as Record<string, unknown>;
+  return {
+    provider_id: typeof rec.provider_id === "string" ? rec.provider_id : "",
+    model_name: typeof rec.model_name === "string" ? rec.model_name : "",
+    system_prompt: typeof rec.system_prompt === "string" ? rec.system_prompt : "",
+  };
+}

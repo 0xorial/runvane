@@ -5,6 +5,8 @@ import type { ModelPresetResponse } from "../../../../backend/src/contracts/mode
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
 import { AgentLlmSettings } from "./AgentLlmSettings";
+import { AgentGuardrailSettings, readGuardrailConfig } from "./AgentGuardrailSettings";
+import type { GuardrailConfig } from "./AgentGuardrailSettings";
 import { sortAgents } from "./helpers";
 import type { ModelGroup } from "./helpers";
 import { cn } from "@/lib/utils";
@@ -95,6 +97,7 @@ export function AgentsEditor({
     toolName: string,
   ): {
     enabled: boolean;
+    guardrail: boolean;
     config: Record<string, unknown>;
   } {
     const cfg =
@@ -115,12 +118,14 @@ export function AgentsEditor({
         : {};
     return {
       enabled: rec.enabled === true,
+      guardrail: rec.guardrail === true,
       config,
     };
   }
 
   function getToolConfig(toolName: string): {
     enabled: boolean;
+    guardrail: boolean;
     config: Record<string, unknown>;
   } {
     return getToolConfigFromAgent(currentAgent, toolName);
@@ -130,6 +135,7 @@ export function AgentsEditor({
     toolName: string,
     patch: {
       enabled?: boolean;
+      guardrail?: boolean;
       config?: Record<string, unknown>;
     },
   ) {
@@ -151,12 +157,26 @@ export function AgentsEditor({
         ? { ...(currentTool as Record<string, unknown>) }
         : {};
     if (patch.enabled !== undefined) toolRec.enabled = patch.enabled;
+    if (patch.guardrail !== undefined) toolRec.guardrail = patch.guardrail;
     if (patch.config !== undefined) toolRec.rules = patch.config;
     tools[toolName] = toolRec;
     nextCfg.tools = tools;
     setCurrentAgent({
       ...currentAgent,
       default_llm_configuration: nextCfg,
+    });
+  }
+
+  function patchGuardrailConfig(patch: Partial<GuardrailConfig>) {
+    if (!currentAgent || !canEdit) return;
+    const currentCfg = (currentAgent.default_llm_configuration ?? {}) as Record<string, unknown>;
+    const currentGuardrail = readGuardrailConfig(currentCfg);
+    setCurrentAgent({
+      ...currentAgent,
+      default_llm_configuration: {
+        ...currentCfg,
+        guardrail: { ...currentGuardrail, ...patch },
+      },
     });
   }
 
@@ -338,6 +358,14 @@ export function AgentsEditor({
                   modelGroups={modelGroups}
                   presets={presets}
                 />
+                <AgentGuardrailSettings
+                  config={readGuardrailConfig(
+                    (currentAgent.default_llm_configuration ?? {}) as Record<string, unknown>,
+                  )}
+                  onChange={patchGuardrailConfig}
+                  canEdit={canEdit}
+                  modelGroups={modelGroups}
+                />
                 <div className="mt-3.5">
                   <div className="mb-2 text-[13px] font-bold text-foreground">Tools</div>
                   <table className={toolsTableClass}>
@@ -346,6 +374,7 @@ export function AgentsEditor({
                         <th>Tool</th>
                         <th>Description</th>
                         <th>Enabled</th>
+                        <th title="Requires Guardrail LLM to be configured above">Guardrail</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -355,6 +384,11 @@ export function AgentsEditor({
                         if (!name) return null;
                         const cfg = getToolConfig(name);
                         const expanded = !!expandedTools[name] && cfg.enabled;
+                        const guardrailLlm = readGuardrailConfig(
+                          (currentAgent.default_llm_configuration ?? {}) as Record<string, unknown>,
+                        );
+                        const guardrailLlmConfigured =
+                          guardrailLlm.provider_id.length > 0 && guardrailLlm.model_name.length > 0;
                         return [
                           <tr key={`${name}-row`}>
                             <td>
@@ -406,10 +440,27 @@ export function AgentsEditor({
                                 }}
                               />
                             </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={cfg.guardrail}
+                                disabled={!canEdit || !cfg.enabled || !guardrailLlmConfigured}
+                                title={
+                                  !guardrailLlmConfigured
+                                    ? "Configure the Guardrail LLM above first"
+                                    : !cfg.enabled
+                                      ? "Enable the tool first"
+                                      : undefined
+                                }
+                                onChange={(e) =>
+                                  patchToolConfig(name, { guardrail: e.target.checked })
+                                }
+                              />
+                            </td>
                           </tr>,
                           expanded ? (
                             <tr key={`${name}-config`}>
-                              <td colSpan={3} className="bg-muted/50">
+                              <td colSpan={4} className="bg-muted/50">
                                 <div className="p-2">
                                   <div className="mb-2 text-xs font-semibold text-foreground">
                                     <code>{name}</code> config (JSON)
@@ -437,6 +488,7 @@ export function AgentsEditor({
                                           <th>Agent ID</th>
                                           <th>Agent name</th>
                                           <th>Enabled</th>
+                                          <th>Guardrail</th>
                                           <th>Permissions config</th>
                                         </tr>
                                       </thead>
@@ -450,6 +502,7 @@ export function AgentsEditor({
                                               </td>
                                               <td>{agentRow.name || "Unnamed"}</td>
                                               <td>{agentCfg.enabled ? "true" : "false"}</td>
+                                              <td>{agentCfg.guardrail ? "true" : "false"}</td>
                                               <td>
                                                 <code>{JSON.stringify(agentCfg.config)}</code>
                                               </td>

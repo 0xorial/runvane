@@ -169,6 +169,8 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
+    const guardrailCfg = args.agent.default_llm_configuration?.guardrail;
+    if (guardrailCfg) toolParamsInput.guardrailConfig = guardrailCfg;
     this.thoughtProcessing.startThought({
       provider: this.toolParamsProvider,
       conversationId: toolParamsInput.conversationId,

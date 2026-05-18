@@ -1,3 +1,5 @@
 - inline SSH
+- agent-based safety
 - AI-generated session-persistent widgets
 - separate agent to support hosting backend inside container
+- utm control
