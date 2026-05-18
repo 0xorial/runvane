@@ -1,3 +1,0 @@
-- File exceeds 350-line workspace limit (`lmStudioNative.ts` is oversized).
-- Large mixed concerns (model discovery, streaming parsing, usage extraction, request shaping) increase change risk.
-- Suggested fix: split into focused modules (`lmStudio.request.ts`, `lmStudio.stream.ts`, `lmStudio.usage.ts`) and keep provider class as orchestration-only.

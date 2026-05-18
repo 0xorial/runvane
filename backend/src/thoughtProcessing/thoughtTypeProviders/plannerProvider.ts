@@ -115,7 +115,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (state) await state.pending.catch(() => undefined);
     this.liveStreamState.delete(streamEntryId);
 
-    const parsed = parsePlannerOutput(getCompletionText(completion));
+    const parsed = parsePlannerOutput(getCompletionText(completion), (raw) =>
+      this.logger.warn(`planner JSON parse failed — treating reply as plain text (${raw.length} chars)`),
+    );
     const requestedToolCalls = parsed.toolRequests.filter((t) => input.enabledToolIds.includes(t.toolName));
     const assistantText = parsed.assistantOutput.trim();
     const action = requestedToolCalls.length > 0 ? 'tool_call' : 'final_answer';

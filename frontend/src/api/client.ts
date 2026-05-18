@@ -328,11 +328,7 @@ export async function reprocessThoughtContext(
 ): Promise<PostAcceptedResult<{ conversationId: string; plannerEntryId: string; queuedToolCalls: number }>> {
   const result = await postJsonAccepted(
     `/api/conversations/${encodeURIComponent(conversationId)}/thoughts/${encodeURIComponent(entryId)}/reprocess-context`,
-    {
-      editedRequestText: input.editedRequestText,
-      llmProviderId: input.llmProviderId,
-      llmModel: input.llmModel,
-    },
+    input,
   );
   const data = result.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) {

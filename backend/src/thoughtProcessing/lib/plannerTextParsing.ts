@@ -98,9 +98,13 @@ export type ParsedPlannerOutput = {
   followup: 'continue' | 'finalize';
 };
 
-export function parsePlannerOutput(reply: string): ParsedPlannerOutput {
+export function parsePlannerOutput(
+  reply: string,
+  onJsonParseFailed?: (reply: string) => void,
+): ParsedPlannerOutput {
   const obj = parseJsonObjectLoose(reply);
   if (!obj) {
+    onJsonParseFailed?.(reply);
     return {
       assistantOutput: extractAssistantOutputFromJsonLike(reply) || stripFences(reply),
       toolRequests: [],

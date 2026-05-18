@@ -1,9 +1,0 @@
-- File exceeds the 350-line limit (currently ~480 lines after tool-invocation methods).
-- Why it matters: violates `file-length-limit-350-lines.mdc`; harder to navigate, test, and review.
-- Suggested split:
-  - Extract a private base (`ChatEntriesBaseRepo`) with `appendEntry`/`mergeEntryPayload`/`fetchEntryRow`/lineage helpers.
-  - Move per-entry-type methods into focused repos:
-    - `chat-entries.messages.repo.ts` (user-message, assistant-message)
-    - `chat-entries.thoughts.repo.ts` (thought-prepare, thought-stream, thought-action)
-    - `chat-entries.tool-invocations.repo.ts` (tool-invocation: append/update/find)
-  - Keep `ChatEntriesRepo` as a thin facade exposing the existing public API or split callers per concern.

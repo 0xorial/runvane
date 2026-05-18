@@ -255,10 +255,7 @@ export function ChatPage({
           const parentLeafIdAtSend = cid ? activeLeafId : null;
           const optimisticInput = {
             text,
-            agentId: agentSelection.agentId,
-            llmProviderId: agentSelection.llmProviderId,
-            llmModel: agentSelection.llmModel,
-            modelPresetId: agentSelection.modelPresetId,
+            ...agentSelection,
             attachments: uploadedAttachments,
           };
           let optimistic: { rowId: string; clientRequestId: string } | null;

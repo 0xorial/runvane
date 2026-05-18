@@ -42,11 +42,7 @@ export function estimateConversationCostUsd(
   for (const usage of usageRows) {
     const prices = pricingByModel.get(String(usage.modelName || "").trim());
     if (!prices) continue;
-    const normalized = TokenUsageMapper.fromEntryFields({
-      promptTokens: usage.promptTokens,
-      cachedPromptTokens: usage.cachedPromptTokens,
-      completionTokens: usage.completionTokens,
-    });
+    const normalized = TokenUsageMapper.fromEntryFields(usage);
     if (!normalized) continue;
     const promptSplit = TokenUsageMapper.promptUsageBreakdown(normalized);
     const boundedCompletion = normalized.completionTokens;
