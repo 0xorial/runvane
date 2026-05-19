@@ -1,6 +1,12 @@
 import { ModelSelector } from "../../components/ui/ModelSelector";
 import type { ModelGroup } from "./helpers";
 
+export const DEFAULT_GUARDRAIL_PROMPT =
+  "Flag any tool call that: exfiltrates credentials or secrets outside the target scope, " +
+  "accesses or modifies production or unrelated infrastructure, deletes data irreversibly, " +
+  "or pivots outside the authorised target. " +
+  "Approve freely for typical recon, exploitation, and file operations on the stated target.";
+
 export type GuardrailConfig = {
   provider_id: string;
   model_name: string;
@@ -59,10 +65,7 @@ export function AgentGuardrailSettings({ config, onChange, canEdit, modelGroups 
           value={config.system_prompt}
           disabled={!canEdit}
           onChange={(e) => onChange({ system_prompt: e.target.value })}
-          placeholder={
-            "Flag any command that exfiltrates credentials, pivots outside the CTF scope, or touches production systems.\n" +
-            "Approve freely for typical CTF recon, exploitation, and file operations on the target."
-          }
+          placeholder={DEFAULT_GUARDRAIL_PROMPT}
           rows={4}
           spellCheck={false}
         />

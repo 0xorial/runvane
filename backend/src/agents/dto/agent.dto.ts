@@ -18,6 +18,20 @@ export class AgentModelReferenceDto {
   model_name?: string;
 }
 
+export class GuardrailConfigDto {
+  @IsOptional()
+  @IsString()
+  provider_id?: string;
+
+  @IsOptional()
+  @IsString()
+  model_name?: string;
+
+  @IsOptional()
+  @IsString()
+  system_prompt?: string;
+}
+
 export class AgentDefaultLlmConfigurationDto {
   @IsOptional()
   @IsString()
@@ -41,7 +55,12 @@ export class AgentDefaultLlmConfigurationDto {
 
   @IsOptional()
   @IsObject()
-  tools?: Record<string, { enabled?: boolean; rules?: Record<string, unknown> }>;
+  tools?: Record<string, { enabled?: boolean; rules?: Record<string, unknown>; guardrail?: boolean; guardrail_system_prompt?: string }>;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GuardrailConfigDto)
+  guardrail?: GuardrailConfigDto;
 }
 
 export class CreateAgentDto {

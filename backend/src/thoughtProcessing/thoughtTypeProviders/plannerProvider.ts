@@ -169,8 +169,17 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     };
     const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
     if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
-    const guardrailCfg = args.agent.default_llm_configuration?.guardrail;
-    if (guardrailCfg) toolParamsInput.guardrailConfig = guardrailCfg;
+    const rawGuardrail = args.agent.default_llm_configuration?.guardrail;
+    if (rawGuardrail?.provider_id && rawGuardrail?.model_name) {
+      // Per-tool system_prompt overrides the global one; fall back to global.
+      const toolPromptOverride = toolCfg?.guardrail_system_prompt?.trim();
+      const basePrompt = rawGuardrail.system_prompt ?? '';
+      toolParamsInput.guardrailConfig = {
+        provider_id: rawGuardrail.provider_id,
+        model_name: rawGuardrail.model_name,
+        system_prompt: toolPromptOverride || basePrompt,
+      };
+    }
     this.thoughtProcessing.startThought({
       provider: this.toolParamsProvider,
       conversationId: toolParamsInput.conversationId,

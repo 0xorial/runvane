@@ -5,7 +5,7 @@ import type { ModelPresetResponse } from "../../../../backend/src/contracts/mode
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
 import { AgentLlmSettings } from "./AgentLlmSettings";
-import { AgentGuardrailSettings, readGuardrailConfig } from "./AgentGuardrailSettings";
+import { AgentGuardrailSettings, DEFAULT_GUARDRAIL_PROMPT, readGuardrailConfig } from "./AgentGuardrailSettings";
 import type { GuardrailConfig } from "./AgentGuardrailSettings";
 import { sortAgents } from "./helpers";
 import type { ModelGroup } from "./helpers";
@@ -98,6 +98,7 @@ export function AgentsEditor({
   ): {
     enabled: boolean;
     guardrail: boolean;
+    guardrail_system_prompt: string;
     config: Record<string, unknown>;
   } {
     const cfg =
@@ -119,6 +120,7 @@ export function AgentsEditor({
     return {
       enabled: rec.enabled === true,
       guardrail: rec.guardrail === true,
+      guardrail_system_prompt: typeof rec.guardrail_system_prompt === "string" ? rec.guardrail_system_prompt : "",
       config,
     };
   }
@@ -126,6 +128,7 @@ export function AgentsEditor({
   function getToolConfig(toolName: string): {
     enabled: boolean;
     guardrail: boolean;
+    guardrail_system_prompt: string;
     config: Record<string, unknown>;
   } {
     return getToolConfigFromAgent(currentAgent, toolName);
@@ -136,6 +139,7 @@ export function AgentsEditor({
     patch: {
       enabled?: boolean;
       guardrail?: boolean;
+      guardrail_system_prompt?: string;
       config?: Record<string, unknown>;
     },
   ) {
@@ -158,6 +162,13 @@ export function AgentsEditor({
         : {};
     if (patch.enabled !== undefined) toolRec.enabled = patch.enabled;
     if (patch.guardrail !== undefined) toolRec.guardrail = patch.guardrail;
+    if (patch.guardrail_system_prompt !== undefined) {
+      if (patch.guardrail_system_prompt === "") {
+        delete toolRec.guardrail_system_prompt;
+      } else {
+        toolRec.guardrail_system_prompt = patch.guardrail_system_prompt;
+      }
+    }
     if (patch.config !== undefined) toolRec.rules = patch.config;
     tools[toolName] = toolRec;
     nextCfg.tools = tools;
@@ -478,6 +489,30 @@ export function AgentsEditor({
                                       {toolConfigErrors[name]}
                                     </div>
                                   ) : null}
+                                  {cfg.guardrail && guardrailLlmConfigured && (
+                                    <div className="mt-3">
+                                      <label className="flex flex-col gap-1 text-xs">
+                                        <span className="font-semibold text-foreground">
+                                          Guardrail prompt override{" "}
+                                          <span className="font-normal text-muted-foreground">(leave blank to use global prompt)</span>
+                                        </span>
+                                        <textarea
+                                          className={toolsConfigInput}
+                                          style={{ minHeight: 72 }}
+                                          value={cfg.guardrail_system_prompt}
+                                          disabled={!canEdit}
+                                          onChange={(e) =>
+                                            patchToolConfig(name, { guardrail_system_prompt: e.target.value })
+                                          }
+                                          placeholder={readGuardrailConfig(
+                                            (currentAgent.default_llm_configuration ?? {}) as Record<string, unknown>,
+                                          ).system_prompt || DEFAULT_GUARDRAIL_PROMPT}
+                                          rows={3}
+                                          spellCheck={false}
+                                        />
+                                      </label>
+                                    </div>
+                                  )}
                                   <div className="mt-2.5">
                                     <div className="mb-1.5 text-xs font-semibold text-foreground">
                                       Agent permissions

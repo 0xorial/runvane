@@ -9,6 +9,7 @@ import {
 } from "../components/chat/ChatAgentToolbar";
 import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
 import { ConversationBranchesPanel } from "../components/chat/ConversationBranchesPanel";
+import { TerminalPanel } from "../components/terminal/TerminalPanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
 import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
@@ -49,6 +50,8 @@ type ChatPageProps = {
   onToggleSidebar: () => void;
   rightSidebarVisible: boolean;
   onToggleRightSidebar: () => void;
+  terminalVisible: boolean;
+  onToggleTerminal: () => void;
   onOpenSettings: () => void;
   settingsPressed?: boolean;
 };
@@ -59,6 +62,8 @@ export function ChatPage({
   onToggleSidebar,
   rightSidebarVisible,
   onToggleRightSidebar,
+  terminalVisible,
+  onToggleTerminal,
   onOpenSettings,
   settingsPressed = false,
 }: ChatPageProps) {
@@ -295,6 +300,42 @@ export function ChatPage({
     />
   );
 
+  const chatPane = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* important to not add any padding to the content here */}
+        <AnchorTopScrollArea
+          className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
+          topAnchorEntryId={topAnchorEntryId}
+        >
+          {conversationId
+            ? visibleEntries.map((entry$) => {
+                const entry = entry$.get();
+                return (
+                  <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                    <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
+                  </div>
+                );
+              })
+            : null}
+        </AnchorTopScrollArea>
+      </main>
+      {composer}
+    </div>
+  );
+
+  const chatAndTerminal = terminalVisible ? (
+    <ResizablePanelGroup direction="vertical" autoSaveId="chat-terminal-layout" className="min-h-0 min-w-0 flex-1">
+      <ResizablePanel minSize={20} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        {chatPane}
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={30} minSize={15} maxSize={70} className="min-h-0 min-w-0 overflow-hidden border-t border-border">
+        <TerminalPanel className="h-full w-full" />
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  ) : chatPane;
+
   return (
     <ChatSessionContext.Provider value={chatSessionContextValue}>
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -304,31 +345,16 @@ export function ChatPage({
         onToggleSidebar={onToggleSidebar}
         rightSidebarVisible={rightSidebarVisible}
         onToggleRightSidebar={onToggleRightSidebar}
+        terminalVisible={terminalVisible}
+        onToggleTerminal={onToggleTerminal}
         onOpenSettings={onOpenSettings}
         settingsPressed={settingsPressed}
       />
+      {/* Main area: horizontal split when right sidebar open */}
       {rightSidebarVisible ? (
         <ResizablePanelGroup direction="horizontal" autoSaveId="chat-right-branches-layout" className="min-h-0 min-w-0 flex-1">
-          <ResizablePanel minSize={40} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              {/* important to not add any padding to the content here */}
-              <AnchorTopScrollArea
-                className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
-                topAnchorEntryId={topAnchorEntryId}
-              >
-                {conversationId
-                  ? visibleEntries.map((entry$) => {
-                      const entry = entry$.get();
-                      return (
-                        <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                          <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
-                        </div>
-                      );
-                    })
-                  : null}
-              </AnchorTopScrollArea>
-            </main>
-            {composer}
+          <ResizablePanel minSize={30} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+            {chatAndTerminal}
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={26} minSize={16} maxSize={45} className="min-h-0 min-w-0 overflow-hidden">
@@ -345,25 +371,7 @@ export function ChatPage({
         </ResizablePanelGroup>
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {/* important to not add any padding to the content here */}
-            <AnchorTopScrollArea
-              className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
-              topAnchorEntryId={topAnchorEntryId}
-            >
-              {conversationId
-                ? visibleEntries.map((entry$) => {
-                    const entry = entry$.get();
-                    return (
-                      <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
-                        <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
-                      </div>
-                    );
-                  })
-                : null}
-            </AnchorTopScrollArea>
-          </main>
-          {composer}
+          {chatAndTerminal}
         </div>
       )}
     </div>

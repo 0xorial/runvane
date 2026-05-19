@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings, Square } from "lucide-react";
+import { PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings, Square } from "lucide-react";
 import {
   cancelConversationProcessing,
   getConversation,
@@ -28,6 +28,8 @@ type ChatTitlePanelProps = {
   onToggleSidebar: () => void;
   rightSidebarVisible: boolean;
   onToggleRightSidebar: () => void;
+  terminalVisible: boolean;
+  onToggleTerminal: () => void;
   onOpenSettings: () => void;
   settingsPressed?: boolean;
 };
@@ -45,6 +47,8 @@ export function ChatTitlePanel({
   onToggleSidebar,
   rightSidebarVisible,
   onToggleRightSidebar,
+  terminalVisible,
+  onToggleTerminal,
   onOpenSettings,
   settingsPressed = false,
 }: ChatTitlePanelProps) {
@@ -174,6 +178,17 @@ export function ChatTitlePanel({
         </div>
       </div>
       <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={onToggleTerminal}
+          aria-label={terminalVisible ? "Hide terminal" : "Show terminal"}
+          title={terminalVisible ? "Hide terminal" : "Show terminal"}
+        >
+          {terminalVisible ? <PanelBottomClose className="h-3.5 w-3.5" /> : <PanelBottomOpen className="h-3.5 w-3.5" />}
+        </Button>
         <Button
           type="button"
           variant="ghost"

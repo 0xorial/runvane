@@ -13,6 +13,7 @@ import { ModelPresetsModule } from './model-presets/model-presets.module.js';
 import { SettingsModule } from './settings/settings.module.js';
 import { SseModule } from './sse/sse.module.js';
 import { SystemModule } from './system/system.module.js';
+import { TerminalModule } from './terminal/terminal.module.js';
 import { ToolsModule } from './tools/tools.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 
@@ -32,6 +33,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
     LlmProvidersModule,
     SseModule,
     SystemModule,
+    TerminalModule,
     ToolsModule,
     UploadsModule,
   ],

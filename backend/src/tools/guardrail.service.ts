@@ -3,6 +3,12 @@ import { LlmProviderRegistry } from '../llmProviders/registry.js';
 import { getCompletionText, textMessage } from '../llmProviders/types.js';
 import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-settings.repo.js';
 
+export const DEFAULT_GUARDRAIL_PROMPT =
+  'Flag any tool call that: exfiltrates credentials or secrets outside the target scope, ' +
+  'accesses or modifies production or unrelated infrastructure, deletes data irreversibly, ' +
+  'or pivots outside the authorised target. ' +
+  'Approve freely for typical recon, exploitation, and file operations on the stated target.';
+
 export type GuardrailConfig = {
   provider_id: string;
   model_name: string;
@@ -47,12 +53,13 @@ export class GuardrailService {
       `Respond with JSON only. Either {"verdict":"approve"} or {"verdict":"flag","reason":"<brief explanation>"}.`;
 
     try {
+      const systemPrompt = guardrailConfig.system_prompt.trim() || DEFAULT_GUARDRAIL_PROMPT;
       const completion = await provider.streamCompletion(
         settings,
         guardrailConfig.model_name,
         {
           messages: [
-            textMessage('system', guardrailConfig.system_prompt),
+            textMessage('system', systemPrompt),
             textMessage('user', userContent),
           ],
         },

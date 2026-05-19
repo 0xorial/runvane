@@ -39,6 +39,8 @@ function ChatPageShell({
   onToggleSidebar,
   rightSidebarVisible,
   onToggleRightSidebar,
+  terminalVisible,
+  onToggleTerminal,
   onOpenSettings,
   settingsPressed,
 }: {
@@ -46,6 +48,8 @@ function ChatPageShell({
   onToggleSidebar: () => void;
   rightSidebarVisible: boolean;
   onToggleRightSidebar: () => void;
+  terminalVisible: boolean;
+  onToggleTerminal: () => void;
   onOpenSettings: () => void;
   settingsPressed: boolean;
 }) {
@@ -58,6 +62,8 @@ function ChatPageShell({
       onToggleSidebar={onToggleSidebar}
       rightSidebarVisible={rightSidebarVisible}
       onToggleRightSidebar={onToggleRightSidebar}
+      terminalVisible={terminalVisible}
+      onToggleTerminal={onToggleTerminal}
       onOpenSettings={onOpenSettings}
       settingsPressed={settingsPressed}
     />
@@ -69,6 +75,7 @@ export function App() {
   const location = useLocation();
   const [chatSidebarVisible, setChatSidebarVisible] = useState(true);
   const [chatRightSidebarVisible, setChatRightSidebarVisible] = useState(true);
+  const [chatTerminalVisible, setChatTerminalVisible] = useState(false);
   const activeConversationId = chatActiveIdFromPath(location.pathname);
   const showConversationSidebar = location.pathname.startsWith("/chat");
   const chatTab = location.pathname.startsWith("/chat");
@@ -90,6 +97,8 @@ export function App() {
             onToggleSidebar={() => setChatSidebarVisible((v) => !v)}
             rightSidebarVisible={chatRightSidebarVisible}
             onToggleRightSidebar={() => setChatRightSidebarVisible((v) => !v)}
+            terminalVisible={chatTerminalVisible}
+            onToggleTerminal={() => setChatTerminalVisible((v) => !v)}
             onOpenSettings={() => navigate(settingsLinkTo(location))}
             settingsPressed={settingsTab}
           />

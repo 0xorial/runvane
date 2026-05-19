@@ -2,6 +2,7 @@ export type AgentToolConfig = {
   enabled?: boolean;
   rules?: Record<string, unknown>;
   guardrail?: boolean;
+  guardrail_system_prompt?: string;
 };
 
 export type AgentDefaultLlmConfiguration = {
@@ -12,9 +13,9 @@ export type AgentDefaultLlmConfiguration = {
   model_settings?: Record<string, unknown>;
   tools?: Record<string, AgentToolConfig>;
   guardrail?: {
-    provider_id: string;
-    model_name: string;
-    system_prompt: string;
+    provider_id?: string;
+    model_name?: string;
+    system_prompt?: string;
   };
 };
 
