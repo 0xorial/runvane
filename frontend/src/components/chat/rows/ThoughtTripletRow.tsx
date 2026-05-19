@@ -5,6 +5,7 @@ import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";
 import { useChatSessionContext, type ThoughtStage } from "@/hooks/chatSessionContext";
 import { usePricingMap } from "@/hooks/usePricingMap";
+import { BranchSelector } from "../BranchSelector";
 import { ChatThreadIndent } from "../ChatMessageShell";
 import { ActionStep } from "./thoughtTriplet/ActionStep";
 import { ContextStep } from "./thoughtTriplet/ContextStep";
@@ -70,7 +71,7 @@ function ThoughtTripletRowWithStream({
           <StepChip
             icon={<FileText className="h-3 w-3" />}
             label={contextTitle}
-            badge={null}
+            badge={<BranchSelector entryId={prepareEntry.id} />}
             active={expanded === "context"}
             onClick={() => toggle("context")}
           />
@@ -79,7 +80,7 @@ function ThoughtTripletRowWithStream({
             icon={stream.status === "running" ? <TinyProgressCircle /> : <Sparkles className="h-3 w-3" />}
             label=""
             meta={reasonMeta}
-            badge={null}
+            badge={<BranchSelector entryId={stream.id} />}
             active={expanded === "reasoning"}
             onClick={() => toggle("reasoning")}
           />
@@ -88,7 +89,7 @@ function ThoughtTripletRowWithStream({
             icon={actionMeta.usesTool ? <Wrench className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
             label={actionLabel}
             meta={actionMeta.status}
-            badge={null}
+            badge={actionStepEntry ? <BranchSelector entryId={actionStepEntry.id} /> : null}
             active={expanded === "action"}
             align="right"
             onClick={() => toggle("action")}
@@ -145,7 +146,7 @@ function ThoughtTripletRowPrepareOnly({ prepareEntry }: { prepareEntry: ThoughtP
           <StepChip
             icon={<FileText className="h-3 w-3" />}
             label={contextTitle}
-            badge={null}
+            badge={<BranchSelector entryId={prepareEntry.id} />}
             active={false}
             onClick={noop}
           />
