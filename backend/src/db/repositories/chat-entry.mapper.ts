@@ -123,6 +123,8 @@ function mapThoughtPrepare(base: ChatEntryBase, payload: Record<string, unknown>
   if (llmProviderId !== undefined) out.llmProviderId = llmProviderId;
   const llmModel = optionalString(payload, 'llmModel', ctx);
   if (llmModel !== undefined) out.llmModel = llmModel;
+  const inputJson = optionalString(payload, 'inputJson', ctx);
+  if (inputJson !== undefined) out.inputJson = inputJson;
   return out;
 }
 

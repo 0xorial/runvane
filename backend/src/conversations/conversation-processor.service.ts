@@ -71,7 +71,9 @@ export class ConversationProcessorService {
       },
     );
     this.activeExecutions.set(conversationId, scope);
-    return { scope, chain: new ChatChain() };
+    const reparent = (entryId: string, newParentId: string) =>
+      this.chatEntries.updateChatEntryParent(conversationId, entryId, newParentId);
+    return { scope, chain: new ChatChain(reparent) };
   }
 
   cancelProcessing(conversationId: string): number {
@@ -87,8 +89,7 @@ export class ConversationProcessorService {
     editedRequestText: string;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
-    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain, llm);
+    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
     scope.rootDone();
     return result;
   }

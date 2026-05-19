@@ -84,6 +84,14 @@ export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   title: z.string().optional(),
   llmProviderId: z.string().optional(),
   llmModel: z.string().optional(),
+  /**
+   * JSON-serialised provider input captured when the thought was started.
+   * Allows reprocess-context to rebuild the exact input without each provider
+   * implementing buildInputFromConversation. Absent on entries created before
+   * this field existed and on planner thoughts that self-initiate from
+   * conversation state.
+   */
+  inputJson: z.string().optional(),
 });
 export type ThoughtPrepareEntry = z.infer<typeof ThoughtPrepareEntrySchema>;
 

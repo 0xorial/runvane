@@ -279,4 +279,19 @@ export class ChatEntriesBaseRepo {
   async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {
     await this.mergeEntryPayload(conversationId, entryId, { status });
   }
+
+  /**
+   * Rewrite an entry's parent pointer. Used by ChatChain to keep all steps of a
+   * single thought contiguous: when a thought's later step lands while another
+   * thought has already appended after it, we splice the new step in by
+   * reparenting the intervening entry onto the new one.
+   */
+  async updateChatEntryParent(conversationId: string, entryId: string, newParentId: string | null): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE chat_entries SET parent_id = ? WHERE conversation_id = ? AND id = ?`,
+      newParentId,
+      conversationId,
+      entryId,
+    );
+  }
 }

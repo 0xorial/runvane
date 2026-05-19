@@ -42,7 +42,6 @@ type PlannerParseResult = { status: 'ok'; parsed: AgenticPlannerOutput };
 @Injectable()
 export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerInput> {
   readonly streamEntryType = 'planner_llm_stream' as const;
-  readonly wantsAction = true;
   readonly prepareTitle = 'Decision planning';
   private readonly logger = new Logger(PlannerThoughtTypeProvider.name);
   private readonly liveStreamState = new Map<string, StreamState>();
@@ -210,7 +209,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   ): Promise<void> {
     const conversationId = ctx.conversationId;
     if (!state.assistantEntryId) {
-      const created = await ctx.chain.append((parentId) =>
+      const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
         this.chatEntries.appendAssistantMessage(conversationId, { text: '', parentId }),
       );
       state.assistantEntryId = created.id;
@@ -238,7 +237,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
       return state.assistantEntryId;
     }
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendAssistantMessage(conversationId, { text: assistantText, parentId }),
     );
     const entry = await this.chatEntries.getChatEntry(conversationId, created.id);

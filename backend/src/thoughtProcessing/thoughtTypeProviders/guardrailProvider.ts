@@ -32,7 +32,6 @@ export type GuardrailProviderInput = {
 @Injectable()
 export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<GuardrailProviderInput> {
   readonly streamEntryType = 'guardrail_llm_stream' as const;
-  readonly wantsAction = false;
   readonly prepareTitle = 'Guardrail check';
 
   private readonly logger = new Logger(GuardrailThoughtTypeProvider.name);
@@ -111,40 +110,21 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
       }
     }
 
-    if (verdict.verdict === 'flag') {
-      await this.runTool.recordBlocked({
-        input: {
-          conversationId: input.conversationId,
-          agentId: input.agentId,
-          toolName: input.toolName,
-          params: input.params,
-          toolRequest: input.toolRequest,
-          agentToolConfig: input.agentToolConfig,
-          plannerFollowup: input.plannerFollowup,
-        },
-        permission: 'ask_user',
-        parsedParams: input.params,
-        existingEntryId: null,
-        chain: ctx.chain,
-        guardrailReason: verdict.reason,
-      });
-    } else {
-      await this.runTool.run(
-        {
-          conversationId: input.conversationId,
-          agentId: input.agentId,
-          toolName: input.toolName,
-          params: input.params,
-          toolRequest: input.toolRequest,
-          agentToolConfig: input.agentToolConfig,
-          plannerFollowup: input.plannerFollowup,
-          // Guardrail check has already passed; skip the permission re-check
-          approvalGranted: true,
-        },
-        scope,
-        ctx.chain,
-        input.mainLlm,
-      );
-    }
+    await this.runTool.run(
+      {
+        conversationId: input.conversationId,
+        agentId: input.agentId,
+        toolName: input.toolName,
+        params: input.params,
+        toolRequest: input.toolRequest,
+        agentToolConfig: input.agentToolConfig,
+        plannerFollowup: input.plannerFollowup,
+        decidingThoughtId: ctx.thoughtId,
+        ...(verdict.verdict === 'flag' ? { guardrailFlagReason: verdict.reason } : {}),
+      },
+      scope,
+      ctx.chain,
+      input.mainLlm,
+    );
   };
 }

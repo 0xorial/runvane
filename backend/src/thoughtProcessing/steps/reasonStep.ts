@@ -35,7 +35,7 @@ export class ReasonStep {
     const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, prepared.display));
     ctx.streamEntryId = streamEntryId;
 
-    if (provider.wantsAction && !ctx.thoughtActionEntryId) {
+    if (!ctx.thoughtActionEntryId) {
       ctx.thoughtActionEntryId = await this.createActionEntry(provider, ctx);
     }
 
@@ -53,7 +53,7 @@ export class ReasonStep {
     ctx: ThoughtContext,
     requestDisplay: string,
   ): Promise<string> {
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         type: provider.streamEntryType,
         thoughtId: ctx.thoughtId,
@@ -72,7 +72,7 @@ export class ReasonStep {
     provider: ThoughtTypeProvider<TInput>,
     ctx: ThoughtContext,
   ): Promise<string> {
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,

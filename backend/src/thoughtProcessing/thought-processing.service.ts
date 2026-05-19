@@ -100,6 +100,13 @@ export class ThoughtProcessingService {
       const input = args.input ?? (await buildInput!(conversationId));
       const prepareEntry = await prepareCreatePromise;
       ctx.prepareEntryId = prepareEntry.id;
+      // Persist input on the prepare entry so reprocess-context can rebuild
+      // it without any per-provider logic. Reprocess truncates the chain back
+      // to this prepare's parent before re-running, so the snapshot reflects
+      // the same chain state the provider originally saw.
+      await this.chatEntries.mergeEntryPayload(conversationId, prepareEntry.id, {
+        inputJson: JSON.stringify(input),
+      });
       await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, prepareEntry.id);
       const prepared = await this.prepareStep.run(provider, input, ctx, scope);
       const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
@@ -108,7 +115,7 @@ export class ThoughtProcessingService {
   }
 
   private appendPreparePlaceholder(ctx: ThoughtContext, provider: AnyThoughtProvider): Promise<{ id: string }> {
-    return ctx.chain.append((parentId) =>
+    return ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
@@ -124,7 +131,6 @@ export class ThoughtProcessingService {
     args: { conversationId: string; sourceEntryId: string; editedRequestText: string },
     scope: LifecycleScope,
     chain: ChatChain,
-    llm: LlmRef,
   ): Promise<{ plannerEntryId: string }> {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
@@ -136,18 +142,29 @@ export class ThoughtProcessingService {
     const display = requestToDisplay(request);
     const branch = await this.resolvePrepareSource(args.conversationId, args.sourceEntryId);
     const provider = await this.resolveProviderForThought(args.conversationId, branch.thoughtId);
-    if (!provider.buildInputFromConversation) {
-      throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
+    if (branch.inputJson === null) {
+      throw new Error(
+        `cannot reprocess: prepare entry ${branch.prepareEntryId} has no persisted input ` +
+          `(predates input-snapshot persistence)`,
+      );
+    }
+    if (branch.llmProviderId === null || branch.llmModel === null) {
+      throw new Error(
+        `cannot reprocess: prepare entry ${branch.prepareEntryId} has no persisted LLM ref`,
+      );
     }
     chain.setTip(branch.parentId);
 
-    const ctx = this.createContext(args.conversationId, chain, llm);
-    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display);
+    const ctx = this.createContext(args.conversationId, chain, {
+      providerId: branch.llmProviderId,
+      model: branch.llmModel,
+    });
+    ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display, branch.inputJson);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, display);
     const plannerEntryId = ctx.streamEntryId;
 
     scope.spawn(async () => {
-      const input = await provider.buildInputFromConversation!(args.conversationId);
+      const input = JSON.parse(branch.inputJson!) as unknown;
       const prepared: PreparedReason = { request, display };
       const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
       await this.decisionStep.run(provider, input, ctx, completion, scope);
@@ -211,13 +228,27 @@ export class ThoughtProcessingService {
   private async resolvePrepareSource(
     conversationId: string,
     sourceEntryId: string,
-  ): Promise<{ prepareEntryId: string; parentId: string | null; thoughtId: string }> {
+  ): Promise<{
+    prepareEntryId: string;
+    parentId: string | null;
+    thoughtId: string;
+    inputJson: string | null;
+    llmProviderId: string | null;
+    llmModel: string | null;
+  }> {
     const sourceEntry = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
     if (!sourceEntry) throw new Error(`source entry not found: ${sourceEntryId}`);
     if (sourceEntry.type !== 'thought-prepare') {
       throw new Error(`reprocess-context source ${sourceEntryId} is not a thought-prepare (got ${sourceEntry.type})`);
     }
-    return { prepareEntryId: sourceEntry.id, parentId: sourceEntry.parentId, thoughtId: sourceEntry.thoughtId };
+    return {
+      prepareEntryId: sourceEntry.id,
+      parentId: sourceEntry.parentId,
+      thoughtId: sourceEntry.thoughtId,
+      inputJson: sourceEntry.inputJson ?? null,
+      llmProviderId: sourceEntry.llmProviderId ?? null,
+      llmModel: sourceEntry.llmModel ?? null,
+    };
   }
 
   /**
@@ -282,8 +313,9 @@ export class ThoughtProcessingService {
     ctx: ThoughtContext,
     provider: AnyThoughtProvider,
     requestText: string,
+    inputJson: string | null,
   ): Promise<string> {
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
@@ -294,6 +326,10 @@ export class ThoughtProcessingService {
         llmModel: ctx.llmModel,
       }),
     );
+    if (inputJson !== null) {
+      // Carry the input forward so the new prepare entry is itself reprocessable.
+      await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { inputJson });
+    }
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
@@ -303,7 +339,7 @@ export class ThoughtProcessingService {
     provider: ThoughtTypeProvider<unknown>,
     llmRequest: string,
   ): Promise<string> {
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         type: provider.streamEntryType,
         thoughtId: ctx.thoughtId,
@@ -319,7 +355,7 @@ export class ThoughtProcessingService {
   }
 
   private async appendRunningActionEntry(ctx: ThoughtContext, provider: ThoughtTypeProvider<unknown>): Promise<string> {
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
@@ -337,7 +373,7 @@ export class ThoughtProcessingService {
     llmRequest: string,
     llmResponse: string,
   ): Promise<string> {
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         type: provider.streamEntryType,
         thoughtId: ctx.thoughtId,

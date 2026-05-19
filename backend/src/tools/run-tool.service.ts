@@ -29,6 +29,19 @@ export type RunToolInput = {
   agentToolConfig?: AgentToolConfigInput;
   plannerFollowup?: { mode: 'continue' | 'finalize' };
   guardrailConfig?: GuardrailConfig;
+  /**
+   * Set by the guardrail thought provider when the guardrail LLM flagged the
+   * call. Forces the request to be blocked with this reason — surfaces in the
+   * UI as a guardrail-tagged "needs approval" tool row.
+   */
+  guardrailFlagReason?: string;
+  /**
+   * The thoughtId of the thought that decided to run this tool (toolParams or
+   * guardrail). Tool-invocation chain entries cluster with that thought so a
+   * later reprocess of the deciding thought includes its tool result in the
+   * new branch's lineage.
+   */
+  decidingThoughtId?: string;
 };
 
 export type RunToolResult = { kind: 'skipped' } | { kind: 'completed'; toolEntryId: string } | { kind: 'blocked'; toolEntryId: string };
@@ -91,6 +104,18 @@ export class RunToolService {
     if (permission === 'forbid' || (permission === 'ask_user' && input.approvalGranted !== true)) {
       return this.recordBlocked({ input, permission, parsedParams, existingEntryId: existing?.id ?? null, chain });
     }
+    // Guardrail-flagged calls block with permission='ask_user' even when the
+    // permission rules said 'allow' — user must approve past the guardrail.
+    if (input.guardrailFlagReason && input.approvalGranted !== true) {
+      return this.recordBlocked({
+        input,
+        permission: 'ask_user',
+        parsedParams,
+        existingEntryId: existing?.id ?? null,
+        chain,
+        guardrailReason: input.guardrailFlagReason,
+      });
+    }
 
     return this.executeTool({
       input,
@@ -124,7 +149,7 @@ export class RunToolService {
       permission_state: 'forbid',
       timing: { started_at: startedAt.toISOString(), finished_at: startedAt.toISOString(), elapsed_ms: 0 },
     };
-    const created = await chain.append((parentId) =>
+    const created = await chain.append(input.decidingThoughtId ?? null, (parentId) =>
       this.chatEntries.appendToolInvocation(input.conversationId, {
         toolId: input.toolName,
         state: 'error',
@@ -145,7 +170,7 @@ export class RunToolService {
     return created.id;
   }
 
-  async recordBlocked(args: {
+  private async recordBlocked(args: {
     input: RunToolInput;
     permission: ToolPermission;
     parsedParams: unknown;
@@ -173,7 +198,7 @@ export class RunToolService {
     if (entryId) {
       await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state, result: envelope, parameters });
     } else {
-      const created = await chain.append((p) =>
+      const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
         this.chatEntries.appendToolInvocation(input.conversationId, {
           toolId: input.toolName,
           state,
@@ -230,7 +255,7 @@ export class RunToolService {
     if (entryId) {
       await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'running', parameters });
     } else {
-      const created = await chain.append((p) =>
+      const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
         this.chatEntries.appendToolInvocation(input.conversationId, {
           toolId: input.toolName,
           state: 'running',

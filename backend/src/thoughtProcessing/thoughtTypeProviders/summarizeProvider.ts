@@ -35,7 +35,6 @@ export type SummarizeInput = {
 @Injectable()
 export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<SummarizeInput> {
   readonly streamEntryType = 'summarize_llm_stream' as const;
-  readonly wantsAction = false;
   readonly prepareTitle = 'Summarize tail';
 
   constructor(
@@ -61,7 +60,7 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
     if (!summaryText) {
       throw new Error('summarize produced empty output');
     }
-    const created = await ctx.chain.append((parentId) =>
+    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendCheckpointSummary(ctx.conversationId, {
         parentId,
         summarizedRange: { fromEntryId: input.fromEntryId, toEntryId: input.toEntryId },

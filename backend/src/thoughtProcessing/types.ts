@@ -49,7 +49,6 @@ export type ThoughtContext = {
 
 export type ThoughtTypeProvider<TInput> = {
   streamEntryType: ThoughtStreamEntryType;
-  wantsAction: boolean;
   prepareTitle: string;
   initialActionSummary?: string;
   buildInputFromConversation?: (conversationId: string) => Promise<TInput>;
