@@ -1,24 +1,29 @@
-export type ConversationEntity = {
-  id: string;
-  title: string;
-  groupId: string | null;
-  isDeleted: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  lastMessageAt: Date;
-  promptTokensTotal: number;
-  cachedPromptTokensTotal: number;
-  completionTokensTotal: number;
-  defaultViewLeafEntryId: string | null;
-};
+import { z } from 'zod';
 
-export type CreateConversationInput = {
-  title?: string;
-};
+export const ConversationEntitySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  groupId: z.string().nullable(),
+  isDeleted: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  lastMessageAt: z.date(),
+  promptTokensTotal: z.number(),
+  cachedPromptTokensTotal: z.number(),
+  completionTokensTotal: z.number(),
+  defaultViewLeafEntryId: z.string().nullable(),
+});
+export type ConversationEntity = z.infer<typeof ConversationEntitySchema>;
 
-export type ConversationGroupEntity = {
-  id: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export const CreateConversationInputSchema = z.object({
+  title: z.string().optional(),
+});
+export type CreateConversationInput = z.infer<typeof CreateConversationInputSchema>;
+
+export const ConversationGroupEntitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type ConversationGroupEntity = z.infer<typeof ConversationGroupEntitySchema>;

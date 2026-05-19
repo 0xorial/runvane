@@ -1,19 +1,13 @@
 import { z } from 'zod';
 
-export type ToolCatalogItemResponse = {
-  name: string;
-  description?: string;
-  ui?: boolean;
-  [key: string]: unknown;
-};
-
-const ToolCatalogItemResponseSchema: z.ZodType<ToolCatalogItemResponse> = z
+export const ToolCatalogItemResponseSchema = z
   .object({
     name: z.string(),
     description: z.string().optional(),
     ui: z.boolean().optional(),
   })
   .passthrough();
+export type ToolCatalogItemResponse = z.infer<typeof ToolCatalogItemResponseSchema>;
 
 export function validateGetToolsResponse(data: unknown): ToolCatalogItemResponse[] {
   const parsed = z.array(ToolCatalogItemResponseSchema).safeParse(data);

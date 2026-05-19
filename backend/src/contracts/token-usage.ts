@@ -1,16 +1,19 @@
+import { z } from 'zod';
 import type { StreamTextCompletionUsage } from '../llmProviders/provider.js';
 
-export type EntryTokenUsage = {
-  promptTokens?: number;
-  cachedPromptTokens?: number;
-  completionTokens?: number;
-};
+export const EntryTokenUsageSchema = z.object({
+  promptTokens: z.number().optional(),
+  cachedPromptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+});
+export type EntryTokenUsage = z.infer<typeof EntryTokenUsageSchema>;
 
-export type ConversationTotalsUsage = {
-  promptTokensTotal?: number;
-  cachedPromptTokensTotal?: number;
-  completionTokensTotal?: number;
-};
+export const ConversationTotalsUsageSchema = z.object({
+  promptTokensTotal: z.number().optional(),
+  cachedPromptTokensTotal: z.number().optional(),
+  completionTokensTotal: z.number().optional(),
+});
+export type ConversationTotalsUsage = z.infer<typeof ConversationTotalsUsageSchema>;
 
 function toFiniteOrUndefined(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;

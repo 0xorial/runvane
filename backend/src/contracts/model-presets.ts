@@ -1,36 +1,28 @@
 import { z } from 'zod';
 
-export type ModelPresetUpsertInput = {
-  name: string;
-  parameters: Record<string, unknown>;
-};
+export const ModelPresetUpsertInputSchema = z.object({
+  name: z.string(),
+  parameters: z.record(z.string(), z.unknown()),
+});
+export type ModelPresetUpsertInput = z.infer<typeof ModelPresetUpsertInputSchema>;
 
-export type ModelPresetResponse = {
-  id: number;
-  name: string;
-  parameters: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-};
-
-export type ModelPresetUpsertRequest = {
-  name?: string;
-  parameters?: Record<string, unknown>;
-};
-
-export type DeleteModelPresetResponse = { ok: boolean };
-
-const ModelPresetResponseSchema: z.ZodType<ModelPresetResponse> = z.object({
+export const ModelPresetResponseSchema = z.object({
   id: z.number().finite(),
   name: z.string(),
   parameters: z.record(z.string(), z.unknown()),
   created_at: z.string(),
   updated_at: z.string(),
 });
+export type ModelPresetResponse = z.infer<typeof ModelPresetResponseSchema>;
 
-const DeleteModelPresetResponseSchema: z.ZodType<DeleteModelPresetResponse> = z.object({
-  ok: z.boolean(),
+export const ModelPresetUpsertRequestSchema = z.object({
+  name: z.string().optional(),
+  parameters: z.record(z.string(), z.unknown()).optional(),
 });
+export type ModelPresetUpsertRequest = z.infer<typeof ModelPresetUpsertRequestSchema>;
+
+export const DeleteModelPresetResponseSchema = z.object({ ok: z.boolean() });
+export type DeleteModelPresetResponse = z.infer<typeof DeleteModelPresetResponseSchema>;
 
 function formatZodError(context: string, err: z.ZodError): Error {
   const details = err.issues.map((i) => `${context}.${i.path.join('.') || '<root>'}: ${i.message}`).join('; ');

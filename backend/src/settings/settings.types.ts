@@ -1,31 +1,36 @@
-import type { LlmProviderSettingSpec } from '../llmProviders/provider.js';
+import { z } from 'zod';
+import { LlmProviderSettingSpecSchema } from '../llmProviders/provider.js';
 
-export type LlmProviderRow = {
-  id: string;
-  label: string;
-  settings: Record<string, unknown>;
-  settings_spec: LlmProviderSettingSpec[];
-  models: string[];
-  models_verified: boolean;
-};
+export const LlmProviderRowSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  settings: z.record(z.string(), z.unknown()),
+  settings_spec: z.array(LlmProviderSettingSpecSchema),
+  models: z.array(z.string()),
+  models_verified: z.boolean(),
+});
+export type LlmProviderRow = z.infer<typeof LlmProviderRowSchema>;
 
-export type LlmConfiguration = {
-  provider_id: string;
-  model_name: string;
-  tool_call_provider_id?: string;
-  tool_call_model_name?: string;
-  title_provider_id?: string;
-  title_model_name?: string;
-  model_settings: Record<string, unknown>;
-};
+export const LlmConfigurationSchema = z.object({
+  provider_id: z.string(),
+  model_name: z.string(),
+  tool_call_provider_id: z.string().optional(),
+  tool_call_model_name: z.string().optional(),
+  title_provider_id: z.string().optional(),
+  title_model_name: z.string().optional(),
+  model_settings: z.record(z.string(), z.unknown()),
+});
+export type LlmConfiguration = z.infer<typeof LlmConfigurationSchema>;
 
-export type LlmProviderSettingsDocument = {
-  providers: LlmProviderRow[];
-  llm_configuration: LlmConfiguration;
-};
+export const LlmProviderSettingsDocumentSchema = z.object({
+  providers: z.array(LlmProviderRowSchema),
+  llm_configuration: LlmConfigurationSchema,
+});
+export type LlmProviderSettingsDocument = z.infer<typeof LlmProviderSettingsDocumentSchema>;
 
-export type LlmProviderConnectionTestResponse = {
-  ok: boolean;
-  detail: string | null;
-  models: string[];
-};
+export const LlmProviderConnectionTestResponseSchema = z.object({
+  ok: z.boolean(),
+  detail: z.string().nullable(),
+  models: z.array(z.string()),
+});
+export type LlmProviderConnectionTestResponse = z.infer<typeof LlmProviderConnectionTestResponseSchema>;

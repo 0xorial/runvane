@@ -7,6 +7,12 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import type { AgentDefaultLlmConfiguration } from '../agent.entity.js';
+
+// Compile-time check: AgentDefaultLlmConfigurationDto must be structurally
+// assignable to AgentDefaultLlmConfiguration. If a field is added to the
+// schema and forgotten here, agents.service.ts will fail to compile.
+type _DtoMatchesEntity = AgentDefaultLlmConfigurationDto extends AgentDefaultLlmConfiguration ? true : never;
 
 export class AgentModelReferenceDto {
   @IsOptional()

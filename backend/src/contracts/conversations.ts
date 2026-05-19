@@ -44,25 +44,30 @@ export const GetConversationsResponseSchema = z.object({
 });
 export type GetConversationsResponse = z.infer<typeof GetConversationsResponseSchema>;
 
-// ---- Request / response shapes (no validation needed server-side) ----
+// ---- Request / response shapes ----
 
-export type CreateConversationRequest = { title?: string };
+export const CreateConversationRequestSchema = z.object({ title: z.string().optional() });
+export type CreateConversationRequest = z.infer<typeof CreateConversationRequestSchema>;
 
-export type PostConversationMessageRequest = {
-  message: string;
-  agentId: string;
-  llmProviderId?: string;
-  llmModel?: string;
-  modelPresetId?: number;
-  attachmentIds?: string[];
-};
+export const PostConversationMessageRequestSchema = z.object({
+  message: z.string(),
+  agentId: z.string(),
+  llmProviderId: z.string().optional(),
+  llmModel: z.string().optional(),
+  modelPresetId: z.number().optional(),
+  attachmentIds: z.array(z.string()).optional(),
+  parentId: z.string().nullable().optional(),
+  clientRequestId: z.string().optional(),
+});
+export type PostConversationMessageRequest = z.infer<typeof PostConversationMessageRequestSchema>;
 
 export const PostConversationMessageAcceptedResponseSchema = z.object({
   conversationId: z.string(),
 });
 export type PostConversationMessageAcceptedResponse = z.infer<typeof PostConversationMessageAcceptedResponseSchema>;
 
-export type SetConversationActiveLeafRequest = { entryId: string };
+export const SetConversationActiveLeafRequestSchema = z.object({ entryId: z.string() });
+export type SetConversationActiveLeafRequest = z.infer<typeof SetConversationActiveLeafRequestSchema>;
 
 // ---- Frontend validation helpers ----
 // These are used by the frontend to validate HTTP responses received from the backend.

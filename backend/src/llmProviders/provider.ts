@@ -1,19 +1,22 @@
+import { z } from 'zod';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from './types.js';
 
 export type ProviderSettingsDict = Record<string, unknown>;
 
-export type LlmProviderSettingSpec = {
-  key: string;
-  label: string;
-  type: 'string' | 'secret' | 'url';
-  required: boolean;
-  placeholder?: string;
-};
+export const LlmProviderSettingSpecSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  type: z.union([z.literal('string'), z.literal('secret'), z.literal('url')]),
+  required: z.boolean(),
+  placeholder: z.string().optional(),
+});
+export type LlmProviderSettingSpec = z.infer<typeof LlmProviderSettingSpecSchema>;
 
-export type ConnectivityResult = {
-  ok: boolean;
-  detail: string | null;
-};
+export const ConnectivityResultSchema = z.object({
+  ok: z.boolean(),
+  detail: z.string().nullable(),
+});
+export type ConnectivityResult = z.infer<typeof ConnectivityResultSchema>;
 
 /** Re-exported for convenience; usage shape lives in types.ts. */
 export type { LlmUsage as StreamTextCompletionUsage } from './types.js';
