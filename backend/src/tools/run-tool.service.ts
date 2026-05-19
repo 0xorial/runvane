@@ -10,7 +10,7 @@ import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProv
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
-import { GuardrailService, type GuardrailConfig } from './guardrail.service.js';
+import type { GuardrailConfig } from '../contracts/guardrail.js';
 
 export type AgentToolConfigInput = {
   enabled?: boolean;
@@ -54,7 +54,6 @@ export class RunToolService {
     private readonly thoughtProcessing: ThoughtProcessingService,
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
     private readonly plannerProvider: PlannerThoughtTypeProvider,
-    private readonly guardrail: GuardrailService,
   ) {}
 
   async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
@@ -91,30 +90,6 @@ export class RunToolService {
     const existing = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (permission === 'forbid' || (permission === 'ask_user' && input.approvalGranted !== true)) {
       return this.recordBlocked({ input, permission, parsedParams, existingEntryId: existing?.id ?? null, chain });
-    }
-
-    const shouldRunGuardrail =
-      permission === 'allow' &&
-      input.agentToolConfig?.guardrail === true &&
-      input.guardrailConfig != null &&
-      input.approvalGranted !== true;
-
-    if (shouldRunGuardrail) {
-      const guardrailResult = await this.guardrail.evaluate({
-        toolName: input.toolName,
-        params: parsedParams,
-        guardrailConfig: input.guardrailConfig!,
-      });
-      if (guardrailResult.verdict === 'flag') {
-        return this.recordBlocked({
-          input,
-          permission: 'ask_user',
-          parsedParams,
-          existingEntryId: existing?.id ?? null,
-          chain,
-          guardrailReason: guardrailResult.reason,
-        });
-      }
     }
 
     return this.executeTool({
@@ -170,7 +145,7 @@ export class RunToolService {
     return created.id;
   }
 
-  private async recordBlocked(args: {
+  async recordBlocked(args: {
     input: RunToolInput;
     permission: ToolPermission;
     parsedParams: unknown;

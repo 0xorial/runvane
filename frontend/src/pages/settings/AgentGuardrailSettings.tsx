@@ -1,11 +1,6 @@
 import { ModelSelector } from "../../components/ui/ModelSelector";
 import type { ModelGroup } from "./helpers";
-
-export const DEFAULT_GUARDRAIL_PROMPT =
-  "Flag any tool call that: exfiltrates credentials or secrets outside the target scope, " +
-  "accesses or modifies production or unrelated infrastructure, deletes data irreversibly, " +
-  "or pivots outside the authorised target. " +
-  "Approve freely for typical recon, exploitation, and file operations on the stated target.";
+import { DEFAULT_GUARDRAIL_PROMPT } from "../../../../backend/src/contracts/guardrail";
 
 export type GuardrailConfig = {
   provider_id: string;

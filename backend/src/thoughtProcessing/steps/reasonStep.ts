@@ -108,7 +108,7 @@ export class ReasonStep {
     });
 
     this.logger.log(
-      `[reason-step] streamEntry=${streamEntryId} model=${ctx.llmModel} turns=${wireRequest.messages.length} tools=${wireRequest.tools?.length ?? 0}`,
+      `llm → ${ctx.llmProviderId}/${ctx.llmModel} turns=${wireRequest.messages.length} tools=${wireRequest.tools?.length ?? 0}`,
     );
 
     const startedAt = Date.now();
@@ -119,6 +119,15 @@ export class ReasonStep {
 
     const completion = await llmProvider.streamCompletion(providerSettings, ctx.llmModel, wireRequest, onEvent);
     scope.throwIfAborted();
+
+    const elapsedMs = Date.now() - startedAt;
+    const usage = completion.usage;
+    const usageStr = usage
+      ? `prompt=${usage.promptTokens} cached=${usage.cachedPromptTokens ?? 0} completion=${usage.completionTokens}`
+      : 'usage=unknown';
+    this.logger.log(
+      `llm ← ${ctx.llmProviderId}/${ctx.llmModel} ${elapsedMs}ms finish=${completion.finishReason} ${usageStr}`,
+    );
 
     const responseText = getCompletionText(completion);
     const thinkingText = getCompletionThinking(completion);

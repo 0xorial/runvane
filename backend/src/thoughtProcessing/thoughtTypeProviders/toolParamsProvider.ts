@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
@@ -6,9 +6,10 @@ import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-h
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
-import type { GuardrailConfig } from '../../tools/guardrail.service.js';
+import type { GuardrailConfig } from '../../contracts/guardrail.js';
 import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
+import { GuardrailThoughtTypeProvider } from './guardrailProvider.js';
 
 export type ToolParamsInput = {
   conversationId: string;
@@ -31,7 +32,10 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
     private readonly hub: SseHubService,
+    @Inject(forwardRef(() => RunToolService))
     private readonly runTool: RunToolService,
+    @Inject(forwardRef(() => GuardrailThoughtTypeProvider))
+    private readonly guardrailProvider: GuardrailThoughtTypeProvider,
   ) {}
 
   runPrepare = (input: ToolParamsInput): LlmRequest => ({
@@ -69,6 +73,29 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
 
     await this.markActionCompleted(ctx, input.toolName, parsedParams);
 
+    const mainLlm = { providerId: ctx.llmProviderId, model: ctx.llmModel };
+
+    if (input.guardrailConfig) {
+      // Delegate to GuardrailThoughtTypeProvider so the guardrail LLM call is
+      // visible as a thought entry in the chat chain.
+      this.guardrailProvider.start({
+        input: {
+          conversationId: input.conversationId,
+          agentId: input.agentId,
+          toolName: input.toolName,
+          params: parsedParams,
+          toolRequest: input.toolRequest,
+          agentToolConfig: input.agentToolConfig,
+          guardrailConfig: input.guardrailConfig,
+          plannerFollowup: input.plannerFollowup,
+          mainLlm,
+        },
+        scope,
+        chain: ctx.chain,
+      });
+      return;
+    }
+
     await this.runTool.run(
       {
         conversationId: input.conversationId,
@@ -77,12 +104,11 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         params: parsedParams,
         toolRequest: input.toolRequest,
         ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
-        ...(input.guardrailConfig ? { guardrailConfig: input.guardrailConfig } : {}),
         plannerFollowup: input.plannerFollowup,
       },
       scope,
       ctx.chain,
-      { providerId: ctx.llmProviderId, model: ctx.llmModel },
+      mainLlm,
     );
   };
 

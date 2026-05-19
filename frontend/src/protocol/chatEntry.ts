@@ -1,5 +1,6 @@
 import type {
   ChatEntry,
+  GuardrailLlmStreamEntry,
   PlannerLlmStreamEntry,
   SummarizeLlmStreamEntry,
   TitleLlmStreamEntry,
@@ -11,6 +12,7 @@ export type {
   ChatAttachment,
   ChatEntry,
   CheckpointSummaryEntry,
+  GuardrailLlmStreamEntry,
   LlmDecision,
   LlmDecisionTool,
   LlmDecisionUserResponse,
@@ -21,6 +23,7 @@ export type {
   TitleLlmStreamEntry,
   ToolInvocationEntry,
   ToolParamsLlmStreamEntry,
+  ToolState,
   UserMessageEntry,
 } from "../../../backend/src/contracts/chatEntry.js";
 
@@ -28,7 +31,8 @@ export type ThoughtStreamEntry =
   | PlannerLlmStreamEntry
   | TitleLlmStreamEntry
   | ToolParamsLlmStreamEntry
-  | SummarizeLlmStreamEntry;
+  | SummarizeLlmStreamEntry
+  | GuardrailLlmStreamEntry;
 
 export function isPlannerThinkingEntry(e: ChatEntry): e is PlannerLlmStreamEntry {
   return e.type === "planner_llm_stream";
@@ -39,6 +43,7 @@ export function isThoughtStreamEntry(e: ChatEntry): e is ThoughtStreamEntry {
     e.type === "planner_llm_stream" ||
     e.type === "title_llm_stream" ||
     e.type === "tool_params_llm_stream" ||
-    e.type === "summarize_llm_stream"
+    e.type === "summarize_llm_stream" ||
+    e.type === "guardrail_llm_stream"
   );
 }

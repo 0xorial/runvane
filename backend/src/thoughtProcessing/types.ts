@@ -1,5 +1,6 @@
 import type {
   ChatEntry,
+  GuardrailLlmStreamEntry,
   PlannerLlmStreamEntry,
   SummarizeLlmStreamEntry,
   TitleLlmStreamEntry,
@@ -13,7 +14,8 @@ export type ThoughtStreamEntry =
   | PlannerLlmStreamEntry
   | TitleLlmStreamEntry
   | ToolParamsLlmStreamEntry
-  | SummarizeLlmStreamEntry;
+  | SummarizeLlmStreamEntry
+  | GuardrailLlmStreamEntry;
 export type ThoughtStreamEntryType = ThoughtStreamEntry['type'];
 
 const THOUGHT_STREAM_ENTRY_TYPES: ReadonlySet<ThoughtStreamEntryType> = new Set<ThoughtStreamEntryType>([
@@ -21,6 +23,7 @@ const THOUGHT_STREAM_ENTRY_TYPES: ReadonlySet<ThoughtStreamEntryType> = new Set<
   'title_llm_stream',
   'tool_params_llm_stream',
   'summarize_llm_stream',
+  'guardrail_llm_stream',
 ]);
 
 export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEntry {

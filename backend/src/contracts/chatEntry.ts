@@ -124,6 +124,11 @@ export const SummarizeLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend
 });
 export type SummarizeLlmStreamEntry = z.infer<typeof SummarizeLlmStreamEntrySchema>;
 
+export const GuardrailLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
+  type: z.literal('guardrail_llm_stream'),
+});
+export type GuardrailLlmStreamEntry = z.infer<typeof GuardrailLlmStreamEntrySchema>;
+
 export const ThoughtActionEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal('thought-action'),
   thoughtId: z.string(),
@@ -136,12 +141,32 @@ export const ThoughtActionEntrySchema = ChatEntryBaseSchema.extend({
 });
 export type ThoughtActionEntry = z.infer<typeof ThoughtActionEntrySchema>;
 
+export const ToolPermissionSchema = z.enum(['allow', 'ask_user', 'forbid']);
+export type ToolPermission = z.infer<typeof ToolPermissionSchema>;
+
+export const ToolEnvelopeSchema = z.object({
+  ok: z.boolean(),
+  toolId: z.string(),
+  output: z.unknown(),
+  error: z.string().nullable(),
+  permission_state: ToolPermissionSchema,
+  timing: z.object({
+    started_at: z.string(),
+    finished_at: z.string(),
+    elapsed_ms: z.number(),
+  }),
+});
+export type ToolEnvelope = z.infer<typeof ToolEnvelopeSchema>;
+
+export const ToolStateSchema = z.enum(['requested', 'running', 'done', 'error']);
+export type ToolState = z.infer<typeof ToolStateSchema>;
+
 export const ToolInvocationEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal('tool-invocation'),
   toolId: z.string(),
-  state: z.enum(['requested', 'running', 'done', 'error']),
+  state: ToolStateSchema,
   parameters: z.record(z.string(), z.unknown()),
-  result: z.unknown(),
+  result: ToolEnvelopeSchema.nullable().optional(),
 });
 export type ToolInvocationEntry = z.infer<typeof ToolInvocationEntrySchema>;
 
@@ -172,6 +197,7 @@ export const ChatEntrySchema = z.discriminatedUnion('type', [
   TitleLlmStreamEntrySchema,
   ToolParamsLlmStreamEntrySchema,
   SummarizeLlmStreamEntrySchema,
+  GuardrailLlmStreamEntrySchema,
   ThoughtActionEntrySchema,
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,

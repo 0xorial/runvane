@@ -120,6 +120,7 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
       case 'title_llm_stream':
       case 'tool_params_llm_stream':
       case 'summarize_llm_stream':
+      case 'guardrail_llm_stream':
         break;
       default: {
         const _exhaustive: never = e;

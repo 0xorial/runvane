@@ -3,12 +3,14 @@ import type {
   ChatEntry,
   ChatEntryBase,
   CheckpointSummaryEntry,
+  GuardrailLlmStreamEntry,
   PlannerLlmStreamEntry,
   SummarizeLlmStreamEntry,
   ThoughtStepStatus,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
 } from '../../contracts/chatEntry.js';
+import { ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
 import { z } from 'zod';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import type { ChatEntryDbRow } from './chat-entries.payload.js';
@@ -39,6 +41,7 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
     case 'title_llm_stream':
     case 'tool_params_llm_stream':
     case 'summarize_llm_stream':
+    case 'guardrail_llm_stream':
       return mapStream(base, payload, row.type, ctx);
     case 'tool-invocation':
       return mapToolInvocation(base, payload, ctx);
@@ -146,7 +149,7 @@ function mapStream(
   payload: Record<string, unknown>,
   type: ThoughtStreamEntryType,
   ctx: string,
-): PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry | SummarizeLlmStreamEntry {
+): PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry | SummarizeLlmStreamEntry | GuardrailLlmStreamEntry {
   const stream: PlannerLlmStreamEntry = {
     ...base,
     type: 'planner_llm_stream',
@@ -180,6 +183,8 @@ function mapStream(
       return { ...stream, type: 'tool_params_llm_stream' } satisfies ToolParamsLlmStreamEntry;
     case 'summarize_llm_stream':
       return { ...stream, type: 'summarize_llm_stream' } satisfies SummarizeLlmStreamEntry;
+    case 'guardrail_llm_stream':
+      return { ...stream, type: 'guardrail_llm_stream' } satisfies GuardrailLlmStreamEntry;
     default: {
       const exhaustive: never = type;
       throw new Error(`${ctx}: unhandled stream entry type ${String(exhaustive)}`);
@@ -188,13 +193,25 @@ function mapStream(
 }
 
 function mapToolInvocation(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
+  let result: z.infer<typeof ToolEnvelopeSchema> | null | undefined;
+  if (payload.result === undefined) {
+    result = undefined;
+  } else if (payload.result === null) {
+    result = null;
+  } else {
+    const parsed = ToolEnvelopeSchema.safeParse(payload.result);
+    if (!parsed.success) {
+      throw new Error(`${ctx}.result: invalid tool envelope: ${parsed.error.message}`);
+    }
+    result = parsed.data;
+  }
   return {
     ...base,
     type: 'tool-invocation',
     toolId: requireString(payload, 'toolId', ctx),
     state: requireToolState(payload, ctx),
     parameters: requireRecord(payload.parameters, `${ctx}.parameters`),
-    result: payload.result,
+    result,
   };
 }
 

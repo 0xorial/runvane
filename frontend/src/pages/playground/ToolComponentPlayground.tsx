@@ -1,20 +1,50 @@
 import { ToolRunRow } from "../../components/chat/rows/ToolRunRow";
 import type { ToolInvocationEntry } from "../../protocol/chatEntry";
 
+const now = new Date().toISOString();
+
+const mockEnvelope = (
+  ok: boolean,
+  output: unknown,
+  error: string | null,
+  permission_state: "allow" | "ask_user" | "forbid" = "allow",
+) => ({
+  ok,
+  toolId: "tool",
+  output,
+  error,
+  permission_state,
+  timing: { started_at: now, finished_at: now, elapsed_ms: 0 },
+});
+
 export function ToolComponentPlayground() {
   const scenarios: Array<{ label: string; entry: ToolInvocationEntry }> = [
     {
-      label: "Requested",
+      label: "Requested — permission",
       entry: {
         type: "tool-invocation",
         id: "playground-tool-requested",
         conversationIndex: 0,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
         parentId: null,
         toolId: "curl",
         state: "requested",
         parameters: { url: "https://example.com", method: "GET" },
-        result: "Tool requires user approval.",
+        result: mockEnvelope(false, null, "Tool requires user approval.", "ask_user"),
+      },
+    },
+    {
+      label: "Requested — guardrail flagged",
+      entry: {
+        type: "tool-invocation",
+        id: "playground-tool-guardrail",
+        conversationIndex: 1,
+        createdAt: now,
+        parentId: null,
+        toolId: "bash",
+        state: "requested",
+        parameters: { command: "cat /etc/passwd" },
+        result: mockEnvelope(false, null, "Guardrail flagged: command reads system credential files outside target scope", "ask_user"),
       },
     },
     {
@@ -22,8 +52,8 @@ export function ToolComponentPlayground() {
       entry: {
         type: "tool-invocation",
         id: "playground-tool-running",
-        conversationIndex: 1,
-        createdAt: new Date().toISOString(),
+        conversationIndex: 2,
+        createdAt: now,
         parentId: null,
         toolId: "curl",
         state: "running",
@@ -36,13 +66,13 @@ export function ToolComponentPlayground() {
       entry: {
         type: "tool-invocation",
         id: "playground-tool-done",
-        conversationIndex: 2,
-        createdAt: new Date().toISOString(),
+        conversationIndex: 3,
+        createdAt: now,
         parentId: null,
         toolId: "get_current_time",
         state: "done",
         parameters: {},
-        result: { nowIso: "2026-04-01T19:10:12.456Z" },
+        result: mockEnvelope(true, { iso: now }, null),
       },
     },
     {
@@ -50,13 +80,13 @@ export function ToolComponentPlayground() {
       entry: {
         type: "tool-invocation",
         id: "playground-tool-error",
-        conversationIndex: 3,
-        createdAt: new Date().toISOString(),
+        conversationIndex: 4,
+        createdAt: now,
         parentId: null,
         toolId: "curl",
         state: "error",
         parameters: { url: "http://localhost:3000/private", method: "GET" },
-        result: "curl: blocked local host 'localhost'",
+        result: mockEnvelope(false, null, "curl: blocked local host 'localhost'", "forbid"),
       },
     },
   ];

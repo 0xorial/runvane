@@ -5,7 +5,8 @@ import type { ModelPresetResponse } from "../../../../backend/src/contracts/mode
 import { AsyncButton } from "../../components/ui/AsyncButton";
 import { notifyError } from "../../utils/toast";
 import { AgentLlmSettings } from "./AgentLlmSettings";
-import { AgentGuardrailSettings, DEFAULT_GUARDRAIL_PROMPT, readGuardrailConfig } from "./AgentGuardrailSettings";
+import { AgentGuardrailSettings, readGuardrailConfig } from "./AgentGuardrailSettings";
+import { DEFAULT_GUARDRAIL_PROMPT } from "../../../../backend/src/contracts/guardrail";
 import type { GuardrailConfig } from "./AgentGuardrailSettings";
 import { sortAgents } from "./helpers";
 import type { ModelGroup } from "./helpers";

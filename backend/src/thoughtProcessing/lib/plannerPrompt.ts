@@ -92,6 +92,7 @@ function entryToMessages(entry: ChatEntry): LlmMessage[] {
     case 'title_llm_stream':
     case 'tool_params_llm_stream':
     case 'summarize_llm_stream':
+    case 'guardrail_llm_stream':
       return [];
     default: {
       const _exhaustive: never = entry;
