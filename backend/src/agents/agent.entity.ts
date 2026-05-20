@@ -13,6 +13,7 @@ export const AgentGuardrailConfigSchema = z.object({
   system_prompt: z.string().optional(),
 });
 
+// todo shoudl be AgentConfigurationSchema
 export const AgentDefaultLlmConfigurationSchema = z.object({
   provider_id: z.string().optional(),
   model_name: z.string().optional(),

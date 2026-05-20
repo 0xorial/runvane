@@ -6,7 +6,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
-import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
+import { RunToolService } from '../../tools/run-tool.service.js';
 import { DEFAULT_GUARDRAIL_PROMPT, type GuardrailConfig } from '../../contracts/guardrail.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
 import type { LlmRef, ThoughtContext, ThoughtTypeProvider } from '../types.js';
@@ -22,7 +22,6 @@ export type GuardrailProviderInput = {
   toolName: string;
   params: Record<string, unknown>;
   toolRequest?: string;
-  agentToolConfig?: AgentToolConfigInput;
   guardrailConfig: GuardrailConfig;
   plannerFollowup: { mode: 'continue' | 'finalize' };
   /** The main agent LLM — used when calling runTool after guardrail approves. */
@@ -49,11 +48,7 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
    * present. Starts this provider as a visible thought in the chain using the
    * guardrail LLM, keeping ThoughtProcessingService out of toolParamsProvider.
    */
-  start(args: {
-    input: GuardrailProviderInput;
-    scope: LifecycleScope;
-    chain: ChatChain;
-  }): void {
+  start(args: { input: GuardrailProviderInput; scope: LifecycleScope; chain: ChatChain }): void {
     const { input, scope, chain } = args;
     this.thoughtProcessing.startThought({
       provider: this,
@@ -73,10 +68,7 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
       `Parameters:\n${paramsJson}\n\n` +
       `Respond with JSON only. Either {"verdict":"approve"} or {"verdict":"flag","reason":"<brief explanation>"}.`;
     return {
-      messages: [
-        textMessage('system', systemPrompt),
-        textMessage('user', userContent),
-      ],
+      messages: [textMessage('system', systemPrompt), textMessage('user', userContent)],
     };
   };
 
@@ -92,7 +84,10 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
     scope: LifecycleScope,
   ): Promise<void> => {
     const raw = getCompletionText(completion).trim();
-    const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const jsonText = raw
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim();
 
     let verdict: z.infer<typeof GuardrailVerdictSchema> = { verdict: 'approve' };
     let parsedJson: unknown;
@@ -117,7 +112,6 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
         toolName: input.toolName,
         params: input.params,
         toolRequest: input.toolRequest,
-        agentToolConfig: input.agentToolConfig,
         plannerFollowup: input.plannerFollowup,
         decidingThoughtId: ctx.thoughtId,
         ...(verdict.verdict === 'flag' ? { guardrailFlagReason: verdict.reason } : {}),

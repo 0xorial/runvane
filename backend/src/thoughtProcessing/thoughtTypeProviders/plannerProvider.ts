@@ -17,7 +17,11 @@ import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { buildPlannerMessages } from '../lib/plannerPrompt.js';
-import { extractAssistantOutputFromJsonLike, parsePlannerOutput, type ParsedPlannerOutput } from '../lib/plannerTextParsing.js';
+import {
+  extractAssistantOutputFromJsonLike,
+  parsePlannerOutput,
+  type ParsedPlannerOutput,
+} from '../lib/plannerTextParsing.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import { ToolParamsThoughtTypeProvider, type ToolParamsInput } from './toolParamsProvider.js';
@@ -166,11 +170,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       toolRequest: args.requested.toolRequest,
       plannerFollowup: { mode: args.followup },
     };
-    const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
-    if (toolCfg) toolParamsInput.agentToolConfig = toolCfg;
     const rawGuardrail = args.agent.default_llm_configuration?.guardrail;
     if (rawGuardrail?.provider_id && rawGuardrail?.model_name) {
       // Per-tool system_prompt overrides the global one; fall back to global.
+      const toolCfg = args.agent.default_llm_configuration?.tools?.[args.requested.toolName];
       const toolPromptOverride = toolCfg?.guardrail_system_prompt?.trim();
       const basePrompt = rawGuardrail.system_prompt ?? '';
       toolParamsInput.guardrailConfig = {
@@ -202,11 +205,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     return created;
   }
 
-  private async streamAssistantDelta(
-    state: StreamState,
-    ctx: ThoughtContext,
-    delta: string,
-  ): Promise<void> {
+  private async streamAssistantDelta(state: StreamState, ctx: ThoughtContext, delta: string): Promise<void> {
     const conversationId = ctx.conversationId;
     if (!state.assistantEntryId) {
       const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
@@ -232,7 +231,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const conversationId = ctx.conversationId;
     if (!assistantText) return state?.assistantEntryId ?? null;
     if (state?.assistantEntryId) {
-      await this.chatEntries.updateAssistantMessage(conversationId, { id: state.assistantEntryId, text: assistantText });
+      await this.chatEntries.updateAssistantMessage(conversationId, {
+        id: state.assistantEntryId,
+        text: assistantText,
+      });
       const entry = await this.chatEntries.getChatEntry(conversationId, state.assistantEntryId);
       if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
       return state.assistantEntryId;

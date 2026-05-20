@@ -192,32 +192,6 @@ export class ChatEntriesBaseRepo {
     )) as ChatEntryDbRow[];
   }
 
-  async isEntryOnDefaultViewLineage(conversationId: string, entryId: string): Promise<boolean> {
-    const leafId = await this.resolveDefaultViewLeaf(conversationId);
-    if (!leafId) return false;
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `WITH RECURSIVE lineage(id, parent_id) AS (
-         SELECT id, parent_id FROM chat_entries
-         WHERE conversation_id = ? AND id = ?
-         UNION ALL
-         SELECT e.id, e.parent_id FROM chat_entries e
-         JOIN lineage l ON l.parent_id = e.id
-         WHERE e.conversation_id = ?
-       )
-       SELECT 1 AS present FROM lineage WHERE id = ? LIMIT 1`,
-      conversationId,
-      leafId,
-      conversationId,
-      entryId,
-    )) as Array<{ present: number }>;
-    return rows.length > 0;
-  }
-
-  async getMessage(conversationId: string, entryId: string): Promise<ChatMessageEntryRow | null> {
-    const row = await this.fetchEntryRow(conversationId, entryId);
-    return row ? rowToChatMessage(row) : null;
-  }
-
   async getChatEntry(conversationId: string, entryId: string): Promise<ChatEntry | null> {
     const row = await this.fetchEntryRow(conversationId, entryId);
     return row ? rowToChatEntry(row) : null;

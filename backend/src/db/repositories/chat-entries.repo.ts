@@ -245,24 +245,6 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     await this.mergeEntryPayload(conversationId, input.id, patch);
   }
 
-  async findPendingToolInvocation(
-    conversationId: string,
-    toolId: string,
-    toolRequest?: string,
-  ): Promise<ToolInvocationEntry | null> {
-    const entries = await this.listChatEntries(conversationId);
-    const pending = entries.filter(
-      (e): e is ToolInvocationEntry =>
-        e.type === 'tool-invocation' && e.toolId === toolId && (e.state === 'requested' || e.state === 'running'),
-    );
-    if (pending.length === 0) return null;
-    if (toolRequest) {
-      const match = pending.findLast((e) => String(e.parameters.tool_request ?? '').trim() === toolRequest);
-      if (match) return match;
-    }
-    return pending.at(-1) ?? null;
-  }
-
   async updateAssistantMessage(
     conversationId: string,
     input: { id: string; text: string },

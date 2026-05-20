@@ -5,7 +5,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
-import { RunToolService, type AgentToolConfigInput } from '../../tools/run-tool.service.js';
+import { RunToolService } from '../../tools/run-tool.service.js';
 import type { GuardrailConfig } from '../../contracts/guardrail.js';
 import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
@@ -18,7 +18,6 @@ export type ToolParamsInput = {
   toolAiDescription: string;
   toolParamsSchema: unknown;
   toolRequest: string;
-  agentToolConfig?: AgentToolConfigInput;
   plannerFollowup: { mode: 'continue' | 'finalize' };
   guardrailConfig?: GuardrailConfig;
 };
@@ -84,7 +83,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           toolName: input.toolName,
           params: parsedParams,
           toolRequest: input.toolRequest,
-          agentToolConfig: input.agentToolConfig,
           guardrailConfig: input.guardrailConfig,
           plannerFollowup: input.plannerFollowup,
           mainLlm,
@@ -102,7 +100,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         toolName: input.toolName,
         params: parsedParams,
         toolRequest: input.toolRequest,
-        ...(input.agentToolConfig ? { agentToolConfig: input.agentToolConfig } : {}),
         plannerFollowup: input.plannerFollowup,
         decidingThoughtId: ctx.thoughtId,
       },

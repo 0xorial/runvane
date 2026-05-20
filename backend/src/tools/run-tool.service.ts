@@ -2,6 +2,7 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { SseType } from '../contracts/sse.js';
+import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
@@ -12,21 +13,13 @@ import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
 import type { GuardrailConfig } from '../contracts/guardrail.js';
 
-export type AgentToolConfigInput = {
-  enabled?: boolean;
-  rules?: Record<string, unknown>;
-  guardrail?: boolean;
-};
-
 export type RunToolInput = {
   conversationId: string;
-  sourceEntryId?: string;
   agentId: string;
   toolName: string;
   params: unknown;
   toolRequest?: string;
   approvalGranted?: boolean;
-  agentToolConfig?: AgentToolConfigInput;
   plannerFollowup?: { mode: 'continue' | 'finalize' };
   guardrailConfig?: GuardrailConfig;
   /**
@@ -63,6 +56,7 @@ export class RunToolService {
     private readonly chatEntries: ChatEntriesRepo,
     private readonly tools: ToolRegistry,
     private readonly hub: SseHubService,
+    private readonly agents: AgentsRepo,
     @Inject(forwardRef(() => ThoughtProcessingService))
     private readonly thoughtProcessing: ThoughtProcessingService,
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
@@ -70,12 +64,6 @@ export class RunToolService {
   ) {}
 
   async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
-    if (input.sourceEntryId && !(await this.chatEntries.isEntryOnDefaultViewLineage(input.conversationId, input.sourceEntryId))) {
-      this.logger.log(`tool skipped: source entry not on default-view lineage (${input.conversationId}/${input.sourceEntryId})`);
-      return { kind: 'skipped' };
-    }
-    scope.throwIfAborted();
-
     const tool = this.tools.get(input.toolName);
     if (!tool) {
       const reason = `Tool not found: ${input.toolName}`;
@@ -83,7 +71,12 @@ export class RunToolService {
       throw new Error(reason + ` (entry=${entryId})`);
     }
 
-    const parsedRules = tool.parseRules(input.agentToolConfig?.rules ?? tool.getDefaultRules());
+    // Per-tool config is owned by the agent — load it here rather than threading
+    // it through ToolParamsInput/GuardrailProviderInput/RunToolInput.
+    const agent = await this.agents.get(input.agentId);
+    const toolCfg = agent?.default_llm_configuration?.tools?.[input.toolName];
+
+    const parsedRules = tool.parseRules(toolCfg?.rules ?? tool.getDefaultRules());
     const parsedParams = tool.parseParams(input.params);
     const entries = await this.chatEntries.listChatEntries(input.conversationId);
 
@@ -93,16 +86,15 @@ export class RunToolService {
       agentId: input.agentId,
       entries,
       agentToolConfig: {
-        enabled: input.agentToolConfig?.enabled !== false,
+        enabled: toolCfg?.enabled !== false,
         policy: 'allow',
         rules: parsedRules,
       },
     });
     const permission = mostPermissivePermission(ruleResults);
 
-    const existing = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
     if (permission === 'forbid' || (permission === 'ask_user' && input.approvalGranted !== true)) {
-      return this.recordBlocked({ input, permission, parsedParams, existingEntryId: existing?.id ?? null, chain });
+      return this.recordBlocked({ input, permission, parsedParams, chain });
     }
     // Guardrail-flagged calls block with permission='ask_user' even when the
     // permission rules said 'allow' — user must approve past the guardrail.
@@ -111,7 +103,6 @@ export class RunToolService {
         input,
         permission: 'ask_user',
         parsedParams,
-        existingEntryId: existing?.id ?? null,
         chain,
         guardrailReason: input.guardrailFlagReason,
       });
@@ -123,20 +114,10 @@ export class RunToolService {
       parsedParams,
       parsedRules,
       entries,
-      existingEntryId: existing?.id ?? null,
       scope,
       chain,
       llm,
     });
-  }
-
-  async allowAndRun(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
-    const pending = await this.chatEntries.findPendingToolInvocation(input.conversationId, input.toolName, input.toolRequest);
-    if (!pending || pending.state !== 'requested') {
-      this.logger.log(`allowAndRun skipped: no requested invocation (${input.conversationId}/${input.toolName})`);
-      return { kind: 'skipped' };
-    }
-    return this.run({ ...input, sourceEntryId: pending.id, approvalGranted: true }, scope, chain, llm);
   }
 
   private async appendErrorEntry(input: RunToolInput, reason: string, chain: ChatChain): Promise<string> {
@@ -174,11 +155,10 @@ export class RunToolService {
     input: RunToolInput;
     permission: ToolPermission;
     parsedParams: unknown;
-    existingEntryId: string | null;
     chain: ChatChain;
     guardrailReason?: string;
   }): Promise<RunToolResult> {
-    const { input, permission, parsedParams, existingEntryId, chain, guardrailReason } = args;
+    const { input, permission, parsedParams, chain, guardrailReason } = args;
     const startedAt = new Date();
     const baseReason = permission === 'ask_user' ? 'Tool requires user approval.' : 'Tool is forbidden by permission rules.';
     const reason = guardrailReason ? `Guardrail flagged: ${guardrailReason}` : baseReason;
@@ -193,23 +173,17 @@ export class RunToolService {
     const state = permission === 'ask_user' ? 'requested' : 'error';
     const parameters = this.toParametersPayload(input, parsedParams);
 
-    let entryId = existingEntryId;
-    let parentId: string | null = null;
-    if (entryId) {
-      await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state, result: envelope, parameters });
-    } else {
-      const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
-        this.chatEntries.appendToolInvocation(input.conversationId, {
-          toolId: input.toolName,
-          state,
-          parameters,
-          result: envelope,
-          parentId: p,
-        }),
-      );
-      entryId = created.id;
-      parentId = created.parentId;
-    }
+    const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
+      this.chatEntries.appendToolInvocation(input.conversationId, {
+        toolId: input.toolName,
+        state,
+        parameters,
+        result: envelope,
+        parentId: p,
+      }),
+    );
+    const entryId = created.id;
+    const parentId = created.parentId;
     if (permission === 'ask_user') {
       this.hub.publish(input.conversationId, {
         type: SseType.TOOL_INVOCATION_START,
@@ -240,32 +214,25 @@ export class RunToolService {
     parsedParams: unknown;
     parsedRules: Record<string, unknown>;
     entries: Awaited<ReturnType<ChatEntriesRepo['listChatEntries']>>;
-    existingEntryId: string | null;
     scope: LifecycleScope;
     chain: ChatChain;
     llm: LlmRef;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, existingEntryId, scope, chain, llm } = args;
+    const { input, tool, parsedParams, parsedRules, entries, scope, chain, llm } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
 
-    let entryId = existingEntryId;
-    let parentId: string | null = null;
-    if (entryId) {
-      await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'running', parameters });
-    } else {
-      const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
-        this.chatEntries.appendToolInvocation(input.conversationId, {
-          toolId: input.toolName,
-          state: 'running',
-          parameters,
-          parentId: p,
-        }),
-      );
-      entryId = created.id;
-      parentId = created.parentId;
-    }
+    const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
+      this.chatEntries.appendToolInvocation(input.conversationId, {
+        toolId: input.toolName,
+        state: 'running',
+        parameters,
+        parentId: p,
+      }),
+    );
+    const entryId = created.id;
+    const parentId = created.parentId;
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_START,
       chatEntryId: entryId,

@@ -9,6 +9,14 @@ import { StreamInterruptedError } from '../provider.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from '../types.js';
 import { OpenAiStreamAccumulator, buildOpenAiBody, ingestOpenAiChunk } from './openAiShared.js';
 
+async function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, ms);
+  })
+}
+
 function normalizeBaseUrl(settings: ProviderSettingsDict): string {
   const raw = String(settings.base_url ?? '').trim();
   return raw.replace(/\/$/, '');
@@ -223,6 +231,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     };
 
     for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+      await sleep(1000);
       buffer += decoder.decode(chunk, { stream: true });
       while (true) {
         const nl = buffer.indexOf('\n');
