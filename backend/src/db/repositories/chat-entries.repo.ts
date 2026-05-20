@@ -1,19 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import type { ChatAttachment, ToolInvocationEntry } from '../../contracts/chatEntry.js';
+import type {
+  AssistantMessageEntry,
+  ChatAttachment,
+  ToolInvocationEntry,
+  UserMessageEntry,
+} from '../../contracts/chatEntry.js';
 import type { LlmRef } from '../../contracts/llm.js';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { PrismaService } from '../prisma.service.js';
-import type { ThoughtStepStatus, UserMessageEntryRow, AssistantMessageEntryRow } from './chat-entries.types.js';
+import type { ThoughtStepStatus } from './chat-entries.types.js';
 import { ChatEntriesBaseRepo } from './chat-entries-base.repo.js';
 
 export type ToolInvocationState = ToolInvocationEntry['state'];
 
-export type {
-  AssistantMessageEntryRow,
-  ChatMessageEntryRow,
-  ThoughtStepStatus,
-  UserMessageEntryRow,
-} from './chat-entries.types.js';
+export type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat-entries.types.js';
 
 @Injectable()
 export class ChatEntriesRepo extends ChatEntriesBaseRepo {
@@ -31,7 +31,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       parentId: string | null;
       attachments?: ChatAttachment[];
     },
-  ): Promise<UserMessageEntryRow> {
+  ): Promise<UserMessageEntry> {
     const payload: Record<string, unknown> = { text: input.text, agentId: input.agentId };
     if (input.llm) payload.llm = input.llm;
     if (input.modelPresetId !== undefined) payload.modelPresetId = input.modelPresetId;
@@ -41,7 +41,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       parentId: input.parentId,
       payload,
     });
-    const result: UserMessageEntryRow = {
+    const result: UserMessageEntry = {
       type: 'user-message',
       id: row.id,
       conversationIndex: row.conversationIndex,
@@ -59,7 +59,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   async appendAssistantMessage(
     conversationId: string,
     input: { text: string; parentId: string | null },
-  ): Promise<AssistantMessageEntryRow> {
+  ): Promise<AssistantMessageEntry> {
     const row = await this.appendEntry(conversationId, {
       type: 'assistant-message',
       parentId: input.parentId,

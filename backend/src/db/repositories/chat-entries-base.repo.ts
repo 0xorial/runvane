@@ -2,13 +2,7 @@ import type { ChatAttachment, ChatEntry, ToolInvocationEntry } from '../../contr
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
-import { rowToChatMessage, type ChatEntryDbRow } from './chat-entries.payload.js';
-import type {
-  AssistantMessageEntryRow,
-  ChatMessageEntryRow,
-  ThoughtStepStatus,
-  UserMessageEntryRow,
-} from './chat-entries.types.js';
+import type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat-entries.types.js';
 
 type AppendInput = {
   type: string;
@@ -139,14 +133,12 @@ export class ChatEntriesBaseRepo {
     return this.walkToLatestLeaf(conversationId, roots[0].id);
   }
 
-  async listMessages(conversationId: string): Promise<ChatMessageEntryRow[]> {
+  async listMessages(conversationId: string): Promise<ChatMessageEntry[]> {
     const leafId = await this.resolveDefaultViewLeaf(conversationId);
     const rows = leafId ? await this.fetchLineageRows(conversationId, leafId) : [];
-    if (rows.length === 0) return [];
-    return rows.flatMap((row) => {
-      const message = rowToChatMessage(row);
-      return message ? [message] : [];
-    });
+    return rows
+      .map(rowToChatEntry)
+      .filter((e): e is ChatMessageEntry => e.type === 'user-message' || e.type === 'assistant-message');
   }
 
   async listChatEntries(conversationId: string, opts: { all?: boolean } = {}): Promise<ChatEntry[]> {

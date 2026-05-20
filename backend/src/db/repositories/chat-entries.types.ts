@@ -1,27 +1,21 @@
-import type { ChatAttachment } from '../../contracts/chatEntry.js';
-import type { LlmRef } from '../../contracts/llm.js';
+import type { AssistantMessageEntry, UserMessageEntry } from '../../contracts/chatEntry.js';
 
-export type UserMessageEntryRow = {
-  type: 'user-message';
+/** Raw `chat_entries` table row — payload is still a serialised JSON string. */
+export type ChatEntryDbRow = {
   id: string;
-  conversationIndex: number;
-  createdAt: string;
-  parentId: string | null;
-  text: string;
-  agentId: string;
-  llm?: LlmRef;
-  modelPresetId?: number | null;
-  attachments?: ChatAttachment[];
+  conversation_id: string;
+  conversation_index: number;
+  parent_id: string | null;
+  type: string;
+  payload_json: string;
+  created_at: Date;
 };
 
-export type AssistantMessageEntryRow = {
-  type: 'assistant-message';
-  id: string;
-  conversationIndex: number;
-  createdAt: string;
-  parentId: string | null;
-  text: string;
-};
+/**
+ * The user-visible message turns — the subset of `ChatEntry` that
+ * `listMessages` surfaces (thought scaffolding is excluded). Just the
+ * contract entry types; no separate hand-maintained "row" shape.
+ */
+export type ChatMessageEntry = UserMessageEntry | AssistantMessageEntry;
 
-export type ChatMessageEntryRow = UserMessageEntryRow | AssistantMessageEntryRow;
 export type ThoughtStepStatus = 'running' | 'completed' | 'failed' | 'cancelled';

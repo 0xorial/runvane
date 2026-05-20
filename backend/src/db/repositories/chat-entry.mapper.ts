@@ -14,7 +14,7 @@ import { ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { z } from 'zod';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
-import type { ChatEntryDbRow } from './chat-entries.payload.js';
+import type { ChatEntryDbRow } from './chat-entries.types.js';
 
 const STEP_STATUSES: readonly ThoughtStepStatus[] = ['running', 'completed', 'failed', 'cancelled'];
 const TOOL_STATES = ['requested', 'running', 'done', 'error'] as const;
