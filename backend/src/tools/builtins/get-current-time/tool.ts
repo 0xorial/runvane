@@ -5,8 +5,9 @@ import {
   parseGetCurrentTimeToolParams,
   type GetCurrentTimeToolParams,
 } from './params.js';
+import { zerialize } from 'zodex';
 import {
-  getCurrentTimeRulesSchema,
+  GetCurrentTimeToolRulesSchema,
   parseGetCurrentTimeToolRules,
   type GetCurrentTimeToolRules,
 } from './rules.js';
@@ -25,12 +26,12 @@ export class GetCurrentTimeTool extends BaseTool<GetCurrentTimeToolParams, GetCu
     return 'Get current server time.';
   }
 
-  getParamsSchema(): Record<string, unknown> {
+  getParamsSchema(): unknown {
     return getCurrentTimeParamsSchema();
   }
 
-  getRulesSchema(): Record<string, unknown> {
-    return getCurrentTimeRulesSchema();
+  getRulesSchema(): unknown {
+    return zerialize(GetCurrentTimeToolRulesSchema);
   }
 
   getDefaultRules(): GetCurrentTimeToolRules {

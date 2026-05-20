@@ -1,57 +1,26 @@
 import { z } from 'zod';
 
 const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
-type CurlMethod = (typeof ALLOWED_METHODS)[number];
 
-const CurlToolParamsSchema = z
+export const CurlToolParamsSchema = z
   .object({
-    url: z.string().min(1),
+    url: z.string().min(1).describe('Absolute URL to request (http/https).'),
     method: z.enum(ALLOWED_METHODS).default('GET'),
     headers: z.record(z.string(), z.string()).default({}),
-    body: z.string().optional(),
+    body: z.string().optional().describe('Optional request body for POST/PUT/PATCH/DELETE.'),
     timeoutMs: z.number().finite().int().min(100).max(60000).default(10000),
     maxResponseBytes: z.number().finite().int().min(256).max(1000000).default(50000),
     followRedirects: z.boolean().default(true),
   })
   .strict();
 
-export type CurlToolParams = {
-  url: string;
-  method: CurlMethod;
-  headers: Record<string, string>;
-  body?: string;
-  timeoutMs: number;
-  maxResponseBytes: number;
-  followRedirects: boolean;
-};
+export type CurlToolParams = z.infer<typeof CurlToolParamsSchema>;
 
-export function curlParamsSchema(): Record<string, unknown> {
-  return {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      url: { type: 'string', description: 'Absolute URL to request (http/https).' },
-      method: { type: 'string', enum: [...ALLOWED_METHODS], default: 'GET' },
-      headers: { type: 'object', additionalProperties: { type: 'string' }, default: {} },
-      body: { type: 'string', description: 'Optional request body for POST/PUT/PATCH/DELETE.' },
-      timeoutMs: { type: 'integer', minimum: 100, maximum: 60000, default: 10000 },
-      maxResponseBytes: { type: 'integer', minimum: 256, maximum: 1000000, default: 50000 },
-      followRedirects: { type: 'boolean', default: true },
-    },
-    required: ['url'],
-  };
+/** JSON Schema for the LLM, derived from the Zod schema — single source of truth. */
+export function curlParamsSchema(): unknown {
+  return z.toJSONSchema(CurlToolParamsSchema);
 }
 
 export function parseCurlToolParams(raw: unknown): CurlToolParams {
-  const parsed = CurlToolParamsSchema.parse(raw);
-  const out: CurlToolParams = {
-    url: parsed.url,
-    method: parsed.method as CurlMethod,
-    headers: parsed.headers,
-    timeoutMs: parsed.timeoutMs,
-    maxResponseBytes: parsed.maxResponseBytes,
-    followRedirects: parsed.followRedirects,
-  };
-  if (typeof parsed.body === 'string') out.body = parsed.body;
-  return out;
+  return CurlToolParamsSchema.parse(raw);
 }

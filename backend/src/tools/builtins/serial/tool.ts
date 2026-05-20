@@ -6,7 +6,8 @@ import {
   type ToolRunContext,
 } from '../../base-tool.js';
 import { serialParamsSchema, parseSerialToolParams, type SerialToolParams } from './params.js';
-import { serialRulesSchema, parseSerialToolRules, type SerialToolRules } from './rules.js';
+import { zerialize } from 'zodex';
+import { SerialToolRulesSchema, parseSerialToolRules, type SerialToolRules } from './rules.js';
 import { SerialConnectionManager } from './connection.js';
 
 @Injectable()
@@ -33,12 +34,12 @@ export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRul
     return 'Execute a command on a remote Kali Linux VM via a serial socket.';
   }
 
-  getParamsSchema(): Record<string, unknown> {
+  getParamsSchema(): unknown {
     return serialParamsSchema();
   }
 
-  getRulesSchema(): Record<string, unknown> {
-    return serialRulesSchema();
+  getRulesSchema(): unknown {
+    return zerialize(SerialToolRulesSchema);
   }
 
   getDefaultRules(): SerialToolRules {

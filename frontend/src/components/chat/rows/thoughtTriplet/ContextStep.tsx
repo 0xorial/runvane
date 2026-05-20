@@ -5,8 +5,8 @@ import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEnt
 import { notifyError } from "@/utils/toast";
 import { useLlmSettings } from "@/hooks/llmSettingsContext";
 import { ModelSelector } from "@/components/ui/ModelSelector";
-import { CodeEditor } from "@/components/ui/CodeEditor";
-import { llmRequestJsonSchema } from "@/lib/editorSchemas";
+import { ZodJsonEditor } from "@/components/ui/ZodJsonEditor";
+import { LlmRequestSchema } from "@/lib/editorSchemas";
 import { ReadOnlySection } from "./ReadOnlySection";
 
 export function ContextStep({
@@ -25,6 +25,7 @@ export function ContextStep({
   const [editedPrompt, setEditedPrompt] = useState(prompt);
   const [selectedProviderId, setSelectedProviderId] = useState(currentProviderId);
   const [selectedModel, setSelectedModel] = useState(currentModel);
+  const [promptValid, setPromptValid] = useState(false);
   const { modelGroups } = useLlmSettings();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -36,7 +37,7 @@ export function ContextStep({
   }, [currentModel, currentProviderId, isEditing, prompt]);
 
   const canApply =
-    editedPrompt.trim().length > 0 &&
+    promptValid &&
     selectedProviderId.trim().length > 0 &&
     selectedModel.trim().length > 0 &&
     !isSaving;
@@ -86,12 +87,12 @@ export function ContextStep({
             searchPlaceholder="Search model"
           />
           <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Prompt</div>
-          <CodeEditor
+          <ZodJsonEditor
+            schema={LlmRequestSchema}
             value={editedPrompt}
             onChange={setEditedPrompt}
-            language="json"
+            onValidityChange={setPromptValid}
             height={260}
-            jsonSchema={llmRequestJsonSchema}
           />
           <div className="flex justify-end gap-1.5">
             <button

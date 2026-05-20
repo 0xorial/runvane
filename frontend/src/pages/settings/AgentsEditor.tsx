@@ -1,8 +1,12 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import type { z } from "zod";
+import { dezerialize } from "zodex";
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
 import { AsyncButton } from "../../components/ui/AsyncButton";
+import { CodeEditor } from "../../components/ui/CodeEditor";
+import { ZodJsonEditor } from "../../components/ui/ZodJsonEditor";
 import { notifyError } from "../../utils/toast";
 import { AgentLlmSettings } from "./AgentLlmSettings";
 import { AgentGuardrailSettings, readGuardrailConfig } from "./AgentGuardrailSettings";
@@ -74,6 +78,24 @@ export function AgentsEditor({
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   const [toolConfigDrafts, setToolConfigDrafts] = useState<Record<string, string>>({});
   const [toolConfigErrors, setToolConfigErrors] = useState<Record<string, string>>({});
+
+  // Each tool ships its rules Zod schema `zerialize`d in the catalog —
+  // `dezerialize` reconstructs the real schema for the config editor.
+  const toolRulesZodSchemas = useMemo(() => {
+    const map = new Map<string, z.ZodType>();
+    for (const raw of toolCatalog) {
+      if (!raw || typeof raw !== "object") continue;
+      const rec = raw as Record<string, unknown>;
+      const name = String(rec.name ?? "").trim();
+      if (!name || rec.rules_schema == null) continue;
+      try {
+        map.set(name, dezerialize(rec.rules_schema as never) as z.ZodType);
+      } catch {
+        // schema couldn't be reconstructed — editor falls back to plain JSON
+      }
+    }
+    return map;
+  }, [toolCatalog]);
 
   async function handleAddAgent() {
     try {
@@ -477,19 +499,30 @@ export function AgentsEditor({
                                   <div className="mb-2 text-xs font-semibold text-foreground">
                                     <code>{name}</code> config (JSON)
                                   </div>
-                                  <textarea
-                                    className={toolsConfigInput}
-                                    value={getToolConfigDraft(name)}
-                                    disabled={!canEdit}
-                                    onChange={(e) => onToolConfigDraftChange(name, e.target.value)}
-                                    spellCheck={false}
-                                    rows={8}
-                                  />
-                                  {toolConfigErrors[name] ? (
-                                    <div className="mt-2 text-xs text-destructive" role="alert">
-                                      {toolConfigErrors[name]}
-                                    </div>
-                                  ) : null}
+                                  {toolRulesZodSchemas.get(name) ? (
+                                    <ZodJsonEditor
+                                      schema={toolRulesZodSchemas.get(name)!}
+                                      value={getToolConfigDraft(name)}
+                                      onChange={(v) => onToolConfigDraftChange(name, v)}
+                                      height={200}
+                                      readOnly={!canEdit}
+                                    />
+                                  ) : (
+                                    <>
+                                      <CodeEditor
+                                        value={getToolConfigDraft(name)}
+                                        onChange={(v) => onToolConfigDraftChange(name, v)}
+                                        language="json"
+                                        height={200}
+                                        readOnly={!canEdit}
+                                      />
+                                      {toolConfigErrors[name] ? (
+                                        <div className="mt-2 text-xs text-destructive" role="alert">
+                                          {toolConfigErrors[name]}
+                                        </div>
+                                      ) : null}
+                                    </>
+                                  )}
                                   {cfg.guardrail && guardrailLlmConfigured && (
                                     <div className="mt-3">
                                       <label className="flex flex-col gap-1 text-xs">

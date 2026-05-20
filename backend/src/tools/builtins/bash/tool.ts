@@ -6,8 +6,9 @@ import {
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../../base-tool.js';
+import { zerialize } from 'zodex';
 import { bashParamsSchema, parseBashToolParams, type BashToolParams } from './params.js';
-import { bashRulesSchema, parseBashToolRules, type BashToolRules } from './rules.js';
+import { BashToolRulesSchema, parseBashToolRules, type BashToolRules } from './rules.js';
 
 type BashToolResult = {
   command: string;
@@ -92,12 +93,12 @@ export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
     return 'Run a shell command on the host machine.';
   }
 
-  getParamsSchema(): Record<string, unknown> {
+  getParamsSchema(): unknown {
     return bashParamsSchema();
   }
 
-  getRulesSchema(): Record<string, unknown> {
-    return bashRulesSchema();
+  getRulesSchema(): unknown {
+    return zerialize(BashToolRulesSchema);
   }
 
   getDefaultRules(): BashToolRules {

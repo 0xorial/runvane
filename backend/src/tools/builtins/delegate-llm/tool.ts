@@ -5,8 +5,9 @@ import {
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../../base-tool.js';
+import { zerialize } from 'zodex';
 import { delegateLlmParamsSchema, parseDelegateLlmParams, type DelegateLlmParams } from './params.js';
-import { delegateLlmRulesSchema, parseDelegateLlmRules, type DelegateLlmRules } from './rules.js';
+import { DelegateLlmRulesSchema, parseDelegateLlmRules, type DelegateLlmRules } from './rules.js';
 import { LlmProviderRegistry } from '../../../llmProviders/registry.js';
 import { LlmProviderSettingsRepo } from '../../../db/repositories/llm-provider-settings.repo.js';
 import { getCompletionText, textMessage, type LlmMessage, type LlmRequest } from '../../../llmProviders/types.js';
@@ -37,12 +38,12 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
     return 'Delegate a prompt to another configured LLM provider and model.';
   }
 
-  getParamsSchema(): Record<string, unknown> {
+  getParamsSchema(): unknown {
     return delegateLlmParamsSchema();
   }
 
-  getRulesSchema(): Record<string, unknown> {
-    return delegateLlmRulesSchema();
+  getRulesSchema(): unknown {
+    return zerialize(DelegateLlmRulesSchema);
   }
 
   getDefaultRules(): DelegateLlmRules {

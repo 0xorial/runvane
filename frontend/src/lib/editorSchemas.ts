@@ -1,11 +1,14 @@
-import { z } from "zod";
 import { LlmRequestSchema } from "../../../backend/src/llmProviders/types";
 import { AgenticPlannerOutputSchema } from "../../../backend/src/contracts/chatEntry";
 
 /**
- * JSON Schemas fed to the Monaco editor for live validation + autocomplete.
- * Derived from the same Zod schemas the backend validates against, so the
- * editor and the runtime can't drift.
+ * Zod schemas wired into the chat-entry editors (ZodJsonEditor). Each is the
+ * same schema the backend validates against — the editor is type-checked
+ * against it and the two cannot drift.
  */
-export const llmRequestJsonSchema = z.toJSONSchema(LlmRequestSchema);
-export const plannerOutputJsonSchema = z.toJSONSchema(AgenticPlannerOutputSchema);
+
+/** Prepare-step prompt editor — the LlmRequest the thought will send. */
+export { LlmRequestSchema };
+
+/** Planner reasoning/response editor — the planner's structured output. */
+export { AgenticPlannerOutputSchema };

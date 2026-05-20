@@ -1,7 +1,6 @@
 import type { ChatEntry } from '../contracts/chatEntry.js';
 
 export type ToolPermission = 'allow' | 'ask_user' | 'forbid';
-export type JsonSchema = Record<string, unknown>;
 
 export type RuleEvaluationResult = {
   ruleName: string;
@@ -31,8 +30,10 @@ export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknow
   abstract getName(): string;
   abstract getAiDescription(): string;
   abstract getHumanDescription(): string;
-  abstract getParamsSchema(): JsonSchema;
-  abstract getRulesSchema(): JsonSchema;
+  /** JSON Schema for the LLM (params) — derived from the tool's Zod params schema. */
+  abstract getParamsSchema(): unknown;
+  /** The rules Zod schema, `zerialize`d for transport — the client `dezerialize`s it. */
+  abstract getRulesSchema(): unknown;
   abstract getDefaultRules(): TRules;
   abstract parseParams(raw: unknown): TParams;
   abstract parseRules(raw: unknown): TRules;

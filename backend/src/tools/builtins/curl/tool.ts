@@ -5,8 +5,9 @@ import {
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../../base-tool.js';
+import { zerialize } from 'zodex';
 import { curlParamsSchema, parseCurlToolParams, type CurlToolParams } from './params.js';
-import { curlRulesSchema, parseCurlToolRules, type CurlToolRules } from './rules.js';
+import { CurlToolRulesSchema, parseCurlToolRules, type CurlToolRules } from './rules.js';
 import { isLocalHost, matchesHostList } from './host-rules.js';
 import { headersToObject, parseAbsoluteUrl, readBodyCapped } from './http-fetch.js';
 
@@ -24,12 +25,12 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
     return 'Call an HTTP endpoint (curl-style).';
   }
 
-  getParamsSchema(): Record<string, unknown> {
+  getParamsSchema(): unknown {
     return curlParamsSchema();
   }
 
-  getRulesSchema(): Record<string, unknown> {
-    return curlRulesSchema();
+  getRulesSchema(): unknown {
+    return zerialize(CurlToolRulesSchema);
   }
 
   getDefaultRules(): CurlToolRules {

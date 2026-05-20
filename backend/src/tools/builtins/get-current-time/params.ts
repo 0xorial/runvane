@@ -1,16 +1,14 @@
 import { z } from 'zod';
 
-export type GetCurrentTimeToolParams = Record<string, never>;
+export const GetCurrentTimeToolParamsSchema = z.object({}).strict();
 
-export function getCurrentTimeParamsSchema(): Record<string, unknown> {
-  return {
-    type: 'object',
-    additionalProperties: false,
-    properties: {},
-  };
+export type GetCurrentTimeToolParams = z.infer<typeof GetCurrentTimeToolParamsSchema>;
+
+/** JSON Schema for the LLM, derived from the Zod schema — single source of truth. */
+export function getCurrentTimeParamsSchema(): unknown {
+  return z.toJSONSchema(GetCurrentTimeToolParamsSchema);
 }
 
 export function parseGetCurrentTimeToolParams(raw: unknown): GetCurrentTimeToolParams {
-  z.object({}).strict().parse(raw);
-  return {};
+  return GetCurrentTimeToolParamsSchema.parse(raw);
 }

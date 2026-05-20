@@ -9,6 +9,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - keep as much data local as possible
 - avoid vendor lock-in
 - customize tools, permissions, and execution flow
+- get all the flexibility you want in context engineering
 
 ## Stack
 

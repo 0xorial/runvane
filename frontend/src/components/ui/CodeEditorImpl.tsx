@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import Editor, { loader } from "@monaco-editor/react";
+import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
@@ -85,24 +85,33 @@ function CodeEditorImpl({
   jsonSchema,
 }: CodeEditorProps) {
   const isDark = useIsDark();
-  // Unique, stable model URI for this editor instance so its schema can be
-  // scoped via fileMatch without affecting other open editors.
+  // Unique, stable model path for this editor instance so its schema can be
+  // scoped to its own model without affecting other open editors.
   const rawId = useId();
   const modelPath = `entry-editor-${rawId.replace(/[^a-zA-Z0-9]/g, "")}.json`;
+  // The real model URI, captured at mount. `fileMatch` must be matched against
+  // this exact string — globbing a bare filename is unreliable (a slash-less
+  // URI never matches the `**/...` glob Monaco derives from it).
+  const [modelUri, setModelUri] = useState<string | null>(null);
+
+  const handleMount: OnMount = (editor) => {
+    const uri = editor.getModel()?.uri.toString();
+    if (uri) setModelUri(uri);
+  };
 
   useEffect(() => {
-    if (!jsonSchema) return;
-    schemaRegistry.set(modelPath, {
+    if (!jsonSchema || !modelUri) return;
+    schemaRegistry.set(modelUri, {
       uri: `schema://entry-editor/${modelPath}`,
-      fileMatch: [modelPath],
+      fileMatch: [modelUri],
       schema: jsonSchema,
     });
     applySchemas();
     return () => {
-      schemaRegistry.delete(modelPath);
+      schemaRegistry.delete(modelUri);
       applySchemas();
     };
-  }, [jsonSchema, modelPath]);
+  }, [jsonSchema, modelUri, modelPath]);
 
   return (
     <div className="overflow-hidden rounded border border-border/70">
@@ -112,6 +121,7 @@ function CodeEditorImpl({
         path={language === "json" ? modelPath : undefined}
         value={value}
         theme={isDark ? "vs-dark" : "vs"}
+        onMount={handleMount}
         onChange={(next) => onChange?.(next ?? "")}
         options={{
           readOnly,
@@ -124,6 +134,11 @@ function CodeEditorImpl({
           tabSize: 2,
           renderLineHighlight: "none",
           overviewRulerLanes: 0,
+          // JSON property keys and enum values live inside "..."; Monaco
+          // suppresses quick suggestions in strings by default, which hides
+          // schema-driven autocomplete. Enable it so completions auto-pop.
+          quickSuggestions: { other: true, comments: false, strings: true },
+          suggestOnTriggerCharacters: true,
           scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
           padding: { top: 6, bottom: 6 },
         }}

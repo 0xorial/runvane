@@ -3,11 +3,7 @@ import { z } from 'zod';
 const NonEmptyString = z.string().min(1);
 const NullableFiniteNumber = z.number().finite().nullable();
 const NullableBoolean = z.boolean().nullable();
-const OptionalNullableString = z
-  .string()
-  .transform((v) => (v.length > 0 ? v : null))
-  .nullable()
-  .optional();
+const OptionalNullableString = z.string().min(1).nullable().optional();
 
 export const ModelCapabilityRowSchema = z.object({
   provider_id: z.string(),
@@ -27,41 +23,6 @@ export const ModelCapabilityRowSchema = z.object({
   overridden: z.boolean(),
 });
 export type ModelCapabilityRow = z.infer<typeof ModelCapabilityRowSchema>;
-
-export const SeedModelCapabilitySchema = z
-  .object({
-    provider_id: NonEmptyString,
-    model_name: NonEmptyString,
-    supports_image_input: NullableBoolean.default(false).transform((v) => v ?? false),
-    supports_file_input: NullableBoolean.default(false).transform((v) => v ?? false),
-    max_context_tokens: NullableFiniteNumber,
-    max_output_tokens: NullableFiniteNumber,
-    usd_per_1m_tokens_in: NullableFiniteNumber.optional(),
-    usd_per_1m_tokens_in_cached: NullableFiniteNumber.optional(),
-    usd_per_1m_tokens_out: NullableFiniteNumber.optional(),
-    input_cost_per_1m: NullableFiniteNumber.optional(),
-    cached_input_cost_per_1m: NullableFiniteNumber.optional(),
-    output_cost_per_1m: NullableFiniteNumber.optional(),
-    currency: z
-      .string()
-      .transform((v) => (v.length > 0 ? v : 'USD'))
-      .default('USD'),
-  })
-  .transform((row) => {
-    const inCost = row.usd_per_1m_tokens_in ?? row.input_cost_per_1m ?? null;
-    const cachedInCost = row.usd_per_1m_tokens_in_cached ?? row.cached_input_cost_per_1m ?? null;
-    const outCost = row.usd_per_1m_tokens_out ?? row.output_cost_per_1m ?? null;
-    return {
-      ...row,
-      usd_per_1m_tokens_in: inCost,
-      usd_per_1m_tokens_in_cached: cachedInCost,
-      usd_per_1m_tokens_out: outCost,
-      input_cost_per_1m: inCost,
-      cached_input_cost_per_1m: cachedInCost,
-      output_cost_per_1m: outCost,
-    };
-  });
-export type SeedModelCapability = z.infer<typeof SeedModelCapabilitySchema>;
 
 export const ModelCapabilityOverrideUpsertSchema = z.object({
   provider_id: NonEmptyString,
@@ -90,12 +51,6 @@ function formatZodIssues(error: z.ZodError, context: string): Error {
     })
     .join('; ');
   return new Error(`${context}: invalid payload (${details})`);
-}
-
-export function validateSeedModelCapabilities(data: unknown): SeedModelCapability[] {
-  const parsed = z.array(SeedModelCapabilitySchema).safeParse(data);
-  if (!parsed.success) throw formatZodIssues(parsed.error, 'model capability seed');
-  return parsed.data;
 }
 
 export function validateModelCapabilityOverrideUpsert(data: unknown): ModelCapabilityOverrideUpsert {

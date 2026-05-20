@@ -5,7 +5,8 @@ import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEnt
 import { notifyError } from "@/utils/toast";
 import { formatTokenCount } from "@/utils/formatTokenCount";
 import { CodeEditor } from "@/components/ui/CodeEditor";
-import { plannerOutputJsonSchema } from "@/lib/editorSchemas";
+import { ZodJsonEditor } from "@/components/ui/ZodJsonEditor";
+import { AgenticPlannerOutputSchema } from "@/lib/editorSchemas";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -119,13 +120,16 @@ export function ReasoningStep({
       {isEditing ? (
         <div className="space-y-1.5">
           <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Edit response</div>
-          <CodeEditor
-            value={editedResponse}
-            onChange={setEditedResponse}
-            language="json"
-            height={260}
-            {...(stream.type === "planner_llm_stream" ? { jsonSchema: plannerOutputJsonSchema } : {})}
-          />
+          {stream.type === "planner_llm_stream" ? (
+            <ZodJsonEditor
+              schema={AgenticPlannerOutputSchema}
+              value={editedResponse}
+              onChange={setEditedResponse}
+              height={260}
+            />
+          ) : (
+            <CodeEditor value={editedResponse} onChange={setEditedResponse} language="json" height={260} />
+          )}
           <div className="flex justify-end gap-1.5">
             <button
               type="button"
