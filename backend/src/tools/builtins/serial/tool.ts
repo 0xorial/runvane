@@ -11,7 +11,9 @@ import { SerialConnectionManager } from './connection.js';
 
 @Injectable()
 export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRules> {
-  private readonly manager = new SerialConnectionManager();
+  constructor(private readonly manager: SerialConnectionManager) {
+    super();
+  }
 
   getName(): string {
     return 'serial_terminal';

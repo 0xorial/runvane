@@ -8,6 +8,7 @@ import {
 import * as fs from 'fs';
 import * as net from 'net';
 import type { Server, WebSocket } from 'ws';
+import { SerialConnectionManager } from '../tools/builtins/serial/connection.js';
 
 const WS_OPEN = 1;
 
@@ -116,6 +117,32 @@ export class TerminalGateway implements OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(TerminalGateway.name);
   private readonly sessions = new Map<WebSocket, TerminalSession>();
+  /** Read-only observers: unsubscribe fn per client mirroring a serial line. */
+  private readonly observers = new Map<WebSocket, () => void>();
+
+  constructor(private readonly serialManager: SerialConnectionManager) {}
+
+  /**
+   * Read-only mirror of the agent's live serial session. Subscribes to the
+   * shared SerialConnectionManager rather than opening a second connection
+   * (QEMU serial sockets are single-client). Input from this client is ignored.
+   */
+  @SubscribeMessage('observe_serial')
+  handleObserveSerial(client: WebSocket, data: { address: string }): void {
+    this.closeSession(client);
+    const address = (data?.address ?? '').trim();
+    if (!address) {
+      this.send(client, { type: 'error', message: 'address is required' });
+      return;
+    }
+    const unsub = this.serialManager.observe(address, ({ dir, data: chunk }) => {
+      // The agent's own writes use bare \n; normalise so xterm renders cleanly.
+      const text = dir === 'out' ? chunk.replace(/\r?\n/g, '\r\n') : chunk;
+      this.send(client, { type: 'data', data: text });
+    });
+    this.observers.set(client, unsub);
+    this.send(client, { type: 'connected' });
+  }
 
   @SubscribeMessage('connect_terminal')
   async handleConnectTerminal(client: WebSocket, data: { address: string }): Promise<void> {
@@ -166,6 +193,11 @@ export class TerminalGateway implements OnGatewayDisconnect {
     if (session) {
       session.destroy();
       this.sessions.delete(client);
+    }
+    const unsub = this.observers.get(client);
+    if (unsub) {
+      unsub();
+      this.observers.delete(client);
     }
   }
 

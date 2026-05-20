@@ -41,8 +41,11 @@ export function TerminalPanel({ className }: { className?: string }) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  /** When true, the current session is a read-only mirror — input is dropped. */
+  const readOnlyRef = useRef(false);
   const [address, setAddress] = useState(loadStoredAddress);
   const [state, setState] = useState<ConnectionState>("idle");
+  const [readOnly, setReadOnly] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   // ── xterm initialisation (once) ──────────────────────────────────────────
@@ -82,6 +85,7 @@ export function TerminalPanel({ className }: { className?: string }) {
     const term = termRef.current;
     if (!term) return;
     const disposable = term.onData((data) => {
+      if (readOnlyRef.current) return; // observe mode — never send input
       const ws = wsRef.current;
       if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ event: "input", data: { data } }));
@@ -91,7 +95,9 @@ export function TerminalPanel({ className }: { className?: string }) {
   }, []);
 
   // ── Connect ───────────────────────────────────────────────────────────────
-  function connect() {
+  // mode "interactive": open a terminal you can type in.
+  // mode "observe": read-only mirror of the agent's live serial session.
+  function connect(mode: "interactive" | "observe" = "interactive") {
     const addr = address.trim();
     if (!addr) return;
     saveAddress(addr);
@@ -101,6 +107,9 @@ export function TerminalPanel({ className }: { className?: string }) {
       wsRef.current = null;
     }
 
+    const observe = mode === "observe";
+    readOnlyRef.current = observe;
+    setReadOnly(observe);
     setState("connecting");
     setErrorMsg("");
 
@@ -108,7 +117,12 @@ export function TerminalPanel({ className }: { className?: string }) {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ event: "connect_terminal", data: { address: addr } }));
+      ws.send(
+        JSON.stringify({
+          event: observe ? "observe_serial" : "connect_terminal",
+          data: { address: addr },
+        }),
+      );
     };
 
     ws.onmessage = (ev) => {
@@ -187,20 +201,37 @@ export function TerminalPanel({ className }: { className?: string }) {
           spellCheck={false}
         />
         {isConnected ? (
-          <button
-            className="shrink-0 rounded px-2 py-0.5 text-[11px] font-medium text-red-400 hover:bg-red-500/10"
-            onClick={disconnect}
-          >
-            Disconnect
-          </button>
+          <>
+            {readOnly && (
+              <span className="shrink-0 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                observing · read-only
+              </span>
+            )}
+            <button
+              className="shrink-0 rounded px-2 py-0.5 text-[11px] font-medium text-red-400 hover:bg-red-500/10"
+              onClick={disconnect}
+            >
+              Disconnect
+            </button>
+          </>
         ) : (
-          <button
-            className="shrink-0 rounded px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-40"
-            disabled={isBusy || !address.trim()}
-            onClick={connect}
-          >
-            {isBusy ? "Connecting…" : "Connect"}
-          </button>
+          <>
+            <button
+              className="shrink-0 rounded px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-secondary disabled:opacity-40"
+              disabled={isBusy || !address.trim()}
+              onClick={() => connect("observe")}
+              title="Read-only mirror of the agent's live serial session"
+            >
+              Observe
+            </button>
+            <button
+              className="shrink-0 rounded px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-40"
+              disabled={isBusy || !address.trim()}
+              onClick={() => connect("interactive")}
+            >
+              {isBusy ? "Connecting…" : "Connect"}
+            </button>
+          </>
         )}
       </div>
 

@@ -1,8 +1,14 @@
+import { Injectable } from '@nestjs/common';
 import * as net from 'net';
 import { randomBytes } from 'node:crypto';
 import type { SerialToolRules } from './rules.js';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'logging_in' | 'ready';
+
+/** A chunk of raw serial traffic, for read-only observers. */
+export type SerialTraffic = { dir: 'in' | 'out'; data: string };
+export type SerialObserver = (t: SerialTraffic) => void;
+type TrafficSink = (dir: 'in' | 'out', data: string) => void;
 
 /** Parse "tcp://host:port" → { host, port }; otherwise treat as Unix socket path. */
 function parseAddress(address: string): net.NetConnectOpts {
@@ -40,14 +46,23 @@ class SerialConnection {
   private readonly rules: SerialToolRules;
   /** Serialises run() calls — one serial line, one command at a time. */
   private lock: Promise<unknown> = Promise.resolve();
+  /** Where raw traffic is mirrored for read-only observers. */
+  private readonly sink: TrafficSink;
 
-  constructor(socketPath: string, rules: SerialToolRules) {
+  constructor(socketPath: string, rules: SerialToolRules, sink: TrafficSink) {
     this.address = socketPath;
     this.rules = rules;
+    this.sink = sink;
   }
 
   isConnected(): boolean {
     return this.state === 'ready' && this.socket !== null && !this.socket.destroyed;
+  }
+
+  /** Write to the socket; `mirror=false` keeps secrets (passwords) out of observers. */
+  private send(data: string, mirror = true): void {
+    if (this.socket && !this.socket.destroyed) this.socket.write(data);
+    if (mirror) this.sink('out', data);
   }
 
   /**
@@ -111,6 +126,7 @@ class SerialConnection {
       sock.once('connect', () => {
         sock.on('data', (chunk: string) => {
           this.buffer += chunk;
+          this.sink('in', chunk);
         });
         sock.on('close', () => {
           if (this.state !== 'disconnected') this.state = 'disconnected';
@@ -137,7 +153,7 @@ class SerialConnection {
 
     // A serial console that is already logged in (or sitting at `login:`)
     // prints nothing until prodded — send a newline to elicit a fresh prompt.
-    this.socket?.write('\n');
+    this.send('\n');
 
     const timer = setTimeout(() => {
       if (!settled) {
@@ -161,14 +177,14 @@ class SerialConnection {
       if (!loginSent && login_username && loginRegex.test(buf)) {
         loginSent = true;
         this.buffer = '';
-        this.socket?.write(login_username + '\n');
+        this.send(login_username + '\n');
         setTimeout(poll, 50);
         return;
       }
       if (!passwordSent && login_password && passwordRegex.test(buf)) {
         passwordSent = true;
         this.buffer = '';
-        this.socket?.write(login_password + '\n');
+        this.send(login_password + '\n', false); // never mirror the password
         setTimeout(poll, 50);
         return;
       }
@@ -221,7 +237,7 @@ class SerialConnection {
     const exitRe = new RegExp(`__RUNVANE_EXIT_${nonce}:(-?\\d+)__`);
 
     this.buffer = '';
-    socket.write(`echo '${startMarker}'\n${command}\necho "__RUNVANE_EXIT_${nonce}:$?__"\n`);
+    this.send(`echo '${startMarker}'\n${command}\necho "__RUNVANE_EXIT_${nonce}:$?__"\n`);
 
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -238,7 +254,7 @@ class SerialConnection {
         // Best-effort: interrupt whatever is still running so the next
         // command does not execute inside a wedged program.
         try {
-          socket.write('\x03');
+          this.send('\x03');
         } catch {
           /* ignore */
         }
@@ -296,16 +312,56 @@ class SerialConnection {
   }
 }
 
+/**
+ * Owns the one live SerialConnection per address (the shell session the agent
+ * drives) and fans its raw traffic out to read-only observers — so a terminal
+ * panel can mirror exactly what the agent is doing without opening a second
+ * connection (QEMU serial sockets are single-client).
+ */
+@Injectable()
 export class SerialConnectionManager {
-  private connections = new Map<string, SerialConnection>();
+  private readonly connections = new Map<string, SerialConnection>();
+  private readonly observersByAddress = new Map<string, Set<SerialObserver>>();
 
   getOrCreate(socketPath: string, rules: SerialToolRules): SerialConnection {
     let conn = this.connections.get(socketPath);
     if (!conn) {
-      conn = new SerialConnection(socketPath, rules);
+      conn = new SerialConnection(socketPath, rules, (dir, data) => this.fanout(socketPath, dir, data));
       this.connections.set(socketPath, conn);
     }
     return conn;
+  }
+
+  /**
+   * Subscribe to a connection's raw traffic. Works whether or not a
+   * connection for `address` exists yet — observers attach to the address,
+   * and any connection later created for it fans out to them.
+   */
+  observe(address: string, fn: SerialObserver): () => void {
+    let set = this.observersByAddress.get(address);
+    if (!set) {
+      set = new Set();
+      this.observersByAddress.set(address, set);
+    }
+    set.add(fn);
+    return () => {
+      const s = this.observersByAddress.get(address);
+      if (!s) return;
+      s.delete(fn);
+      if (s.size === 0) this.observersByAddress.delete(address);
+    };
+  }
+
+  private fanout(address: string, dir: 'in' | 'out', data: string): void {
+    const set = this.observersByAddress.get(address);
+    if (!set) return;
+    for (const fn of set) {
+      try {
+        fn({ dir, data });
+      } catch {
+        // a broken observer must not disrupt the serial session
+      }
+    }
   }
 
   closeAll(): void {
