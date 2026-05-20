@@ -119,6 +119,12 @@ export function ToolRunRow({ entry }: ToolRunRowProps) {
                 <span><span className="font-semibold">Guardrail: </span>{guardrailReason}</span>
               </div>
             )}
+            {entry.state === "error" && entry.result?.error && (
+              <div className="flex items-start gap-1.5 rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span><span className="font-semibold">Error: </span>{entry.result.error}</span>
+              </div>
+            )}
             <div>
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Arguments</span>
               <pre className="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">

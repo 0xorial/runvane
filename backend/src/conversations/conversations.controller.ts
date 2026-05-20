@@ -6,7 +6,6 @@ import {
   Get,
   HttpCode,
   NotFoundException,
-  NotImplementedException,
   Param,
   Post,
   Put,
@@ -196,10 +195,20 @@ export class ConversationsController {
   }
 
   @Post(':conversationId/tool-invocations/:entryId/approve')
-  async approveToolInvocation(@Param('conversationId') conversationId: string) {
+  @HttpCode(202)
+  async approveToolInvocation(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+  ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    throw new NotImplementedException('tool invocation approval is not implemented yet');
+    try {
+      await this.conversationProcessor.approveToolInvocation({ conversationId, toolEntryId: entryId });
+      return { conversationId, toolEntryId: entryId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to approve tool invocation';
+      throw new BadRequestException(detail);
+    }
   }
 
   @Post(':conversationId/cancel-processing')

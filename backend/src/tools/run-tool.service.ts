@@ -120,6 +120,69 @@ export class RunToolService {
     });
   }
 
+  /**
+   * User-approval path: the user clicked "Approve & run" on a `requested`
+   * tool-invocation entry. Validates synchronously (errors surface to the
+   * HTTP caller), then runs the tool in a spawned task — updating that exact
+   * entry `requested → running → done` and continuing the planner afterward.
+   */
+  async approveAndRun(
+    args: { conversationId: string; toolEntryId: string; agentId: string },
+    scope: LifecycleScope,
+    chain: ChatChain,
+    llm: LlmRef,
+  ): Promise<void> {
+    const entry = await this.chatEntries.getChatEntry(args.conversationId, args.toolEntryId);
+    if (!entry || entry.type !== 'tool-invocation') {
+      throw new Error(`approve: entry ${args.toolEntryId} is not a tool-invocation`);
+    }
+    if (entry.state !== 'requested') {
+      throw new Error(`approve: tool invocation ${args.toolEntryId} is not awaiting approval (state=${entry.state})`);
+    }
+    const tool = this.tools.get(entry.toolId);
+    if (!tool) throw new Error(`approve: unknown tool ${entry.toolId}`);
+
+    // Strip the planner-meta keys toParametersPayload() added to recover the
+    // real tool params; the tool's strict param schema rejects extras.
+    const { tool_request, source: _source, ...rawParams } = entry.parameters;
+    const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
+
+    const agent = await this.agents.get(args.agentId);
+    const toolCfg = agent?.default_llm_configuration?.tools?.[entry.toolId];
+    const parsedRules = tool.parseRules(toolCfg?.rules ?? tool.getDefaultRules());
+    const parsedParams = tool.parseParams(rawParams);
+
+    const input: RunToolInput = {
+      conversationId: args.conversationId,
+      agentId: args.agentId,
+      toolName: entry.toolId,
+      params: rawParams,
+      approvalGranted: true,
+      // After a human-approved tool runs, the planner should take stock and
+      // decide whether to continue or finalize.
+      plannerFollowup: { mode: 'continue' },
+      ...(toolRequest ? { toolRequest } : {}),
+    };
+
+    // The planner continuation hangs off the approved tool entry.
+    chain.setTip(args.toolEntryId);
+
+    scope.spawn(async () => {
+      const entries = await this.chatEntries.listChatEntries(args.conversationId);
+      await this.executeTool({
+        input,
+        tool,
+        parsedParams,
+        parsedRules,
+        entries,
+        scope,
+        chain,
+        llm,
+        existingEntryId: args.toolEntryId,
+      });
+    });
+  }
+
   private async appendErrorEntry(input: RunToolInput, reason: string, chain: ChatChain): Promise<string> {
     const startedAt = new Date();
     const envelope: ToolEnvelope = {
@@ -217,22 +280,36 @@ export class RunToolService {
     scope: LifecycleScope;
     chain: ChatChain;
     llm: LlmRef;
+    /**
+     * When set (user-approval path), the run updates this already-persisted
+     * `requested` entry in place (`requested → running → done`) instead of
+     * appending a fresh tool-invocation. Caller is responsible for tipping
+     * the chain so any planner continuation hangs off this entry.
+     */
+    existingEntryId?: string;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, scope, chain, llm } = args;
+    const { input, tool, parsedParams, parsedRules, entries, scope, chain, llm, existingEntryId } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
 
-    const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
-      this.chatEntries.appendToolInvocation(input.conversationId, {
-        toolId: input.toolName,
-        state: 'running',
-        parameters,
-        parentId: p,
-      }),
-    );
-    const entryId = created.id;
-    const parentId = created.parentId;
+    let entryId: string;
+    let parentId: string | null = null;
+    if (existingEntryId) {
+      entryId = existingEntryId;
+      await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'running', parameters });
+    } else {
+      const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
+        this.chatEntries.appendToolInvocation(input.conversationId, {
+          toolId: input.toolName,
+          state: 'running',
+          parameters,
+          parentId: p,
+        }),
+      );
+      entryId = created.id;
+      parentId = created.parentId;
+    }
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_START,
       chatEntryId: entryId,
@@ -244,27 +321,78 @@ export class RunToolService {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
-    scope.throwIfAborted();
-    const output = await tool.runTool(parsedParams, {
-      conversationId: input.conversationId,
-      agentId: input.agentId,
-      entries,
-      toolRules: parsedRules,
-    });
-    scope.throwIfAborted();
+    // Run the tool. A throw here (timeout, connection failure, etc.) must NOT
+    // leave the entry stranded in `running` — record it as `error` either way.
+    let output: unknown = null;
+    let toolError: unknown = null;
+    try {
+      scope.throwIfAborted();
+      output = await tool.runTool(parsedParams, {
+        conversationId: input.conversationId,
+        agentId: input.agentId,
+        entries,
+        toolRules: parsedRules,
+      });
+      scope.throwIfAborted();
+    } catch (err) {
+      toolError = err;
+    }
 
     const finishedAt = new Date();
+    const timing = {
+      started_at: startedAt.toISOString(),
+      finished_at: finishedAt.toISOString(),
+      elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
+    };
+    const aborted =
+      scope.signal.aborted || (toolError instanceof Error && toolError.name === 'AbortError');
+
+    if (toolError !== null) {
+      const detail = toolError instanceof Error ? toolError.message : String(toolError);
+      const envelope: ToolEnvelope = {
+        ok: false,
+        toolId: input.toolName,
+        output: null,
+        error: detail,
+        permission_state: 'allow',
+        timing,
+      };
+      await this.chatEntries.updateToolInvocation(input.conversationId, {
+        id: entryId,
+        state: 'error',
+        result: envelope,
+      });
+      await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
+      if (!aborted) {
+        this.hub.publish(input.conversationId, {
+          type: SseType.TOOL_INVOCATION_END,
+          chatEntryId: entryId,
+          toolName: input.toolName,
+          output: detail,
+          ok: false,
+          runContinues: input.plannerFollowup?.mode === 'continue',
+        });
+        // Continue planning so the agent can see the failure and adapt.
+        if (input.plannerFollowup?.mode === 'continue') {
+          this.thoughtProcessing.startThought({
+            provider: this.plannerProvider,
+            conversationId: input.conversationId,
+            scope,
+            chain,
+            llm,
+          });
+        }
+      }
+      return { kind: 'completed', toolEntryId: entryId };
+    }
+
     const envelope: ToolEnvelope = {
       ok: true,
       toolId: input.toolName,
       output,
       error: null,
       permission_state: 'allow',
-      timing: {
-        started_at: startedAt.toISOString(),
-        finished_at: finishedAt.toISOString(),
-        elapsed_ms: Math.max(0, finishedAt.getTime() - startedAtMs),
-      },
+      timing,
     };
     await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'done', result: envelope });
     this.hub.publish(input.conversationId, {

@@ -86,27 +86,8 @@ export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRul
     );
 
     const conn = this.manager.getOrCreate(rules.socket_path, rules);
-
-    const runExec = async () => {
-      if (!conn.isConnected()) {
-        await conn.connect();
-      }
-      return conn.exec(params.command, timeoutMs, rules.max_output_bytes);
-    };
-
-    let result: { stdout: string; exitCode: number; truncated: boolean };
-    try {
-      result = await runExec();
-    } catch (firstErr) {
-      // Attempt reconnect once on failure
-      try {
-        conn.disconnect();
-        await conn.connect();
-        result = await conn.exec(params.command, timeoutMs, rules.max_output_bytes);
-      } catch {
-        throw firstErr;
-      }
-    }
+    // run() serialises concurrent calls, (re)connects, and retries once.
+    const result = await conn.run(params.command, timeoutMs, rules.max_output_bytes);
 
     return {
       command: params.command,

@@ -10,6 +10,7 @@ import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypePr
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
+import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
@@ -32,7 +33,24 @@ export class ConversationProcessorService {
     private readonly summarizeProvider: SummarizeThoughtTypeProvider,
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
+    private readonly runTool: RunToolService,
   ) {}
+
+  async approveToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
+    const entries = await this.chatEntries.listChatEntries(args.conversationId);
+    const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
+    if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
+    const agentId = anchorUser.agentId;
+    const llm = await this.resolveLlmRef({ agentId });
+    const { scope, chain } = this.beginRun(args.conversationId);
+    await this.runTool.approveAndRun(
+      { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
+      scope,
+      chain,
+      llm,
+    );
+    scope.rootDone();
+  }
 
   private async resolveLlmRef(opts: {
     explicitProviderId?: string;

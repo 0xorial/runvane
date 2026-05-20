@@ -1,8 +1,6 @@
 import * as net from 'net';
+import { randomBytes } from 'node:crypto';
 import type { SerialToolRules } from './rules.js';
-
-const EXIT_MARKER_PREFIX = '---SERIAL_EXIT:';
-const EXIT_MARKER_SUFFIX = '---';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'logging_in' | 'ready';
 
@@ -20,12 +18,28 @@ function parseAddress(address: string): net.NetConnectOpts {
   return { path: address };
 }
 
+// Strip ANSI/VT escape sequences (CSI colour codes, OSC, etc.) — Kali's
+// prompt and many tools emit them and they are noise to the LLM. Built from a
+// string so no literal control chars sit in the source.
+const ANSI_RE = new RegExp(
+  '[\\u001B\\u009B][[\\]()#;?]*' +
+    '(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\\u0007)' +
+    '|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-ntqry=><~]))',
+  'g',
+);
+
+function cleanOutput(raw: string): string {
+  return raw.replace(ANSI_RE, '').replace(/\r\n/g, '\n').replace(/\r/g, '');
+}
+
 class SerialConnection {
   private socket: net.Socket | null = null;
   private state: ConnectionState = 'disconnected';
   private buffer = '';
   private readonly address: string;
   private readonly rules: SerialToolRules;
+  /** Serialises run() calls — one serial line, one command at a time. */
+  private lock: Promise<unknown> = Promise.resolve();
 
   constructor(socketPath: string, rules: SerialToolRules) {
     this.address = socketPath;
@@ -36,7 +50,46 @@ class SerialConnection {
     return this.state === 'ready' && this.socket !== null && !this.socket.destroyed;
   }
 
-  async connect(): Promise<void> {
+  /**
+   * Public entry point. Serialises against other in-flight commands on the
+   * same connection (one serial line = one command at a time), (re)connecting
+   * as needed, with a single reconnect-retry on failure.
+   */
+  async run(
+    command: string,
+    timeoutMs: number,
+    maxBytes: number,
+  ): Promise<{ stdout: string; exitCode: number; truncated: boolean }> {
+    const prev = this.lock;
+    let release!: () => void;
+    this.lock = new Promise<void>((r) => {
+      release = r;
+    });
+    try {
+      await prev.catch(() => undefined);
+      if (!this.isConnected()) {
+        await this.connect();
+        await this.applyShellSetup();
+      }
+      try {
+        return await this.execRaw(command, timeoutMs, maxBytes);
+      } catch (firstErr) {
+        // The session may be wedged — drop it and retry once on a fresh one.
+        this.disconnect();
+        try {
+          await this.connect();
+          await this.applyShellSetup();
+          return await this.execRaw(command, timeoutMs, maxBytes);
+        } catch {
+          throw firstErr;
+        }
+      }
+    } finally {
+      release();
+    }
+  }
+
+  private async connect(): Promise<void> {
     if (this.isConnected()) return;
 
     this.state = 'connecting';
@@ -59,18 +112,12 @@ class SerialConnection {
         sock.on('data', (chunk: string) => {
           this.buffer += chunk;
         });
-
         sock.on('close', () => {
-          if (this.state !== 'disconnected') {
-            this.state = 'disconnected';
-          }
+          if (this.state !== 'disconnected') this.state = 'disconnected';
         });
-
-        sock.on('error', (err: Error) => {
-          // After initial connect errors are handled by the calling code
-          void err;
+        sock.on('error', () => {
+          // Post-connect errors surface via the close handler / command polls.
         });
-
         this.doLogin(resolve, reject);
       });
     });
@@ -88,6 +135,10 @@ class SerialConnection {
     let passwordSent = false;
     let settled = false;
 
+    // A serial console that is already logged in (or sitting at `login:`)
+    // prints nothing until prodded — send a newline to elicit a fresh prompt.
+    this.socket?.write('\n');
+
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
@@ -97,7 +148,6 @@ class SerialConnection {
 
     const poll = () => {
       if (settled) return;
-
       const buf = this.buffer;
 
       if (promptRegex.test(buf)) {
@@ -108,7 +158,6 @@ class SerialConnection {
         resolve();
         return;
       }
-
       if (!loginSent && login_username && loginRegex.test(buf)) {
         loginSent = true;
         this.buffer = '';
@@ -116,7 +165,6 @@ class SerialConnection {
         setTimeout(poll, 50);
         return;
       }
-
       if (!passwordSent && login_password && passwordRegex.test(buf)) {
         passwordSent = true;
         this.buffer = '';
@@ -124,100 +172,114 @@ class SerialConnection {
         setTimeout(poll, 50);
         return;
       }
-
       setTimeout(poll, 50);
     };
 
     poll();
   }
 
-  async exec(
+  /**
+   * Best-effort: quiet the shell so command output is clean for the LLM.
+   * `stty -echo` drops input echo; `TERM=dumb` discourages tools from
+   * emitting colour. Failures are non-fatal — output parsing does not
+   * depend on it (see execRaw's marker scheme).
+   */
+  private async applyShellSetup(): Promise<void> {
+    try {
+      await this.execRaw('export TERM=dumb; stty -echo 2>/dev/null', 5000, 4096);
+    } catch {
+      // ignore — purely cosmetic
+    }
+  }
+
+  /**
+   * Sends a command and recovers its output + exit code.
+   *
+   * Output is delimited by per-call random-nonce markers, NOT by stripping
+   * the echoed command line:
+   *   echo '<START>'
+   *   <command>
+   *   echo "<EXIT>:$?"
+   * The shell PRINTS `<START>\n` on its own line; the echoed input line
+   * (if TTY echo is on) contains `<START>'` — the regex requires a newline
+   * right after the marker, so it locks onto the printed one. Everything
+   * between the printed start line and the exit marker is the real output.
+   * The nonce makes a collision with command output content infeasible.
+   */
+  private execRaw(
     command: string,
     timeoutMs: number,
     maxBytes: number,
   ): Promise<{ stdout: string; exitCode: number; truncated: boolean }> {
     if (!this.socket || this.socket.destroyed) {
-      throw new Error('serial_terminal: socket is not connected');
+      return Promise.reject(new Error('serial_terminal: socket is not connected'));
     }
+    const socket = this.socket;
+    const nonce = randomBytes(8).toString('hex');
+    const startMarker = `__RUNVANE_START_${nonce}__`;
+    const startRe = new RegExp(`${startMarker}\\r?\\n`);
+    const exitRe = new RegExp(`__RUNVANE_EXIT_${nonce}:(-?\\d+)__`);
 
     this.buffer = '';
-
-    const sentCommand = `${command}; echo "${EXIT_MARKER_PREFIX}$?${EXIT_MARKER_SUFFIX}"\n`;
-    this.socket.write(sentCommand);
+    socket.write(`echo '${startMarker}'\n${command}\necho "__RUNVANE_EXIT_${nonce}:$?__"\n`);
 
     return new Promise((resolve, reject) => {
       let settled = false;
 
-      const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          reject(new Error(`serial_terminal: command timed out after ${timeoutMs}ms`));
-        }
-      }, timeoutMs);
-
-      const onClose = () => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          reject(new Error('serial_terminal: socket closed while waiting for command output'));
-        }
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        socket.removeListener('close', onClose);
+        fn();
       };
 
-      this.socket?.once('close', onClose);
+      const timer = setTimeout(() => {
+        // Best-effort: interrupt whatever is still running so the next
+        // command does not execute inside a wedged program.
+        try {
+          socket.write('\x03');
+        } catch {
+          /* ignore */
+        }
+        finish(() => reject(new Error(`serial_terminal: command timed out after ${timeoutMs}ms`)));
+      }, timeoutMs);
+
+      const onClose = () =>
+        finish(() => reject(new Error('serial_terminal: socket closed while waiting for command output')));
+      socket.once('close', onClose);
 
       const poll = () => {
         if (settled) return;
 
-        const markerIndex = this.buffer.indexOf(EXIT_MARKER_PREFIX);
-        if (markerIndex === -1) {
+        const startMatch = startRe.exec(this.buffer);
+        if (!startMatch) {
+          setTimeout(poll, 20);
+          return;
+        }
+        const outputStart = startMatch.index + startMatch[0].length;
+
+        const exitMatch = exitRe.exec(this.buffer.slice(outputStart));
+        if (!exitMatch) {
           setTimeout(poll, 20);
           return;
         }
 
-        const markerEnd = this.buffer.indexOf(EXIT_MARKER_SUFFIX, markerIndex + EXIT_MARKER_PREFIX.length);
-        if (markerEnd === -1) {
-          setTimeout(poll, 20);
-          return;
-        }
+        const rawOutput = this.buffer.slice(outputStart, outputStart + exitMatch.index);
+        const exitCode = Number.parseInt(exitMatch[1], 10);
+        this.buffer = this.buffer.slice(outputStart + exitMatch.index + exitMatch[0].length);
 
-        const exitCodeStr = this.buffer.slice(
-          markerIndex + EXIT_MARKER_PREFIX.length,
-          markerEnd,
-        );
-        const exitCode = parseInt(exitCodeStr, 10);
-
-        // Strip the echo command line and the marker from output
-        let rawOutput = this.buffer.slice(0, markerIndex);
-
-        // Strip the echoed command itself (first line that matches the sent command echo)
-        const echoLine = sentCommand.trimEnd();
-        const echoIdx = rawOutput.indexOf(echoLine);
-        if (echoIdx !== -1) {
-          rawOutput = rawOutput.slice(echoIdx + echoLine.length);
-        }
-
-        // Strip any trailing newline after marker
-        const afterMarker = markerEnd + EXIT_MARKER_SUFFIX.length;
-        this.buffer = this.buffer.slice(afterMarker);
-
-        settled = true;
-        clearTimeout(timer);
-        this.socket?.removeListener('close', onClose);
-
+        let cleaned = cleanOutput(rawOutput).replace(/\n$/, '');
         let truncated = false;
-        const encoder = new TextEncoder();
-        const encoded = encoder.encode(rawOutput);
+        const encoded = new TextEncoder().encode(cleaned);
         if (encoded.byteLength > maxBytes) {
           truncated = true;
-          const decoder = new TextDecoder();
-          rawOutput = decoder.decode(encoded.slice(0, maxBytes));
+          cleaned = new TextDecoder().decode(encoded.slice(0, maxBytes));
         }
 
-        resolve({
-          stdout: rawOutput,
-          exitCode: isNaN(exitCode) ? -1 : exitCode,
-          truncated,
-        });
+        finish(() =>
+          resolve({ stdout: cleaned, exitCode: Number.isNaN(exitCode) ? -1 : exitCode, truncated }),
+        );
       };
 
       poll();
