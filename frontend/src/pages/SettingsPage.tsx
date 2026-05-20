@@ -27,6 +27,7 @@ import { GlobalModelSettingsCard } from "./settings/GlobalModelSettingsCard";
 import { ModelPresetsEditor } from "./settings/ModelPresetsEditor";
 import { filterProviders, normalizeSection, buildModelGroups } from "./settings/helpers";
 import type { LlmSettings } from "../types/llmSettings";
+import { useLlmSettings } from "../hooks/llmSettingsContext";
 import { ProviderCard } from "./settings/ProviderCard";
 import { SettingsHeader } from "./settings/SettingsHeader";
 import { SettingsSidebar } from "./settings/SettingsSidebar";
@@ -43,6 +44,7 @@ function ToolsSettingsPlaceholder() {
 }
 
 export function SettingsPage() {
+  const { setProviders: setGlobalProviders } = useLlmSettings();
   const [settings, setSettings] = useState<LlmSettings | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [search, setSearch] = useState("");
@@ -106,6 +108,10 @@ export function SettingsPage() {
   async function save() {
     if (!settings) return false;
     await updateLlmProviderSettings(settings as unknown as LlmProviderSettingsDocument);
+    // Push the just-persisted providers straight into the global store so
+    // model selectors elsewhere (e.g. the prepare-step editor) update without
+    // a reload — no server round-trip, we already hold the saved data.
+    setGlobalProviders(settings.providers ?? []);
     return true;
   }
 

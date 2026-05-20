@@ -11,6 +11,12 @@ export type LlmSettingsContextValue = {
   status: LoadStatus;
   error: Error | null;
   refresh: () => Promise<void>;
+  /**
+   * Replace the cached providers directly — used after a settings save, where
+   * the caller already holds the just-persisted data and a server round-trip
+   * would be redundant.
+   */
+  setProviders: (providers: LlmProviderRow[]) => void;
 };
 
 const LlmSettingsContext = createContext<LlmSettingsContextValue | null>(null);
@@ -49,7 +55,7 @@ export function LlmSettingsProvider({ children }: { children: ReactNode }) {
 
   const modelGroups = useMemo(() => buildModelGroups(providers), [providers]);
   const value = useMemo(
-    () => ({ providers, modelGroups, status, error, refresh }),
+    () => ({ providers, modelGroups, status, error, refresh, setProviders }),
     [providers, modelGroups, status, error, refresh],
   );
 

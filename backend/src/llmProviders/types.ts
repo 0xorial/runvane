@@ -10,57 +10,71 @@
  * etc.). Domain code never deals with provider-specific shapes.
  */
 
-export type LlmRole = 'system' | 'user' | 'assistant' | 'tool';
+import { z } from 'zod';
 
-export type LlmContentPart =
-  | { kind: 'text'; text: string }
-  | { kind: 'image'; mime: string; data: { base64: string } | { url: string } }
-  | { kind: 'file'; filename: string; mime: string; base64: string }
-  | {
-      /**
-       * Lightweight reference to a stored upload. Carries metadata only —
-       * never raw bytes — so it stays small in `requestText`, on the SSE
-       * wire, and in the prepare-entry editor. The reason step expands
-       * each ref to the corresponding `image`/`file` part right before
-       * calling the provider adapter; adapters never see this kind.
-       */
-      kind: 'attachment_ref';
-      attachmentId: string;
-      mime: string;
-      filename: string;
-      sizeBytes: number;
-    }
-  | { kind: 'tool_call'; callId: string; toolName: string; args: unknown }
-  | { kind: 'tool_result'; callId: string; ok: boolean; payload: unknown }
-  | { kind: 'thinking'; text: string };
+export const LlmRoleSchema = z.enum(['system', 'user', 'assistant', 'tool']);
+export type LlmRole = z.infer<typeof LlmRoleSchema>;
 
-export type LlmMessage = {
-  role: LlmRole;
-  parts: LlmContentPart[];
-};
+export const LlmContentPartSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), text: z.string() }),
+  z.object({
+    kind: z.literal('image'),
+    mime: z.string(),
+    data: z.union([z.object({ base64: z.string() }), z.object({ url: z.string() })]),
+  }),
+  z.object({ kind: z.literal('file'), filename: z.string(), mime: z.string(), base64: z.string() }),
+  z.object({
+    /**
+     * Lightweight reference to a stored upload. Carries metadata only —
+     * never raw bytes — so it stays small in `requestText`, on the SSE
+     * wire, and in the prepare-entry editor. The reason step expands
+     * each ref to the corresponding `image`/`file` part right before
+     * calling the provider adapter; adapters never see this kind.
+     */
+    kind: z.literal('attachment_ref'),
+    attachmentId: z.string(),
+    mime: z.string(),
+    filename: z.string(),
+    sizeBytes: z.number(),
+  }),
+  z.object({ kind: z.literal('tool_call'), callId: z.string(), toolName: z.string(), args: z.unknown() }),
+  z.object({ kind: z.literal('tool_result'), callId: z.string(), ok: z.boolean(), payload: z.unknown() }),
+  z.object({ kind: z.literal('thinking'), text: z.string() }),
+]);
+export type LlmContentPart = z.infer<typeof LlmContentPartSchema>;
 
-export type LlmToolSpec = {
-  name: string;
-  description: string;
-  paramsSchema: unknown;
-};
+export const LlmMessageSchema = z.object({
+  role: LlmRoleSchema,
+  parts: z.array(LlmContentPartSchema),
+});
+export type LlmMessage = z.infer<typeof LlmMessageSchema>;
 
-export type LlmResponseFormat =
-  | { type: 'json_object' }
-  | { type: 'json_schema'; name: string; schema: unknown };
+export const LlmToolSpecSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  paramsSchema: z.unknown(),
+});
+export type LlmToolSpec = z.infer<typeof LlmToolSpecSchema>;
+
+export const LlmResponseFormatSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('json_object') }),
+  z.object({ type: z.literal('json_schema'), name: z.string(), schema: z.unknown() }),
+]);
+export type LlmResponseFormat = z.infer<typeof LlmResponseFormatSchema>;
 
 /**
  * Provider-agnostic request payload. `model` is intentionally NOT part of
  * this type — model selection is resolved separately (LlmRef / provider
  * settings) and stamped onto the wire body by the provider adapter.
  */
-export type LlmRequest = {
-  messages: LlmMessage[];
-  tools?: LlmToolSpec[];
-  toolChoice?: 'auto' | 'required' | 'none';
-  responseFormat?: LlmResponseFormat;
-  requestParams?: Record<string, unknown>;
-};
+export const LlmRequestSchema = z.object({
+  messages: z.array(LlmMessageSchema),
+  tools: z.array(LlmToolSpecSchema).optional(),
+  toolChoice: z.enum(['auto', 'required', 'none']).optional(),
+  responseFormat: LlmResponseFormatSchema.optional(),
+  requestParams: z.record(z.string(), z.unknown()).optional(),
+});
+export type LlmRequest = z.infer<typeof LlmRequestSchema>;
 
 export type LlmFinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'error';
 

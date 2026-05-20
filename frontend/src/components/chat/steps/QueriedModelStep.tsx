@@ -3,7 +3,8 @@ import { ChevronRight, Pencil, Sparkles } from "lucide-react";
 import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { parseDbTimestampMs } from "@/utils/formatDuration";
 import { reprocessThought } from "@/api/client";
-import { Textarea } from "@/components/ui/textarea";
+import { CodeEditor } from "@/components/ui/CodeEditor";
+import { plannerOutputJsonSchema } from "@/lib/editorSchemas";
 import { cn } from "@/lib/utils";
 import { ChatThreadIndent } from "../ChatMessageShell";
 import { formatTokenCount } from "@/utils/formatTokenCount";
@@ -176,10 +177,12 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
                   ) : null}
                 </div>
                 {editing ? (
-                  <Textarea
+                  <CodeEditor
                     value={editedResponse}
-                    onChange={(e) => setEditedResponse(e.target.value)}
-                    className="min-h-[120px] text-xs font-mono"
+                    onChange={setEditedResponse}
+                    language="json"
+                    height={220}
+                    {...(entry.type === "planner_llm_stream" ? { jsonSchema: plannerOutputJsonSchema } : {})}
                   />
                 ) : (
                   <pre className="whitespace-pre-wrap break-words rounded border border-border/50 bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-foreground/90">

@@ -87,6 +87,8 @@ export class ConversationProcessorService {
     conversationId: string;
     sourceEntryId: string;
     editedRequestText: string;
+    llmProviderId?: string;
+    llmModel?: string;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
     const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);

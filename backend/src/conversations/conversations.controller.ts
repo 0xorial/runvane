@@ -288,6 +288,8 @@ export class ConversationsController {
         conversationId,
         sourceEntryId: entryId,
         editedRequestText: body.editedRequestText,
+        ...(body.llmProviderId ? { llmProviderId: body.llmProviderId } : {}),
+        ...(body.llmModel ? { llmModel: body.llmModel } : {}),
       });
       return { conversationId, plannerEntryId: result.plannerEntryId, queuedToolCalls: 0 };
     } catch (error) {

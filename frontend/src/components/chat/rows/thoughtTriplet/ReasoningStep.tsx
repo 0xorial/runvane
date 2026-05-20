@@ -4,6 +4,8 @@ import { reprocessThought, reprocessThoughtContext } from "@/api/client";
 import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { formatTokenCount } from "@/utils/formatTokenCount";
+import { CodeEditor } from "@/components/ui/CodeEditor";
+import { plannerOutputJsonSchema } from "@/lib/editorSchemas";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
 
@@ -118,10 +120,12 @@ export function ReasoningStep({
       {isEditing ? (
         <div className="space-y-1.5">
           <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Edit response</div>
-          <textarea
-            className="h-28 w-full resize-y rounded border border-border/70 bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground focus:outline-none"
+          <CodeEditor
             value={editedResponse}
-            onChange={(event) => setEditedResponse(event.currentTarget.value)}
+            onChange={setEditedResponse}
+            language="json"
+            height={260}
+            {...(stream.type === "planner_llm_stream" ? { jsonSchema: plannerOutputJsonSchema } : {})}
           />
           <div className="flex justify-end gap-1.5">
             <button

@@ -128,7 +128,13 @@ export class ThoughtProcessingService {
   }
 
   async startReprocessContext(
-    args: { conversationId: string; sourceEntryId: string; editedRequestText: string },
+    args: {
+      conversationId: string;
+      sourceEntryId: string;
+      editedRequestText: string;
+      llmProviderId?: string;
+      llmModel?: string;
+    },
     scope: LifecycleScope,
     chain: ChatChain,
   ): Promise<{ plannerEntryId: string }> {
@@ -148,17 +154,19 @@ export class ThoughtProcessingService {
           `(predates input-snapshot persistence)`,
       );
     }
-    if (branch.llmProviderId === null || branch.llmModel === null) {
+    // The caller can override the LLM (model picker in the prepare-step editor);
+    // otherwise reuse the source prepare entry's own LLM.
+    const providerId = args.llmProviderId ?? branch.llmProviderId;
+    const model = args.llmModel ?? branch.llmModel;
+    if (!providerId || !model) {
       throw new Error(
-        `cannot reprocess: prepare entry ${branch.prepareEntryId} has no persisted LLM ref`,
+        `cannot reprocess: no LLM ref — prepare entry ${branch.prepareEntryId} has none persisted ` +
+          `and none was supplied`,
       );
     }
     chain.setTip(branch.parentId);
 
-    const ctx = this.createContext(args.conversationId, chain, {
-      providerId: branch.llmProviderId,
-      model: branch.llmModel,
-    });
+    const ctx = this.createContext(args.conversationId, chain, { providerId, model });
     ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display, branch.inputJson);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, display);
     const plannerEntryId = ctx.streamEntryId;

@@ -5,6 +5,8 @@ import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEnt
 import { notifyError } from "@/utils/toast";
 import { useLlmSettings } from "@/hooks/llmSettingsContext";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { CodeEditor } from "@/components/ui/CodeEditor";
+import { llmRequestJsonSchema } from "@/lib/editorSchemas";
 import { ReadOnlySection } from "./ReadOnlySection";
 
 export function ContextStep({
@@ -85,10 +87,12 @@ export function ContextStep({
             searchPlaceholder="Search model"
           />
           <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Prompt</div>
-          <textarea
-            className="h-28 w-full resize-y rounded border border-border/70 bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground focus:outline-none"
+          <CodeEditor
             value={editedPrompt}
-            onChange={(event) => setEditedPrompt(event.currentTarget.value)}
+            onChange={setEditedPrompt}
+            language="json"
+            height={260}
+            jsonSchema={llmRequestJsonSchema}
           />
           <div className="flex justify-end gap-1.5">
             <button
