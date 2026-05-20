@@ -1,7 +1,4 @@
-import { IsString, MinLength } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { ReprocessUserMessageRequestSchema } from '../../contracts/conversations.js';
 
-export class ReprocessUserMessageDto {
-  @IsString()
-  @MinLength(1)
-  editedText!: string;
-}
+export class ReprocessUserMessageDto extends createZodDto(ReprocessUserMessageRequestSchema) {}

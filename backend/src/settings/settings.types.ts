@@ -8,6 +8,8 @@ export const LlmProviderRowSchema = z.object({
   settings_spec: z.array(LlmProviderSettingSpecSchema),
   models: z.array(z.string()),
   models_verified: z.boolean(),
+  quick_access_models: z.array(z.string()).optional(),
+  enabled_models: z.array(z.string()).optional(),
 });
 export type LlmProviderRow = z.infer<typeof LlmProviderRowSchema>;
 

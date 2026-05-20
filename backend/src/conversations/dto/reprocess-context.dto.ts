@@ -1,14 +1,4 @@
-import { IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
-import { LlmRefDto } from './llm-ref.dto.js';
+import { createZodDto } from 'nestjs-zod';
+import { ReprocessContextRequestSchema } from '../../contracts/conversations.js';
 
-export class ReprocessContextDto {
-  @IsString()
-  @MinLength(1)
-  editedRequestText!: string;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => LlmRefDto)
-  llm?: LlmRefDto;
-}
+export class ReprocessContextDto extends createZodDto(ReprocessContextRequestSchema) {}

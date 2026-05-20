@@ -1,8 +1,4 @@
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { CreateConversationRequestSchema } from '../../contracts/conversations.js';
 
-export class CreateConversationDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  title?: string;
-}
+export class CreateConversationDto extends createZodDto(CreateConversationRequestSchema) {}

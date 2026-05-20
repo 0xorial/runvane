@@ -1,4 +1,5 @@
-import { IsString, MinLength } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { SummarizeConversationRequestSchema } from '../../contracts/conversations.js';
 
 /**
  * Fold every entry on the active chain from `firstEntryToSummarize` through
@@ -7,8 +8,4 @@ import { IsString, MinLength } from 'class-validator';
  * the sibling branch via the BranchSelector. The new `checkpoint-summary`
  * entry attaches as a child of the parent of `firstEntryToSummarize`.
  */
-export class SummarizeConversationDto {
-  @IsString()
-  @MinLength(1)
-  firstEntryToSummarize!: string;
-}
+export class SummarizeConversationDto extends createZodDto(SummarizeConversationRequestSchema) {}

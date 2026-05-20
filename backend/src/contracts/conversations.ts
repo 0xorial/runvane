@@ -47,17 +47,24 @@ export type GetConversationsResponse = z.infer<typeof GetConversationsResponseSc
 
 // ---- Request / response shapes ----
 
-export const CreateConversationRequestSchema = z.object({ title: z.string().optional() });
+export const CreateConversationRequestSchema = z.object({ title: z.string().min(1).optional() });
 export type CreateConversationRequest = z.infer<typeof CreateConversationRequestSchema>;
 
+export const UpdateConversationRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  groupId: z.string().min(1).nullable().optional(),
+  newGroupName: z.string().min(1).optional(),
+});
+export type UpdateConversationRequest = z.infer<typeof UpdateConversationRequestSchema>;
+
 export const PostConversationMessageRequestSchema = z.object({
-  message: z.string(),
-  agentId: z.string(),
+  message: z.string().min(1),
+  agentId: z.string().min(1),
   llm: LlmRefSchema.optional(),
-  modelPresetId: z.number().optional(),
+  modelPresetId: z.number().int().min(1).optional(),
   attachmentIds: z.array(z.string()).optional(),
-  parentId: z.string().nullable().optional(),
-  clientRequestId: z.string().optional(),
+  parentId: z.string().min(1).nullable().optional(),
+  clientRequestId: z.string().min(1).optional(),
 });
 export type PostConversationMessageRequest = z.infer<typeof PostConversationMessageRequestSchema>;
 
@@ -66,8 +73,23 @@ export const PostConversationMessageAcceptedResponseSchema = z.object({
 });
 export type PostConversationMessageAcceptedResponse = z.infer<typeof PostConversationMessageAcceptedResponseSchema>;
 
-export const SetConversationActiveLeafRequestSchema = z.object({ entryId: z.string() });
+export const SetConversationActiveLeafRequestSchema = z.object({ entryId: z.string().min(1) });
 export type SetConversationActiveLeafRequest = z.infer<typeof SetConversationActiveLeafRequestSchema>;
+
+export const ReprocessContextRequestSchema = z.object({
+  editedRequestText: z.string().min(1),
+  llm: LlmRefSchema.optional(),
+});
+export type ReprocessContextRequest = z.infer<typeof ReprocessContextRequestSchema>;
+
+export const ReprocessReasonRequestSchema = z.object({ editedResponse: z.string().min(1) });
+export type ReprocessReasonRequest = z.infer<typeof ReprocessReasonRequestSchema>;
+
+export const ReprocessUserMessageRequestSchema = z.object({ editedText: z.string().min(1) });
+export type ReprocessUserMessageRequest = z.infer<typeof ReprocessUserMessageRequestSchema>;
+
+export const SummarizeConversationRequestSchema = z.object({ firstEntryToSummarize: z.string().min(1) });
+export type SummarizeConversationRequest = z.infer<typeof SummarizeConversationRequestSchema>;
 
 // ---- Frontend validation helpers ----
 // These are used by the frontend to validate HTTP responses received from the backend.

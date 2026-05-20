@@ -1,7 +1,7 @@
-import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { NestFactory } from '@nestjs/core';
 import { WsAdapter } from '@nestjs/platform-ws';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import { HttpExceptionLoggingFilter } from './http/http-exception-logging.filter.js';
 
@@ -14,13 +14,7 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new HttpExceptionLoggingFilter());
   await app.listen(process.env.PORT ?? 3000);
 }

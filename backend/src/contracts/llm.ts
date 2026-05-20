@@ -7,7 +7,7 @@ import { z } from 'zod';
  * providerId/model pair.
  */
 export const LlmRefSchema = z.object({
-  providerId: z.string(),
-  model: z.string(),
+  providerId: z.string().min(1),
+  model: z.string().min(1),
 });
 export type LlmRef = z.infer<typeof LlmRefSchema>;

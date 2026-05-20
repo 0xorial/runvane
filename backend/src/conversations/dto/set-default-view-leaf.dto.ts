@@ -1,7 +1,4 @@
-import { IsString, MinLength } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { SetConversationActiveLeafRequestSchema } from '../../contracts/conversations.js';
 
-export class SetDefaultViewLeafDto {
-  @IsString()
-  @MinLength(1)
-  entryId!: string;
-}
+export class SetDefaultViewLeafDto extends createZodDto(SetConversationActiveLeafRequestSchema) {}
