@@ -1,3 +1,4 @@
+import { LlmRefSchema } from '../../contracts/llm.js';
 import type { AssistantMessageEntryRow, ChatMessageEntryRow, UserMessageEntryRow } from './chat-entries.types.js';
 
 export type ChatEntryDbRow = {
@@ -30,8 +31,8 @@ function parseUserMessageRow(row: ChatEntryDbRow, payload: Record<string, unknow
     text: String(payload.text ?? ''),
     agentId,
   };
-  if (typeof payload.llmProviderId === 'string' && payload.llmProviderId) userRow.llmProviderId = payload.llmProviderId;
-  if (typeof payload.llmModel === 'string' && payload.llmModel) userRow.llmModel = payload.llmModel;
+  const llm = LlmRefSchema.safeParse(payload.llm);
+  if (llm.success) userRow.llm = llm.data;
   if (typeof payload.modelPresetId === 'number' && Number.isFinite(payload.modelPresetId)) {
     userRow.modelPresetId = payload.modelPresetId;
   }

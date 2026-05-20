@@ -59,7 +59,7 @@ function ThoughtTripletRowWithStream({
   const expanded = expandedStageBySlotKey.get(slotKey) ?? null;
   const toggle = (stage: ThoughtStage) => setSlotExpandedStage(slotKey, expanded === stage ? null : stage);
   const contextTitle = String(prepareEntry.title ?? "").trim() || "Preparation";
-  const modelLabel = String(stream.llmModel || "").trim();
+  const modelLabel = String(stream.llm?.model || "").trim();
   const reasonMeta = buildReasonMetaNode(stream, pricingByModel.get(modelLabel));
   const actionMeta = actionMetaLabel(actionStepEntry, stream);
   const actionLabel = actionMeta.usesTool ? `call ${actionMeta.toolName ?? "tool"}` : "Reply";
@@ -105,8 +105,8 @@ function ThoughtTripletRowWithStream({
 }
 
 function buildReasonMetaNode(stream: ThoughtStreamEntry, pricing: ModelPricing | undefined): ReactNode {
-  const provider = String(stream.llmProviderId || "").trim() || "unknown-provider";
-  const model = String(stream.llmModel || "").trim() || "unknown-model";
+  const provider = String(stream.llm?.providerId || "").trim() || "unknown-provider";
+  const model = String(stream.llm?.model || "").trim() || "unknown-model";
   const status = displayStatus(stream.status ?? "running");
   const promptTokens = stream.promptTokens ?? 0;
   const cachedTokens = stream.cachedPromptTokens ?? 0;

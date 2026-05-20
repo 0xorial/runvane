@@ -6,9 +6,12 @@ import type {
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
 } from '../contracts/chatEntry.js';
+import type { LlmRef } from '../contracts/llm.js';
 import type { ChatChain } from '../conversations/chat-chain.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../llmProviders/types.js';
+
+export type { LlmRef };
 
 export type ThoughtStreamEntry =
   | PlannerLlmStreamEntry
@@ -30,16 +33,10 @@ export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEn
   return THOUGHT_STREAM_ENTRY_TYPES.has(entry.type as ThoughtStreamEntryType);
 }
 
-export type LlmRef = {
-  providerId: string;
-  model: string;
-};
-
 export type ThoughtContext = {
   thoughtId: string;
   conversationId: string;
-  llmProviderId: string;
-  llmModel: string;
+  llm: LlmRef;
   prepareEntryId: string | null;
   streamEntryId: string | null;
   thoughtActionEntryId: string | null;

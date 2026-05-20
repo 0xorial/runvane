@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ChatEntrySchema, UserMessageEntrySchema } from './chatEntry.js';
+import { LlmRefSchema } from './llm.js';
 
 // Re-export so consumers that import ChatEntry via this module keep working.
 export type { ChatEntry } from './chatEntry.js';
@@ -52,8 +53,7 @@ export type CreateConversationRequest = z.infer<typeof CreateConversationRequest
 export const PostConversationMessageRequestSchema = z.object({
   message: z.string(),
   agentId: z.string(),
-  llmProviderId: z.string().optional(),
-  llmModel: z.string().optional(),
+  llm: LlmRefSchema.optional(),
   modelPresetId: z.number().optional(),
   attachmentIds: z.array(z.string()).optional(),
   parentId: z.string().nullable().optional(),

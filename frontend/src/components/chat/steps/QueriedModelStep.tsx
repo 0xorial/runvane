@@ -62,7 +62,7 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
   const completionTokens =
     typeof entry.completionTokens === "number" && Number.isFinite(entry.completionTokens) ? entry.completionTokens : 0;
   const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
-  const modelLabel = String(entry.llmModel || "").trim();
+  const modelLabel = String(entry.llm?.model || "").trim();
   const responseText = String(entry.llmResponse || "").trim();
   const errorText = String(entry.error || "").trim();
   const canEditResponse = entry.type === "planner_llm_stream" && done && Boolean(conversationId);

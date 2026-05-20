@@ -5,6 +5,7 @@ import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEn
 import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
+import type { LlmRef } from "../../../backend/src/contracts/llm";
 import { createObservableItemCollection, type ObservableItem } from "../utils/observableCollection";
 
 export type OptimisticUserMessage = {
@@ -18,8 +19,7 @@ type AppendOptimisticUserMessageInput = {
   conversationId: string;
   text: string;
   agentId: string;
-  llmProviderId?: string;
-  llmModel?: string;
+  llm?: LlmRef;
   modelPresetId?: number | null;
   attachments?: ChatAttachment[];
 };
@@ -37,8 +37,7 @@ function buildOptimisticUserEntry(
     parentId,
     text: input.text,
     agentId: input.agentId,
-    ...(input.llmProviderId ? { llmProviderId: input.llmProviderId } : {}),
-    ...(input.llmModel ? { llmModel: input.llmModel } : {}),
+    ...(input.llm ? { llm: input.llm } : {}),
     ...(input.modelPresetId != null ? { modelPresetId: input.modelPresetId } : {}),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   };

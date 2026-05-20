@@ -19,8 +19,8 @@ export function ContextStep({
   conversationId: string;
 }) {
   const prompt = useMemo(() => (prepareEntry.requestText ?? stream.llmRequest ?? "").trim(), [prepareEntry.requestText, stream.llmRequest]);
-  const currentProviderId = String(prepareEntry.llmProviderId ?? stream.llmProviderId ?? "").trim();
-  const currentModel = String(prepareEntry.llmModel ?? stream.llmModel ?? "").trim();
+  const currentProviderId = String(prepareEntry.llm?.providerId ?? stream.llm?.providerId ?? "").trim();
+  const currentModel = String(prepareEntry.llm?.model ?? stream.llm?.model ?? "").trim();
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState(prompt);
   const [selectedProviderId, setSelectedProviderId] = useState(currentProviderId);
@@ -47,8 +47,7 @@ export function ContextStep({
     try {
       await reprocessThoughtContext(conversationId, prepareEntry.id, {
         editedRequestText: editedPrompt.trim(),
-        llmProviderId: selectedProviderId.trim(),
-        llmModel: selectedModel.trim(),
+        llm: { providerId: selectedProviderId.trim(), model: selectedModel.trim() },
       });
       setIsEditing(false);
     } catch (error) {

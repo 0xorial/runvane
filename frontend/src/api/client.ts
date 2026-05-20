@@ -37,6 +37,7 @@ import {
 import type { ToolCatalogItemResponse } from "../../../backend/src/contracts/system";
 import { validateGetToolsResponse } from "../../../backend/src/contracts/system";
 import type { UploadFileResponse } from "../../../backend/src/contracts/uploads";
+import type { LlmRef } from "../../../backend/src/contracts/llm";
 import { validateUploadFileResponse } from "../../../backend/src/contracts/uploads";
 import type {
   ModelPresetResponse,
@@ -102,8 +103,7 @@ export async function postJsonAccepted(path: string, body: unknown): Promise<Pos
 export type PostConversationMessageInput = {
   message: string;
   agentId: string;
-  llmProviderId?: string;
-  llmModel?: string;
+  llm?: LlmRef;
   modelPresetId?: number;
   attachmentIds?: string[];
   /** The entry the user wants this message attached to. Required when the conversation is non-empty. */
@@ -322,8 +322,7 @@ export async function reprocessThoughtContext(
   entryId: string,
   input: {
     editedRequestText: string;
-    llmProviderId: string;
-    llmModel: string;
+    llm: LlmRef;
   },
 ): Promise<PostAcceptedResult<{ conversationId: string; plannerEntryId: string; queuedToolCalls: number }>> {
   const result = await postJsonAccepted(

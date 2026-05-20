@@ -11,6 +11,7 @@ import type {
   ToolParamsLlmStreamEntry,
 } from '../../contracts/chatEntry.js';
 import { ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
+import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { z } from 'zod';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import type { ChatEntryDbRow } from './chat-entries.payload.js';
@@ -72,10 +73,8 @@ function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, c
     text: requireString(payload, 'text', ctx),
     agentId: requireString(payload, 'agentId', ctx),
   };
-  const llmProviderId = optionalString(payload, 'llmProviderId', ctx);
-  if (llmProviderId !== undefined) out.llmProviderId = llmProviderId;
-  const llmModel = optionalString(payload, 'llmModel', ctx);
-  if (llmModel !== undefined) out.llmModel = llmModel;
+  const llm = optionalLlmRef(payload, ctx);
+  if (llm !== undefined) out.llm = llm;
   if (payload.modelPresetId !== undefined) {
     if (payload.modelPresetId !== null && (typeof payload.modelPresetId !== 'number' || !Number.isFinite(payload.modelPresetId))) {
       throw new Error(`${ctx}: modelPresetId must be number or null`);
@@ -119,10 +118,8 @@ function mapThoughtPrepare(base: ChatEntryBase, payload: Record<string, unknown>
   };
   const title = optionalString(payload, 'title', ctx);
   if (title !== undefined) out.title = title;
-  const llmProviderId = optionalString(payload, 'llmProviderId', ctx);
-  if (llmProviderId !== undefined) out.llmProviderId = llmProviderId;
-  const llmModel = optionalString(payload, 'llmModel', ctx);
-  if (llmModel !== undefined) out.llmModel = llmModel;
+  const llm = optionalLlmRef(payload, ctx);
+  if (llm !== undefined) out.llm = llm;
   const inputJson = optionalString(payload, 'inputJson', ctx);
   if (inputJson !== undefined) out.inputJson = inputJson;
   return out;
@@ -159,10 +156,8 @@ function mapStream(
     llmRequest: requireString(payload, 'llmRequest', ctx),
     status: requireStatus(payload, ctx),
   };
-  const llmProviderId = optionalString(payload, 'llmProviderId', ctx);
-  if (llmProviderId !== undefined) stream.llmProviderId = llmProviderId;
-  const llmModel = optionalString(payload, 'llmModel', ctx);
-  if (llmModel !== undefined) stream.llmModel = llmModel;
+  const llm = optionalLlmRef(payload, ctx);
+  if (llm !== undefined) stream.llm = llm;
   if (typeof payload.llmResponse === 'string') stream.llmResponse = payload.llmResponse;
   if (typeof payload.thinkingText === 'string') stream.thinkingText = payload.thinkingText;
   if (payload.thoughtMs !== undefined) {
@@ -215,6 +210,18 @@ function mapToolInvocation(base: ChatEntryBase, payload: Record<string, unknown>
     parameters: requireRecord(payload.parameters, `${ctx}.parameters`),
     result,
   };
+}
+
+/**
+ * Reads the nested `llm` ref from a payload. Entries persisted before the
+ * llmProviderId/llmModel → llm consolidation have no `llm` key and resolve to
+ * undefined (their model label is lost — accepted tradeoff).
+ */
+function optionalLlmRef(payload: Record<string, unknown>, ctx: string): LlmRef | undefined {
+  if (payload.llm === undefined || payload.llm === null) return undefined;
+  const parsed = LlmRefSchema.safeParse(payload.llm);
+  if (!parsed.success) throw new Error(`${ctx}.llm: invalid LLM ref: ${parsed.error.message}`);
+  return parsed.data;
 }
 
 function parsePayload(json: string, ctx: string): Record<string, unknown> {

@@ -187,7 +187,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       conversationId: toolParamsInput.conversationId,
       scope,
       chain: ctx.chain,
-      llm: { providerId: ctx.llmProviderId, model: ctx.llmModel },
+      llm: ctx.llm,
       input: toolParamsInput,
     });
   }

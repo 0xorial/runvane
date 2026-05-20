@@ -1,4 +1,6 @@
-import { IsArray, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsArray, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { LlmRefDto } from './llm-ref.dto.js';
 
 export class PostConversationMessageDto {
   @IsString()
@@ -10,14 +12,9 @@ export class PostConversationMessageDto {
   agentId!: string;
 
   @IsOptional()
-  @IsString()
-  @MinLength(1)
-  llmProviderId?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  llmModel?: string;
+  @ValidateNested()
+  @Type(() => LlmRefDto)
+  llm?: LlmRefDto;
 
   @IsOptional()
   @IsInt()

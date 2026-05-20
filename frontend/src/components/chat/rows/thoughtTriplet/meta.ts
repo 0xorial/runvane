@@ -6,8 +6,8 @@ export function displayStatus(status: string): string {
 }
 
 export function reasonMetaLabel(stream: ThoughtStreamEntry): string {
-  const provider = String(stream.llmProviderId || "").trim() || "unknown-provider";
-  const model = String(stream.llmModel || "").trim() || "unknown-model";
+  const provider = String(stream.llm?.providerId || "").trim() || "unknown-provider";
+  const model = String(stream.llm?.model || "").trim() || "unknown-model";
   const status = displayStatus(stream.status ?? "running");
   const promptTokens = stream.promptTokens ?? 0;
   const cachedPromptTokens = stream.cachedPromptTokens ?? 0;

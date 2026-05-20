@@ -57,8 +57,8 @@ export function ReasoningStep({
     // Re-issue the same LLM call against the original prepare entry by replaying
     // its captured request unchanged through the existing reprocess-context path.
     const requestText = String(prepareEntry.requestText ?? stream.llmRequest ?? "").trim();
-    const providerId = String(prepareEntry.llmProviderId ?? stream.llmProviderId ?? "").trim();
-    const model = String(prepareEntry.llmModel ?? stream.llmModel ?? "").trim();
+    const providerId = String(prepareEntry.llm?.providerId ?? stream.llm?.providerId ?? "").trim();
+    const model = String(prepareEntry.llm?.model ?? stream.llm?.model ?? "").trim();
     if (!requestText || !providerId || !model) {
       notifyError("Cannot retry: original request, provider, or model is missing.");
       return;
@@ -67,8 +67,7 @@ export function ReasoningStep({
     try {
       await reprocessThoughtContext(conversationId, prepareEntry.id, {
         editedRequestText: requestText,
-        llmProviderId: providerId,
-        llmModel: model,
+        llm: { providerId, model },
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

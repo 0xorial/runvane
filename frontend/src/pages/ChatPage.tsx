@@ -19,13 +19,13 @@ import { ChatSessionContext, useThoughtExpandedStageState } from "../hooks/chatS
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
 import { isThoughtStreamEntry, type ChatAttachment } from "../protocol/chatEntry";
+import type { LlmRef } from "../../../backend/src/contracts/llm";
 
 async function sendMessageToConversation(
   conversationId: string,
   message: string,
   agentId: string,
-  llmProviderId: string,
-  llmModel: string,
+  llm: LlmRef | null,
   modelPresetId: number | null,
   attachmentIds: string[],
   parentId: string | null,
@@ -34,8 +34,7 @@ async function sendMessageToConversation(
   const { status } = await postConversationMessage(conversationId, {
     message,
     agentId,
-    ...(llmProviderId.trim() ? { llmProviderId: llmProviderId.trim() } : {}),
-    ...(llmModel.trim() ? { llmModel: llmModel.trim() } : {}),
+    ...(llm ? { llm } : {}),
     ...(modelPresetId != null ? { modelPresetId } : {}),
     ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
     parentId,
@@ -80,8 +79,7 @@ export function ChatPage({
   const [selectedBranchAnchorEntryId, setSelectedBranchAnchorEntryId] = useState<string | null>(null);
   const [agentSelection, setAgentSelection] = useState<ChatAgentSelection>(() => ({
     agentId: agentIdFromSearchParams(searchParams) || "",
-    llmProviderId: "",
-    llmModel: "",
+    llm: null,
     modelPresetId: null,
   }));
 
@@ -260,7 +258,9 @@ export function ChatPage({
           const parentLeafIdAtSend = cid ? activeLeafId : null;
           const optimisticInput = {
             text,
-            ...agentSelection,
+            agentId: agentSelection.agentId,
+            modelPresetId: agentSelection.modelPresetId,
+            ...(agentSelection.llm ? { llm: agentSelection.llm } : {}),
             attachments: uploadedAttachments,
           };
           let optimistic: { rowId: string; clientRequestId: string } | null;
@@ -288,8 +288,7 @@ export function ChatPage({
             cid,
             text,
             agentSelection.agentId,
-            agentSelection.llmProviderId,
-            agentSelection.llmModel,
+            agentSelection.llm,
             agentSelection.modelPresetId,
             uploadedAttachments.map((x) => x.id),
             parentLeafIdAtSend,

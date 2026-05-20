@@ -1,4 +1,6 @@
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { LlmRefDto } from './llm-ref.dto.js';
 
 export class ReprocessContextDto {
   @IsString()
@@ -6,12 +8,7 @@ export class ReprocessContextDto {
   editedRequestText!: string;
 
   @IsOptional()
-  @IsString()
-  @MinLength(1)
-  llmProviderId?: string;
-
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  llmModel?: string;
+  @ValidateNested()
+  @Type(() => LlmRefDto)
+  llm?: LlmRefDto;
 }

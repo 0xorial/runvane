@@ -59,8 +59,7 @@ export class ReasonStep {
         thoughtId: ctx.thoughtId,
         parentId,
         status: 'running',
-        llmProviderId: ctx.llmProviderId,
-        llmModel: ctx.llmModel,
+        llm: ctx.llm,
       }),
     );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest: requestDisplay });
@@ -92,10 +91,10 @@ export class ReasonStep {
     streamEntryId: string,
     scope: LifecycleScope,
   ): Promise<LlmCompletion> {
-    const llmProvider = this.llmProviders.get(ctx.llmProviderId);
-    if (!llmProvider) throw new Error(`unknown llm provider: ${ctx.llmProviderId}`);
-    const providerSettings = await this.llmProviderSettings.getProviderSettings(ctx.llmProviderId);
-    if (!providerSettings) throw new Error(`llm provider settings not found: ${ctx.llmProviderId}`);
+    const llmProvider = this.llmProviders.get(ctx.llm.providerId);
+    if (!llmProvider) throw new Error(`unknown llm provider: ${ctx.llm.providerId}`);
+    const providerSettings = await this.llmProviderSettings.getProviderSettings(ctx.llm.providerId);
+    if (!providerSettings) throw new Error(`llm provider settings not found: ${ctx.llm.providerId}`);
 
     const wireRequest = await expandAttachmentRefs(prepared.request, async (id) => {
       const content = await this.uploads.readContentById(id);
@@ -108,7 +107,7 @@ export class ReasonStep {
     });
 
     this.logger.log(
-      `llm → ${ctx.llmProviderId}/${ctx.llmModel} turns=${wireRequest.messages.length} tools=${wireRequest.tools?.length ?? 0}`,
+      `llm → ${ctx.llm.providerId}/${ctx.llm.model} turns=${wireRequest.messages.length} tools=${wireRequest.tools?.length ?? 0}`,
     );
 
     const startedAt = Date.now();
@@ -117,7 +116,7 @@ export class ReasonStep {
       provider.onLlmEvent?.(input, ctx, event);
     };
 
-    const completion = await llmProvider.streamCompletion(providerSettings, ctx.llmModel, wireRequest, onEvent);
+    const completion = await llmProvider.streamCompletion(providerSettings, ctx.llm.model, wireRequest, onEvent);
     scope.throwIfAborted();
 
     const elapsedMs = Date.now() - startedAt;
@@ -126,7 +125,7 @@ export class ReasonStep {
       ? `prompt=${usage.promptTokens} cached=${usage.cachedPromptTokens ?? 0} completion=${usage.completionTokens}`
       : 'usage=unknown';
     this.logger.log(
-      `llm ← ${ctx.llmProviderId}/${ctx.llmModel} ${elapsedMs}ms finish=${completion.finishReason} ${usageStr}`,
+      `llm ← ${ctx.llm.providerId}/${ctx.llm.model} ${elapsedMs}ms finish=${completion.finishReason} ${usageStr}`,
     );
 
     const responseText = getCompletionText(completion);

@@ -22,7 +22,7 @@ function entryPreview(entry: ChatEntry): string {
   if (entry.type === "thought-prepare") {
     const summary = String(entry.title || "").trim();
     if (summary) return summary;
-    const model = String(entry.llmModel || "").trim();
+    const model = String(entry.llm?.model || "").trim();
     return model || "(context)";
   }
   if (entry.type === "thought-action") {
@@ -46,7 +46,7 @@ function entryPreview(entry: ChatEntry): string {
     typeof entry.completionTokens === "number" && Number.isFinite(entry.completionTokens) ? entry.completionTokens : 0;
   const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
   const tokenLabel = totalTokens > 0 ? `${totalTokens} tok` : "";
-  const model = String(entry.llmModel || "").trim();
+  const model = String(entry.llm?.model || "").trim();
   const meta = [model, tokenLabel].filter((x) => x.length > 0).join(" ");
   return [status, meta].filter((x) => x.length > 0).join(" ");
 }

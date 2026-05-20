@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LlmRefSchema } from './llm.js';
 
 // ---- Primitives ----
 
@@ -68,8 +69,7 @@ export const UserMessageEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal('user-message'),
   text: z.string(),
   agentId: z.string(),
-  llmProviderId: z.string().optional(),
-  llmModel: z.string().optional(),
+  llm: LlmRefSchema.optional(),
   modelPresetId: z.number().nullable().optional(),
   attachments: z.array(ChatAttachmentSchema).optional(),
 });
@@ -82,8 +82,7 @@ export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   error: z.string().optional(),
   requestText: z.string().optional(),
   title: z.string().optional(),
-  llmProviderId: z.string().optional(),
-  llmModel: z.string().optional(),
+  llm: LlmRefSchema.optional(),
   /**
    * JSON-serialised provider input captured when the thought was started.
    * Allows reprocess-context to rebuild the exact input without each provider
@@ -98,8 +97,7 @@ export type ThoughtPrepareEntry = z.infer<typeof ThoughtPrepareEntrySchema>;
 const ThoughtStreamEntryBaseSchema = ChatEntryBaseSchema.extend({
   thoughtId: z.string(),
   llmRequest: z.string(),
-  llmProviderId: z.string().optional(),
-  llmModel: z.string().optional(),
+  llm: LlmRefSchema.optional(),
   llmResponse: z.string().optional(),
   thinkingText: z.string().optional(),
   thoughtMs: z.number().nullable().optional(),

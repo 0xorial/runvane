@@ -71,7 +71,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
 
     await this.markActionCompleted(ctx, input.toolName, parsedParams);
 
-    const mainLlm = { providerId: ctx.llmProviderId, model: ctx.llmModel };
+    const mainLlm = ctx.llm;
 
     if (input.guardrailConfig) {
       // Delegate to GuardrailThoughtTypeProvider so the guardrail LLM call is

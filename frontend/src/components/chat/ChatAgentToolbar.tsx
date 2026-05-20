@@ -3,6 +3,7 @@ import { Bot, Cpu, SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
+import type { LlmRef } from "../../../../backend/src/contracts/llm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getAgents, getModelPresets } from "../../api/client";
@@ -26,8 +27,7 @@ function presetIdFromSearchParams(searchParams: URLSearchParams): number | null 
 
 export type ChatAgentSelection = {
   agentId: string;
-  llmProviderId: string;
-  llmModel: string;
+  llm: LlmRef | null;
   modelPresetId: number | null;
 };
 
@@ -234,8 +234,10 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
   useEffect(() => {
     onSelectionChange({
       agentId: selectedAgentId,
-      llmProviderId: effectiveLlm.provider_id,
-      llmModel: effectiveLlm.model,
+      llm:
+        effectiveLlm.provider_id && effectiveLlm.model
+          ? { providerId: effectiveLlm.provider_id, model: effectiveLlm.model }
+          : null,
       modelPresetId: selectedPresetId,
     });
   }, [selectedAgentId, effectiveLlm.provider_id, effectiveLlm.model, selectedPresetId, onSelectionChange]);

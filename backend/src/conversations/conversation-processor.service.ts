@@ -87,8 +87,7 @@ export class ConversationProcessorService {
     conversationId: string;
     sourceEntryId: string;
     editedRequestText: string;
-    llmProviderId?: string;
-    llmModel?: string;
+    llm?: LlmRef;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
     const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
@@ -121,15 +120,14 @@ export class ConversationProcessorService {
 
     const { scope, chain } = this.beginRun(args.conversationId);
     const llm = await this.resolveLlmRef({
-      explicitProviderId: source.llmProviderId,
-      explicitModel: source.llmModel,
+      explicitProviderId: source.llm?.providerId,
+      explicitModel: source.llm?.model,
       agentId: source.agentId,
     });
     const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
       text: args.editedText,
       agentId: source.agentId,
-      ...(source.llmProviderId ? { llmProviderId: source.llmProviderId } : {}),
-      ...(source.llmModel ? { llmModel: source.llmModel } : {}),
+      ...(source.llm ? { llm: source.llm } : {}),
       ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
       parentId: source.parentId,
       ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
@@ -187,7 +185,11 @@ export class ConversationProcessorService {
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const { scope, chain } = this.beginRun(conversationId);
-    const llm = await this.resolveLlmRef({ explicitProviderId: body.llmProviderId, explicitModel: body.llmModel, agentId: body.agentId });
+    const llm = await this.resolveLlmRef({
+      explicitProviderId: body.llm?.providerId,
+      explicitModel: body.llm?.model,
+      agentId: body.agentId,
+    });
     const titleLlm = await this.thoughtProcessing.getTitleLlmRef(llm);
     const existingMessages = await this.chatEntries.listMessages(conversationId);
     if (existingMessages.length > 0 && !body.parentId) {
@@ -200,8 +202,7 @@ export class ConversationProcessorService {
     const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
       text: body.message,
       agentId: body.agentId,
-      llmProviderId: body.llmProviderId,
-      llmModel: body.llmModel,
+      ...(body.llm ? { llm: body.llm } : {}),
       modelPresetId: body.modelPresetId,
       parentId,
       ...(attachments ? { attachments } : {}),

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ChatAttachment, ToolInvocationEntry } from '../../contracts/chatEntry.js';
+import type { LlmRef } from '../../contracts/llm.js';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { PrismaService } from '../prisma.service.js';
 import type { ThoughtStepStatus, UserMessageEntryRow, AssistantMessageEntryRow } from './chat-entries.types.js';
@@ -25,16 +26,14 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     input: {
       text: string;
       agentId: string;
-      llmProviderId?: string;
-      llmModel?: string;
+      llm?: LlmRef;
       modelPresetId?: number;
       parentId: string | null;
       attachments?: ChatAttachment[];
     },
   ): Promise<UserMessageEntryRow> {
     const payload: Record<string, unknown> = { text: input.text, agentId: input.agentId };
-    if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
-    if (input.llmModel) payload.llmModel = input.llmModel;
+    if (input.llm) payload.llm = input.llm;
     if (input.modelPresetId !== undefined) payload.modelPresetId = input.modelPresetId;
     if (input.attachments && input.attachments.length > 0) payload.attachments = input.attachments;
     const row = await this.appendEntry(conversationId, {
@@ -51,8 +50,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       text: input.text,
       agentId: input.agentId,
     };
-    if (input.llmProviderId) result.llmProviderId = input.llmProviderId;
-    if (input.llmModel) result.llmModel = input.llmModel;
+    if (input.llm) result.llm = input.llm;
     if (input.modelPresetId !== undefined) result.modelPresetId = input.modelPresetId;
     if (input.attachments && input.attachments.length > 0) result.attachments = input.attachments;
     return result;
@@ -85,8 +83,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       status?: ThoughtStepStatus;
       requestText?: string;
       title?: string;
-      llmProviderId?: string;
-      llmModel?: string;
+      llm?: LlmRef;
     },
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
@@ -95,8 +92,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       status: input.status ?? 'running',
     };
     if (input.title) payload.title = input.title;
-    if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
-    if (input.llmModel) payload.llmModel = input.llmModel;
+    if (input.llm) payload.llm = input.llm;
     const row = await this.appendEntry(conversationId, {
       type: 'thought-prepare',
       parentId: input.parentId,
@@ -112,8 +108,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       thoughtId: string;
       parentId: string | null;
       status?: ThoughtStepStatus;
-      llmProviderId?: string;
-      llmModel?: string;
+      llm?: LlmRef;
     },
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
@@ -124,8 +119,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       decision: null,
       status: input.status ?? 'running',
     };
-    if (input.llmProviderId) payload.llmProviderId = input.llmProviderId;
-    if (input.llmModel) payload.llmModel = input.llmModel;
+    if (input.llm) payload.llm = input.llm;
     const row = await this.appendEntry(conversationId, {
       type: input.type,
       parentId: input.parentId,

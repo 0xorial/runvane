@@ -121,8 +121,7 @@ export class ThoughtProcessingService {
         parentId,
         status: 'running',
         title: provider.prepareTitle,
-        llmProviderId: ctx.llmProviderId,
-        llmModel: ctx.llmModel,
+        llm: ctx.llm,
       }),
     );
   }
@@ -132,8 +131,7 @@ export class ThoughtProcessingService {
       conversationId: string;
       sourceEntryId: string;
       editedRequestText: string;
-      llmProviderId?: string;
-      llmModel?: string;
+      llm?: LlmRef;
     },
     scope: LifecycleScope,
     chain: ChatChain,
@@ -156,9 +154,8 @@ export class ThoughtProcessingService {
     }
     // The caller can override the LLM (model picker in the prepare-step editor);
     // otherwise reuse the source prepare entry's own LLM.
-    const providerId = args.llmProviderId ?? branch.llmProviderId;
-    const model = args.llmModel ?? branch.llmModel;
-    if (!providerId || !model) {
+    const llm = args.llm ?? branch.llm;
+    if (!llm) {
       throw new Error(
         `cannot reprocess: no LLM ref — prepare entry ${branch.prepareEntryId} has none persisted ` +
           `and none was supplied`,
@@ -166,7 +163,7 @@ export class ThoughtProcessingService {
     }
     chain.setTip(branch.parentId);
 
-    const ctx = this.createContext(args.conversationId, chain, { providerId, model });
+    const ctx = this.createContext(args.conversationId, chain, llm);
     ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display, branch.inputJson);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, display);
     const plannerEntryId = ctx.streamEntryId;
@@ -196,9 +193,7 @@ export class ThoughtProcessingService {
     }
     chain.setTip(source.prepareEntryId);
 
-    const ctx = this.createContext(args.conversationId, chain, llm, { thoughtId: source.thoughtId });
-    if (source.llmProviderId) ctx.llmProviderId = source.llmProviderId;
-    if (source.llmModel) ctx.llmModel = source.llmModel;
+    const ctx = this.createContext(args.conversationId, chain, source.llm ?? llm, { thoughtId: source.thoughtId });
     ctx.prepareEntryId = source.prepareEntryId;
     ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.llmRequest, editedResponse);
     ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
@@ -224,8 +219,7 @@ export class ThoughtProcessingService {
     return {
       thoughtId: opts.thoughtId ?? crypto.randomUUID(),
       conversationId,
-      llmProviderId: llm.providerId,
-      llmModel: llm.model,
+      llm,
       prepareEntryId: null,
       streamEntryId: null,
       thoughtActionEntryId: null,
@@ -241,8 +235,7 @@ export class ThoughtProcessingService {
     parentId: string | null;
     thoughtId: string;
     inputJson: string | null;
-    llmProviderId: string | null;
-    llmModel: string | null;
+    llm: LlmRef | null;
   }> {
     const sourceEntry = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
     if (!sourceEntry) throw new Error(`source entry not found: ${sourceEntryId}`);
@@ -254,8 +247,7 @@ export class ThoughtProcessingService {
       parentId: sourceEntry.parentId,
       thoughtId: sourceEntry.thoughtId,
       inputJson: sourceEntry.inputJson ?? null,
-      llmProviderId: sourceEntry.llmProviderId ?? null,
-      llmModel: sourceEntry.llmModel ?? null,
+      llm: sourceEntry.llm ?? null,
     };
   }
 
@@ -286,8 +278,7 @@ export class ThoughtProcessingService {
     thoughtId: string;
     prepareEntryId: string;
     llmRequest: string;
-    llmProviderId?: string;
-    llmModel?: string;
+    llm?: LlmRef;
   }> {
     const source = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
     if (!source) throw new Error(`source entry not found: ${sourceEntryId}`);
@@ -304,16 +295,14 @@ export class ThoughtProcessingService {
       thoughtId: string;
       prepareEntryId: string;
       llmRequest: string;
-      llmProviderId?: string;
-      llmModel?: string;
+      llm?: LlmRef;
     } = {
       provider,
       thoughtId: source.thoughtId,
       prepareEntryId: source.parentId,
       llmRequest: source.llmRequest,
     };
-    if (source.llmProviderId) out.llmProviderId = source.llmProviderId;
-    if (source.llmModel) out.llmModel = source.llmModel;
+    if (source.llm) out.llm = source.llm;
     return out;
   }
 
@@ -330,8 +319,7 @@ export class ThoughtProcessingService {
         status: 'completed',
         requestText,
         title: provider.prepareTitle,
-        llmProviderId: ctx.llmProviderId,
-        llmModel: ctx.llmModel,
+        llm: ctx.llm,
       }),
     );
     if (inputJson !== null) {
@@ -353,8 +341,7 @@ export class ThoughtProcessingService {
         thoughtId: ctx.thoughtId,
         parentId,
         status: 'running',
-        llmProviderId: ctx.llmProviderId,
-        llmModel: ctx.llmModel,
+        llm: ctx.llm,
       }),
     );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest });
@@ -387,8 +374,7 @@ export class ThoughtProcessingService {
         thoughtId: ctx.thoughtId,
         parentId,
         status: 'completed',
-        llmProviderId: ctx.llmProviderId,
-        llmModel: ctx.llmModel,
+        llm: ctx.llm,
       }),
     );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, {

@@ -9,7 +9,7 @@ type PreparedContextStepProps = {
 
 export function PreparedContextStep({ entry }: PreparedContextStepProps) {
   const [open, setOpen] = useState(false);
-  const model = String(entry.llmModel || "").trim();
+  const model = String(entry.llm?.model || "").trim();
   const meta = model ? `completed · ${model}` : "completed";
   const requestText = String(entry.requestText || "").trim();
 
