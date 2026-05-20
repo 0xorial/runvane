@@ -1,5 +1,7 @@
 # Runvane
 
+Long live context engineering!
+
 Personal AI chat client focused on local-first control, flexible orchestration, and transparent runtime behavior.
 
 ## Why
