@@ -39,12 +39,21 @@ export class ReasonStep {
       ctx.thoughtActionEntryId = await this.createActionEntry(provider, ctx);
     }
 
+    const onAbort = () => {
+      void this.setStreamStatus(ctx, streamEntryId, 'cancelled');
+    };
+    scope.signal.addEventListener('abort', onAbort, { once: true });
+
     try {
       scope.throwIfAborted();
       return await this.streamLlm(provider, input, ctx, prepared, streamEntryId, scope);
     } catch (error) {
-      await this.markFailed(ctx, streamEntryId, error, scope);
+      if (scope.signal.aborted) throw error;
+      const detail = error instanceof Error ? error.message : String(error);
+      await this.setStreamStatus(ctx, streamEntryId, 'failed', detail);
       throw error;
+    } finally {
+      scope.signal.removeEventListener('abort', onAbort);
     }
   }
 
@@ -121,7 +130,13 @@ export class ReasonStep {
       provider.onLlmEvent?.(input, ctx, event);
     };
 
-    const completion = await llmProvider.streamCompletion(providerSettings, ctx.llm.model, wireRequest, onEvent);
+    const completion = await llmProvider.streamCompletion(
+      providerSettings,
+      ctx.llm.model,
+      wireRequest,
+      onEvent,
+      scope.signal,
+    );
     scope.throwIfAborted();
 
     const elapsedMs = Date.now() - startedAt;
@@ -145,16 +160,14 @@ export class ReasonStep {
     return completion;
   }
 
-  private async markFailed(
+  private async setStreamStatus(
     ctx: ThoughtContext,
     streamEntryId: string,
-    error: unknown,
-    scope: LifecycleScope,
+    status: 'failed' | 'cancelled',
+    errorDetail?: string,
   ): Promise<void> {
-    const cancelled = scope.signal.aborted || (error instanceof Error && error.name === 'AbortError');
-    const detail = error instanceof Error ? error.message : String(error);
-    const patch: Record<string, unknown> = { status: cancelled ? 'cancelled' : 'failed' };
-    if (!cancelled) patch.error = detail;
+    const patch: Record<string, unknown> = { status };
+    if (errorDetail) patch.error = errorDetail;
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, patch);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
   }

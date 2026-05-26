@@ -57,5 +57,6 @@ export interface LlmProvider {
     model: string,
     request: LlmRequest,
     onEvent: (event: LlmStreamEvent) => void,
+    signal?: AbortSignal,
   ): Promise<LlmCompletion>;
 }

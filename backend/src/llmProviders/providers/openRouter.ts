@@ -222,6 +222,7 @@ export class OpenRouterProvider implements LlmProvider {
     model: string,
     request: LlmRequest,
     onEvent: (event: LlmStreamEvent) => void,
+    signal?: AbortSignal,
   ): Promise<LlmCompletion> {
     const settings = this.mergedSettings(settingsIn);
     const baseUrl = normalizeBaseUrl(settings, this.defaultBaseUrl);
@@ -238,6 +239,7 @@ export class OpenRouterProvider implements LlmProvider {
       method: 'POST',
       headers: buildHeaders(settings),
       body: JSON.stringify(buildOpenAiBody(model, request)),
+      ...(signal ? { signal } : {}),
     });
     if (!res.ok) {
       const body = await res.text();
