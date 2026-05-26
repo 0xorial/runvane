@@ -63,6 +63,14 @@ function ThoughtTripletRowWithStream({
   const reasonMeta = buildReasonMetaNode(stream, pricingByModel.get(modelLabel));
   const actionMeta = actionMetaLabel(actionStepEntry, stream);
   const actionLabel = actionMeta.usesTool ? `call ${actionMeta.toolName ?? "tool"}` : "Reply";
+  const reasonFailed = stream.status === "failed" || stream.status === "cancelled";
+  const reasonIcon = reasonFailed ? (
+    <AlertTriangle className="h-3 w-3 text-destructive" />
+  ) : stream.status === "running" ? (
+    <TinyProgressCircle />
+  ) : (
+    <Sparkles className="h-3 w-3" />
+  );
 
   return (
     <ChatThreadIndent className="py-0 mb-1">
@@ -77,7 +85,7 @@ function ThoughtTripletRowWithStream({
           />
           <Connector />
           <StepChip
-            icon={stream.status === "running" ? <TinyProgressCircle /> : <Sparkles className="h-3 w-3" />}
+            icon={reasonIcon}
             label=""
             meta={reasonMeta}
             badge={<BranchSelector entryId={stream.id} />}

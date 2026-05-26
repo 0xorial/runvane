@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Pencil, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronRight, Pencil, Sparkles } from "lucide-react";
 import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { parseDbTimestampMs } from "@/utils/formatDuration";
 import { reprocessThought } from "@/api/client";
@@ -102,7 +102,11 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
             )}
           >
             <ChevronRight className={cn("h-3 w-3 transition-transform", open ? "rotate-90" : "")} />
-            <Sparkles className="h-3 w-3" />
+            {failed || cancelled ? (
+              <AlertTriangle className="h-3 w-3 text-destructive" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
             <span className="font-medium">Queried model</span>
             <span className="opacity-60">
               · {modelLabel || "unknown model"}
