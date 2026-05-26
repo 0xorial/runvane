@@ -73,7 +73,7 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
     if (allAgents == null) return;
     const raw = agentIdFromSearchParams(urlParams);
     if (!raw) {
-      const fallbackId = allAgents[0]?.id ?? "";
+      const fallbackId = (allAgents.find((a) => a.is_default)?.id ?? allAgents[0]?.id) ?? "";
       setSelectedAgentId(fallbackId);
       if (fallbackId) {
         setUrlParams(

@@ -44,4 +44,9 @@ export class AgentsService {
   async delete(agentId: string): Promise<boolean> {
     return this.agents.delete(agentId);
   }
+
+  async setDefault(agentId: string): Promise<AgentRouteResponse | null> {
+    const updated = await this.agents.setDefault(agentId);
+    return updated ? toAgentResponse(updated) : null;
+  }
 }

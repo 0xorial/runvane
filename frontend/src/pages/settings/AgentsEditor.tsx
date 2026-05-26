@@ -37,6 +37,7 @@ type AgentsEditorProps = {
   saveAgentAndOpenChat: (targetId?: string) => Promise<boolean>;
   createAgent: () => Promise<void>;
   deleteLoadedAgent: () => Promise<void>;
+  setLoadedAgentAsDefault: () => Promise<void>;
   agentLoadError: string | null;
   agentLoading: boolean;
   modelGroups: ModelGroup[];
@@ -69,6 +70,7 @@ export function AgentsEditor({
   saveAgentAndOpenChat,
   createAgent,
   deleteLoadedAgent,
+  setLoadedAgentAsDefault,
   agentLoadError,
   agentLoading,
   modelGroups,
@@ -349,6 +351,22 @@ export function AgentsEditor({
                     />
                   </label>
                   <div className="ml-auto inline-flex flex-wrap items-center gap-2.5">
+                    {currentAgent.is_default ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        default
+                      </span>
+                    ) : (
+                      <AsyncButton
+                        className={ghostBtn}
+                        disabled={!canEdit}
+                        onClickAsync={async () => {
+                          await setLoadedAgentAsDefault();
+                          return true;
+                        }}
+                      >
+                        Set as default
+                      </AsyncButton>
+                    )}
                     <button
                       type="button"
                       className={cn(ghostBtn, ghostDanger)}
@@ -368,7 +386,14 @@ export function AgentsEditor({
                     </AsyncButton>
                   </div>
                 </div>
-                <label className="mb-3 flex flex-col gap-2 text-[13px] text-muted-foreground">
+                <AgentLlmSettings
+                  agent={currentAgent}
+                  onChange={setCurrentAgent}
+                  canEdit={canEdit}
+                  modelGroups={modelGroups}
+                  presets={presets}
+                />
+                <label className="mb-3 mt-3 flex flex-col gap-2 text-[13px] text-muted-foreground">
                   System prompt
                   <textarea
                     className={systemPromptInput}
@@ -381,17 +406,9 @@ export function AgentsEditor({
                       })
                     }
                     spellCheck={false}
-                    placeholder="Global instructions for this agent. Applied before every request."
                     rows={5}
                   />
                 </label>
-                <AgentLlmSettings
-                  agent={currentAgent}
-                  onChange={setCurrentAgent}
-                  canEdit={canEdit}
-                  modelGroups={modelGroups}
-                  presets={presets}
-                />
                 <AgentGuardrailSettings
                   config={readGuardrailConfig(
                     (currentAgent.default_llm_configuration ?? {}) as Record<string, unknown>,

@@ -472,6 +472,10 @@ export function deleteAgentById(agentId: string): Promise<DeleteAgentResponse> {
   return deleteJson(`/api/agents/${encodeURIComponent(agentId)}`).then(validateDeleteAgentResponse);
 }
 
+export function setDefaultAgent(agentId: string): Promise<AgentListItemResponse> {
+  return sendJson(`/api/agents/${encodeURIComponent(agentId)}/default`, "POST", {}).then(validateAgentResponse);
+}
+
 export function getModelPresets(): Promise<ModelPresetResponse[]> {
   return getJson("/api/model-presets").then(validateGetModelPresetsResponse);
 }

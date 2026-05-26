@@ -10,9 +10,23 @@ type AgentDbRow = {
   default_model_preset_id: number | null;
   model_provider_id: string | null;
   model_name: string | null;
+  is_default: number;
   created_at: string;
   updated_at: string;
 };
+
+const SELECT_COLS = `
+  id,
+  name,
+  system_prompt,
+  default_llm_configuration_json,
+  default_model_preset_id,
+  model_provider_id,
+  model_name,
+  is_default,
+  created_at,
+  updated_at
+`;
 
 function asModelReference(providerId: string | null, modelName: string | null): AgentEntity['model_reference'] {
   const provider_id = String(providerId ?? '').trim();
@@ -38,6 +52,7 @@ function toAgentEntity(row: AgentDbRow): AgentEntity {
     default_llm_configuration: parseDefaultConfig(row.default_llm_configuration_json),
     default_model_preset_id: row.default_model_preset_id,
     model_reference: asModelReference(row.model_provider_id, row.model_name),
+    is_default: row.is_default === 1,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -49,40 +64,36 @@ export class AgentsRepo {
 
   async list(): Promise<AgentEntity[]> {
     const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT
-         id,
-         name,
-         system_prompt,
-         default_llm_configuration_json,
-         default_model_preset_id,
-         model_provider_id,
-         model_name,
-         created_at,
-         updated_at
-       FROM agents
-       ORDER BY updated_at DESC`,
+      `SELECT ${SELECT_COLS} FROM agents ORDER BY updated_at DESC`,
     )) as AgentDbRow[];
     return rows.map((row) => toAgentEntity(row));
   }
 
   async get(id: string): Promise<AgentEntity | null> {
     const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT
-         id,
-         name,
-         system_prompt,
-         default_llm_configuration_json,
-         default_model_preset_id,
-         model_provider_id,
-         model_name,
-         created_at,
-         updated_at
-       FROM agents
-       WHERE id = ?`,
+      `SELECT ${SELECT_COLS} FROM agents WHERE id = ?`,
       id,
     )) as AgentDbRow[];
     const row = rows[0];
     return row ? toAgentEntity(row) : null;
+  }
+
+  async getDefault(): Promise<AgentEntity | null> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT ${SELECT_COLS} FROM agents WHERE is_default = 1 LIMIT 1`,
+    )) as AgentDbRow[];
+    const row = rows[0];
+    return row ? toAgentEntity(row) : null;
+  }
+
+  async setDefault(id: string): Promise<AgentEntity | null> {
+    const target = await this.get(id);
+    if (!target) return null;
+    // Clear before setting so the partial-unique index on `is_default = 1`
+    // never sees two truthy rows simultaneously.
+    await this.prisma.$executeRawUnsafe(`UPDATE agents SET is_default = 0 WHERE is_default = 1 AND id != ?`, id);
+    await this.prisma.$executeRawUnsafe(`UPDATE agents SET is_default = 1 WHERE id = ?`, id);
+    return this.get(id);
   }
 
   async create(input: {

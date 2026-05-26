@@ -41,6 +41,7 @@ const AgentListItemResponseSchema: z.ZodType<AgentListItemResponse> = z.object({
   default_llm_configuration: AgentDefaultLlmConfigurationSchema.nullable(),
   default_model_preset_id: z.number().finite().nullable(),
   model_reference: AgentModelReferenceSchema.nullable(),
+  is_default: z.boolean(),
   llms: z.array(z.record(z.string(), z.unknown())),
   created_at: z.string(),
   updated_at: z.string(),

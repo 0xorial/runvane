@@ -36,4 +36,11 @@ export class AgentsController {
     if (!ok) throw new NotFoundException('agent not found');
     return { ok: true };
   }
+
+  @Post(':agentId/default')
+  async setDefault(@Param('agentId') agentId: string) {
+    const updated = await this.agents.setDefault(agentId);
+    if (!updated) throw new NotFoundException('agent not found');
+    return updated;
+  }
 }

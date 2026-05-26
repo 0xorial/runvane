@@ -21,17 +21,10 @@ const promptInput =
   "min-h-[90px] w-full resize-y rounded-[10px] border border-input bg-background px-2.5 py-2 text-[13px] leading-snug";
 
 export function AgentGuardrailSettings({ config, onChange, canEdit, modelGroups }: Props) {
-  const hasModel = config.provider_id.length > 0 && config.model_name.length > 0;
-
   return (
     <div className="mt-3.5">
       <div className="mb-1 flex items-center gap-2">
         <span className="text-[13px] font-bold text-foreground">Guardrail LLM</span>
-        {hasModel && (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-            active
-          </span>
-        )}
       </div>
       <p className="mb-2.5 text-xs text-muted-foreground">
         When enabled per-tool, this LLM reviews each call before it runs. A flagged call pauses for your approval with the guardrail&apos;s reason shown.

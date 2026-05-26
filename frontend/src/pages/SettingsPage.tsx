@@ -7,6 +7,7 @@ import {
   createAgent as createAgentApi,
   createModelPreset,
   deleteAgentById,
+  setDefaultAgent,
   deleteModelPresetById,
   getAgentById,
   getAgents as getAgentsApi,
@@ -192,6 +193,13 @@ export function SettingsPage() {
     setAgentEditId(created.id);
     await loadAgent(created.id);
     notifyToast({ message: "Agent created", type: "success", durationMs: 4000 });
+  }
+
+  async function setLoadedAgentAsDefault() {
+    if (!currentAgent) return;
+    const updated = await setDefaultAgent(currentAgent.id);
+    setCurrentAgent(updated);
+    await loadAgents();
   }
 
   async function deleteLoadedAgent() {
@@ -386,6 +394,7 @@ export function SettingsPage() {
               saveAgentAndOpenChat={saveAgentAndOpenChat}
               createAgent={createAgent}
               deleteLoadedAgent={deleteLoadedAgent}
+              setLoadedAgentAsDefault={setLoadedAgentAsDefault}
               agentLoadError={agentLoadError}
               agentLoading={agentLoading}
               modelGroups={modelGroups}
