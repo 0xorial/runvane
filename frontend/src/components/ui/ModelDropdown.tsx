@@ -20,6 +20,10 @@ function itemLabel(item: DropdownItem): string {
   return typeof item === "string" ? item : item.label;
 }
 
+function itemClassName(item: DropdownItem): string | undefined {
+  return typeof item === "string" ? undefined : item.className;
+}
+
 type ModelDropdownProps = {
   value: string;
   onChange: (value: string, groupId?: string) => void;
@@ -135,6 +139,7 @@ export function ModelDropdown({
               {g.models.map((m) => {
                 const v = itemValue(m);
                 const l = itemLabel(m);
+                const extraClass = itemClassName(m);
                 return (
                   <button
                     key={`${g.id}:${v}`}
@@ -142,6 +147,7 @@ export function ModelDropdown({
                     className={cn(
                       "block cursor-pointer whitespace-nowrap rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10",
                       v === value && "bg-primary/15",
+                      extraClass,
                     )}
                     onClick={() => {
                       onChange(v, g.id);

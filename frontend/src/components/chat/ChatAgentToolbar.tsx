@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Cpu, SlidersHorizontal } from "lucide-react";
+import { Bot, Cpu, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
@@ -48,12 +48,15 @@ const toolbarLabelEmbeddedClass = "flex min-w-0 shrink-0 items-center gap-1 text
 const embeddedDropdownButtonClass =
   "min-h-[24px] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45 focus-visible:ring-1 focus-visible:ring-border";
 
+const AGENT_DEFAULT_MODEL_SENTINEL = "__agent_default__";
+
 export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded = false }: ChatAgentToolbarProps) {
   const [urlParams, setUrlParams] = useSearchParams();
   const [allAgents, setAllAgents] = useState<AgentListItemResponse[] | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const { modelGroups: allLlms } = useLlmSettings();
   const [selectedLlm, setSelectedLlm] = useState<LlmSelection | null>(null);
+  const [followAgentDefault, setFollowAgentDefault] = useState(true);
   const [allPresets, setAllPresets] = useState<ModelPresetResponse[] | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(() => presetIdFromSearchParams(urlParams));
 
@@ -200,23 +203,78 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
   }, [agentDefaultLlm]);
 
   useEffect(() => {
-    setSelectedLlm(normalizedAgentDefault ?? firstAvailableLlm);
-  }, [selectedAgentId, normalizedAgentDefault, firstAvailableLlm]);
-
-  useEffect(() => {
+    if (followAgentDefault) return;
     if (selectedLlm && selectedLlm.provider_id && selectedLlm.model) return;
-    if (normalizedAgentDefault) {
-      setSelectedLlm(normalizedAgentDefault);
+    if (firstAvailableLlm) setSelectedLlm(firstAvailableLlm);
+  }, [followAgentDefault, selectedLlm, firstAvailableLlm]);
+
+  const effectiveLlm: LlmSelection = followAgentDefault
+    ? (normalizedAgentDefault ?? firstAvailableLlm ?? { provider_id: "", model: "" })
+    : (selectedLlm ?? firstAvailableLlm ?? { provider_id: "", model: "" });
+
+  const modelGroupsWithAgentDefault: ModelGroup[] = useMemo(() => {
+    if (!normalizedAgentDefault) return allLlms;
+    const agentName = currentAgent?.name?.trim() || "agent";
+    return [
+      {
+        id: AGENT_DEFAULT_MODEL_SENTINEL,
+        label: "",
+        models: [
+          {
+            value: AGENT_DEFAULT_MODEL_SENTINEL,
+            label: `${agentName} default (${normalizedAgentDefault.model})`,
+            className: "text-muted-foreground",
+          },
+        ],
+      },
+      ...allLlms,
+    ];
+  }, [allLlms, normalizedAgentDefault, currentAgent]);
+
+  const handleModelChange = (m: string, providerId?: string) => {
+    if (m === AGENT_DEFAULT_MODEL_SENTINEL) {
+      setFollowAgentDefault(true);
+      setSelectedLlm(null);
       return;
     }
-    if (firstAvailableLlm) {
-      setSelectedLlm(firstAvailableLlm);
-    }
-  }, [selectedLlm, normalizedAgentDefault, firstAvailableLlm]);
+    setFollowAgentDefault(false);
+    setSelectedLlm({
+      provider_id: providerId
+        ? String(providerId)
+        : String(
+            effectiveLlm.provider_id ||
+              normalizedAgentDefault?.provider_id ||
+              firstAvailableLlm?.provider_id ||
+              "",
+          ).trim(),
+      model: m,
+    });
+  };
 
-  const effectiveLlm: LlmSelection = selectedLlm ??
-    normalizedAgentDefault ??
-    firstAvailableLlm ?? { provider_id: "", model: "" };
+  const modelSelectorValue = followAgentDefault && normalizedAgentDefault
+    ? AGENT_DEFAULT_MODEL_SENTINEL
+    : effectiveLlm.model || "";
+
+  const showResetToAgentDefault = !followAgentDefault && normalizedAgentDefault != null;
+  const resetToAgentDefault = () => {
+    setFollowAgentDefault(true);
+    setSelectedLlm(null);
+  };
+  const resetButton = showResetToAgentDefault ? (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resetToAgentDefault();
+      }}
+      title={`Reset to ${currentAgent?.name?.trim() || "agent"} default`}
+      className="ml-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+    >
+      <RotateCcw className="h-3 w-3" strokeWidth={2} />
+      <span className="sr-only">Reset to agent default</span>
+    </button>
+  ) : null;
   const presetGroups: ModelGroup[] = useMemo(
     () => [
       {
@@ -292,27 +350,18 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
             <Cpu className="h-3.5 w-3.5" strokeWidth={1.85} aria-hidden />
             <span className="sr-only">Model</span>
           </span>
-          <div className="min-w-[104px] max-w-[188px]">
-            <ModelSelector
-              value={effectiveLlm.model || ""}
-              onChange={(m, providerId) => {
-                setSelectedLlm({
-                  provider_id: providerId
-                    ? String(providerId)
-                    : String(
-                        effectiveLlm.provider_id ||
-                          normalizedAgentDefault?.provider_id ||
-                          firstAvailableLlm?.provider_id ||
-                          "",
-                      ).trim(),
-                  model: m,
-                });
-              }}
-              modelGroups={allLlms}
-              placeholder="Select model"
-              searchPlaceholder="Search model"
-              buttonClassName={embeddedDropdownButtonClass}
-            />
+          <div className="flex min-w-[104px] max-w-[188px] items-center">
+            <div className="min-w-0 flex-1">
+              <ModelSelector
+                value={modelSelectorValue}
+                onChange={handleModelChange}
+                modelGroups={modelGroupsWithAgentDefault}
+                placeholder="Select model"
+                searchPlaceholder="Search model"
+                buttonClassName={embeddedDropdownButtonClass}
+              />
+            </div>
+            {resetButton}
           </div>
         </label>
         <span className="h-4 w-px shrink-0 bg-border/80" aria-hidden />
@@ -377,26 +426,17 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
       ) : null}
       <label className={cn(embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass, "min-w-0")}>
         Model
-        <div className="min-w-0 flex-1">
-          <ModelSelector
-            value={effectiveLlm.model || ""}
-            onChange={(m, providerId) => {
-              setSelectedLlm({
-                provider_id: providerId
-                  ? String(providerId)
-                  : String(
-                      effectiveLlm.provider_id ||
-                        normalizedAgentDefault?.provider_id ||
-                        firstAvailableLlm?.provider_id ||
-                        "",
-                    ).trim(),
-                model: m,
-              });
-            }}
-            modelGroups={allLlms}
-            placeholder="Select model"
-            searchPlaceholder="Search model"
-          />
+        <div className="flex min-w-0 flex-1 items-center">
+          <div className="min-w-0 flex-1">
+            <ModelSelector
+              value={modelSelectorValue}
+              onChange={handleModelChange}
+              modelGroups={modelGroupsWithAgentDefault}
+              placeholder="Select model"
+              searchPlaceholder="Search model"
+            />
+          </div>
+          {resetButton}
         </div>
       </label>
       <label className={embedded ? toolbarLabelEmbeddedClass : toolbarLabelClass}>
