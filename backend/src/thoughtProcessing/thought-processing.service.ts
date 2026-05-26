@@ -106,10 +106,11 @@ export class ThoughtProcessingService {
     const ctx = this.createContext(conversationId, chain, llm);
     const prepareCreatePromise = this.appendPreparePlaceholder(ctx, provider);
     scope.spawn(async () => {
-      const input = args.input ?? (await buildInput!(conversationId));
+      let input: TInput | undefined;
       try {
         const prepareEntry = await prepareCreatePromise;
         ctx.prepareEntryId = prepareEntry.id;
+        input = args.input ?? (await buildInput!(conversationId, prepareEntry.id));
         // Persist input on the prepare entry so reprocess-context can rebuild
         // it without any per-provider logic. Reprocess truncates the chain back
         // to this prepare's parent before re-running, so the snapshot reflects
@@ -122,7 +123,7 @@ export class ThoughtProcessingService {
         const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
         await this.decisionStep.run(provider, input, ctx, completion, scope);
       } finally {
-        provider.onThoughtSettled?.(input, ctx);
+        if (input !== undefined) provider.onThoughtSettled?.(input, ctx);
       }
     });
   }
@@ -180,6 +181,7 @@ export class ThoughtProcessingService {
     ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display, branch.inputJson);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, display);
     const plannerEntryId = ctx.streamEntryId;
+    await this.chatEntries.setDefaultViewLeaf(args.conversationId, plannerEntryId);
 
     scope.spawn(async () => {
       const input = JSON.parse(branch.inputJson!) as unknown;
@@ -211,9 +213,10 @@ export class ThoughtProcessingService {
     ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.llmRequest, editedResponse);
     ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
     const plannerEntryId = ctx.streamEntryId;
+    await this.chatEntries.setDefaultViewLeaf(args.conversationId, ctx.thoughtActionEntryId);
 
     scope.spawn(async () => {
-      const input = await provider.buildInputFromConversation!(args.conversationId);
+      const input = await provider.buildInputFromConversation!(args.conversationId, ctx.thoughtActionEntryId!);
       const completion: LlmCompletion = {
         parts: [{ kind: 'text', text: editedResponse }],
         finishReason: 'stop',

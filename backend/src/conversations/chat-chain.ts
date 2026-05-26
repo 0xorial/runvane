@@ -46,6 +46,10 @@ export class ChatChain {
     this.tip = entryId;
   }
 
+  getTip(): string | null {
+    return this.tip;
+  }
+
   async append<T extends { id: string }>(
     thoughtId: string | null,
     fn: (parentId: string | null) => Promise<T>,

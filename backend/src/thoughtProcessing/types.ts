@@ -51,7 +51,14 @@ export type ThoughtTypeProvider<TInput> = {
   streamEntryType: ThoughtStreamEntryType;
   prepareTitle: string;
   initialActionSummary?: string;
-  buildInputFromConversation?: (conversationId: string) => Promise<TInput>;
+  /**
+   * `leafEntryId` is the run's chain tip — the deepest entry on the branch
+   * this thought is writing to. Implementations MUST walk lineage from this
+   * leaf rather than re-resolving the conversation's default-view leaf, so
+   * concurrent sibling branches and UI branch-switches can't poison the
+   * run's input.
+   */
+  buildInputFromConversation?: (conversationId: string, leafEntryId: string) => Promise<TInput>;
   /**
    * Returns the LLM request (messages, optional tools, response format).
    * Model is resolved at the LLM-config layer and passed to the provider

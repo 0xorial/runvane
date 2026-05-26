@@ -23,8 +23,8 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     private readonly hub: SseHubService,
   ) {}
 
-  buildInputFromConversation = async (conversationId: string): Promise<AutoTitleInput> => {
-    const entries = await this.chatEntries.listMessages(conversationId);
+  buildInputFromConversation = async (conversationId: string, leafEntryId: string): Promise<AutoTitleInput> => {
+    const entries = await this.chatEntries.listMessagesFromLeaf(conversationId, leafEntryId);
     const firstUserMessage = entries.find((entry) => entry.type === 'user-message');
     if (!firstUserMessage) throw new Error(`autoTitle requires a user-message in conversation ${conversationId}`);
     return { conversationId, firstMessage: firstUserMessage.text };

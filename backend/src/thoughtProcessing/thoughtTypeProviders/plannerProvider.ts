@@ -61,8 +61,8 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     private readonly thoughtProcessing: ThoughtProcessingService,
   ) {}
 
-  buildInputFromConversation = async (conversationId: string): Promise<PlannerInput> => {
-    const entries = await this.chatEntries.listChatEntries(conversationId);
+  buildInputFromConversation = async (conversationId: string, leafEntryId: string): Promise<PlannerInput> => {
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(conversationId, leafEntryId);
     const anchorUserMessage = [...entries].reverse().find((entry) => entry.type === 'user-message');
     if (!anchorUserMessage) throw new Error(`planner requires a user-message in conversation ${conversationId}`);
     const agentId = anchorUserMessage.agentId;

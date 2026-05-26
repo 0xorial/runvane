@@ -135,7 +135,11 @@ export class ChatEntriesBaseRepo {
 
   async listMessages(conversationId: string): Promise<ChatMessageEntry[]> {
     const leafId = await this.resolveDefaultViewLeaf(conversationId);
-    const rows = leafId ? await this.fetchLineageRows(conversationId, leafId) : [];
+    return leafId ? this.listMessagesFromLeaf(conversationId, leafId) : [];
+  }
+
+  async listMessagesFromLeaf(conversationId: string, leafEntryId: string): Promise<ChatMessageEntry[]> {
+    const rows = await this.fetchLineageRows(conversationId, leafEntryId);
     return rows
       .map(rowToChatEntry)
       .filter((e): e is ChatMessageEntry => e.type === 'user-message' || e.type === 'assistant-message');
@@ -148,7 +152,11 @@ export class ChatEntriesBaseRepo {
     }
     const leafId = await this.resolveDefaultViewLeaf(conversationId);
     if (!leafId) return [];
-    const rows = await this.fetchLineageRows(conversationId, leafId);
+    return this.listChatEntriesFromLeaf(conversationId, leafId);
+  }
+
+  async listChatEntriesFromLeaf(conversationId: string, leafEntryId: string): Promise<ChatEntry[]> {
+    const rows = await this.fetchLineageRows(conversationId, leafEntryId);
     return rows.map(rowToChatEntry);
   }
 

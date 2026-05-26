@@ -78,7 +78,9 @@ export class RunToolService {
 
     const parsedRules = tool.parseRules(toolCfg?.rules ?? tool.getDefaultRules());
     const parsedParams = tool.parseParams(input.params);
-    const entries = await this.chatEntries.listChatEntries(input.conversationId);
+    const chainTip = chain.getTip();
+    if (!chainTip) throw new Error(`runTool: chain tip is unset (conversation=${input.conversationId})`);
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(input.conversationId, chainTip);
 
     scope.throwIfAborted();
     const ruleResults = await tool.evaluatePermission({
@@ -168,7 +170,7 @@ export class RunToolService {
     chain.setTip(args.toolEntryId);
 
     scope.spawn(async () => {
-      const entries = await this.chatEntries.listChatEntries(args.conversationId);
+      const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
       await this.executeTool({
         input,
         tool,

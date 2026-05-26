@@ -41,7 +41,7 @@ export class ConversationProcessorService {
   ) {}
 
   async approveToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
-    const entries = await this.chatEntries.listChatEntries(args.conversationId);
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
     if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
     const agentId = anchorUser.agentId;
@@ -113,6 +113,7 @@ export class ConversationProcessorService {
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
     const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
+    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
     scope.rootDone();
     return result;
   }
@@ -125,6 +126,7 @@ export class ConversationProcessorService {
     const { scope, chain } = this.beginRun(args.conversationId);
     const llm = await this.thoughtProcessing.getLlmRef();
     const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
+    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
     scope.rootDone();
     return result;
   }
