@@ -24,6 +24,8 @@ export class AgentsService {
       default_llm_configuration: input.default_llm_configuration ?? null,
       default_model_preset_id: input.default_model_preset_id ?? null,
       model_reference: input.model_reference ?? null,
+      icon: input.icon ?? null,
+      color: input.color ?? null,
     });
     return toAgentResponse(created);
   }
@@ -37,6 +39,8 @@ export class AgentsService {
       default_llm_configuration: patch.default_llm_configuration ?? existing.default_llm_configuration,
       default_model_preset_id: patch.default_model_preset_id ?? existing.default_model_preset_id,
       model_reference: patch.model_reference ?? existing.model_reference,
+      icon: patch.icon === undefined ? existing.icon : patch.icon,
+      color: patch.color === undefined ? existing.color : patch.color,
     });
     return updated ? toAgentResponse(updated) : null;
   }

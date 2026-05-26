@@ -173,6 +173,8 @@ export function SettingsPage() {
       system_prompt: currentAgent.system_prompt,
       default_llm_configuration: currentAgent.default_llm_configuration,
       default_model_preset_id: currentAgent.default_model_preset_id,
+      icon: currentAgent.icon,
+      color: currentAgent.color,
     });
     setCurrentAgent(saved);
     await loadAgents();

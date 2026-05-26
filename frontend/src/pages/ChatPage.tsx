@@ -19,6 +19,7 @@ import { TerminalPanel } from "../components/terminal/TerminalPanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
 import { AttachmentChips, type SelectedAttachment } from "../components/chat/AttachmentChips";
 import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
+import { AgentCardsEmptyState } from "../components/chat/AgentCardsEmptyState";
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
@@ -312,7 +313,7 @@ export function ChatPage({
           className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
           topAnchorEntryId={topAnchorEntryId}
         >
-          {conversationId
+          {conversationId && visibleEntries.length > 0
             ? visibleEntries.map((entry$) => {
                 const entry = entry$.get();
                 return (
@@ -321,7 +322,7 @@ export function ChatPage({
                   </div>
                 );
               })
-            : null}
+            : <AgentCardsEmptyState selectedAgentId={agentSelection.agentId} />}
         </AnchorTopScrollArea>
       </main>
       {composer}

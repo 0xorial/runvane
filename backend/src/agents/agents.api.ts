@@ -20,3 +20,5 @@ export function toAgentResponse(row: AgentEntity): AgentRouteResponse {
     llms: llmsFromAgent(row.default_llm_configuration, row.model_reference),
   };
 }
+
+export type { AgentEntity } from './agent.entity.js';

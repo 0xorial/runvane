@@ -37,6 +37,8 @@ export const AgentEntitySchema = z.object({
   default_model_preset_id: z.number().finite().nullable(),
   model_reference: AgentModelReferenceSchema.nullable(),
   is_default: z.boolean(),
+  icon: z.string().nullable(),
+  color: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });

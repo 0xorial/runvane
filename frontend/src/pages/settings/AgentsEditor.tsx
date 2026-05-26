@@ -14,6 +14,8 @@ import { DEFAULT_GUARDRAIL_PROMPT } from "../../../../backend/src/contracts/guar
 import type { GuardrailConfig } from "./AgentGuardrailSettings";
 import { sortAgents } from "./helpers";
 import type { ModelGroup } from "./helpers";
+import { AgentIconPicker } from "./AgentIconPicker";
+import { AgentColorPicker } from "./AgentColorPicker";
 import { cn } from "@/lib/utils";
 import {
   chipActive,
@@ -332,6 +334,17 @@ export function AgentsEditor({
             {currentAgent && (
               <>
                 <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                  <AgentIconPicker
+                    value={currentAgent.icon}
+                    colorId={currentAgent.color}
+                    onChange={(iconId) => setCurrentAgent({ ...currentAgent, icon: iconId })}
+                    disabled={!canEdit}
+                  />
+                  <AgentColorPicker
+                    value={currentAgent.color}
+                    onChange={(colorId) => setCurrentAgent({ ...currentAgent, color: colorId })}
+                    disabled={!canEdit}
+                  />
                   <label className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground">
                     Name
                     <input

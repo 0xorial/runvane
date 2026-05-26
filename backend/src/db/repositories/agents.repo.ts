@@ -11,6 +11,8 @@ type AgentDbRow = {
   model_provider_id: string | null;
   model_name: string | null;
   is_default: number;
+  icon: string | null;
+  color: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,6 +26,8 @@ const SELECT_COLS = `
   model_provider_id,
   model_name,
   is_default,
+  icon,
+  color,
   created_at,
   updated_at
 `;
@@ -53,6 +57,8 @@ function toAgentEntity(row: AgentDbRow): AgentEntity {
     default_model_preset_id: row.default_model_preset_id,
     model_reference: asModelReference(row.model_provider_id, row.model_name),
     is_default: row.is_default === 1,
+    icon: row.icon,
+    color: row.color,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -102,6 +108,8 @@ export class AgentsRepo {
     default_llm_configuration?: AgentDefaultLlmConfiguration | null;
     default_model_preset_id?: number | null;
     model_reference?: { provider_id?: string; model_name?: string } | null;
+    icon?: string | null;
+    color?: string | null;
   }): Promise<AgentEntity> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -110,9 +118,9 @@ export class AgentsRepo {
     await this.prisma.$executeRawUnsafe(
       `INSERT INTO agents (
          id, name, system_prompt, default_llm_configuration_json, default_model_preset_id, model_provider_id, model_name,
-         created_at, updated_at
+         icon, color, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.name,
       input.system_prompt ?? '',
@@ -120,6 +128,8 @@ export class AgentsRepo {
       input.default_model_preset_id ?? null,
       providerId,
       modelName,
+      input.icon?.trim() || null,
+      input.color?.trim() || null,
       now,
       now,
     );
@@ -136,12 +146,16 @@ export class AgentsRepo {
       default_llm_configuration?: AgentDefaultLlmConfiguration | null;
       default_model_preset_id?: number | null;
       model_reference?: { provider_id?: string; model_name?: string } | null;
+      icon?: string | null;
+      color?: string | null;
     },
   ): Promise<AgentEntity | null> {
     const existing = await this.get(id);
     if (!existing) return null;
     const providerId = input.model_reference?.provider_id?.trim() || null;
     const modelName = input.model_reference?.model_name?.trim() || null;
+    const icon = input.icon === undefined ? existing.icon : (input.icon?.trim() || null);
+    const color = input.color === undefined ? existing.color : (input.color?.trim() || null);
     await this.prisma.$executeRawUnsafe(
       `UPDATE agents
        SET name = ?,
@@ -150,6 +164,8 @@ export class AgentsRepo {
            default_model_preset_id = ?,
            model_provider_id = ?,
            model_name = ?,
+           icon = ?,
+           color = ?,
            updated_at = ?
        WHERE id = ?`,
       input.name,
@@ -158,6 +174,8 @@ export class AgentsRepo {
       input.default_model_preset_id ?? null,
       providerId,
       modelName,
+      icon,
+      color,
       new Date().toISOString(),
       id,
     );
