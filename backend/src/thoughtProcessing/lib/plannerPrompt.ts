@@ -1,4 +1,4 @@
-import type { ChatEntry } from '../../contracts/chatEntry.js';
+import type { ChatEntry, SummarizeAttachmentLlmStreamEntry } from '../../contracts/chatEntry.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 
 export type BuildPlannerMessagesInput = {
@@ -6,6 +6,22 @@ export type BuildPlannerMessagesInput = {
   entries: ChatEntry[];
   toolIds: string[];
 };
+
+/**
+ * Index of `summarize_attachment_llm_stream` entries (which carry the
+ * persisted `summaryText`) by attachmentId. When multiple exist for the
+ * same attachment (e.g. reprocessed), the latest by `conversationIndex`
+ * wins — that matches what the user sees in chat.
+ */
+function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, SummarizeAttachmentLlmStreamEntry> {
+  const out = new Map<string, SummarizeAttachmentLlmStreamEntry>();
+  for (const e of entries) {
+    if (e.type !== 'summarize_attachment_llm_stream') continue;
+    const prev = out.get(e.attachmentId);
+    if (!prev || prev.conversationIndex < e.conversationIndex) out.set(e.attachmentId, e);
+  }
+  return out;
+}
 
 function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): string {
   const parts: string[] = [];
@@ -25,14 +41,33 @@ function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): str
 }
 
 /**
- * Build the user message's content parts. Attachments are emitted as
- * lightweight `attachment_ref`s in stable id-order; raw bytes are loaded
- * later by the reason step before hitting the provider adapter.
+ * Build the user message's content parts.
+ *
+ * - `direct` attachments are emitted as lightweight `attachment_ref`s in
+ *   stable id-order; raw bytes are loaded later by the reason step before
+ *   hitting the provider adapter.
+ * - `summary` attachments are emitted as a text block carrying the
+ *   pre-computed summary (and the attachment id, so the agent can call
+ *   `ask_attachment` for follow-up questions). Raw bytes are NOT loaded.
  */
-function userMessageParts(entry: Extract<ChatEntry, { type: 'user-message' }>): LlmContentPart[] {
+function userMessageParts(
+  entry: Extract<ChatEntry, { type: 'user-message' }>,
+  summaries: Map<string, SummarizeAttachmentLlmStreamEntry>,
+): LlmContentPart[] {
   const parts: LlmContentPart[] = [{ kind: 'text', text: entry.text }];
   const ordered = [...(entry.attachments ?? [])].sort((a, b) => a.id.localeCompare(b.id));
   for (const att of ordered) {
+    if (att.mode === 'summary') {
+      const summary = summaries.get(att.id);
+      const summaryBody = summary?.summaryText?.trim() ?? '[summary unavailable]';
+      parts.push({
+        kind: 'text',
+        text:
+          `<attachment_summary id="${att.id}" filename="${att.name}" mime="${att.mimeType}" ` +
+          `size_bytes="${att.sizeBytes}">\n${summaryBody}\n</attachment_summary>`,
+      });
+      continue;
+    }
     parts.push({
       kind: 'attachment_ref',
       attachmentId: att.id,
@@ -72,10 +107,13 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
   ];
 }
 
-function entryToMessages(entry: ChatEntry): LlmMessage[] {
+function entryToMessages(
+  entry: ChatEntry,
+  summaries: Map<string, SummarizeAttachmentLlmStreamEntry>,
+): LlmMessage[] {
   switch (entry.type) {
     case 'user-message':
-      return [{ role: 'user', parts: userMessageParts(entry) }];
+      return [{ role: 'user', parts: userMessageParts(entry, summaries) }];
     case 'assistant-message':
       return [textMessage('assistant', entry.text)];
     case 'tool-invocation':
@@ -92,6 +130,7 @@ function entryToMessages(entry: ChatEntry): LlmMessage[] {
     case 'title_llm_stream':
     case 'tool_params_llm_stream':
     case 'summarize_llm_stream':
+    case 'summarize_attachment_llm_stream':
     case 'guardrail_llm_stream':
       return [];
     default: {
@@ -102,9 +141,10 @@ function entryToMessages(entry: ChatEntry): LlmMessage[] {
 }
 
 export function buildPlannerMessages(input: BuildPlannerMessagesInput): LlmMessage[] {
+  const summaries = indexAttachmentSummaries(input.entries);
   const messages: LlmMessage[] = [textMessage('system', plannerSystemContent(input.systemPrompt, input.toolIds))];
   for (const entry of input.entries) {
-    for (const m of entryToMessages(entry)) messages.push(m);
+    for (const m of entryToMessages(entry, summaries)) messages.push(m);
   }
   return messages;
 }

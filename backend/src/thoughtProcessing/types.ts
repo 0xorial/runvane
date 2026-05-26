@@ -2,6 +2,7 @@ import type {
   ChatEntry,
   GuardrailLlmStreamEntry,
   PlannerLlmStreamEntry,
+  SummarizeAttachmentLlmStreamEntry,
   SummarizeLlmStreamEntry,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
@@ -18,6 +19,7 @@ export type ThoughtStreamEntry =
   | TitleLlmStreamEntry
   | ToolParamsLlmStreamEntry
   | SummarizeLlmStreamEntry
+  | SummarizeAttachmentLlmStreamEntry
   | GuardrailLlmStreamEntry;
 export type ThoughtStreamEntryType = ThoughtStreamEntry['type'];
 
@@ -26,6 +28,7 @@ const THOUGHT_STREAM_ENTRY_TYPES: ReadonlySet<ThoughtStreamEntryType> = new Set<
   'title_llm_stream',
   'tool_params_llm_stream',
   'summarize_llm_stream',
+  'summarize_attachment_llm_stream',
   'guardrail_llm_stream',
 ]);
 
@@ -57,6 +60,13 @@ export type ThoughtTypeProvider<TInput> = {
    * of this request — what you see is exactly what hits the wire.
    */
   runPrepare: (input: TInput) => LlmRequest;
+  /**
+   * Optional payload merged onto the stream entry at creation time. Lets
+   * provider-specific fields (e.g. `attachmentId` on
+   * `summarize_attachment_llm_stream`) land on the stream entry without each
+   * provider re-implementing chain append.
+   */
+  streamEntryExtraPayload?: (input: TInput) => Record<string, unknown>;
   onLlmEvent?: (input: TInput, ctx: ThoughtContext, event: LlmStreamEvent) => void;
   runDecision: (
     input: TInput,
@@ -64,4 +74,11 @@ export type ThoughtTypeProvider<TInput> = {
     completion: LlmCompletion,
     scope: LifecycleScope,
   ) => Promise<void>;
+  /**
+   * Fires from the spawn-task `finally` for EVERY thought run, regardless
+   * of whether prepare/reason/decision succeeded or threw. Use this to
+   * release per-batch barriers / latches so peers waiting on completion
+   * can't deadlock when a sibling fails mid-pipeline.
+   */
+  onThoughtSettled?: (input: TInput, ctx: ThoughtContext) => void;
 };

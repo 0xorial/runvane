@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { ChatAttachment } from '../contracts/chatEntry.js';
+import type { AttachmentMode, ChatAttachment } from '../contracts/chatEntry.js';
 import { UploadsRepo } from '../db/repositories/uploads.repo.js';
 import { uploadContentUrl } from './uploads.types.js';
+
+export type RequestedAttachment = { id: string; mode: AttachmentMode };
 
 @Injectable()
 export class UploadsService {
@@ -16,21 +18,22 @@ export class UploadsService {
   }
 
   /**
-   * Resolve a list of upload ids to persistable `ChatAttachment` metadata
-   * for embedding on a user-message entry. Throws if any id is missing —
-   * we never persist a phantom attachment id.
+   * Resolve requested attachments (id + delivery mode) to persistable
+   * `ChatAttachment` metadata for embedding on a user-message entry. Throws
+   * if any id is missing — we never persist a phantom attachment id.
    */
-  async resolveChatAttachments(uploadIds: string[]): Promise<ChatAttachment[]> {
+  async resolveChatAttachments(requested: RequestedAttachment[]): Promise<ChatAttachment[]> {
     const out: ChatAttachment[] = [];
-    for (const id of uploadIds) {
-      const content = await this.uploads.readContentById(id);
-      if (!content) throw new Error(`upload not found: ${id}`);
+    for (const req of requested) {
+      const content = await this.uploads.readContentById(req.id);
+      if (!content) throw new Error(`upload not found: ${req.id}`);
       out.push({
         id: content.attachment.id,
         name: content.attachment.name,
         mimeType: content.attachment.mimeType,
         sizeBytes: content.attachment.sizeBytes,
         url: uploadContentUrl(content.attachment.id),
+        mode: req.mode,
       });
     }
     return out;

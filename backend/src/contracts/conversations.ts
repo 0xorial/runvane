@@ -1,6 +1,12 @@
 import { z } from 'zod';
-import { ChatEntrySchema, UserMessageEntrySchema } from './chatEntry.js';
+import { AttachmentModeSchema, ChatEntrySchema, UserMessageEntrySchema } from './chatEntry.js';
 import { LlmRefSchema } from './llm.js';
+
+export const PostMessageAttachmentSchema = z.object({
+  id: z.string().min(1),
+  mode: AttachmentModeSchema,
+});
+export type PostMessageAttachment = z.infer<typeof PostMessageAttachmentSchema>;
 
 // Re-export so consumers that import ChatEntry via this module keep working.
 export type { ChatEntry } from './chatEntry.js';
@@ -62,7 +68,7 @@ export const PostConversationMessageRequestSchema = z.object({
   agentId: z.string().min(1),
   llm: LlmRefSchema.optional(),
   modelPresetId: z.number().int().min(1).optional(),
-  attachmentIds: z.array(z.string()).optional(),
+  attachments: z.array(PostMessageAttachmentSchema).optional(),
   parentId: z.string().min(1).nullable().optional(),
   clientRequestId: z.string().min(1).optional(),
 });

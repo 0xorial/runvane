@@ -100,12 +100,25 @@ export async function postJsonAccepted(path: string, body: unknown): Promise<Pos
   return { status: res.status, data };
 }
 
+export type AttachmentMode = "direct" | "summary";
+
+export type PostMessageAttachment = {
+  id: string;
+  /**
+   * - `direct`: raw bytes are inlined into the planner call (image/file part).
+   * - `summary`: a one-shot summarize-attachment thought runs first; the
+   *   planner sees the summary text and may call `ask_attachment` for
+   *   follow-up questions against the full content.
+   */
+  mode: AttachmentMode;
+};
+
 export type PostConversationMessageInput = {
   message: string;
   agentId: string;
   llm?: LlmRef;
   modelPresetId?: number;
-  attachmentIds?: string[];
+  attachments?: PostMessageAttachment[];
   /** The entry the user wants this message attached to. Required when the conversation is non-empty. */
   parentId?: string | null;
   /** Echoed back on the resulting USER_MESSAGE SSE event for optimistic reconciliation. */

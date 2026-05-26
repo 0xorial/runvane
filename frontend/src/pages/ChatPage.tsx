@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { createConversation, postConversationMessage, uploadFile } from "../api/client";
+import {
+  createConversation,
+  postConversationMessage,
+  uploadFile,
+  type AttachmentMode,
+  type PostMessageAttachment,
+} from "../api/client";
 import {
   agentIdFromSearchParams,
   ChatAgentToolbar,
@@ -11,6 +17,7 @@ import { ChatTitlePanel } from "../components/chat/header/ChatTitlePanel";
 import { ConversationBranchesPanel } from "../components/chat/ConversationBranchesPanel";
 import { TerminalPanel } from "../components/terminal/TerminalPanel";
 import { MessageComposer } from "../components/chat/MessageComposer";
+import { AttachmentChips, type SelectedAttachment } from "../components/chat/AttachmentChips";
 import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
 import type { AsyncButtonHandle, AsyncResult } from "../components/ui/AsyncButton";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
@@ -27,7 +34,7 @@ async function sendMessageToConversation(
   agentId: string,
   llm: LlmRef | null,
   modelPresetId: number | null,
-  attachmentIds: string[],
+  attachments: PostMessageAttachment[],
   parentId: string | null,
   clientRequestId: string,
 ): Promise<AsyncResult> {
@@ -36,11 +43,25 @@ async function sendMessageToConversation(
     agentId,
     ...(llm ? { llm } : {}),
     ...(modelPresetId != null ? { modelPresetId } : {}),
-    ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
     parentId,
     clientRequestId,
   });
   return { ok: status >= 200 && status < 300 };
+}
+
+/**
+ * Default delivery mode for a freshly-picked file.
+ *
+ * Heuristic: anything likely to be small + meaningful as-is to the model
+ * (image, plain text) defaults to `direct`. Larger / opaque files
+ * (PDFs, archives, big binaries) default to `summary` so the planner
+ * isn't blasted with raw bytes on every turn. User can flip per file.
+ */
+function defaultAttachmentMode(file: File): AttachmentMode {
+  if (file.type.startsWith("image/")) return "direct";
+  if (file.type.startsWith("text/")) return "direct";
+  return "summary";
 }
 
 type ChatPageProps = {
@@ -73,7 +94,7 @@ export function ChatPage({
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [input, setInput] = useState("");
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedAttachment[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [topAnchorEntryId, setTopAnchorEntryId] = useState<string | null>(null);
   const [selectedBranchAnchorEntryId, setSelectedBranchAnchorEntryId] = useState<string | null>(null);
@@ -152,7 +173,7 @@ export function ChatPage({
   }, [conversationId, composerTextareaRef]);
 
   useEffect(() => {
-    const urls = selectedFiles.map((file) =>
+    const urls = selectedFiles.map(({ file }) =>
       file.type.startsWith("image/") || file.type === "application/pdf" ? URL.createObjectURL(file) : "",
     );
     setPreviewUrls(urls);
@@ -195,11 +216,11 @@ export function ChatPage({
       onValueChange={setInput}
       onPaste={(e) => {
         const items = Array.from(e.clipboardData?.items ?? []);
-        const images: File[] = [];
+        const images: SelectedAttachment[] = [];
         for (const item of items) {
           if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
           const file = item.getAsFile();
-          if (file) images.push(file);
+          if (file) images.push({ file, mode: defaultAttachmentMode(file) });
         }
         if (images.length > 0) {
           setSelectedFiles((prev) => [...prev, ...images]);
@@ -209,7 +230,8 @@ export function ChatPage({
       onFileInputChange={(e) => {
         const files = Array.from(e.currentTarget.files ?? []);
         if (files.length === 0) return;
-        setSelectedFiles((prev) => [...prev, ...files]);
+        const wrapped: SelectedAttachment[] = files.map((file) => ({ file, mode: defaultAttachmentMode(file) }));
+        setSelectedFiles((prev) => [...prev, ...wrapped]);
         e.currentTarget.value = "";
       }}
       onPickFiles={() => fileInputRef.current?.click()}
@@ -218,31 +240,14 @@ export function ChatPage({
       selectionSlot={<ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />}
       attachmentsSlot={
         selectedFiles.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {selectedFiles.map((file, idx) => (
-              <button
-                key={`${file.name}-${file.size}-${idx}`}
-                type="button"
-                className="flex w-[120px] flex-col gap-1 rounded-md border border-border bg-card p-1.5 text-left text-card-foreground"
-                onClick={() => setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))}
-                title="Remove file"
-              >
-                {previewUrls[idx] ? (
-                  file.type === "application/pdf" ? (
-                    <iframe className="h-[76px] w-full rounded-md border-0 bg-muted" src={previewUrls[idx]} title={file.name} />
-                  ) : (
-                    <img className="h-[76px] w-full rounded-md object-cover" src={previewUrls[idx]} alt={file.name} />
-                  )
-                ) : (
-                  <div className="flex h-[76px] w-full items-center justify-center rounded-md bg-muted text-[11px] font-bold tracking-wide text-muted-foreground">
-                    FILE
-                  </div>
-                )}
-                <div className="break-words text-xs leading-tight">{file.name}</div>
-                <div className="text-[11px] text-muted-foreground">Remove</div>
-              </button>
-            ))}
-          </div>
+          <AttachmentChips
+            files={selectedFiles}
+            previewUrls={previewUrls}
+            onChangeMode={(idx, next) =>
+              setSelectedFiles((prev) => prev.map((entry, x) => (x === idx ? { ...entry, mode: next } : entry)))
+            }
+            onRemove={(idx) => setSelectedFiles((prev) => prev.filter((_, x) => x !== idx))}
+          />
         ) : undefined
       }
       onSendAsync={() => {
@@ -250,9 +255,9 @@ export function ChatPage({
           const text = input.trim();
           if (!text && selectedFiles.length === 0) return { ok: false };
           const uploadedAttachments: ChatAttachment[] = [];
-          for (const file of selectedFiles) {
+          for (const { file, mode } of selectedFiles) {
             const uploaded = await uploadFile(file);
-            uploadedAttachments.push(uploaded.attachment);
+            uploadedAttachments.push({ ...uploaded.attachment, mode });
           }
           let cid = conversationId;
           const parentLeafIdAtSend = cid ? activeLeafId : null;
@@ -290,7 +295,7 @@ export function ChatPage({
             agentSelection.agentId,
             agentSelection.llm,
             agentSelection.modelPresetId,
-            uploadedAttachments.map((x) => x.id),
+            uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
             parentLeafIdAtSend,
             optimistic.clientRequestId,
           );

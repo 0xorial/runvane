@@ -111,6 +111,16 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
       case 'checkpoint-summary':
         lines.push(`<earlier-summary>\n${e.summaryText}\n</earlier-summary>`);
         break;
+      case 'summarize_attachment_llm_stream':
+        // The stream entry carries the persisted summary text — fold it in
+        // as the user-visible attachment summary for the conversation
+        // summary input.
+        if (e.summaryText) {
+          lines.push(
+            `<attachment-summary filename="${e.filename ?? ''}" mime="${e.mimeType ?? ''}">\n${e.summaryText}\n</attachment-summary>`,
+          );
+        }
+        break;
       // Thought scaffolding (prepare/stream/action) is internal plumbing,
       // not user-visible content; skip from the summary input.
       case 'thought-prepare':

@@ -2,6 +2,7 @@ import type {
   ChatEntry,
   GuardrailLlmStreamEntry,
   PlannerLlmStreamEntry,
+  SummarizeAttachmentLlmStreamEntry,
   SummarizeLlmStreamEntry,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
@@ -9,6 +10,7 @@ import type {
 
 export type {
   AssistantMessageEntry,
+  AttachmentMode,
   ChatAttachment,
   ChatEntry,
   CheckpointSummaryEntry,
@@ -17,6 +19,7 @@ export type {
   LlmDecisionTool,
   LlmDecisionUserResponse,
   PlannerLlmStreamEntry,
+  SummarizeAttachmentLlmStreamEntry,
   SummarizeLlmStreamEntry,
   ThoughtActionEntry,
   ThoughtPrepareEntry,
@@ -32,6 +35,7 @@ export type ThoughtStreamEntry =
   | TitleLlmStreamEntry
   | ToolParamsLlmStreamEntry
   | SummarizeLlmStreamEntry
+  | SummarizeAttachmentLlmStreamEntry
   | GuardrailLlmStreamEntry;
 
 export function isPlannerThinkingEntry(e: ChatEntry): e is PlannerLlmStreamEntry {
@@ -44,6 +48,7 @@ export function isThoughtStreamEntry(e: ChatEntry): e is ThoughtStreamEntry {
     e.type === "title_llm_stream" ||
     e.type === "tool_params_llm_stream" ||
     e.type === "summarize_llm_stream" ||
+    e.type === "summarize_attachment_llm_stream" ||
     e.type === "guardrail_llm_stream"
   );
 }

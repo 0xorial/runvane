@@ -70,8 +70,8 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
 
   private async completeThoughtAction(ctx: ThoughtContext, summary: string): Promise<void> {
     if (!ctx.thoughtActionEntryId) return;
+    // Custom summary/action only — status is flipped by DecisionStep.
     await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
-      status: 'completed',
       summary,
       action: 'final_answer',
     });

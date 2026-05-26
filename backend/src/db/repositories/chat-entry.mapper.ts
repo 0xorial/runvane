@@ -5,18 +5,21 @@ import type {
   CheckpointSummaryEntry,
   GuardrailLlmStreamEntry,
   PlannerLlmStreamEntry,
+  SummarizeAttachmentLlmStreamEntry,
   SummarizeLlmStreamEntry,
   ThoughtStepStatus,
   TitleLlmStreamEntry,
   ToolParamsLlmStreamEntry,
 } from '../../contracts/chatEntry.js';
-import { ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
+import { ChatAttachmentSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { z } from 'zod';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import type { ChatEntryDbRow } from './chat-entries.types.js';
 
 const STEP_STATUSES: readonly ThoughtStepStatus[] = ['running', 'completed', 'failed', 'cancelled'];
+
+const AttachmentsArraySchema = z.array(ChatAttachmentSchema);
 const TOOL_STATES = ['requested', 'running', 'done', 'error'] as const;
 type ToolState = (typeof TOOL_STATES)[number];
 
@@ -42,6 +45,7 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
     case 'title_llm_stream':
     case 'tool_params_llm_stream':
     case 'summarize_llm_stream':
+    case 'summarize_attachment_llm_stream':
     case 'guardrail_llm_stream':
       return mapStream(base, payload, row.type, ctx);
     case 'tool-invocation':
@@ -88,25 +92,11 @@ function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, c
 
 function parseAttachments(value: unknown, ctx: string): ChatAttachment[] | null {
   if (value === undefined || value === null) return null;
-  if (!Array.isArray(value)) throw new Error(`${ctx}: attachments must be an array`);
-  return value.map((raw, i) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      throw new Error(`${ctx}: attachments[${i}] must be an object`);
-    }
-    const rec = raw as Record<string, unknown>;
-    return {
-      id: requireString(rec, 'id', `${ctx}.attachments[${i}]`),
-      name: requireString(rec, 'name', `${ctx}.attachments[${i}]`),
-      mimeType: requireString(rec, 'mimeType', `${ctx}.attachments[${i}]`),
-      sizeBytes:
-        typeof rec.sizeBytes === 'number' && Number.isFinite(rec.sizeBytes)
-          ? rec.sizeBytes
-          : (() => {
-              throw new Error(`${ctx}.attachments[${i}].sizeBytes must be a finite number`);
-            })(),
-      url: requireString(rec, 'url', `${ctx}.attachments[${i}]`),
-    };
-  });
+  const parsed = AttachmentsArraySchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`${ctx}.attachments: ${parsed.error.message}`);
+  }
+  return parsed.data;
 }
 
 function mapThoughtPrepare(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
@@ -148,7 +138,13 @@ function mapStream(
   payload: Record<string, unknown>,
   type: ThoughtStreamEntryType,
   ctx: string,
-): PlannerLlmStreamEntry | TitleLlmStreamEntry | ToolParamsLlmStreamEntry | SummarizeLlmStreamEntry | GuardrailLlmStreamEntry {
+):
+  | PlannerLlmStreamEntry
+  | TitleLlmStreamEntry
+  | ToolParamsLlmStreamEntry
+  | SummarizeLlmStreamEntry
+  | SummarizeAttachmentLlmStreamEntry
+  | GuardrailLlmStreamEntry {
   const stream: PlannerLlmStreamEntry = {
     ...base,
     type: 'planner_llm_stream',
@@ -180,6 +176,22 @@ function mapStream(
       return { ...stream, type: 'tool_params_llm_stream' } satisfies ToolParamsLlmStreamEntry;
     case 'summarize_llm_stream':
       return { ...stream, type: 'summarize_llm_stream' } satisfies SummarizeLlmStreamEntry;
+    case 'summarize_attachment_llm_stream': {
+      const out: SummarizeAttachmentLlmStreamEntry = {
+        ...stream,
+        type: 'summarize_attachment_llm_stream',
+        attachmentId: requireString(payload, 'attachmentId', ctx),
+        userMessageId: requireString(payload, 'userMessageId', ctx),
+      };
+      const filename = optionalString(payload, 'filename', ctx);
+      if (filename !== undefined) out.filename = filename;
+      const mimeType = optionalString(payload, 'mimeType', ctx);
+      if (mimeType !== undefined) out.mimeType = mimeType;
+      if (payload.sizeBytes !== undefined) out.sizeBytes = requireFiniteNumber(payload, 'sizeBytes', ctx);
+      const summaryText = optionalString(payload, 'summaryText', ctx);
+      if (summaryText !== undefined) out.summaryText = summaryText;
+      return out;
+    }
     case 'guardrail_llm_stream':
       return { ...stream, type: 'guardrail_llm_stream' } satisfies GuardrailLlmStreamEntry;
     default: {

@@ -9,6 +9,7 @@ import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitleProvider.js';
 import { GuardrailThoughtTypeProvider } from './thoughtTypeProviders/guardrailProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
+import { SummarizeAttachmentThoughtTypeProvider } from './thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from './thoughtTypeProviders/summarizeProvider.js';
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
 import type { LlmCompletion } from '../llmProviders/types.js';
@@ -41,10 +42,18 @@ export class ThoughtProcessingService {
     @Inject(forwardRef(() => ToolParamsThoughtTypeProvider))
     toolParamsProvider: ToolParamsThoughtTypeProvider,
     summarizeProvider: SummarizeThoughtTypeProvider,
+    summarizeAttachmentProvider: SummarizeAttachmentThoughtTypeProvider,
     @Inject(forwardRef(() => GuardrailThoughtTypeProvider))
     guardrailProvider: GuardrailThoughtTypeProvider,
   ) {
-    this.providers = [autoTitleProvider, plannerProvider, toolParamsProvider, summarizeProvider, guardrailProvider];
+    this.providers = [
+      autoTitleProvider,
+      plannerProvider,
+      toolParamsProvider,
+      summarizeProvider,
+      summarizeAttachmentProvider,
+      guardrailProvider,
+    ];
   }
 
   /**
@@ -98,19 +107,23 @@ export class ThoughtProcessingService {
     const prepareCreatePromise = this.appendPreparePlaceholder(ctx, provider);
     scope.spawn(async () => {
       const input = args.input ?? (await buildInput!(conversationId));
-      const prepareEntry = await prepareCreatePromise;
-      ctx.prepareEntryId = prepareEntry.id;
-      // Persist input on the prepare entry so reprocess-context can rebuild
-      // it without any per-provider logic. Reprocess truncates the chain back
-      // to this prepare's parent before re-running, so the snapshot reflects
-      // the same chain state the provider originally saw.
-      await this.chatEntries.mergeEntryPayload(conversationId, prepareEntry.id, {
-        inputJson: JSON.stringify(input),
-      });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, prepareEntry.id);
-      const prepared = await this.prepareStep.run(provider, input, ctx, scope);
-      const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
-      await this.decisionStep.run(provider, input, ctx, completion, scope);
+      try {
+        const prepareEntry = await prepareCreatePromise;
+        ctx.prepareEntryId = prepareEntry.id;
+        // Persist input on the prepare entry so reprocess-context can rebuild
+        // it without any per-provider logic. Reprocess truncates the chain back
+        // to this prepare's parent before re-running, so the snapshot reflects
+        // the same chain state the provider originally saw.
+        await this.chatEntries.mergeEntryPayload(conversationId, prepareEntry.id, {
+          inputJson: JSON.stringify(input),
+        });
+        await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, prepareEntry.id);
+        const prepared = await this.prepareStep.run(provider, input, ctx, scope);
+        const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
+        await this.decisionStep.run(provider, input, ctx, completion, scope);
+      } finally {
+        provider.onThoughtSettled?.(input, ctx);
+      }
     });
   }
 

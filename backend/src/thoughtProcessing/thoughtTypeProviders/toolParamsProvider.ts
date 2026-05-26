@@ -115,8 +115,8 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     parsedParams: Record<string, unknown>,
   ): Promise<void> {
     if (!ctx.thoughtActionEntryId) return;
+    // Custom summary/action only — status is flipped by DecisionStep.
     await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
-      status: 'completed',
       summary: `Resolved parameters for ${toolName}`,
       action: 'tool_call',
       toolName,

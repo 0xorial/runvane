@@ -267,8 +267,8 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   ): Promise<void> {
     if (!ctx.thoughtActionEntryId) return;
     const summary = action === 'tool_call' ? 'Queued tool call(s)' : assistantText || 'Completed';
+    // Custom summary/action only — status is flipped by DecisionStep.
     await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
-      status: 'completed',
       summary,
       action,
     });

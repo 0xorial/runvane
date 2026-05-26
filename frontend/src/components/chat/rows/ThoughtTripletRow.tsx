@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FileText, MessageSquare, Sparkles, Wrench } from "lucide-react";
+import { AlertTriangle, FileText, MessageSquare, Sparkles, Wrench } from "lucide-react";
 import { isThoughtStreamEntry, type ChatEntry, type ThoughtPrepareEntry, type ThoughtStreamEntry } from "@/protocol/chatEntry";
 import type { ObservableItem } from "@/utils/observableCollection";
 import { useObservableValue } from "@/hooks/useObservable";

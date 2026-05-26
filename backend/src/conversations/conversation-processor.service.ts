@@ -5,10 +5,13 @@ import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated } from '../sse/sse-helpers.js';
+import { createBatchBarrier } from '../thoughtProcessing/lib/batchBarrier.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
+import type { ChatAttachment } from '../contracts/chatEntry.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
@@ -31,6 +34,7 @@ export class ConversationProcessorService {
     private readonly autoTitleProvider: AutoTitleThoughtTypeProvider,
     private readonly plannerProvider: PlannerThoughtTypeProvider,
     private readonly summarizeProvider: SummarizeThoughtTypeProvider,
+    private readonly summarizeAttachmentProvider: SummarizeAttachmentThoughtTypeProvider,
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
@@ -214,8 +218,8 @@ export class ConversationProcessorService {
       throw new Error('parentId is required when conversation already has messages');
     }
     const parentId = body.parentId ?? null;
-    const attachments = body.attachmentIds && body.attachmentIds.length > 0
-      ? await this.uploads.resolveChatAttachments(body.attachmentIds)
+    const attachments = body.attachments && body.attachments.length > 0
+      ? await this.uploads.resolveChatAttachments(body.attachments)
       : undefined;
     const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
       text: body.message,
@@ -238,11 +242,81 @@ export class ConversationProcessorService {
     });
     await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
-    if (existingMessages.length === 0) {
-      this.thoughtProcessing.startThought({ provider: this.autoTitleProvider, conversationId, scope, chain, llm: titleLlm });
-    }
-    this.thoughtProcessing.startThought({ provider: this.plannerProvider, conversationId, scope, chain, llm });
+    this.startThoughts({
+      conversationId,
+      userMessageId: userEntry.id,
+      attachments: attachments ?? [],
+      isFirstMessage: existingMessages.length === 0,
+      scope,
+      chain,
+      llm,
+      titleLlm,
+    });
     scope.rootDone();
+  }
+
+  /**
+   * Kick off every thought a freshly-posted user message implies:
+   *
+   * - autoTitle (only on the very first message in the conversation),
+   * - one `summarize-attachment` thought per summary-mode attachment,
+   * - the planner — but only if there are no summary attachments to
+   *   wait on. When summaries ARE pending, the LAST completing
+   *   summarize-attachment provider starts the planner itself (see
+   *   `SummarizeAttachmentThoughtTypeProvider.maybeStartPlanner`), so
+   *   the planner prompt is guaranteed to see every
+   *   `summarize_attachment_llm_stream` entry with its persisted
+   *   `summaryText`.
+   *
+   * All calls are fire-and-forget; lifecycle is owned by `scope`.
+   */
+  private startThoughts(args: {
+    conversationId: string;
+    userMessageId: string;
+    attachments: ChatAttachment[];
+    isFirstMessage: boolean;
+    scope: LifecycleScope;
+    chain: ChatChain;
+    llm: LlmRef;
+    titleLlm: LlmRef;
+  }): void {
+    if (args.isFirstMessage) {
+      this.thoughtProcessing.startThought({
+        provider: this.autoTitleProvider,
+        conversationId: args.conversationId,
+        scope: args.scope,
+        chain: args.chain,
+        llm: args.titleLlm,
+      });
+    }
+    const summaryAttachments = args.attachments.filter((a) => a.mode === 'summary');
+    if (summaryAttachments.length === 0) {
+      this.thoughtProcessing.startThought({
+        provider: this.plannerProvider,
+        conversationId: args.conversationId,
+        scope: args.scope,
+        chain: args.chain,
+        llm: args.llm,
+      });
+      return;
+    }
+    const peersDone = createBatchBarrier(summaryAttachments.length);
+    for (const attachment of summaryAttachments) {
+      this.thoughtProcessing.startThought({
+        provider: this.summarizeAttachmentProvider,
+        conversationId: args.conversationId,
+        scope: args.scope,
+        chain: args.chain,
+        llm: args.llm,
+        input: {
+          conversationId: args.conversationId,
+          attachment,
+          userMessageId: args.userMessageId,
+          peersDone,
+          plannerLlm: args.llm,
+        },
+      });
+    }
   }
 }
 

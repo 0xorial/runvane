@@ -2,8 +2,9 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { ChatChain } from '../../conversations/chat-chain.js';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
+import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
-import { publishStreamFieldDelta } from '../../sse/sse-helpers.js';
+import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { RunToolService } from '../../tools/run-tool.service.js';
@@ -37,6 +38,7 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
 
   constructor(
     private readonly hub: SseHubService,
+    private readonly chatEntries: ChatEntriesRepo,
     @Inject(forwardRef(() => RunToolService))
     private readonly runTool: RunToolService,
     @Inject(forwardRef(() => ThoughtProcessingService))
@@ -103,6 +105,15 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
       } else {
         this.logger.warn(`guardrail: verdict shape invalid (${result.error.message}), defaulting to approve`);
       }
+    }
+
+    if (ctx.thoughtActionEntryId) {
+      // Custom summary/action only — status is flipped by DecisionStep.
+      await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+        summary: verdict.verdict === 'flag' ? `Flagged: ${verdict.reason ?? 'no reason'}` : 'Approved',
+        action: verdict.verdict,
+      });
+      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
     }
 
     await this.runTool.run(

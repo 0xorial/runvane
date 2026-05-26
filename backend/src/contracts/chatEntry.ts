@@ -3,12 +3,27 @@ import { LlmRefSchema } from './llm.js';
 
 // ---- Primitives ----
 
+/**
+ * How the attachment is delivered to downstream LLM calls.
+ *
+ * - `direct`: raw bytes are inlined into the user message at reason time
+ *   (image / file part). Burns tokens but the model sees ground truth.
+ * - `summary`: a one-shot summarize-attachment thought runs before the
+ *   planner. The planner sees the summary text in place of the raw bytes,
+ *   and can call the `ask_attachment` tool to query the full content via
+ *   a RAG-style subagent. Cheap on tokens; relies on summary quality + tool
+ *   usage for precise lookups.
+ */
+export const AttachmentModeSchema = z.enum(['direct', 'summary']);
+export type AttachmentMode = z.infer<typeof AttachmentModeSchema>;
+
 export const ChatAttachmentSchema = z.object({
   id: z.string(),
   name: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
   url: z.string(),
+  mode: AttachmentModeSchema,
 });
 export type ChatAttachment = z.infer<typeof ChatAttachmentSchema>;
 
@@ -130,6 +145,29 @@ export const SummarizeLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend
 });
 export type SummarizeLlmStreamEntry = z.infer<typeof SummarizeLlmStreamEntrySchema>;
 
+/**
+ * Carries both the LLM-call trace and the produced summary text. There is no
+ * separate "attachment-summary" output entry: the stream entry IS the
+ * persisted output. `summaryText` lands on completion of `runDecision`;
+ * `filename` / `mimeType` / `sizeBytes` are stamped at stream-entry
+ * creation for offline consumers (planner prompt, ask_attachment tool, UI).
+ */
+export const SummarizeAttachmentLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
+  type: z.literal('summarize_attachment_llm_stream'),
+  attachmentId: z.string(),
+  /**
+   * Id of the user-message this summary was triggered by. Used to scope
+   * the "all peers settled?" check to a single batch when starting the
+   * planner.
+   */
+  userMessageId: z.string(),
+  filename: z.string().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().optional(),
+  summaryText: z.string().optional(),
+});
+export type SummarizeAttachmentLlmStreamEntry = z.infer<typeof SummarizeAttachmentLlmStreamEntrySchema>;
+
 export const GuardrailLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
   type: z.literal('guardrail_llm_stream'),
 });
@@ -203,6 +241,7 @@ export const ChatEntrySchema = z.discriminatedUnion('type', [
   TitleLlmStreamEntrySchema,
   ToolParamsLlmStreamEntrySchema,
   SummarizeLlmStreamEntrySchema,
+  SummarizeAttachmentLlmStreamEntrySchema,
   GuardrailLlmStreamEntrySchema,
   ThoughtActionEntrySchema,
   ToolInvocationEntrySchema,

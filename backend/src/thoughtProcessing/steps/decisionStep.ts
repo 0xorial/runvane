@@ -30,6 +30,22 @@ export class DecisionStep {
       await this.markFailed(ctx, error, scope);
       throw error;
     }
+    await this.markCompleted(ctx);
+  }
+
+  /**
+   * Fallback action-entry status flip — runs after every successful
+   * `provider.runDecision`. Providers can still set their own
+   * `summary`/`action`/`status` inside `runDecision` (e.g. `autoTitle`
+   * sets `action: 'final_answer'`); this just guarantees the chip stops
+   * showing "running" when the decision is actually done.
+   */
+  private async markCompleted(ctx: ThoughtContext): Promise<void> {
+    if (!ctx.thoughtActionEntryId) return;
+    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+      status: 'completed',
+    });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
   }
 
   private async persistUsage(ctx: ThoughtContext, completion: LlmCompletion): Promise<void> {

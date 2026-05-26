@@ -37,7 +37,12 @@ function entryPreview(entry: ChatEntry): string {
     const head = entry.summaryText.trim().split(/\s+/).slice(0, 12).join(" ");
     return head ? `Summary: ${head}…` : "Summary";
   }
-  // remaining: thought stream entries (planner/title/toolParams/summarize)
+  if (entry.type === "summarize_attachment_llm_stream") {
+    const name = String(entry.filename ?? "").trim();
+    const status = displayStatus(String(entry.status || "running").trim());
+    return [status, name ? `Summarize: ${name}` : "Summarize attachment"].filter((x) => x.length > 0).join(" ");
+  }
+  // remaining: thought stream entries (planner/title/toolParams/summarize/...)
   const status = displayStatus(String(entry.status || "running").trim());
   const promptTokens = typeof entry.promptTokens === "number" && Number.isFinite(entry.promptTokens) ? entry.promptTokens : 0;
   const cachedPromptTokens =
@@ -196,6 +201,7 @@ function BranchNode({
   const isActive = activePathIds.has(entry.id);
   const isLeaf = children.length === 0;
   const isSwitching = switchingToEntryId === entry.id;
+  const isUserMessage = entry.type === "user-message";
   const [userExpanded, setUserExpanded] = useState(false);
   const isBranchPoint = hasSiblings && !isActive && children.length > 0;
   const childrenVisible = !isBranchPoint || userExpanded;
@@ -206,9 +212,10 @@ function BranchNode({
       <div
         className={cn(
           "flex w-full items-start gap-1 rounded text-left transition-colors",
-          isActive
-            ? "bg-primary/10 text-foreground"
-            : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+          isUserMessage && !isActive && "bg-accent/40 text-foreground",
+          isUserMessage && isActive && "bg-accent/70 text-foreground",
+          !isUserMessage && isActive && "bg-primary/10 text-foreground",
+          !isUserMessage && !isActive && "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
           isSwitching && "cursor-wait opacity-60",
         )}
         style={{ paddingLeft: `${branchDepth * 12 + 6}px` }}

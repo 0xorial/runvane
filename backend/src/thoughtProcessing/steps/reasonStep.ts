@@ -32,7 +32,7 @@ export class ReasonStep {
     scope: LifecycleScope,
   ): Promise<LlmCompletion> {
     scope.throwIfAborted();
-    const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, prepared.display));
+    const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, input, prepared.display));
     ctx.streamEntryId = streamEntryId;
 
     if (!ctx.thoughtActionEntryId) {
@@ -51,6 +51,7 @@ export class ReasonStep {
   private async createStreamEntry<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     ctx: ThoughtContext,
+    input: TInput,
     requestDisplay: string,
   ): Promise<string> {
     const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
@@ -62,7 +63,11 @@ export class ReasonStep {
         llm: ctx.llm,
       }),
     );
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, { llmRequest: requestDisplay });
+    const extra = provider.streamEntryExtraPayload?.(input);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, {
+      llmRequest: requestDisplay,
+      ...(extra ?? {}),
+    });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
