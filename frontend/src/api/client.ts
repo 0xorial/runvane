@@ -238,34 +238,14 @@ export async function approveToolInvocation(
   );
 }
 
-export function cancelConversationProcessing(conversationId: string): Promise<{
-  conversationId: string;
-  cancelledTasks: number;
-}> {
-  return postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/cancel-processing`, {}).then(
-    (result) => {
-      const data = result.data;
-      if (!data || typeof data !== "object" || Array.isArray(data)) {
-        throw new Error("POST /api/conversations/:id/cancel-processing: invalid response envelope");
-      }
-      const row = data as {
-        conversationId?: unknown;
-        cancelledTasks?: unknown;
-      };
-      const conversationIdOut = String(row.conversationId ?? "").trim();
-      const cancelledTasks =
-        typeof row.cancelledTasks === "number" && Number.isFinite(row.cancelledTasks)
-          ? Math.max(0, Math.trunc(row.cancelledTasks))
-          : NaN;
-      if (!conversationIdOut || Number.isNaN(cancelledTasks)) {
-        throw new Error("POST /api/conversations/:id/cancel-processing: invalid response fields");
-      }
-      return {
-        conversationId: conversationIdOut,
-        cancelledTasks,
-      };
-    },
-  );
+export async function getTasks(): Promise<import("../../../backend/src/contracts/task").TaskInfo[]> {
+  const data = (await getJson("/api/tasks")) as { tasks?: unknown };
+  if (!data || !Array.isArray(data.tasks)) throw new Error("GET /api/tasks: invalid response");
+  return data.tasks as import("../../../backend/src/contracts/task").TaskInfo[];
+}
+
+export async function cancelTask(taskId: string): Promise<void> {
+  await postJsonAccepted(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, {});
 }
 
 export async function reprocessThought(

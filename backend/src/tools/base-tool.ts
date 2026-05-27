@@ -24,6 +24,7 @@ export type ToolRunContext = {
   agentId: string | null;
   entries: ChatEntry[];
   toolRules?: unknown;
+  signal: AbortSignal;
 };
 
 export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknown>> {

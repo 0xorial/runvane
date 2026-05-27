@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings, Square } from "lucide-react";
+import { PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings } from "lucide-react";
 import {
-  cancelConversationProcessing,
   getConversation,
   getModelCapabilities,
   renameConversation,
@@ -13,6 +12,7 @@ import { Button } from "../../ui/button";
 import { ThemeToggle } from "../../ThemeToggle";
 import { LlmMetaBadge } from "../LlmMetaBadge";
 import { EditableConversationTitle } from "./EditableConversationTitle";
+import { TaskStatusButton } from "./TaskStatusButton";
 import type { EntryTokenUsage } from "../../../../../backend/src/contracts/token-usage";
 import { TokenUsageMapper } from "../../../../../backend/src/contracts/token-usage";
 import {
@@ -62,7 +62,6 @@ export function ChatTitlePanel({
   const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(() => new Map());
   const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
   const estimatedCostUsd = useMemo(
     () => estimateConversationCostUsd(tokenUsageByModel, pricingByModel),
     [tokenUsageByModel, pricingByModel],
@@ -145,19 +144,6 @@ export function ChatTitlePanel({
     }
   }
 
-  async function onCancelProcessing(): Promise<void> {
-    if (!conversationId || isCancelling) return;
-    setIsCancelling(true);
-    try {
-      await cancelConversationProcessing(conversationId);
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      notifyError(`Failed to cancel processing: ${detail}`);
-    } finally {
-      setIsCancelling(false);
-    }
-  }
-
   return (
     <div className="relative z-10 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-card/40 px-3">
       <Button
@@ -200,20 +186,7 @@ export function ChatTitlePanel({
         >
           {rightSidebarVisible ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!conversationId || isCancelling}
-          className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-50"
-          onClick={() => {
-            void onCancelProcessing();
-          }}
-          aria-label="Cancel processing"
-          title="Cancel processing"
-        >
-          <Square className="h-3.5 w-3.5" />
-        </Button>
+        <TaskStatusButton conversationId={conversationId} />
         <ThemeToggle />
         <Button
           type="button"

@@ -8,6 +8,7 @@ import { getCompletionText, getCompletionThinking } from '../../llmProviders/typ
 import type { LlmCompletion, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
+import { TaskRegistryService } from '../../tasks/task-registry.service.js';
 import { UploadsService } from '../../uploads/uploads.service.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import type { PreparedReason } from './prepareStep.js';
@@ -22,6 +23,7 @@ export class ReasonStep {
     private readonly hub: SseHubService,
     private readonly chatEntries: ChatEntriesRepo,
     private readonly uploads: UploadsService,
+    private readonly taskRegistry: TaskRegistryService,
   ) {}
 
   async run<TInput>(
@@ -39,22 +41,31 @@ export class ReasonStep {
       ctx.thoughtActionEntryId = await this.createActionEntry(provider, ctx);
     }
 
-    const onAbort = () => {
-      void this.setStreamStatus(ctx, streamEntryId, 'cancelled');
-    };
-    scope.signal.addEventListener('abort', onAbort, { once: true });
-
-    try {
-      scope.throwIfAborted();
-      return await this.streamLlm(provider, input, ctx, prepared, streamEntryId, scope);
-    } catch (error) {
-      if (scope.signal.aborted) throw error;
-      const detail = error instanceof Error ? error.message : String(error);
-      await this.setStreamStatus(ctx, streamEntryId, 'failed', detail);
-      throw error;
-    } finally {
-      scope.signal.removeEventListener('abort', onAbort);
-    }
+    return this.taskRegistry.run(
+      {
+        kind: 'llm',
+        title: `${provider.streamEntryType} · ${ctx.llm.model}`,
+        conversationId: ctx.conversationId,
+        parentSignal: scope.signal,
+      },
+      async (taskSignal) => {
+        const onAbort = () => {
+          void this.setStreamStatus(ctx, streamEntryId, 'cancelled');
+        };
+        taskSignal.addEventListener('abort', onAbort, { once: true });
+        try {
+          taskSignal.throwIfAborted();
+          return await this.streamLlm(provider, input, ctx, prepared, streamEntryId, taskSignal);
+        } catch (error) {
+          if (taskSignal.aborted) throw error;
+          const detail = error instanceof Error ? error.message : String(error);
+          await this.setStreamStatus(ctx, streamEntryId, 'failed', detail);
+          throw error;
+        } finally {
+          taskSignal.removeEventListener('abort', onAbort);
+        }
+      },
+    );
   }
 
   private async createStreamEntry<TInput>(
@@ -103,7 +114,7 @@ export class ReasonStep {
     ctx: ThoughtContext,
     prepared: PreparedReason,
     streamEntryId: string,
-    scope: LifecycleScope,
+    signal: AbortSignal,
   ): Promise<LlmCompletion> {
     const llmProvider = this.llmProviders.get(ctx.llm.providerId);
     if (!llmProvider) throw new Error(`unknown llm provider: ${ctx.llm.providerId}`);
@@ -126,7 +137,7 @@ export class ReasonStep {
 
     const startedAt = Date.now();
     const onEvent = (event: LlmStreamEvent) => {
-      scope.throwIfAborted();
+      signal.throwIfAborted();
       provider.onLlmEvent?.(input, ctx, event);
     };
 
@@ -135,9 +146,9 @@ export class ReasonStep {
       ctx.llm.model,
       wireRequest,
       onEvent,
-      scope.signal,
+      signal,
     );
-    scope.throwIfAborted();
+    signal.throwIfAborted();
 
     const elapsedMs = Date.now() - startedAt;
     const usage = completion.usage;

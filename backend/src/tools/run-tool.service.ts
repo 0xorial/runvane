@@ -6,6 +6,7 @@ import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
+import { TaskRegistryService } from '../tasks/task-registry.service.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
@@ -61,6 +62,7 @@ export class RunToolService {
     private readonly thoughtProcessing: ThoughtProcessingService,
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
     private readonly plannerProvider: PlannerThoughtTypeProvider,
+    private readonly taskRegistry: TaskRegistryService,
   ) {}
 
   async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
@@ -329,12 +331,24 @@ export class RunToolService {
     let toolError: unknown = null;
     try {
       scope.throwIfAborted();
-      output = await tool.runTool(parsedParams, {
-        conversationId: input.conversationId,
-        agentId: input.agentId,
-        entries,
-        toolRules: parsedRules,
-      });
+      output = await this.taskRegistry.run(
+        {
+          kind: 'tool',
+          title: input.toolName,
+          conversationId: input.conversationId,
+          parentSignal: scope.signal,
+        },
+        (taskSignal) =>
+          Promise.resolve(
+            tool.runTool(parsedParams, {
+              conversationId: input.conversationId,
+              agentId: input.agentId,
+              entries,
+              toolRules: parsedRules,
+              signal: taskSignal,
+            }),
+          ),
+      );
       scope.throwIfAborted();
     } catch (err) {
       toolError = err;
