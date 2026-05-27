@@ -158,7 +158,7 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
         <Activity className="h-4 w-4 text-primary" />
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Activity</h3>
       </div>
-      <div className="text-[11px]">
+      <div className="text-[11px] leading-snug">
         {rootNodes.map((row$) => (
           <BranchNode
             key={row$.id}
@@ -204,51 +204,51 @@ function BranchNode({
   const isUserMessage = entry.type === "user-message";
   const [userExpanded, setUserExpanded] = useState(false);
   const isBranchPoint = hasSiblings && !isActive && children.length > 0;
-  const childrenVisible = !isBranchPoint || userExpanded;
-  const showToggle = isBranchPoint;
+  const isCollapsedTurn = isUserMessage && !isActive && children.length > 0;
+  const isCollapsible = isBranchPoint || isCollapsedTurn;
+  const childrenVisible = !isCollapsible || userExpanded;
+  const showToggle = isCollapsible;
 
   return (
-    <div>
-      <div
-        className={cn(
-          "flex w-full items-start gap-1 rounded text-left transition-colors",
-          isUserMessage && !isActive && "bg-accent/40 text-foreground",
-          isUserMessage && isActive && "bg-accent/70 text-foreground",
-          !isUserMessage && isActive && "bg-primary/10 text-foreground",
-          !isUserMessage && !isActive && "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-          isSwitching && "cursor-wait opacity-60",
-        )}
-        style={{ paddingLeft: `${branchDepth * 12 + 6}px` }}
-      >
-        {showToggle ? (
+    <div className={cn(isUserMessage && branchDepth === 0 && "mt-1.5 first:mt-0")}>
+      <div style={{ paddingLeft: `${branchDepth * 10}px` }}>
+        <div
+          className={cn(
+            "flex min-w-0 items-start gap-0.5 py-0.5 text-left transition-colors",
+            isActive ? "text-foreground" : "text-muted-foreground",
+            isUserMessage && "font-medium",
+            !isActive && "hover:bg-secondary/40 hover:text-foreground",
+            isSwitching && "cursor-wait opacity-60",
+          )}
+        >
+          {showToggle ? (
+            <button
+              type="button"
+              aria-label={userExpanded ? "Collapse branch" : "Expand branch"}
+              onClick={(e) => {
+                e.stopPropagation();
+                setUserExpanded((v) => !v);
+              }}
+              className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+            >
+              <ChevronRight className={cn("h-3 w-3 transition-transform", userExpanded ? "rotate-90" : "")} />
+            </button>
+          ) : null}
           <button
             type="button"
-            aria-label={userExpanded ? "Collapse branch" : "Expand branch"}
-            onClick={(e) => {
-              e.stopPropagation();
-              setUserExpanded((v) => !v);
+            disabled={isSwitching}
+            onClick={() => {
+              void onSelectEntry(entry.id);
             }}
-            className="mt-1 flex h-3 w-3 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+            className="flex min-w-0 flex-1 items-start gap-1.5 px-1 py-0.5 text-left"
           >
-            <ChevronRight className={cn("h-3 w-3 transition-transform", userExpanded ? "rotate-90" : "")} />
+            <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry)}</span>
+            <span className="min-w-0 flex-1 truncate">{entryPreview(entry)}</span>
+            {isLeaf && activeLeafId === entry.id ? (
+              <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wider text-primary">head</span>
+            ) : null}
           </button>
-        ) : (
-          <span className="mt-1 h-3 w-3 shrink-0" />
-        )}
-        <button
-          type="button"
-          disabled={isSwitching}
-          onClick={() => {
-            void onSelectEntry(entry.id);
-          }}
-          className="flex flex-1 items-start gap-1.5 rounded px-1.5 py-1 text-left"
-        >
-          <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry)}</span>
-          <span className="flex-1 truncate">{entryPreview(entry)}</span>
-          {isLeaf && activeLeafId === entry.id ? (
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-primary">head</span>
-          ) : null}
-        </button>
+        </div>
       </div>
       {childrenVisible
         ? children.map((child$) => (
