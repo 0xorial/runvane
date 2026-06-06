@@ -25,14 +25,15 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - full chat history
 - token and cost visibility
 - configurable model/tool behavior
+- message steering (abort in-flight runs and redirect)
+- RAG search tool (`rag_search`)
+- meta tool (tool discovery and conversation summary)
+- filesystem tools (`filesystem`, `filesystem_index`)
+- import chat history from OpenAI and Gemini
 
 ## Planned features
 
-- steering
-- RAG tool
-- meta tool
-- filesystem tool
-- filesystem index tool
+_(none — see roadmap for upcoming work)_
 
 ## Shared Definitions
 
@@ -63,4 +64,4 @@ npm run dev
 
 ## Roadmap
 
-- import chat history from OpenAI and Gemini
+- additional import formats and bulk migration helpers
