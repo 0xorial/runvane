@@ -384,8 +384,24 @@ export async function uploadFile(file: File): Promise<UploadFileResponse> {
   return validateUploadFileResponse(data);
 }
 
-export function getAgents(): Promise<AgentListItemResponse[]> {
+let agentsCache: Promise<AgentListItemResponse[]> | null = null;
+
+function fetchAgents(): Promise<AgentListItemResponse[]> {
   return getJson("/api/agents").then(validateGetAgentsResponse);
+}
+
+export function getAgents(): Promise<AgentListItemResponse[]> {
+  if (!agentsCache) {
+    agentsCache = fetchAgents().catch((e: unknown) => {
+      agentsCache = null;
+      throw e;
+    });
+  }
+  return agentsCache;
+}
+
+export function invalidateAgentsCache(): void {
+  agentsCache = null;
 }
 
 export function getLlmSettings(): Promise<{ providers: LlmProviderRow[] }> {
@@ -396,31 +412,49 @@ export function getLlmProviderSettings(): Promise<LlmProviderSettingsDocument> {
   return getJson("/api/settings/llm_provider").then(validateLlmProviderSettingsResponse);
 }
 
-export function getModelCapabilities(): Promise<{
-  models: ModelCapabilityRow[];
-}> {
-  return getJson("/api/settings/model_capabilities").then((data) => {
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      throw new Error("GET /api/settings/model_capabilities: invalid response envelope");
+type ModelCapabilitiesResponse = { models: ModelCapabilityRow[] };
+
+let modelCapabilitiesCache: Promise<ModelCapabilitiesResponse> | null = null;
+
+function parseModelCapabilitiesResponse(data: unknown): ModelCapabilitiesResponse {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("GET /api/settings/model_capabilities: invalid response envelope");
+  }
+  const rawModels = (data as { models?: unknown }).models;
+  if (!Array.isArray(rawModels)) {
+    throw new Error("GET /api/settings/model_capabilities: models must be an array");
+  }
+  const models = rawModels.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error(`GET /api/settings/model_capabilities: models[${index}] must be an object`);
     }
-    const rawModels = (data as { models?: unknown }).models;
-    if (!Array.isArray(rawModels)) {
-      throw new Error("GET /api/settings/model_capabilities: models must be an array");
+    const row = raw as Record<string, unknown>;
+    const providerId = String(row.provider_id ?? "").trim();
+    const modelName = String(row.model_name ?? "").trim();
+    if (!providerId || !modelName) {
+      throw new Error(`GET /api/settings/model_capabilities: models[${index}] missing provider_id/model_name`);
     }
-    const models = rawModels.map((raw, index) => {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-        throw new Error(`GET /api/settings/model_capabilities: models[${index}] must be an object`);
-      }
-      const row = raw as Record<string, unknown>;
-      const providerId = String(row.provider_id ?? "").trim();
-      const modelName = String(row.model_name ?? "").trim();
-      if (!providerId || !modelName) {
-        throw new Error(`GET /api/settings/model_capabilities: models[${index}] missing provider_id/model_name`);
-      }
-      return raw as ModelCapabilityRow;
-    });
-    return { models };
+    return raw as ModelCapabilityRow;
   });
+  return { models };
+}
+
+function fetchModelCapabilities(): Promise<ModelCapabilitiesResponse> {
+  return getJson("/api/settings/model_capabilities").then(parseModelCapabilitiesResponse);
+}
+
+export function getModelCapabilities(): Promise<ModelCapabilitiesResponse> {
+  if (!modelCapabilitiesCache) {
+    modelCapabilitiesCache = fetchModelCapabilities().catch((e: unknown) => {
+      modelCapabilitiesCache = null;
+      throw e;
+    });
+  }
+  return modelCapabilitiesCache;
+}
+
+export function invalidateModelCapabilitiesCache(): void {
+  modelCapabilitiesCache = null;
 }
 
 export function updateModelCapabilityOverride(
@@ -430,6 +464,7 @@ export function updateModelCapabilityOverride(
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw new Error("PUT /api/settings/model_capabilities/override: invalid response envelope");
     }
+    invalidateModelCapabilitiesCache();
     return data as { models: ModelCapabilityRow[] };
   });
 }
@@ -456,19 +491,31 @@ export function getAgentById(agentId: string): Promise<AgentListItemResponse> {
 }
 
 export function updateAgentById(agentId: string, body: AgentUpsertRequest): Promise<AgentListItemResponse> {
-  return sendJson(`/api/agents/${encodeURIComponent(agentId)}`, "PUT", body).then(validateAgentResponse);
+  return sendJson(`/api/agents/${encodeURIComponent(agentId)}`, "PUT", body).then((data) => {
+    invalidateAgentsCache();
+    return validateAgentResponse(data);
+  });
 }
 
 export function createAgent(body: AgentUpsertRequest = {}): Promise<AgentListItemResponse> {
-  return sendJson("/api/agents", "POST", body).then(validateAgentResponse);
+  return sendJson("/api/agents", "POST", body).then((data) => {
+    invalidateAgentsCache();
+    return validateAgentResponse(data);
+  });
 }
 
 export function deleteAgentById(agentId: string): Promise<DeleteAgentResponse> {
-  return deleteJson(`/api/agents/${encodeURIComponent(agentId)}`).then(validateDeleteAgentResponse);
+  return deleteJson(`/api/agents/${encodeURIComponent(agentId)}`).then((data) => {
+    invalidateAgentsCache();
+    return validateDeleteAgentResponse(data);
+  });
 }
 
 export function setDefaultAgent(agentId: string): Promise<AgentListItemResponse> {
-  return sendJson(`/api/agents/${encodeURIComponent(agentId)}/default`, "POST", {}).then(validateAgentResponse);
+  return sendJson(`/api/agents/${encodeURIComponent(agentId)}/default`, "POST", {}).then((data) => {
+    invalidateAgentsCache();
+    return validateAgentResponse(data);
+  });
 }
 
 export function getModelPresets(): Promise<ModelPresetResponse[]> {

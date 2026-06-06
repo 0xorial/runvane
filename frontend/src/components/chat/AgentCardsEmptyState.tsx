@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Check, Settings as SettingsIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
-import { getAgents } from "../../api/client";
+import { useAgents } from "../../hooks/useAgents";
 import { getAgentIcon } from "../../pages/settings/agentIcons";
 import { getAgentColor } from "../../pages/settings/agentColors";
 import { getAgentLlm } from "../../pages/settings/agentLlm";
@@ -15,23 +14,8 @@ type AgentCardsEmptyStateProps = {
 };
 
 export function AgentCardsEmptyState({ selectedAgentId }: AgentCardsEmptyStateProps) {
-  const [agents, setAgents] = useState<AgentListItemResponse[] | null>(null);
+  const agents = useAgents();
   const [, setUrlParams] = useSearchParams();
-
-  useEffect(() => {
-    let cancelled = false;
-    getAgents().then(
-      (rows) => {
-        if (!cancelled) setAgents(rows);
-      },
-      () => {
-        if (!cancelled) setAgents([]);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   if (agents == null) return null;
   const sorted = sortAgents(agents);

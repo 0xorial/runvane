@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings } from "lucide-react";
-import {
-  getConversation,
-  getModelCapabilities,
-  renameConversation,
-} from "../../../api/client";
+import { getConversation, renameConversation } from "../../../api/client";
+import { getPricingMap } from "@/lib/pricingCache";
 import { subscribeGlobalLive } from "../../../protocol/runLiveClient";
 import { SseType } from "../../../protocol/sseTypes";
 import { notifyError } from "../../../utils/toast";
@@ -16,7 +13,6 @@ import { TaskStatusButton } from "./TaskStatusButton";
 import type { EntryTokenUsage } from "../../../../../backend/src/contracts/token-usage";
 import { TokenUsageMapper } from "../../../../../backend/src/contracts/token-usage";
 import {
-  buildModelPricingByName,
   estimateConversationCostUsd,
   hasUnpricedUsage,
   type ModelPricing,
@@ -114,9 +110,9 @@ export function ChatTitlePanel({
     let cancelled = false;
     void (async () => {
       try {
-        const data = await getModelCapabilities();
+        const pricing = await getPricingMap();
         if (cancelled) return;
-        setPricingByModel(buildModelPricingByName(data.models));
+        setPricingByModel(pricing);
       } catch (e) {
         if (cancelled) return;
         const detail = e instanceof Error ? e.message : String(e);

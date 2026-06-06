@@ -4,7 +4,6 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createConversation,
   getConversations,
-  getModelCapabilities,
   permanentlyDeleteConversation,
   postConversationMessage,
   renameConversation,
@@ -18,7 +17,8 @@ import { ConversationItem } from "./conversationSidebar/ConversationItem";
 import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupItem";
 import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
 import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
-import { buildModelPricingByName, type ModelPricing } from "@/lib/costEstimation";
+import { getPricingMap } from "@/lib/pricingCache";
+import type { ModelPricing } from "@/lib/costEstimation";
 
 type ConversationSidebarProps = {
   activeConversationId: string | null;
@@ -62,9 +62,9 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     let cancelled = false;
     void (async () => {
       try {
-        const data = await getModelCapabilities();
+        const pricing = await getPricingMap();
         if (cancelled) return;
-        setPricingByModel(buildModelPricingByName(data.models));
+        setPricingByModel(pricing);
       } catch (e) {
         if (cancelled) return;
         const detail = e instanceof Error ? e.message : String(e);
