@@ -20,7 +20,8 @@ export function toConversationRow(entity: ConversationEntity): ConversationRow {
     promptTokensTotal: entity.promptTokensTotal,
     cachedPromptTokensTotal: entity.cachedPromptTokensTotal,
     completionTokensTotal: entity.completionTokensTotal,
-    defaultViewLeafEntryId: entity.defaultViewLeafEntryId,
+    defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
+    defaultViewLeafEntryId: null,
     tokenUsageByModel: [],
   };
 }

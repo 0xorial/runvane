@@ -91,8 +91,8 @@ export class ConversationsService {
    */
   private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
     const row = toConversationRow(entity);
-    const resolved = await this.chatEntries.resolveDefaultViewLeaf(entity.id);
-    row.defaultViewLeafEntryId = resolved;
+    row.defaultViewLeafAnchorId = entity.defaultViewLeafEntryId;
+    row.defaultViewLeafEntryId = await this.chatEntries.resolveDefaultViewLeaf(entity.id);
     return row;
   }
 }

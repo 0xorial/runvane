@@ -164,3 +164,28 @@ export function extendsChosenPath(lookup: ChatEntryLookup, parentId: string | nu
   if (parentId === null) return path.length === 0;
   return path.some((entry) => entry.id === parentId);
 }
+
+/** Mirror backend resolveDefaultViewLeaf: walk from anchor, latest child at each fork. */
+export function resolveViewTipFromAnchor(lookup: ChatEntryLookup, anchorId: string | null): string | null {
+  const startId =
+    anchorId && lookup.getById(anchorId)
+      ? anchorId
+      : (() => {
+          const roots = childEntries(lookup, null);
+          return roots.length > 0 ? roots[roots.length - 1].id : null;
+        })();
+  if (!startId) return null;
+  return walkToLatestLeaf(lookup, startId);
+}
+
+function walkToLatestLeaf(lookup: ChatEntryLookup, startId: string): string {
+  let cursor = startId;
+  const visited = new Set<string>();
+  while (!visited.has(cursor)) {
+    visited.add(cursor);
+    const children = childEntries(lookup, cursor);
+    if (children.length === 0) return cursor;
+    cursor = children[children.length - 1].id;
+  }
+  return cursor;
+}

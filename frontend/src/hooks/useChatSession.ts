@@ -100,14 +100,18 @@ export function useChatSession(conversationId: string | null | undefined) {
 
     let cancelled = false;
     void (async () => {
-      if (warmCache) {
-        setIsSessionLoading(false);
-        return;
-      }
       try {
         const session = await loadConversationSession(cid);
         if (cancelled) return;
-        store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId);
+        const entries = mapApiMessagesToChatEntries(session.entries);
+        if (store.getAllRows().length === 0) {
+          store.replace(entries, session.leafId, session.anchorId);
+        } else {
+          for (const entry of entries) {
+            if (!store.getById(entry.id)) store.appendEntry(entry);
+          }
+          if (!store.hasViewAnchor()) store.setViewAnchor(session.anchorId);
+        }
       } catch (err) {
         console.error("[useChatSession] Failed to load conversation messages:", err);
       } finally {
@@ -126,11 +130,12 @@ export function useChatSession(conversationId: string | null | undefined) {
       if (!boundCid || !store) return;
       if (!store.getById(entryId)) {
         const session = await loadConversationSession(boundCid);
-        store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId);
+        store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId, session.anchorId);
       }
       store.setChosenPathFromLeaf(entryId);
       const tipId = store.activePathTipId() ?? entryId;
       await setConversationDefaultViewLeaf(boundCid, tipId);
+      store.setViewAnchor(tipId);
     },
     [boundCid, store],
   );
@@ -140,6 +145,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       if (!boundCid || !store) return;
       const tipId = store.chooseBranchLine(branchEntryId);
       await setConversationDefaultViewLeaf(boundCid, tipId);
+      store.setViewAnchor(tipId);
     },
     [boundCid, store],
   );

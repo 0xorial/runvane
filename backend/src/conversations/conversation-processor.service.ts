@@ -178,8 +178,8 @@ export class ConversationProcessorService {
       if (!siblingPayload || siblingPayload.type !== 'user-message') {
         throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
       }
-      this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
       await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
 
       this.thoughtProcessing.startThought({
         provider: this.plannerProvider,
@@ -260,12 +260,12 @@ export class ConversationProcessorService {
         if (!userPayload || userPayload.type !== 'user-message') {
           throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
         }
+        await publishConversationUpdated(this.hub, this.conversations, conversationId);
         this.hub.publish(conversationId, {
           type: SseType.USER_MESSAGE,
           entry: userPayload,
           ...(body.clientRequestId ? { clientRequestId: body.clientRequestId } : {}),
         });
-        await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
         this.startThoughts({
           conversationId,

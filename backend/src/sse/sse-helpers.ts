@@ -25,6 +25,7 @@ export function toConversationSseRow(entity: ConversationEntity): ConversationSs
     promptTokensTotal: entity.promptTokensTotal,
     cachedPromptTokensTotal: entity.cachedPromptTokensTotal,
     completionTokensTotal: entity.completionTokensTotal,
+    defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
     tokenUsageByModel: [],
   };
 }

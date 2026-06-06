@@ -32,6 +32,9 @@ export const ConversationRowSchema = z.object({
   promptTokensTotal: z.number(),
   cachedPromptTokensTotal: z.number(),
   completionTokensTotal: z.number(),
+  /** Stored branch anchor; walk descendants to resolve the live view tip. */
+  defaultViewLeafAnchorId: z.string().nullable(),
+  /** Resolved live tip of the anchored branch (API convenience). */
   defaultViewLeafEntryId: z.string().nullable(),
   tokenUsageByModel: z.array(ConversationTokenUsageByModelSchema),
 });

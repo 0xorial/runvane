@@ -11,9 +11,9 @@ import {
   activePathTipId,
   chooseBranchLine,
   chooseEntry,
-  extendsChosenPath,
   patchLinked,
   pathFromChosen,
+  resolveViewTipFromAnchor,
   childEntries,
   siblingsOf,
   toLinkedEntries,
@@ -24,6 +24,7 @@ import {
 export class ChatSessionStore {
   private readonly rows: ObservableItemCollection<LinkedChatEntry>;
   private readonly pathVersion$ = createObservable({ value: 0 });
+  private viewAnchorId: string | null = null;
 
   constructor(initial: LinkedChatEntry[] = []) {
     this.rows = createObservableItemCollection(initial);
@@ -75,9 +76,19 @@ export class ChatSessionStore {
     return this.append(entry);
   }
 
-  replace(entries: ChatEntry[], viewLeafId?: string | null): void {
+  replace(entries: ChatEntry[], viewLeafId?: string | null, viewAnchorId?: string | null): void {
     this.rows.replace(toLinkedEntries(entries, viewLeafId));
-    this.bumpActivePath();
+    if (viewAnchorId !== undefined) this.viewAnchorId = viewAnchorId;
+    this.syncViewPathFromAnchor();
+  }
+
+  hasViewAnchor(): boolean {
+    return this.viewAnchorId !== null;
+  }
+
+  setViewAnchor(anchorId: string | null): void {
+    this.viewAnchorId = anchorId;
+    this.syncViewPathFromAnchor();
   }
 
   chooseBranchLine(startId: string): string {
@@ -87,25 +98,20 @@ export class ChatSessionStore {
   }
 
   setChosenPathFromLeaf(leafId: string): void {
-    const pathIds: string[] = [];
-    let cursor: string | null = leafId;
-    const seen = new Set<string>();
-    while (cursor && !seen.has(cursor)) {
-      seen.add(cursor);
-      if (!this.rows.getById(cursor)) throw new Error(`ChatSessionStore: unknown leaf ${leafId}`);
-      pathIds.push(cursor);
-      cursor = this.lookup().getById(cursor)?.parentId ?? null;
+    if (!this.trySetChosenPathFromLeaf(leafId)) {
+      throw new Error(`ChatSessionStore: unknown leaf ${leafId}`);
     }
-    for (const id of pathIds) {
-      chooseEntry(id, this.lookup(), (entryId, chosen) => this.setChosen(entryId, chosen));
-    }
-    this.bumpActivePath();
   }
 
   applySseEvent(ev: SseEvent, pending: Map<string, string>): void {
     switch (ev.type) {
       case SseType.CONVERSATION_CREATED:
-      case SseType.CONVERSATION_UPDATED:
+        return;
+      case SseType.CONVERSATION_UPDATED: {
+        const anchorId = ev.conversation.defaultViewLeafAnchorId;
+        if (anchorId) this.setViewAnchor(anchorId);
+        return;
+      }
       case SseType.TOOL_INVOCATION_START:
       case SseType.TOOL_INVOCATION_END:
         return;
@@ -114,9 +120,10 @@ export class ChatSessionStore {
         if (optimisticId && ev.clientRequestId) {
           pending.delete(ev.clientRequestId);
           if (!this.rekey(optimisticId, ev.entry)) this.append(ev.entry);
-          return;
+        } else {
+          this.append(ev.entry);
         }
-        this.append(ev.entry);
+        if (ev.entry.type === "user-message") this.setViewAnchor(ev.entry.id);
         return;
       }
       case SseType.CHAT_ENTRY_UPSERT:
@@ -137,13 +144,32 @@ export class ChatSessionStore {
     }
   }
 
+  private syncViewPathFromAnchor(): void {
+    const tipId = resolveViewTipFromAnchor(this.lookup(), this.viewAnchorId);
+    if (tipId) this.trySetChosenPathFromLeaf(tipId);
+  }
+
+  private trySetChosenPathFromLeaf(leafId: string): boolean {
+    const pathIds: string[] = [];
+    let cursor: string | null = leafId;
+    const seen = new Set<string>();
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      if (!this.rows.getById(cursor)) return false;
+      pathIds.push(cursor);
+      cursor = this.lookup().getById(cursor)?.parentId ?? null;
+    }
+    for (const id of pathIds) {
+      chooseEntry(id, this.lookup(), (entryId, chosen) => this.setChosen(entryId, chosen));
+    }
+    this.bumpActivePath();
+    return true;
+  }
+
   private append(entry: ChatEntry): boolean {
     const linked: LinkedChatEntry = { ...entry, isChosen: false };
     if (!this.rows.append(linked)) return false;
-    if (extendsChosenPath(this.lookup(), entry.parentId)) {
-      chooseEntry(linked.id, this.lookup(), (id, chosen) => this.setChosen(id, chosen));
-      this.bumpActivePath();
-    }
+    this.syncViewPathFromAnchor();
     return true;
   }
 
@@ -155,20 +181,16 @@ export class ChatSessionStore {
     if (!this.rows.replaceById(oldId, linked)) return false;
     if (wasChosen) {
       chooseEntry(linked.id, this.lookup(), (id, chosen) => this.setChosen(id, chosen));
-      this.bumpActivePath();
     }
+    this.syncViewPathFromAnchor();
     return true;
   }
 
   private upsert(entry: ChatEntry): "appended" | "patched" | "unchanged" {
     const existing = this.lookup().getById(entry.id);
     if (existing) {
-      const prevParentId = existing.parentId;
       this.rows.replaceById(entry.id, patchLinked(existing, entry));
-      if (prevParentId !== entry.parentId && extendsChosenPath(this.lookup(), entry.parentId)) {
-        chooseEntry(entry.id, this.lookup(), (id, chosen) => this.setChosen(id, chosen));
-        this.bumpActivePath();
-      }
+      this.syncViewPathFromAnchor();
       return "patched";
     }
     if (this.append(entry)) return "appended";

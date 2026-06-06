@@ -27,6 +27,7 @@ export function useConversationQuery(conversationId: string | null | undefined) 
 
 export type ConversationSession = {
   entries: Awaited<ReturnType<typeof getConversationMessages>>;
+  anchorId: string | null;
   leafId: string | null;
 };
 
@@ -37,7 +38,11 @@ export async function loadConversationSession(conversationId: string): Promise<C
     getConversation(cid),
   ]);
   queryClient.setQueryData(queryKeys.conversation(cid), conversation);
-  return { entries, leafId: conversation.defaultViewLeafEntryId };
+  return {
+    entries,
+    anchorId: conversation.defaultViewLeafAnchorId ?? null,
+    leafId: conversation.defaultViewLeafEntryId,
+  };
 }
 
 export function fetchConversationSession(conversationId: string): Promise<ConversationSession> {
@@ -78,6 +83,7 @@ export function mergeSseConversation(
 ): ConversationRow {
   return {
     ...incoming,
+    defaultViewLeafAnchorId: incoming.defaultViewLeafAnchorId,
     defaultViewLeafEntryId: previous?.defaultViewLeafEntryId ?? null,
   };
 }

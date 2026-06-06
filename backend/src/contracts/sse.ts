@@ -15,7 +15,6 @@ export type SseEventType = (typeof SseType)[keyof typeof SseType];
 
 // ---- SSE payload schemas ----
 
-// ConversationSseRow is a leaner shape used in SSE events (no resolved leaf).
 export const ConversationSseRowSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -27,6 +26,8 @@ export const ConversationSseRowSchema = z.object({
   promptTokensTotal: z.number(),
   cachedPromptTokensTotal: z.number(),
   completionTokensTotal: z.number(),
+  /** User's branch anchor (stored on conversation); client resolves to live tip. */
+  defaultViewLeafAnchorId: z.string().nullable(),
   tokenUsageByModel: z.array(
     z.object({
       modelName: z.string(),
