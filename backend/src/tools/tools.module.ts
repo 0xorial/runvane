@@ -5,6 +5,8 @@ import { CurlTool } from './builtins/curl/tool.js';
 import { MetaTool } from './builtins/meta/tool.js';
 import { RagSearchTool } from './builtins/rag-search/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
+import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
+import { FilesystemIndexTool } from './builtins/filesystem-index/tool.js';
 import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
 import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
@@ -21,6 +23,8 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     CurlTool,
     BashTool,
     FilesystemTool,
+    FilesystemIndexStore,
+    FilesystemIndexTool,
     RagSearchTool,
     MetaTool,
     DelegateLlmTool,
@@ -35,6 +39,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         CurlTool,
         BashTool,
         FilesystemTool,
+        FilesystemIndexTool,
         RagSearchTool,
         MetaTool,
         DelegateLlmTool,
