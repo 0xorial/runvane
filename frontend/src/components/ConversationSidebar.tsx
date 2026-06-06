@@ -17,8 +17,7 @@ import { ConversationItem } from "./conversationSidebar/ConversationItem";
 import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupItem";
 import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
 import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
-import { getPricingMap } from "@/lib/pricingCache";
-import type { ModelPricing } from "@/lib/costEstimation";
+import { usePricingMap } from "../hooks/usePricingMap";
 
 type ConversationSidebarProps = {
   activeConversationId: string | null;
@@ -45,7 +44,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
   const [probeBusy, setProbeBusy] = useState(false);
-  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(() => new Map());
+  const pricingByModel = usePricingMap();
 
   const loadConversations = useCallback(async () => {
     const data = await getConversations({ deletedOnly: showDeletedOnly });
@@ -57,24 +56,6 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const pricing = await getPricingMap();
-        if (cancelled) return;
-        setPricingByModel(pricing);
-      } catch (e) {
-        if (cancelled) return;
-        const detail = e instanceof Error ? e.message : String(e);
-        notifyError(`Failed to load model pricing: ${detail}`);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setSelectedConversationIds([]);

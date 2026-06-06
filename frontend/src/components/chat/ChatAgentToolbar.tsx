@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bot, Cpu, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
 import type { LlmRef } from "../../../../backend/src/contracts/llm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getModelPresets } from "../../api/client";
 import { useAgents } from "../../hooks/useAgents";
+import { useModelPresetsList } from "../../hooks/queries/referenceData";
 import { ModelDropdown } from "../ui/ModelDropdown";
 import { ModelSelector } from "../ui/ModelSelector";
 import { useLlmSettings } from "../../hooks/llmSettingsContext";
@@ -57,14 +56,8 @@ export function ChatAgentToolbar({ onSelectionChange, showAgent = true, embedded
   const { modelGroups: allLlms } = useLlmSettings();
   const [selectedLlm, setSelectedLlm] = useState<LlmSelection | null>(null);
   const [followAgentDefault, setFollowAgentDefault] = useState(true);
-  const [allPresets, setAllPresets] = useState<ModelPresetResponse[] | null>(null);
+  const allPresets = useModelPresetsList();
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(() => presetIdFromSearchParams(urlParams));
-
-  useEffect(() => {
-    getModelPresets()
-      .then((rows) => setAllPresets(rows))
-      .catch(() => setAllPresets([]));
-  }, []);
 
   useEffect(() => {
     if (allAgents == null) return;

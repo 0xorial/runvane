@@ -10,11 +10,9 @@ import {
   setDefaultAgent,
   deleteModelPresetById,
   getAgentById,
-  getAgents as getAgentsApi,
   getLlmProviderSettings,
   getTools as getToolsApi,
   getModelPresetById,
-  getModelPresets,
   testLlmProviderConnection,
   updateAgentById,
   updateModelPresetById,
@@ -30,6 +28,8 @@ import { ModelPricingEditor } from "./settings/ModelPricingEditor";
 import { filterProviders, parseSettingsSection, buildModelGroups } from "./settings/helpers";
 import type { LlmSettings } from "../types/llmSettings";
 import { useLlmSettings } from "../hooks/llmSettingsContext";
+import { refreshAgents, refreshModelPresets } from "../hooks/queries/invalidate";
+import { useAgentsQuery, useModelPresetsQuery } from "../hooks/queries/referenceData";
 import { ProviderCard } from "./settings/ProviderCard";
 import { SettingsHeader } from "./settings/SettingsHeader";
 import { SettingsSidebar } from "./settings/SettingsSidebar";
@@ -68,7 +68,7 @@ export function SettingsPage() {
     );
   }
 
-  const [agents, setAgents] = useState<AgentListItemResponse[]>([]);
+  const { data: agents = [] } = useAgentsQuery();
   const [currentAgent, setCurrentAgent] = useState<AgentListItemResponse | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentLoadError, setAgentLoadError] = useState<string | null>(null);
@@ -85,7 +85,7 @@ export function SettingsPage() {
       { replace: true },
     );
   }
-  const [presets, setPresets] = useState<ModelPresetResponse[]>([]);
+  const { data: presets = [] } = useModelPresetsQuery();
   const [toolCatalog, setToolCatalog] = useState<Record<string, unknown>[]>([]);
   const [currentPreset, setCurrentPreset] = useState<ModelPresetResponse | null>(null);
   const [presetLoading, setPresetLoading] = useState(false);
@@ -142,17 +142,6 @@ export function SettingsPage() {
     void load();
   }, []);
 
-  async function loadAgents(): Promise<AgentListItemResponse[]> {
-    try {
-      const data = await getAgentsApi();
-      setAgents(data);
-      return data;
-    } catch {
-      setAgents([]);
-      return [];
-    }
-  }
-
   async function loadAgent(aid: string) {
     setAgentLoading(true);
     setAgentLoadError(null);
@@ -178,7 +167,7 @@ export function SettingsPage() {
       color: currentAgent.color,
     });
     setCurrentAgent(saved);
-    await loadAgents();
+    await refreshAgents();
     return true;
   }
 
@@ -192,7 +181,7 @@ export function SettingsPage() {
 
   async function createAgent() {
     const created = await createAgentApi();
-    await loadAgents();
+    await refreshAgents();
     setAgentEditId(created.id);
     await loadAgent(created.id);
     notifyToast({ message: "Agent created", type: "success", durationMs: 4000 });
@@ -202,13 +191,13 @@ export function SettingsPage() {
     if (!currentAgent) return;
     const updated = await setDefaultAgent(currentAgent.id);
     setCurrentAgent(updated);
-    await loadAgents();
+    await refreshAgents();
   }
 
   async function deleteLoadedAgent() {
     if (!currentAgent) return;
     await deleteAgentById(currentAgent.id);
-    const remaining = await loadAgents();
+    const remaining = await refreshAgents();
     if (remaining.length > 0) {
       setAgentEditId(remaining[0].id);
       await loadAgent(remaining[0].id);
@@ -217,17 +206,6 @@ export function SettingsPage() {
       setCurrentAgent(null);
     }
     notifyToast({ message: "Agent deleted", type: "success", durationMs: 4000 });
-  }
-
-  async function loadPresets(): Promise<ModelPresetResponse[]> {
-    try {
-      const data = await getModelPresets();
-      setPresets(data);
-      return data;
-    } catch {
-      setPresets([]);
-      return [];
-    }
   }
 
   async function loadToolCatalog(): Promise<Record<string, unknown>[]> {
@@ -268,13 +246,13 @@ export function SettingsPage() {
       parameters: currentPreset.parameters,
     });
     setCurrentPreset(saved);
-    await loadPresets();
+    await refreshModelPresets();
     return true;
   }
 
   async function createPreset() {
     const created = await createModelPreset({});
-    await loadPresets();
+    await refreshModelPresets();
     setPresetEditId(created.id);
     await loadPreset(created.id);
     notifyToast({ message: "Model preset created", type: "success", durationMs: 4000 });
@@ -283,7 +261,7 @@ export function SettingsPage() {
   async function deleteLoadedPreset() {
     if (!currentPreset) return;
     await deleteModelPresetById(currentPreset.id);
-    const remaining = await loadPresets();
+    const remaining = await refreshModelPresets();
     if (remaining.length > 0) {
       setPresetEditId(remaining[0].id);
       await loadPreset(remaining[0].id);
@@ -296,12 +274,12 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (activeSection !== "agents") return;
-    void Promise.all([loadAgents(), loadPresets(), loadToolCatalog()]).then(([list]) => {
-      if (list.length === 0) return;
-      if (agentEditId && list.some((a) => a.id === agentEditId)) return;
-      setAgentEditId(list[0].id);
+    void loadToolCatalog().then(() => {
+      if (agents.length === 0) return;
+      if (agentEditId && agents.some((a) => a.id === agentEditId)) return;
+      setAgentEditId(agents[0].id);
     });
-  }, [activeSection]);
+  }, [activeSection, agents, agentEditId]);
 
   useEffect(() => {
     if (activeSection === "agents" && agentEditId) {
@@ -311,12 +289,10 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (activeSection !== "model-presets") return;
-    void loadPresets().then((list) => {
-      if (list.length === 0) return;
-      if (presetEditId != null && list.some((p) => p.id === presetEditId)) return;
-      setPresetEditId(list[0].id);
-    });
-  }, [activeSection]);
+    if (presets.length === 0) return;
+    if (presetEditId != null && presets.some((p) => p.id === presetEditId)) return;
+    setPresetEditId(presets[0].id);
+  }, [activeSection, presets, presetEditId]);
 
   useEffect(() => {
     if (activeSection === "model-presets" && presetEditId != null) {

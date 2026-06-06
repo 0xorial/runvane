@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings } from "lucide-react";
 import { getConversation, renameConversation } from "../../../api/client";
-import { getPricingMap } from "@/lib/pricingCache";
+import { usePricingMap } from "../../../hooks/usePricingMap";
 import { subscribeGlobalLive } from "../../../protocol/runLiveClient";
 import { SseType } from "../../../protocol/sseTypes";
 import { notifyError } from "../../../utils/toast";
@@ -15,7 +15,6 @@ import { TokenUsageMapper } from "../../../../../backend/src/contracts/token-usa
 import {
   estimateConversationCostUsd,
   hasUnpricedUsage,
-  type ModelPricing,
   type TokenUsageByModelRow,
 } from "@/lib/costEstimation";
 
@@ -56,7 +55,7 @@ export function ChatTitlePanel({
     completionTokens: 0,
   });
   const [tokenUsageByModel, setTokenUsageByModel] = useState<TokenUsageByModelRow[]>([]);
-  const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(() => new Map());
+  const pricingByModel = usePricingMap();
   const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
   const estimatedCostUsd = useMemo((): number | null => {
@@ -105,24 +104,6 @@ export function ChatTitlePanel({
       cancelled = true;
     };
   }, [conversationId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const pricing = await getPricingMap();
-        if (cancelled) return;
-        setPricingByModel(pricing);
-      } catch (e) {
-        if (cancelled) return;
-        const detail = e instanceof Error ? e.message : String(e);
-        notifyError(`Failed to load model pricing: ${detail}`);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const cid = conversationId;

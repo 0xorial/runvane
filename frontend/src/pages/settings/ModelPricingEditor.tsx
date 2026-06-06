@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Pencil, Check, X, Server } from "lucide-react";
 import type { ModelCapabilityRow } from "../../../../backend/src/contracts/model-catalog";
-import { getModelCapabilities, updateModelCapabilityOverride } from "../../api/client";
-import { invalidatePricingCache } from "../../lib/pricingCache";
+import { updateModelCapabilityOverride } from "../../api/client";
+import { queryClient } from "@/lib/queryClient";
+import { queryKeys } from "../../hooks/queries/keys";
+import { useModelCapabilitiesQuery } from "../../hooks/queries/referenceData";
 import { Spinner } from "../../components/ui/Spinner";
 import { cn } from "@/lib/utils";
 import { ghostBtn } from "./settingsClasses";
@@ -97,9 +99,14 @@ function PriceInput({
 }
 
 export function ModelPricingEditor() {
-  const [rows, setRows] = useState<ModelCapabilityRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const capabilitiesQuery = useModelCapabilitiesQuery();
+  const rows = capabilitiesQuery.data?.models ?? [];
+  const loading = capabilitiesQuery.isPending;
+  const loadError = capabilitiesQuery.isError
+    ? capabilitiesQuery.error instanceof Error
+      ? capabilitiesQuery.error.message
+      : String(capabilitiesQuery.error)
+    : null;
   const [rowState, setRowState] = useState<Map<string, RowState>>(new Map());
   const [searchParams] = useSearchParams();
   const focusModels = useMemo(() => {
@@ -114,21 +121,6 @@ export function ModelPricingEditor() {
   }, [searchParams]);
   const firstFocusRowRef = useRef<HTMLTableRowElement | null>(null);
   const didScrollRef = useRef(false);
-
-  async function load() {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await getModelCapabilities();
-      setRows(data.models);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
 
   function rowKey(row: ModelCapabilityRow) {
     return `${row.provider_id}::${row.model_name}`;
@@ -185,8 +177,7 @@ export function ModelPricingEditor() {
         self_hosted: selfHosted,
         currency: "USD",
       });
-      setRows(result.models);
-      invalidatePricingCache();
+      queryClient.setQueryData(queryKeys.modelCapabilities, { models: result.models });
       patchRowState(row, { editing: false, saving: false, error: null });
     } catch (e) {
       patchRowState(row, { saving: false, error: e instanceof Error ? e.message : String(e) });

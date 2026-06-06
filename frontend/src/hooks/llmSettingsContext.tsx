@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo } from "react";
 import type { LlmProviderRow } from "../../../backend/src/contracts/settings";
-import { getLlmSettings } from "../api/client";
+import { queryClient } from "@/lib/queryClient";
 import { buildModelGroups, type ModelGroup } from "../pages/settings/helpers";
+import { queryKeys } from "./queries/keys";
+import { useLlmProvidersQuery } from "./queries/referenceData";
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -11,59 +13,36 @@ export type LlmSettingsContextValue = {
   status: LoadStatus;
   error: Error | null;
   refresh: () => Promise<void>;
-  /**
-   * Replace the cached providers directly — used after a settings save, where
-   * the caller already holds the just-persisted data and a server round-trip
-   * would be redundant.
-   */
   setProviders: (providers: LlmProviderRow[]) => void;
 };
 
-const LlmSettingsContext = createContext<LlmSettingsContextValue | null>(null);
+export function useLlmSettings(): LlmSettingsContextValue {
+  const query = useLlmProvidersQuery();
 
-export function LlmSettingsProvider({ children }: { children: ReactNode }) {
-  const [providers, setProviders] = useState<LlmProviderRow[]>([]);
-  const [status, setStatus] = useState<LoadStatus>("idle");
-  const [error, setError] = useState<Error | null>(null);
-  const inflightRef = useRef<Promise<void> | null>(null);
+  const status: LoadStatus = query.isPending
+    ? "loading"
+    : query.isError
+      ? "error"
+      : query.isSuccess
+        ? "ready"
+        : "idle";
+
+  const modelGroups = useMemo(() => buildModelGroups(query.data ?? []), [query.data]);
 
   const refresh = useCallback(async () => {
-    if (inflightRef.current) return inflightRef.current;
-    setStatus("loading");
-    setError(null);
-    const p = (async () => {
-      try {
-        const data = await getLlmSettings();
-        setProviders(data.providers);
-        setStatus("ready");
-      } catch (e) {
-        const err = e instanceof Error ? e : new Error(String(e));
-        setError(err);
-        setStatus("error");
-        throw err;
-      } finally {
-        inflightRef.current = null;
-      }
-    })();
-    inflightRef.current = p;
-    return p;
+    await query.refetch();
+  }, [query]);
+
+  const setProviders = useCallback((providers: LlmProviderRow[]) => {
+    queryClient.setQueryData(queryKeys.llmProviders, providers);
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const modelGroups = useMemo(() => buildModelGroups(providers), [providers]);
-  const value = useMemo(
-    () => ({ providers, modelGroups, status, error, refresh, setProviders }),
-    [providers, modelGroups, status, error, refresh],
-  );
-
-  return <LlmSettingsContext.Provider value={value}>{children}</LlmSettingsContext.Provider>;
-}
-
-export function useLlmSettings(): LlmSettingsContextValue {
-  const ctx = useContext(LlmSettingsContext);
-  if (!ctx) throw new Error("useLlmSettings must be used inside <LlmSettingsProvider>");
-  return ctx;
+  return {
+    providers: query.data ?? [],
+    modelGroups,
+    status,
+    error: query.error instanceof Error ? query.error : query.error ? new Error(String(query.error)) : null,
+    refresh,
+    setProviders,
+  };
 }

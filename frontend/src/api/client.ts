@@ -384,24 +384,8 @@ export async function uploadFile(file: File): Promise<UploadFileResponse> {
   return validateUploadFileResponse(data);
 }
 
-let agentsCache: Promise<AgentListItemResponse[]> | null = null;
-
-function fetchAgents(): Promise<AgentListItemResponse[]> {
-  return getJson("/api/agents").then(validateGetAgentsResponse);
-}
-
 export function getAgents(): Promise<AgentListItemResponse[]> {
-  if (!agentsCache) {
-    agentsCache = fetchAgents().catch((e: unknown) => {
-      agentsCache = null;
-      throw e;
-    });
-  }
-  return agentsCache;
-}
-
-export function invalidateAgentsCache(): void {
-  agentsCache = null;
+  return getJson("/api/agents").then(validateGetAgentsResponse);
 }
 
 export function getLlmSettings(): Promise<{ providers: LlmProviderRow[] }> {
@@ -413,8 +397,6 @@ export function getLlmProviderSettings(): Promise<LlmProviderSettingsDocument> {
 }
 
 type ModelCapabilitiesResponse = { models: ModelCapabilityRow[] };
-
-let modelCapabilitiesCache: Promise<ModelCapabilitiesResponse> | null = null;
 
 function parseModelCapabilitiesResponse(data: unknown): ModelCapabilitiesResponse {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
@@ -439,22 +421,8 @@ function parseModelCapabilitiesResponse(data: unknown): ModelCapabilitiesRespons
   return { models };
 }
 
-function fetchModelCapabilities(): Promise<ModelCapabilitiesResponse> {
-  return getJson("/api/settings/model_capabilities").then(parseModelCapabilitiesResponse);
-}
-
 export function getModelCapabilities(): Promise<ModelCapabilitiesResponse> {
-  if (!modelCapabilitiesCache) {
-    modelCapabilitiesCache = fetchModelCapabilities().catch((e: unknown) => {
-      modelCapabilitiesCache = null;
-      throw e;
-    });
-  }
-  return modelCapabilitiesCache;
-}
-
-export function invalidateModelCapabilitiesCache(): void {
-  modelCapabilitiesCache = null;
+  return getJson("/api/settings/model_capabilities").then(parseModelCapabilitiesResponse);
 }
 
 export function updateModelCapabilityOverride(
@@ -464,7 +432,6 @@ export function updateModelCapabilityOverride(
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw new Error("PUT /api/settings/model_capabilities/override: invalid response envelope");
     }
-    invalidateModelCapabilitiesCache();
     return data as { models: ModelCapabilityRow[] };
   });
 }
@@ -491,31 +458,19 @@ export function getAgentById(agentId: string): Promise<AgentListItemResponse> {
 }
 
 export function updateAgentById(agentId: string, body: AgentUpsertRequest): Promise<AgentListItemResponse> {
-  return sendJson(`/api/agents/${encodeURIComponent(agentId)}`, "PUT", body).then((data) => {
-    invalidateAgentsCache();
-    return validateAgentResponse(data);
-  });
+  return sendJson(`/api/agents/${encodeURIComponent(agentId)}`, "PUT", body).then(validateAgentResponse);
 }
 
 export function createAgent(body: AgentUpsertRequest = {}): Promise<AgentListItemResponse> {
-  return sendJson("/api/agents", "POST", body).then((data) => {
-    invalidateAgentsCache();
-    return validateAgentResponse(data);
-  });
+  return sendJson("/api/agents", "POST", body).then(validateAgentResponse);
 }
 
 export function deleteAgentById(agentId: string): Promise<DeleteAgentResponse> {
-  return deleteJson(`/api/agents/${encodeURIComponent(agentId)}`).then((data) => {
-    invalidateAgentsCache();
-    return validateDeleteAgentResponse(data);
-  });
+  return deleteJson(`/api/agents/${encodeURIComponent(agentId)}`).then(validateDeleteAgentResponse);
 }
 
 export function setDefaultAgent(agentId: string): Promise<AgentListItemResponse> {
-  return sendJson(`/api/agents/${encodeURIComponent(agentId)}/default`, "POST", {}).then((data) => {
-    invalidateAgentsCache();
-    return validateAgentResponse(data);
-  });
+  return sendJson(`/api/agents/${encodeURIComponent(agentId)}/default`, "POST", {}).then(validateAgentResponse);
 }
 
 export function getModelPresets(): Promise<ModelPresetResponse[]> {
