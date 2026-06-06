@@ -26,6 +26,14 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - token and cost visibility
 - configurable model/tool behavior
 
+## TODO features
+
+- sterring
+- RAG tool
+- meta tool
+- filesystem tool
+- filesystem index tool
+
 ## Shared Definitions
 
 - [`definitions.md`](definitions.md): canonical glossary for naming across code, docs, and agent prompts.
