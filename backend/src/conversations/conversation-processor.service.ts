@@ -26,6 +26,8 @@ type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
 export class ConversationProcessorService {
   private readonly logger = new Logger(ConversationProcessorService.name);
   private readonly activeExecutions = new Map<string, LifecycleScope>();
+  private readonly messagePostLocks = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
     private readonly thoughtProcessing: ThoughtProcessingService,
@@ -46,14 +48,17 @@ export class ConversationProcessorService {
     if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
     const agentId = anchorUser.agentId;
     const llm = await this.resolveLlmRef({ agentId });
-    const { scope, chain } = this.beginRun(args.conversationId);
-    await this.runTool.approveAndRun(
-      { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
-      scope,
-      chain,
-      llm,
-    );
-    scope.rootDone();
+    const { scope, chain } = await this.beginRun(args.conversationId);
+    try {
+      await this.runTool.approveAndRun(
+        { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
+        scope,
+        chain,
+        llm,
+      );
+    } finally {
+      scope.rootDone();
+    }
   }
 
   private async resolveLlmRef(opts: {
@@ -77,8 +82,12 @@ export class ConversationProcessorService {
     return this.thoughtProcessing.getLlmRef();
   }
 
-  private beginRun(conversationId: string): ConversationRun {
-    this.activeExecutions.get(conversationId)?.abort();
+  private async beginRun(conversationId: string): Promise<ConversationRun> {
+    const prev = this.activeExecutions.get(conversationId);
+    if (prev) {
+      prev.abort();
+      await prev.whenFinished();
+    }
     const scope = new LifecycleScope(
       () => {
         if (this.activeExecutions.get(conversationId) === scope) {
@@ -111,11 +120,14 @@ export class ConversationProcessorService {
     editedRequestText: string;
     llm?: LlmRef;
   }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
-    const { scope, chain } = this.beginRun(args.conversationId);
-    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
-    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
-    scope.rootDone();
-    return result;
+    const { scope, chain } = await this.beginRun(args.conversationId);
+    try {
+      const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
+      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      return result;
+    } finally {
+      scope.rootDone();
+    }
   }
 
   async startReprocessReason(args: {
@@ -123,12 +135,15 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedResponse: string;
   }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
-    const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
-    const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
-    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
-    scope.rootDone();
-    return result;
+    const { scope, chain } = await this.beginRun(args.conversationId);
+    try {
+      const llm = await this.thoughtProcessing.getLlmRef();
+      const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
+      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      return result;
+    } finally {
+      scope.rootDone();
+    }
   }
 
   async reprocessUserMessage(args: {
@@ -142,38 +157,41 @@ export class ConversationProcessorService {
       throw new Error(`reprocess target ${args.sourceEntryId} is not a user-message: ${source.type}`);
     }
 
-    const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.resolveLlmRef({
-      explicitProviderId: source.llm?.providerId,
-      explicitModel: source.llm?.model,
-      agentId: source.agentId,
-    });
-    const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
-      text: args.editedText,
-      agentId: source.agentId,
-      ...(source.llm ? { llm: source.llm } : {}),
-      ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
-      parentId: source.parentId,
-      ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
-    });
-    await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
-    chain.setTip(sibling.id);
-    const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
-    if (!siblingPayload || siblingPayload.type !== 'user-message') {
-      throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
-    }
-    this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
-    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+    const { scope, chain } = await this.beginRun(args.conversationId);
+    try {
+      const llm = await this.resolveLlmRef({
+        explicitProviderId: source.llm?.providerId,
+        explicitModel: source.llm?.model,
+        agentId: source.agentId,
+      });
+      const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
+        text: args.editedText,
+        agentId: source.agentId,
+        ...(source.llm ? { llm: source.llm } : {}),
+        ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
+        parentId: source.parentId,
+        ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
+      });
+      await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
+      chain.setTip(sibling.id);
+      const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
+      if (!siblingPayload || siblingPayload.type !== 'user-message') {
+        throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
+      }
+      this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
+      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
 
-    this.thoughtProcessing.startThought({
-      provider: this.plannerProvider,
-      conversationId: args.conversationId,
-      scope,
-      chain,
-      llm,
-    });
-    scope.rootDone();
-    return { userMessageEntryId: sibling.id, leafEntryId: sibling.id };
+      this.thoughtProcessing.startThought({
+        provider: this.plannerProvider,
+        conversationId: args.conversationId,
+        scope,
+        chain,
+        llm,
+      });
+      return { userMessageEntryId: sibling.id, leafEntryId: sibling.id };
+    } finally {
+      scope.rootDone();
+    }
   }
 
   async startSummarize(args: { conversationId: string; firstEntryToSummarize: string }): Promise<void> {
@@ -182,79 +200,105 @@ export class ConversationProcessorService {
 
     const range = resolveSummarizeRange(activeChain, args.firstEntryToSummarize);
 
-    const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
-    // Anchor the new branch at the parent of `firstEntryToSummarize` so the
-    // prepare / stream / checkpoint-summary entries become a sibling of the
-    // original tail. The original tail stays reachable via the branch
-    // selector on the resulting summary entry.
-    chain.setTip(range.fromParentId);
+    const { scope, chain } = await this.beginRun(args.conversationId);
+    try {
+      const llm = await this.thoughtProcessing.getLlmRef();
+      // Anchor the new branch at the parent of `firstEntryToSummarize` so the
+      // prepare / stream / checkpoint-summary entries become a sibling of the
+      // original tail. The original tail stays reachable via the branch
+      // selector on the resulting summary entry.
+      chain.setTip(range.fromParentId);
 
-    this.thoughtProcessing.startThought({
-      provider: this.summarizeProvider,
-      conversationId: args.conversationId,
-      scope,
-      chain,
-      llm,
-      input: {
+      this.thoughtProcessing.startThought({
+        provider: this.summarizeProvider,
         conversationId: args.conversationId,
-        fromEntryId: range.fromEntryId,
-        toEntryId: range.toEntryId,
-        rangeEntries: range.rangeEntries,
-        rangeEntryCount: range.rangeEntryCount,
-      },
-    });
-    scope.rootDone();
+        scope,
+        chain,
+        llm,
+        input: {
+          conversationId: args.conversationId,
+          fromEntryId: range.fromEntryId,
+          toEntryId: range.toEntryId,
+          rangeEntries: range.rangeEntries,
+          rangeEntryCount: range.rangeEntryCount,
+        },
+      });
+    } finally {
+      scope.rootDone();
+    }
   }
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
-    const { scope, chain } = this.beginRun(conversationId);
-    const llm = await this.resolveLlmRef({
-      explicitProviderId: body.llm?.providerId,
-      explicitModel: body.llm?.model,
-      agentId: body.agentId,
-    });
-    const titleLlm = await this.thoughtProcessing.getTitleLlmRef(llm);
-    const existingMessages = await this.chatEntries.listMessages(conversationId);
-    if (existingMessages.length > 0 && !body.parentId) {
-      throw new Error('parentId is required when conversation already has messages');
-    }
-    const parentId = body.parentId ?? null;
-    const attachments = body.attachments && body.attachments.length > 0
-      ? await this.uploads.resolveChatAttachments(body.attachments)
-      : undefined;
-    const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
-      text: body.message,
-      agentId: body.agentId,
-      ...(body.llm ? { llm: body.llm } : {}),
-      modelPresetId: body.modelPresetId,
-      parentId,
-      ...(attachments ? { attachments } : {}),
-    });
-    await this.chatEntries.setDefaultViewLeaf(conversationId, userEntry.id);
-    chain.setTip(userEntry.id);
-    const userPayload = await this.chatEntries.getChatEntry(conversationId, userEntry.id);
-    if (!userPayload || userPayload.type !== 'user-message') {
-      throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
-    }
-    this.hub.publish(conversationId, {
-      type: SseType.USER_MESSAGE,
-      entry: userPayload,
-      ...(body.clientRequestId ? { clientRequestId: body.clientRequestId } : {}),
-    });
-    await publishConversationUpdated(this.hub, this.conversations, conversationId);
+    return this.withMessagePostLock(conversationId, async () => {
+      const { scope, chain } = await this.beginRun(conversationId);
+      try {
+        const llm = await this.resolveLlmRef({
+          explicitProviderId: body.llm?.providerId,
+          explicitModel: body.llm?.model,
+          agentId: body.agentId,
+        });
+        const titleLlm = await this.thoughtProcessing.getTitleLlmRef(llm);
+        const existingMessages = await this.chatEntries.listMessages(conversationId);
+        if (existingMessages.length > 0 && !body.parentId) {
+          throw new Error('parentId is required when conversation already has messages');
+        }
+        const parentId = body.parentId ?? null;
+        const attachments = body.attachments && body.attachments.length > 0
+          ? await this.uploads.resolveChatAttachments(body.attachments)
+          : undefined;
+        const userEntry = await this.chatEntries.appendUserMessage(conversationId, {
+          text: body.message,
+          agentId: body.agentId,
+          ...(body.llm ? { llm: body.llm } : {}),
+          modelPresetId: body.modelPresetId,
+          parentId,
+          ...(attachments ? { attachments } : {}),
+        });
+        await this.chatEntries.setDefaultViewLeaf(conversationId, userEntry.id);
+        chain.setTip(userEntry.id);
+        const userPayload = await this.chatEntries.getChatEntry(conversationId, userEntry.id);
+        if (!userPayload || userPayload.type !== 'user-message') {
+          throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
+        }
+        this.hub.publish(conversationId, {
+          type: SseType.USER_MESSAGE,
+          entry: userPayload,
+          ...(body.clientRequestId ? { clientRequestId: body.clientRequestId } : {}),
+        });
+        await publishConversationUpdated(this.hub, this.conversations, conversationId);
 
-    this.startThoughts({
-      conversationId,
-      userMessageId: userEntry.id,
-      attachments: attachments ?? [],
-      isFirstMessage: existingMessages.length === 0,
-      scope,
-      chain,
-      llm,
-      titleLlm,
+        this.startThoughts({
+          conversationId,
+          userMessageId: userEntry.id,
+          attachments: attachments ?? [],
+          isFirstMessage: existingMessages.length === 0,
+          scope,
+          chain,
+          llm,
+          titleLlm,
+        });
+      } finally {
+        scope.rootDone();
+      }
     });
-    scope.rootDone();
+  }
+
+  private async withMessagePostLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.messagePostLocks.get(conversationId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.messagePostLocks.set(conversationId, gate);
+    await prev.catch(() => undefined);
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this.messagePostLocks.get(conversationId) === gate) {
+        this.messagePostLocks.delete(conversationId);
+      }
+    }
   }
 
   /**

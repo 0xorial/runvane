@@ -10,6 +10,8 @@
  */
 export class LifecycleScope {
   private readonly controller = new AbortController();
+  private readonly finishedPromise: Promise<void>;
+  private readonly resolveFinished: () => void;
   private pending = 0;
   private rootSettled = false;
   private finished = false;
@@ -17,7 +19,17 @@ export class LifecycleScope {
   constructor(
     private readonly onFinished: () => void,
     private readonly onSpawnError: (error: unknown) => void,
-  ) {}
+  ) {
+    let resolveFinished!: () => void;
+    this.finishedPromise = new Promise<void>((resolve) => {
+      resolveFinished = resolve;
+    });
+    this.resolveFinished = resolveFinished;
+  }
+
+  whenFinished(): Promise<void> {
+    return this.finishedPromise;
+  }
 
   get signal(): AbortSignal {
     return this.controller.signal;
@@ -55,6 +67,7 @@ export class LifecycleScope {
     if (this.rootSettled && this.pending === 0) {
       this.finished = true;
       this.onFinished();
+      this.resolveFinished();
     }
   }
 }
