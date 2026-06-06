@@ -1,6 +1,7 @@
-import { SseType } from '../../src/contracts/sse';
+import { SseType, type SseEvent } from '../../src/contracts/sse';
 import { retainSharedTestApp, shutdownSharedTestApp } from '../support/shared-app';
 import {
+  assertProbeParentChain,
   assertProbeShape,
   createConversation,
   entryTypesInOrder,
@@ -10,6 +11,8 @@ import {
   postProbeMessage,
   setDefaultViewLeaf,
   waitForProbeCompletion,
+  walkParentChain,
+  type ChatEntryRow,
 } from '../support/http';
 import { collectSseDuring } from '../support/sse-client';
 
@@ -36,6 +39,11 @@ describeLive('probe time (integration)', () => {
     await postProbeMessage(baseUrl, conversationId, agentId);
     const entries = await waitForProbeCompletion(baseUrl, conversationId);
     assertProbeShape(entryTypesInOrder(entries));
+    const conversation = await getConversation(baseUrl, conversationId);
+    if (!conversation.defaultViewLeafEntryId) {
+      throw new Error('probe: missing defaultViewLeafEntryId');
+    }
+    assertProbeParentChain(entries, conversation.defaultViewLeafEntryId);
   }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 
   it('streams SSE upserts during probe', async () => {
@@ -58,6 +66,8 @@ describeLive('probe time (integration)', () => {
 
     const conversation = await getConversation(baseUrl, conversationId);
     expect(conversation.defaultViewLeafEntryId).toBeTruthy();
+    assertProbeParentChain(entries, conversation.defaultViewLeafEntryId!);
+    assertSseParentChainMatchesHttp(events, entries, conversation.defaultViewLeafEntryId!);
   }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 
   it('default-view-leaf can be repointed to user-message anchor', async () => {
@@ -84,3 +94,55 @@ describeLive('probe time (integration)', () => {
     expect(path.some((entry) => entry.type === 'assistant-message')).toBe(true);
   }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 });
+
+function applySseUpserts(events: SseEvent[]): Map<string, ChatEntryRow> {
+  const map = new Map<string, ChatEntryRow>();
+  for (const ev of events) {
+    if (ev.type === SseType.USER_MESSAGE || ev.type === SseType.CHAT_ENTRY_UPSERT) {
+      const entry = ev.entry;
+      map.set(entry.id, {
+        id: entry.id,
+        type: entry.type,
+        conversationIndex: entry.conversationIndex,
+        parentId: entry.parentId ?? null,
+        text: 'text' in entry ? String(entry.text ?? '') : undefined,
+        title: 'title' in entry ? entry.title : undefined,
+      });
+    }
+  }
+  return map;
+}
+
+/** SSE-reconstructed parent pointers must match HTTP for every entry that was upserted. */
+function assertSseParentChainMatchesHttp(
+  events: SseEvent[],
+  httpEntries: ChatEntryRow[],
+  tipId: string,
+): void {
+  const sseById = applySseUpserts(events);
+  for (const entry of walkParentChain(httpEntries, tipId)) {
+    const sseEntry = sseById.get(entry.id);
+    if (!sseEntry) continue;
+    if (sseEntry.parentId !== entry.parentId) {
+      throw new Error(
+        `probe SSE: entry ${entry.id} (${entry.type}) parentId=${sseEntry.parentId}, HTTP has ${entry.parentId}`,
+      );
+    }
+  }
+  const user = httpEntries.find((row) => row.type === 'user-message');
+  const titlePrepare = httpEntries.find(
+    (row) => row.type === 'thought-prepare' && row.title === 'Title generation',
+  );
+  if (!user || !titlePrepare) throw new Error('probe SSE: missing user or title prepare in HTTP snapshot');
+  const sseTitle = sseById.get(titlePrepare.id);
+  if (!sseTitle) throw new Error('probe SSE: missing title prepare upsert');
+  if (sseTitle.parentId !== user.id) {
+    throw new Error(`probe SSE: title prepare parentId=${sseTitle.parentId}, expected user ${user.id}`);
+  }
+  if (titlePrepare.parentId !== user.id) {
+    throw new Error(`probe HTTP: title prepare parentId=${titlePrepare.parentId}, expected user ${user.id}`);
+  }
+  if (sseTitle.parentId !== titlePrepare.parentId) {
+    throw new Error('probe SSE: title prepare parentId diverged from HTTP after stream');
+  }
+}

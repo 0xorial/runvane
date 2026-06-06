@@ -17,6 +17,7 @@ export type ChatEntryRow = {
   conversationIndex: number;
   parentId: string | null;
   text?: string;
+  title?: string;
 };
 
 export type AgentRow = {
@@ -93,6 +94,50 @@ export async function waitForProbeCompletion(
 
 export function entryTypesInOrder(entries: ChatEntryRow[]): string[] {
   return [...entries].sort((a, b) => a.conversationIndex - b.conversationIndex).map((entry) => entry.type);
+}
+
+export function walkParentChain(entries: ChatEntryRow[], tipId: string): ChatEntryRow[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const path: ChatEntryRow[] = [];
+  let cursor: string | null = tipId;
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    const row = byId.get(cursor);
+    if (!row) throw new Error(`parent chain: unknown entry ${cursor}`);
+    path.unshift(row);
+    cursor = row.parentId;
+  }
+  return path;
+}
+
+export function assertProbeParentChain(entries: ChatEntryRow[], tipId: string): void {
+  const path = walkParentChain(entries, tipId);
+  const user = path.find((entry) => entry.type === 'user-message');
+  if (!user) throw new Error(`probe parent chain: missing user-message on default-view path`);
+  if (user.parentId !== null) {
+    throw new Error(`probe parent chain: user-message parentId=${user.parentId}, expected null`);
+  }
+
+  const titlePrepare = path.find(
+    (entry) => entry.type === 'thought-prepare' && entry.title === 'Title generation',
+  );
+  if (!titlePrepare) {
+    throw new Error(`probe parent chain: missing title thought-prepare on default-view path`);
+  }
+  if (titlePrepare.parentId !== user.id) {
+    throw new Error(
+      `probe parent chain: title prepare parentId=${titlePrepare.parentId}, expected user ${user.id}`,
+    );
+  }
+
+  for (const entry of path) {
+    if (entry.parentId === null) continue;
+    const parent = entries.find((row) => row.id === entry.parentId);
+    if (!parent) {
+      throw new Error(`probe parent chain: entry ${entry.id} (${entry.type}) parent ${entry.parentId} missing`);
+    }
+  }
 }
 
 export function assertProbeShape(types: string[]): void {

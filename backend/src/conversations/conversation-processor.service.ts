@@ -4,7 +4,7 @@ import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
-import { publishConversationUpdated } from '../sse/sse-helpers.js';
+import { publishConversationUpdated, publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { createBatchBarrier } from '../thoughtProcessing/lib/batchBarrier.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
@@ -102,8 +102,10 @@ export class ConversationProcessorService {
       },
     );
     this.activeExecutions.set(conversationId, scope);
-    const reparent = (entryId: string, newParentId: string) =>
-      this.chatEntries.updateChatEntryParent(conversationId, entryId, newParentId);
+    const reparent = async (entryId: string, newParentId: string) => {
+      await this.chatEntries.updateChatEntryParent(conversationId, entryId, newParentId);
+      await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, entryId);
+    };
     return { scope, chain: new ChatChain(reparent) };
   }
 
