@@ -1,4 +1,4 @@
-import { retainSharedTestApp, shutdownSharedTestApp } from '../support/shared-app';
+import { retainSharedTestApp } from '../support/shared-app';
 import {
   createConversation,
   getDefaultAgentId,
@@ -20,11 +20,6 @@ describeLive('steering (integration)', () => {
     baseUrl = testApp.baseUrl;
     agentId = await getDefaultAgentId(baseUrl);
   }, 30_000);
-
-  // Last integration file alphabetically — shuts down the shared Nest app once.
-  afterAll(async () => {
-    await shutdownSharedTestApp();
-  });
 
   it('steer aborts slow in-flight run and processes the steer message', async () => {
     const conversationId = await createConversation(baseUrl);
