@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { ResponseValidationInterceptor } from './validation/response-validation.interceptor.js';
 import { AgentsModule } from './agents/agents.module.js';
+import { ImportModule } from './import/import.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ConversationsModule } from './conversations/conversations.module.js';
@@ -39,6 +40,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
     HealthModule,
     ConversationsModule,
     AgentsModule,
+    ImportModule,
     SettingsModule,
     ModelPresetsModule,
     LlmProvidersModule,
