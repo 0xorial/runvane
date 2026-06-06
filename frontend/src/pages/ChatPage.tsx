@@ -194,6 +194,7 @@ export function ChatPage({
                     key={messageRowKey(entry$)}
                     data-chat-entry-id={entry.id}
                     data-chat-entry-type={entry.type}
+                    data-chat-parent-id={entry.parentId ?? ""}
                     {...(entry.type === "thought-prepare"
                       ? { "data-chat-prepare-title": entry.title ?? "" }
                       : {})}

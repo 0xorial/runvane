@@ -14,6 +14,7 @@ export const PROBE_EXPECTED_PREPARE_TITLES = ["Title generation", "Decision plan
 export type ProbeTranscriptSnapshot = {
   entryTypes: string[];
   prepareTitles: string[];
+  parentIds: string[];
   userText: string;
   assistantText: string;
 };
@@ -62,11 +63,13 @@ export class ChatTranscript {
     const count = await rows.count();
     const entryTypes: string[] = [];
     const prepareTitles: string[] = [];
+    const parentIds: string[] = [];
     for (let i = 0; i < count; i += 1) {
       const row = rows.nth(i);
       const type = await row.getAttribute("data-chat-entry-type");
       if (!type) throw new Error("transcript row missing data-chat-entry-type");
       entryTypes.push(type);
+      parentIds.push((await row.getAttribute("data-chat-parent-id")) ?? "");
       if (type === "thought-prepare") {
         const title = await row.getAttribute("data-chat-prepare-title");
         if (!title) throw new Error(`thought-prepare row ${i} missing data-chat-prepare-title`);
@@ -76,6 +79,7 @@ export class ChatTranscript {
     return {
       entryTypes,
       prepareTitles,
+      parentIds,
       userText: (await this.userMessage.innerText()).trim(),
       assistantText: (await this.assistantMessage.innerText()).trim(),
     };
