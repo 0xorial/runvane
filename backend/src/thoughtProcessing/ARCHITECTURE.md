@@ -105,10 +105,29 @@ is owned by `ChatChain`.
 Single-process assumption: both mutexes are in-process. If we ever shard the
 backend, both move to DB-level advisory locks or per-conversation owner.
 
-## 5. Concurrency model: structured per-conversation scopes
+## 5. Concurrency model: two-layer work accounting
+
+**Layer 1 — `LifecycleScope` + `WorkMonitorService`:** every background branch
+must go through `scope.spawn(label, …)`, `scope.run(label, …)`, `scope.delay(…)`, or
+`scheduleTimeout(…)`. Scopes register with the global monitor; pending items are
+visible at `GET /api/work` (UI: tasks popover → Super details). Our code must not call raw `setTimeout` (ESLint). Do **not** patch globals at
+bootstrap — `fetch`/undici, Nest, Prisma, and RxJS schedule timers outside our
+frames.
+
+**Async context (`.NET AsyncLocal` analogue):** `work-context.ts` keeps a frame
+stack in `AsyncLocalStorage`. `runInWorkContext(scope, label, fn)` pushes a
+frame; `await` inherits it. `getWorkScope()` returns the innermost scope;
+`getWorkContextPath()` returns `conversation-run › process-message › …`.
+`runWithoutWorkContext` suppresses flow (like `ExecutionContext.SuppressFlow`).
+`bindToWorkContext` re-attaches the stack to callbacks scheduled via our timers.
+HTTP handlers enter the root frame via `inRunContext`; spawns/tasks push deeper
+frames.
+
+**Layer 2 — `TaskRegistryService`:** user-visible, individually-cancellable units
+(LLM streams, tool runs). Tasks chain `parentSignal: scope.signal` into layer 1.
 
 `ConversationProcessorService` owns one `LifecycleScope` per active conversation
-(`beginScope(conversationId)`):
+(`beginRun(conversationId)`):
 
 - HTTP handlers (`processMessage`, `startReprocessContext`,
   `startReprocessReason`, `reprocessUserMessage`) do **only** the synchronous

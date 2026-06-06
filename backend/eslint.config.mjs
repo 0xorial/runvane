@@ -32,4 +32,19 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto", printWidth: 120 }],
     },
   },
+  {
+    files: ['src/**/*.ts'],
+    ignores: [
+      'src/concurrency/async-entry-patches.ts',
+      'src/concurrency/async-hooks-monitor.ts',
+      'src/concurrency/raw-timers.ts',
+    ],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        { name: 'setTimeout', message: 'Use scope.scheduleTimeout() or scheduleTimeout() from concurrency/schedule-timeout.' },
+        { name: 'setInterval', message: 'Use scope.scheduleTimeout() or a tracked WorkScope branch.' },
+      ],
+    },
+  },
 );

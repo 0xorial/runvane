@@ -171,7 +171,7 @@ export class RunToolService {
     // The planner continuation hangs off the approved tool entry.
     chain.setTip(args.toolEntryId);
 
-    scope.spawn(async () => {
+    scope.spawn('approve-tool', async () => {
       const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
       await this.executeTool({
         input,

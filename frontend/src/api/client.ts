@@ -33,6 +33,7 @@ import type {
   LlmProviderSettingsDocument,
 } from "../../../backend/src/contracts/settings";
 import type { ModelCapabilityRow, ModelCapabilityOverrideUpsert } from "../../../backend/src/contracts/model-catalog";
+import { validateGetWorkMonitorResponse } from "../../../backend/src/contracts/work";
 import {
   validateGetLlmSettingsResponse,
   validateLlmProviderConnectionTestResponse,
@@ -240,6 +241,10 @@ export async function approveToolInvocation(
     `/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/approve`,
     {},
   );
+}
+
+export async function getWorkMonitor(): Promise<import("../../../backend/src/contracts/work").GetWorkMonitorResponse> {
+  return validateGetWorkMonitorResponse(await getJson("/api/work"));
 }
 
 export async function getTasks(): Promise<import("../../../backend/src/contracts/task").TaskInfo[]> {

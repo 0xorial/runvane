@@ -105,12 +105,13 @@ export class ThoughtProcessingService {
     }
     const ctx = this.createContext(conversationId, chain, llm);
     const prepareCreatePromise = this.appendPreparePlaceholder(ctx, provider);
-    scope.spawn(async () => {
-      let input: TInput | undefined;
+    const inputSeed = args.input;
+    scope.spawn('thought-pipeline', async () => {
+      let input: TInput | undefined = inputSeed;
       try {
         const prepareEntry = await prepareCreatePromise;
         ctx.prepareEntryId = prepareEntry.id;
-        input = args.input ?? (await buildInput!(conversationId, prepareEntry.id));
+        if (input === undefined) input = await buildInput!(conversationId, prepareEntry.id);
         // Persist input on the prepare entry so reprocess-context can rebuild
         // it without any per-provider logic. Reprocess truncates the chain back
         // to this prepare's parent before re-running, so the snapshot reflects
@@ -123,7 +124,8 @@ export class ThoughtProcessingService {
         const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
         await this.decisionStep.run(provider, input, ctx, completion, scope);
       } finally {
-        if (input !== undefined) provider.onThoughtSettled?.(input, ctx);
+        const settledInput = input ?? inputSeed;
+        if (settledInput !== undefined) provider.onThoughtSettled?.(settledInput, ctx);
       }
     });
   }
@@ -183,7 +185,7 @@ export class ThoughtProcessingService {
     const plannerEntryId = ctx.streamEntryId;
     await this.chatEntries.setDefaultViewLeaf(args.conversationId, plannerEntryId);
 
-    scope.spawn(async () => {
+    scope.spawn('reprocess-context', async () => {
       const input = JSON.parse(branch.inputJson!) as unknown;
       const prepared: PreparedReason = { request, display };
       const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
@@ -215,7 +217,7 @@ export class ThoughtProcessingService {
     const plannerEntryId = ctx.streamEntryId;
     await this.chatEntries.setDefaultViewLeaf(args.conversationId, ctx.thoughtActionEntryId);
 
-    scope.spawn(async () => {
+    scope.spawn('reprocess-reason', async () => {
       const input = await provider.buildInputFromConversation!(args.conversationId, ctx.thoughtActionEntryId!);
       const completion: LlmCompletion = {
         parts: [{ kind: 'text', text: editedResponse }],

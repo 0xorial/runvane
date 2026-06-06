@@ -1,5 +1,6 @@
 import { Injectable, Logger, MessageEvent } from '@nestjs/common';
-import { Observable, Subject, from, interval, merge } from 'rxjs';
+import { Observable, Subject, from, merge } from 'rxjs';
+import { sseKeepAlive$ } from './sse-keepalive.js';
 import { filter, map } from 'rxjs/operators';
 import type { SseEvent, SsePayload } from '../contracts/sse.js';
 import { SsePayloadSchema } from '../contracts/sse.js';
@@ -46,9 +47,7 @@ export class SseHubService {
       filter(inScope),
       map((event) => this.toDefaultMessage(event)),
     );
-    const keepAlive$ = interval(15000).pipe(
-      map((): MessageEvent => ({ type: 'ka', data: '{}' })),
-    );
+    const keepAlive$ = sseKeepAlive$();
     return merge(replay$, live$, keepAlive$);
   }
 

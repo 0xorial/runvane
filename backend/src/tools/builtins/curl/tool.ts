@@ -9,6 +9,7 @@ import { zerialize } from 'zodex';
 import { curlParamsSchema, parseCurlToolParams, type CurlToolParams } from './params.js';
 import { CurlToolRulesSchema, parseCurlToolRules, type CurlToolRules } from './rules.js';
 import { isLocalHost, matchesHostList } from './host-rules.js';
+import { scheduleTimeout } from '../../../concurrency/schedule-timeout.js';
 import { headersToObject, parseAbsoluteUrl, readBodyCapped } from './http-fetch.js';
 
 @Injectable()
@@ -76,13 +77,15 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
     const body = params.method === 'GET' || params.method === 'HEAD' ? undefined : params.body;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onParentAbort = () => controller.abort();
+    context.signal.addEventListener('abort', onParentAbort, { once: true });
+    const timer = scheduleTimeout('curl:timeout', timeoutMs, () => controller.abort());
     try {
       const response = await fetch(url.toString(), {
         method: params.method,
         headers: params.headers,
         body,
-        signal: controller.signal,
+        signal: AbortSignal.any([controller.signal, context.signal]),
         redirect: params.followRedirects ? 'follow' : 'manual',
       });
       const { bytes, truncated } = await readBodyCapped(response, maxBytes);
@@ -116,7 +119,8 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
       }
       throw error;
     } finally {
-      clearTimeout(timer);
+      timer.clear();
+      context.signal.removeEventListener('abort', onParentAbort);
     }
   }
 

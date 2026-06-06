@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { ConcurrencyModule } from './concurrency/concurrency.module.js';
 import { ResponseValidationInterceptor } from './validation/response-validation.interceptor.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { AppController } from './app.controller.js';
@@ -33,6 +34,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
         },
       },
     }),
+    ConcurrencyModule,
     DatabaseModule,
     HealthModule,
     ConversationsModule,

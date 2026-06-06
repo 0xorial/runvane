@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as net from 'net';
 import { randomBytes } from 'node:crypto';
+import { scheduleTimeout } from '../../../concurrency/schedule-timeout.js';
 import type { SerialToolRules } from './rules.js';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'logging_in' | 'ready';
@@ -155,19 +156,19 @@ class SerialConnection {
     // prints nothing until prodded — send a newline to elicit a fresh prompt.
     this.send('\n');
 
-    const timer = setTimeout(() => {
+    const timer = scheduleTimeout('serial:login-timeout', timeoutMs, () => {
       if (!settled) {
         settled = true;
         reject(new Error('serial_terminal: timed out waiting for shell prompt during login'));
       }
-    }, timeoutMs);
+    });
 
     const poll = () => {
       if (settled) return;
       const buf = this.buffer;
 
       if (promptRegex.test(buf)) {
-        clearTimeout(timer);
+        timer.clear();
         settled = true;
         this.buffer = '';
         this.state = 'ready';
@@ -178,17 +179,17 @@ class SerialConnection {
         loginSent = true;
         this.buffer = '';
         this.send(login_username + '\n');
-        setTimeout(poll, 50);
+        scheduleTimeout('serial:login-poll', 50, poll);
         return;
       }
       if (!passwordSent && login_password && passwordRegex.test(buf)) {
         passwordSent = true;
         this.buffer = '';
         this.send(login_password + '\n', false); // never mirror the password
-        setTimeout(poll, 50);
+        scheduleTimeout('serial:login-poll', 50, poll);
         return;
       }
-      setTimeout(poll, 50);
+      scheduleTimeout('serial:login-poll', 50, poll);
     };
 
     poll();
@@ -245,12 +246,12 @@ class SerialConnection {
       const finish = (fn: () => void) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
+        timer.clear();
         socket.removeListener('close', onClose);
         fn();
       };
 
-      const timer = setTimeout(() => {
+      const timer = scheduleTimeout('serial:exec-timeout', timeoutMs, () => {
         // Best-effort: interrupt whatever is still running so the next
         // command does not execute inside a wedged program.
         try {
@@ -259,7 +260,7 @@ class SerialConnection {
           /* ignore */
         }
         finish(() => reject(new Error(`serial_terminal: command timed out after ${timeoutMs}ms`)));
-      }, timeoutMs);
+      });
 
       const onClose = () =>
         finish(() => reject(new Error('serial_terminal: socket closed while waiting for command output')));
@@ -270,14 +271,14 @@ class SerialConnection {
 
         const startMatch = startRe.exec(this.buffer);
         if (!startMatch) {
-          setTimeout(poll, 20);
+          scheduleTimeout('serial:exec-poll', 20, poll);
           return;
         }
         const outputStart = startMatch.index + startMatch[0].length;
 
         const exitMatch = exitRe.exec(this.buffer.slice(outputStart));
         if (!exitMatch) {
-          setTimeout(poll, 20);
+          scheduleTimeout('serial:exec-poll', 20, poll);
           return;
         }
 

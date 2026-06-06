@@ -1,4 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { getWorkScope } from '../../concurrency/work-context.js';
 import type { AgentEntity } from '../../agents/agent.entity.js';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import type { AgenticPlannerOutput, ChatEntry, LlmDecision } from '../../contracts/chatEntry.js';
@@ -99,8 +100,13 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const answerDelta = incrementalDelta(state.streamedAnswer, extracted);
     if (!answerDelta) return;
     state.streamedAnswer = extracted;
-    state.pending = state.pending
-      .then(() => this.streamAssistantDelta(state, ctx, answerDelta))
+    const scope = getWorkScope();
+    if (!scope) throw new Error('planner onLlmEvent requires an active WorkScope');
+    state.pending = scope
+      .run('planner:assistant-stream', async () => {
+        await state.pending.catch(() => undefined);
+        await this.streamAssistantDelta(state, ctx, answerDelta);
+      })
       .catch((error) => {
         this.logger.error(`assistant_stream pipe failed: ${error instanceof Error ? error.message : String(error)}`);
       });

@@ -17,6 +17,8 @@ import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
+import { runInWorkContextAsync } from '../concurrency/work-context.js';
+import { WorkMonitorService } from '../concurrency/work-monitor.service.js';
 import { LifecycleScope } from './lifecycle-scope.js';
 
 type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
@@ -38,6 +40,7 @@ export class ConversationProcessorService {
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
+    private readonly workMonitor: WorkMonitorService,
   ) {}
 
   async approveToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
@@ -47,13 +50,14 @@ export class ConversationProcessorService {
     const agentId = anchorUser.agentId;
     const llm = await this.resolveLlmRef({ agentId });
     const { scope, chain } = this.beginRun(args.conversationId);
-    await this.runTool.approveAndRun(
-      { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
-      scope,
-      chain,
-      llm,
-    );
-    scope.rootDone();
+    await this.inRunContext(scope, 'approve-tool', async () => {
+      await this.runTool.approveAndRun(
+        { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
+        scope,
+        chain,
+        llm,
+      );
+    });
   }
 
   private async resolveLlmRef(opts: {
@@ -77,6 +81,17 @@ export class ConversationProcessorService {
     return this.thoughtProcessing.getLlmRef();
   }
 
+  /** HTTP/sync prep runs inside the root ALS frame until `rootDone()`. */
+  private async inRunContext<T>(scope: LifecycleScope, label: string, fn: () => Promise<T>): Promise<T> {
+    return runInWorkContextAsync(scope, label, async () => {
+      try {
+        return await fn();
+      } finally {
+        scope.rootDone();
+      }
+    });
+  }
+
   private beginRun(conversationId: string): ConversationRun {
     this.activeExecutions.get(conversationId)?.abort();
     const scope = new LifecycleScope(
@@ -91,6 +106,7 @@ export class ConversationProcessorService {
           error instanceof Error ? error.stack : String(error),
         );
       },
+      { label: 'conversation-run', conversationId, monitor: this.workMonitor },
     );
     this.activeExecutions.set(conversationId, scope);
     const reparent = (entryId: string, newParentId: string) =>
@@ -112,10 +128,11 @@ export class ConversationProcessorService {
     llm?: LlmRef;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
-    const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
-    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
-    scope.rootDone();
-    return result;
+    return this.inRunContext(scope, 'reprocess-context', async () => {
+      const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
+      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      return result;
+    });
   }
 
   async startReprocessReason(args: {
@@ -124,11 +141,12 @@ export class ConversationProcessorService {
     editedResponse: string;
   }): Promise<{ plannerEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
-    const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
-    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
-    scope.rootDone();
-    return result;
+    return this.inRunContext(scope, 'reprocess-reason', async () => {
+      const llm = await this.thoughtProcessing.getLlmRef();
+      const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
+      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      return result;
+    });
   }
 
   async reprocessUserMessage(args: {
@@ -143,37 +161,38 @@ export class ConversationProcessorService {
     }
 
     const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.resolveLlmRef({
-      explicitProviderId: source.llm?.providerId,
-      explicitModel: source.llm?.model,
-      agentId: source.agentId,
-    });
-    const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
-      text: args.editedText,
-      agentId: source.agentId,
-      ...(source.llm ? { llm: source.llm } : {}),
-      ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
-      parentId: source.parentId,
-      ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
-    });
-    await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
-    chain.setTip(sibling.id);
-    const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
-    if (!siblingPayload || siblingPayload.type !== 'user-message') {
-      throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
-    }
-    this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
-    await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+    return this.inRunContext(scope, 'reprocess-user-message', async () => {
+      const llm = await this.resolveLlmRef({
+        explicitProviderId: source.llm?.providerId,
+        explicitModel: source.llm?.model,
+        agentId: source.agentId,
+      });
+      const sibling = await this.chatEntries.appendUserMessage(args.conversationId, {
+        text: args.editedText,
+        agentId: source.agentId,
+        ...(source.llm ? { llm: source.llm } : {}),
+        ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
+        parentId: source.parentId,
+        ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
+      });
+      await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
+      chain.setTip(sibling.id);
+      const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
+      if (!siblingPayload || siblingPayload.type !== 'user-message') {
+        throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
+      }
+      this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
+      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
 
-    this.thoughtProcessing.startThought({
-      provider: this.plannerProvider,
-      conversationId: args.conversationId,
-      scope,
-      chain,
-      llm,
+      this.thoughtProcessing.startThought({
+        provider: this.plannerProvider,
+        conversationId: args.conversationId,
+        scope,
+        chain,
+        llm,
+      });
+      return { userMessageEntryId: sibling.id };
     });
-    scope.rootDone();
-    return { userMessageEntryId: sibling.id };
   }
 
   async startSummarize(args: { conversationId: string; firstEntryToSummarize: string }): Promise<void> {
@@ -183,32 +202,30 @@ export class ConversationProcessorService {
     const range = resolveSummarizeRange(activeChain, args.firstEntryToSummarize);
 
     const { scope, chain } = this.beginRun(args.conversationId);
-    const llm = await this.thoughtProcessing.getLlmRef();
-    // Anchor the new branch at the parent of `firstEntryToSummarize` so the
-    // prepare / stream / checkpoint-summary entries become a sibling of the
-    // original tail. The original tail stays reachable via the branch
-    // selector on the resulting summary entry.
-    chain.setTip(range.fromParentId);
+    await this.inRunContext(scope, 'summarize', async () => {
+      const llm = await this.thoughtProcessing.getLlmRef();
+      chain.setTip(range.fromParentId);
 
-    this.thoughtProcessing.startThought({
-      provider: this.summarizeProvider,
-      conversationId: args.conversationId,
-      scope,
-      chain,
-      llm,
-      input: {
+      this.thoughtProcessing.startThought({
+        provider: this.summarizeProvider,
         conversationId: args.conversationId,
-        fromEntryId: range.fromEntryId,
-        toEntryId: range.toEntryId,
-        rangeEntries: range.rangeEntries,
-        rangeEntryCount: range.rangeEntryCount,
-      },
+        scope,
+        chain,
+        llm,
+        input: {
+          conversationId: args.conversationId,
+          fromEntryId: range.fromEntryId,
+          toEntryId: range.toEntryId,
+          rangeEntries: range.rangeEntries,
+          rangeEntryCount: range.rangeEntryCount,
+        },
+      });
     });
-    scope.rootDone();
   }
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
     const { scope, chain } = this.beginRun(conversationId);
+    await this.inRunContext(scope, 'process-message', async () => {
     const llm = await this.resolveLlmRef({
       explicitProviderId: body.llm?.providerId,
       explicitModel: body.llm?.model,
@@ -254,7 +271,7 @@ export class ConversationProcessorService {
       llm,
       titleLlm,
     });
-    scope.rootDone();
+    });
   }
 
   /**

@@ -4,7 +4,9 @@ import type { TaskInfo } from "../../../../../backend/src/contracts/task";
 import { cancelTask } from "../../../api/client";
 import { useTasks } from "../../../hooks/useTasks";
 import { notifyError } from "../../../utils/toast";
+import { BorderResizable } from "../../ui/BorderResizable";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover";
+import { WorkSuperDetails } from "./WorkSuperDetails";
 import { cn } from "@/lib/utils";
 
 type TaskStatusButtonProps = {
@@ -14,6 +16,7 @@ type TaskStatusButtonProps = {
 export function TaskStatusButton({ conversationId }: TaskStatusButtonProps) {
   const { tasks } = useTasks();
   const [open, setOpen] = useState(false);
+  const [superDetailsOpen, setSuperDetailsOpen] = useState(false);
 
   const { local, others } = useMemo(() => {
     const local: TaskInfo[] = [];
@@ -30,7 +33,13 @@ export function TaskStatusButton({ conversationId }: TaskStatusButtonProps) {
   const active = total > 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setSuperDetailsOpen(false);
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -54,8 +63,9 @@ export function TaskStatusButton({ conversationId }: TaskStatusButtonProps) {
       <PopoverContent
         align="end"
         sideOffset={6}
-        className="z-[1400] w-80 rounded-lg border border-border bg-popover p-0 shadow-xl"
+        className="z-[1400] w-auto max-w-none overflow-visible rounded-lg border border-border bg-popover p-0 shadow-xl"
       >
+        <BorderResizable defaultWidth={416} defaultHeight={320} minHeight={160}>
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-xs font-medium text-foreground">
             Tasks <span className="ml-1 text-muted-foreground">({total})</span>
@@ -77,7 +87,7 @@ export function TaskStatusButton({ conversationId }: TaskStatusButtonProps) {
         {total === 0 ? (
           <div className="px-3 py-4 text-xs text-muted-foreground">No tasks in flight.</div>
         ) : (
-          <div className="max-h-[60vh] overflow-y-auto">
+          <div className="min-h-0 shrink overflow-y-auto">
             {conversationId && local.length > 0 ? (
               <TaskGroup label="This conversation" tasks={local} />
             ) : null}
@@ -89,6 +99,12 @@ export function TaskStatusButton({ conversationId }: TaskStatusButtonProps) {
             ) : null}
           </div>
         )}
+        <WorkSuperDetails
+          open={superDetailsOpen}
+          onOpenChange={setSuperDetailsOpen}
+          conversationId={conversationId}
+        />
+        </BorderResizable>
       </PopoverContent>
     </Popover>
   );

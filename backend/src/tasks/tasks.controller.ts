@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, MessageEvent, NotFoundException, Param, Post, Sse } from '@nestjs/common';
-import { Observable, concat, from, interval, map, merge } from 'rxjs';
+import { Observable, concat, from, map, merge } from 'rxjs';
 import { TaskSseType, type TaskInfo, type TaskSseEvent } from '../contracts/task.js';
+import { sseKeepAlive$ } from '../sse/sse-keepalive.js';
 import { TaskRegistryService } from './task-registry.service.js';
 
 @Controller('api/tasks')
@@ -26,7 +27,7 @@ export class TasksController {
     const events$ = concat(from<TaskSseEvent[]>([snapshot]), this.registry.stream()).pipe(
       map((event): MessageEvent => ({ data: event })),
     );
-    const keepAlive$ = interval(15000).pipe(map((): MessageEvent => ({ type: 'ka', data: '{}' })));
+    const keepAlive$ = sseKeepAlive$();
     return merge(events$, keepAlive$);
   }
 }

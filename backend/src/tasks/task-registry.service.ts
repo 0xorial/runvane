@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
+import { getWorkScope, runInWorkContextAsync } from '../concurrency/work-context.js';
 import { TaskSseType, type TaskInfo, type TaskSseEvent } from '../contracts/task.js';
 
 /**
@@ -72,7 +73,12 @@ export class TaskRegistryService {
     };
     this.tasks.set(id, rec);
     this.bus.next({ type: TaskSseType.UPSERT, task: toInfo(rec) });
+    const parentScope = getWorkScope();
+    const taskLabel = `task:${spec.kind}:${spec.title}`;
     try {
+      if (parentScope) {
+        return await runInWorkContextAsync(parentScope, taskLabel, () => fn(controller.signal, id));
+      }
       return await fn(controller.signal, id);
     } finally {
       detach();
