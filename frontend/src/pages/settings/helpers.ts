@@ -32,16 +32,29 @@ export function normalizeSearchToken(value: unknown): string {
 export type DropdownItem = string | { value: string; label: string; className?: string };
 export type ModelGroup = { id: string; label: string; models: DropdownItem[] };
 
+function compareModelNames(a: unknown, b: unknown): number {
+  const left = String(a);
+  const right = String(b);
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export function buildModelGroups(providers: ProviderRow[] | null | undefined): ModelGroup[] {
-  return (providers || [])
-    .map((p) => ({
-      id: String(p.id || ""),
-      label: String(p.label || p.id || ""),
-      models: [...(p.models_verified ? p.models || [] : [])].sort((a, b) =>
-        String(a).localeCompare(String(b), undefined, { sensitivity: "base" }),
-      ),
-    }))
-    .filter((g) => g.id && g.models.length > 0);
+  if (!providers?.length) return [];
+  const groups: ModelGroup[] = [];
+  for (const p of providers) {
+    if (!p.models_verified) continue;
+    const id = String(p.id || "");
+    if (!id) continue;
+    const source = p.models;
+    if (!source?.length) continue;
+    const models = source.length === 1 ? source : source.slice().sort(compareModelNames);
+    groups.push({
+      id,
+      label: String(p.label || id),
+      models,
+    });
+  }
+  return groups;
 }
 
 export function filterProviders(providers: ProviderRow[] | null | undefined, search: string): ProviderRow[] {

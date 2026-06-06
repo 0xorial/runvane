@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { AgentListItemResponse } from "../../../backend/src/contracts/agents";
 import type { LlmProviderSettingsDocument } from "../../../backend/src/contracts/settings";
@@ -300,6 +300,15 @@ export function SettingsPage() {
     }
   }, [activeSection, presetEditId]);
 
+  const modelGroups = useMemo(
+    () => (settings ? buildModelGroups(settings.providers) : []),
+    [settings],
+  );
+  const providerCards = useMemo(
+    () => filterProviders(settings?.providers, search),
+    [settings, search],
+  );
+
   if (loadingSettings) {
     return (
       <section className="flex flex-col gap-3 p-4">
@@ -314,9 +323,6 @@ export function SettingsPage() {
   if (!settings) {
     return <section className="p-4">Failed to load settings.</section>;
   }
-
-  const providerCards = filterProviders(settings.providers || [], search);
-  const modelGroups = buildModelGroups(settings.providers || []);
 
   return (
     <section className="min-h-0 w-full flex-1 overflow-auto">
