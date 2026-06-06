@@ -30,7 +30,7 @@ export type ConversationSession = {
   leafId: string | null;
 };
 
-async function loadConversationSession(conversationId: string): Promise<ConversationSession> {
+export async function loadConversationSession(conversationId: string): Promise<ConversationSession> {
   const cid = conversationId.trim();
   const [entries, conversation] = await Promise.all([
     getConversationMessages(cid, { all: true }),
@@ -47,7 +47,7 @@ export function fetchConversationSession(conversationId: string): Promise<Conver
   return queryClient.fetchQuery({
     queryKey: queryKeys.conversationSession(cid),
     queryFn: () => loadConversationSession(cid),
-    staleTime: 60_000,
+    staleTime: 0,
   });
 }
 

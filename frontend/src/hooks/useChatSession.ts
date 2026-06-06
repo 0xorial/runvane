@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setConversationDefaultViewLeaf } from "../api/client";
-import { queryClient } from "@/lib/queryClient";
-import { fetchConversationSession, refetchConversationSession } from "./queries/conversations";
-import { queryKeys } from "./queries/keys";
-import { subscribeGlobalLive, isGlobalSseOpen } from "../protocol/runLiveClient";
+import { buildActivePath } from "@/lib/chatTree";
+import { loadConversationSession } from "./queries/conversations";
+import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
-import { SseType } from "../protocol/sseTypes";
+import { SseType, type SseEvent } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import { createObservableItemCollection, type ObservableItem } from "../utils/observableCollection";
 
 export type OptimisticUserMessage = {
-  /** Ephemeral row id used in the local store until the server entry arrives. */
   rowId: string;
-  /** Correlation token to send with the POST so SSE can re-key this row. */
   clientRequestId: string;
+  parentId: string | null;
 };
 
 type AppendOptimisticUserMessageInput = {
@@ -46,190 +44,155 @@ function buildOptimisticUserEntry(
   };
 }
 
+function applySseToStore(
+  store: ReturnType<typeof createObservableItemCollection<ChatEntry>>,
+  pending: Map<string, string>,
+  ev: SseEvent,
+): void {
+  switch (ev.type) {
+    case SseType.CONVERSATION_CREATED:
+    case SseType.CONVERSATION_UPDATED:
+    case SseType.TOOL_INVOCATION_START:
+    case SseType.TOOL_INVOCATION_END:
+      return;
+    case SseType.USER_MESSAGE: {
+      const optimisticId = ev.clientRequestId ? pending.get(ev.clientRequestId) : undefined;
+      if (optimisticId && ev.clientRequestId) {
+        pending.delete(ev.clientRequestId);
+        if (!store.replaceById(optimisticId, ev.entry)) store.append(ev.entry);
+        return;
+      }
+      store.append(ev.entry);
+      return;
+    }
+    case SseType.CHAT_ENTRY_UPSERT:
+      if (store.getById(ev.entry.id)) store.replaceById(ev.entry.id, ev.entry);
+      else store.append(ev.entry);
+      return;
+    case SseType.CHAT_ENTRY_DELTA: {
+      const row$ = store.getById(ev.chatEntryId);
+      if (!row$) return;
+      row$.mutate((current) => {
+        const row = current as Record<string, unknown>;
+        const prev = typeof row[ev.field] === "string" ? (row[ev.field] as string) : "";
+        row[ev.field] = `${prev}${ev.delta}`;
+      });
+      return;
+    }
+    default:
+      assertNever(ev);
+  }
+}
+
 export function useChatSession(conversationId: string | null | undefined) {
+  const boundCid = conversationId ? String(conversationId) : null;
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
-  const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
+  const [viewAnchorId, setViewAnchorId] = useState<string | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
   const pendingByClientRequestIdRef = useRef<Map<string, string>>(new Map());
-
-  const applySession = useCallback((entries: ChatEntry[], leafId: string | null) => {
-    storeRef.current.replace(entries);
-    setActiveLeafId(leafId);
-  }, []);
-
-  useEffect(() => {
-    storeRef.current.replace(defaultChatEntries);
-    setActiveLeafId(null);
-    pendingByClientRequestIdRef.current.clear();
-    if (!conversationId) return;
-
-    const cid = String(conversationId);
-    let cancelled = false;
-    void (async () => {
-      try {
-        const session = await fetchConversationSession(cid);
-        if (cancelled) return;
-        applySession(mapApiMessagesToChatEntries(session.entries), session.leafId);
-      } catch (err) {
-        console.error("[useChatSession] Failed to load conversation messages:", err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [conversationId, applySession]);
-
-  const reloadFromServer = useCallback(async () => {
-    if (!conversationId) return;
-    const cid = String(conversationId);
-    const session = await refetchConversationSession(cid);
-    const pendingOptimistic = [...pendingByClientRequestIdRef.current.values()]
-      .map((rowId) => storeRef.current.getById(rowId)?.get())
-      .filter((entry): entry is UserMessageEntry => entry?.type === "user-message");
-    applySession(
-      [...mapApiMessagesToChatEntries(session.entries), ...pendingOptimistic],
-      pendingOptimistic.at(-1)?.id ?? session.leafId,
-    );
-  }, [conversationId, applySession]);
-
-  const reconcileOptimisticUserMessage = useCallback(
-    (clientRequestId: string | undefined, incoming: UserMessageEntry): boolean => {
-      if (!clientRequestId) return false;
-      const optimisticRowId = pendingByClientRequestIdRef.current.get(clientRequestId);
-      if (!optimisticRowId) return false;
-      pendingByClientRequestIdRef.current.delete(clientRequestId);
-      const reKeyed = storeRef.current.replaceById(optimisticRowId, incoming);
-      if (!reKeyed) {
-        storeRef.current.append(incoming);
-      }
-      setActiveLeafId((prev) => (prev === optimisticRowId ? incoming.id : prev ?? incoming.id));
-      return true;
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!conversationId) return;
-    const cid = String(conversationId);
-    let sseWasOpen = isGlobalSseOpen();
-    const unsubscribeLive = subscribeGlobalLive({
-      onPollTick: async () => {
-        if (isGlobalSseOpen()) {
-          sseWasOpen = true;
-          return false;
-        }
-        // Fresh HTTP bootstrap is authoritative until SSE has connected at least once.
-        if (!sseWasOpen) return false;
-        const sessionState = queryClient.getQueryState(queryKeys.conversationSession(cid));
-        if (sessionState?.fetchStatus === "fetching" || sessionState?.status !== "success") {
-          return false;
-        }
-        try {
-          await reloadFromServer();
-        } catch (err) {
-          console.error("[useChatSession] SSE fallback reload failed:", err);
-        }
-        return false;
-      },
-      onSseEvent: (ev) => {
-        if (ev.conversationId !== cid) return;
-        if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
-          return;
-        }
-        const store = storeRef.current;
-        if (ev.type === SseType.USER_MESSAGE) {
-          if (reconcileOptimisticUserMessage(ev.clientRequestId, ev.entry)) return;
-          if (store.append(ev.entry)) setActiveLeafId(ev.entry.id);
-          return;
-        }
-        if (ev.type === SseType.CHAT_ENTRY_UPSERT) {
-          const row$ = store.getById(ev.entry.id);
-          if (row$) {
-            row$.mutate((next) => {
-              const target = next as Record<string, unknown>;
-              for (const key of Object.keys(target)) delete target[key];
-              Object.assign(target, ev.entry as Record<string, unknown>);
-            });
-            return;
-          }
-          if (store.append(ev.entry)) setActiveLeafId(ev.entry.id);
-          return;
-        }
-        if (ev.type === SseType.CHAT_ENTRY_DELTA) {
-          const row$ = store.getById(ev.chatEntryId);
-          if (!row$) return;
-          row$.mutate((next) => {
-            const target = next as Record<string, unknown>;
-            const current = typeof target[ev.field] === "string" ? (target[ev.field] as string) : "";
-            target[ev.field] = `${current}${ev.delta}`;
-          });
-          return;
-        }
-        if (ev.type === SseType.TOOL_INVOCATION_START || ev.type === SseType.TOOL_INVOCATION_END) {
-          return;
-        }
-        assertNever(ev);
-      },
-    });
-
-    return unsubscribeLive;
-  }, [conversationId, reconcileOptimisticUserMessage, reloadFromServer]);
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
   const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);
   const rowsVersion = useSyncExternalStore(subscribeRows, getRowsVersion, getRowsVersion);
 
-  const allEntries = useMemo(() => storeRef.current.getRows().slice(), [rowsVersion]);
-
-  const activePathEntries = useMemo<ObservableItem<ChatEntry>[]>(() => {
+  const activePathEntries = useMemo((): ObservableItem<ChatEntry>[] => {
     void rowsVersion;
-    if (!activeLeafId) return [];
-    const path: ObservableItem<ChatEntry>[] = [];
-    const seen = new Set<string>();
-    let cursorId: string | null = activeLeafId;
-    while (cursorId && !seen.has(cursorId)) {
-      seen.add(cursorId);
-      const node = storeRef.current.getById(cursorId);
-      if (!node) break;
-      path.push(node);
-      cursorId = node.get().parentId;
+    const path = buildActivePath(
+      storeRef.current.getRows().map((row$) => row$.get()),
+      viewAnchorId,
+    );
+    return path
+      .map((entry) => storeRef.current.getById(entry.id))
+      .filter((row$): row$ is ObservableItem<ChatEntry> => row$ != null);
+  }, [viewAnchorId, rowsVersion]);
+
+  const allEntries = useMemo(() => {
+    void rowsVersion;
+    return storeRef.current.getRows().slice();
+  }, [rowsVersion]);
+
+  useEffect(() => {
+    if (!boundCid) {
+      storeRef.current.replace(defaultChatEntries);
+      setViewAnchorId(null);
+      pendingByClientRequestIdRef.current.clear();
+      setIsSessionLoading(false);
+      return;
     }
-    return path.reverse();
-  }, [activeLeafId, rowsVersion]);
+
+    const cid = boundCid;
+    const store = storeRef.current;
+    const pending = pendingByClientRequestIdRef.current;
+
+    store.replace(defaultChatEntries);
+    setViewAnchorId(null);
+    pending.clear();
+    setIsSessionLoading(true);
+
+    let unmounted = false;
+    let unsubscribeLive: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        const session = await loadConversationSession(cid);
+        if (unmounted) return;
+        store.replace(mapApiMessagesToChatEntries(session.entries));
+        setViewAnchorId(session.leafId);
+        unsubscribeLive = subscribeGlobalLive({
+          onSseEvent: (ev) => {
+            if (ev.conversationId !== cid) return;
+            applySseToStore(store, pending, ev);
+          },
+        });
+      } catch (err) {
+        console.error("[useChatSession] Failed to load conversation messages:", err);
+      } finally {
+        if (!unmounted) setIsSessionLoading(false);
+      }
+    })();
+
+    return () => {
+      unmounted = true;
+      unsubscribeLive?.();
+    };
+  }, [boundCid]);
 
   const setActiveLeaf = useCallback(
     async (entryId: string) => {
-      if (!conversationId) return;
-      setActiveLeafId(entryId);
-      await setConversationDefaultViewLeaf(String(conversationId), entryId);
+      if (!boundCid) return;
+      setViewAnchorId(entryId);
+      await setConversationDefaultViewLeaf(boundCid, entryId);
     },
-    [conversationId],
+    [boundCid],
   );
 
   const appendOptimisticUserMessage = useCallback(
     (input: AppendOptimisticUserMessageInput): OptimisticUserMessage | null => {
       const cid = String(input.conversationId || "").trim();
-      if (!cid) return null;
+      if (!boundCid || cid !== boundCid) return null;
       const text = String(input.text || "").trim();
       if (!text) return null;
       const agentId = String(input.agentId || "").trim();
-      if (!agentId) {
-        throw new Error("appendOptimisticUserMessage requires agentId");
-      }
+      if (!agentId) throw new Error("appendOptimisticUserMessage requires agentId");
+
+      const path = buildActivePath(
+        storeRef.current.getRows().map((row$) => row$.get()),
+        viewAnchorId,
+      );
+      const parentId = path.length > 0 ? path[path.length - 1].id : null;
       const clientRequestId = crypto.randomUUID();
       const rowId = `optimistic-user-${clientRequestId}`;
-      const row = buildOptimisticUserEntry({ ...input, text, agentId }, rowId, activeLeafId);
       pendingByClientRequestIdRef.current.set(clientRequestId, rowId);
-      storeRef.current.append(row);
-      setActiveLeafId(rowId);
-      return { rowId, clientRequestId };
+      storeRef.current.append(buildOptimisticUserEntry({ ...input, text, agentId }, rowId, parentId));
+      return { rowId, clientRequestId, parentId };
     },
-    [activeLeafId],
+    [boundCid, viewAnchorId],
   );
 
   return {
     activePathEntries,
     allEntries,
-    activeLeafId,
+    isSessionLoading,
     setActiveLeaf,
     appendOptimisticUserMessage,
   };

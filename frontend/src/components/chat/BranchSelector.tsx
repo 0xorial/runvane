@@ -1,34 +1,10 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { ChatEntry } from "@/protocol/chatEntry";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
+import { buildChildrenByParent, byConversationIndexAsc, deepestDescendantId } from "@/lib/chatTree";
 import { notifyError } from "@/utils/toast";
 
-function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
-  const ai = typeof a.conversationIndex === "number" ? a.conversationIndex : 0;
-  const bi = typeof b.conversationIndex === "number" ? b.conversationIndex : 0;
-  if (ai !== bi) return ai - bi;
-  return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
-}
-
-export function buildChildrenByParent(entries: ChatEntry[]): Map<string | null, ChatEntry[]> {
-  const map = new Map<string | null, ChatEntry[]>();
-  for (const row of entries) {
-    const list = map.get(row.parentId) ?? [];
-    list.push(row);
-    map.set(row.parentId, list);
-  }
-  return map;
-}
-
-export function deepestDescendantId(start: string, childrenByParent: Map<string | null, ChatEntry[]>): string {
-  let cursor = start;
-  for (;;) {
-    const children = childrenByParent.get(cursor) ?? [];
-    if (children.length === 0) return cursor;
-    cursor = children[children.length - 1].id;
-  }
-}
+export { buildChildrenByParent, deepestDescendantId } from "@/lib/chatTree";
 
 export function useSiblingBranches(entryId: string | null | undefined) {
   const { allEntries, setActiveLeaf } = useChatSessionContext();

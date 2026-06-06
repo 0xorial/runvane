@@ -135,10 +135,13 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         agentId,
       });
 
-      navigate({
-        pathname: `/chat/${encodeURIComponent(id)}`,
-        search: location.search,
-      });
+      navigate(
+        {
+          pathname: `/chat/${encodeURIComponent(id)}`,
+          search: location.search,
+        },
+        { replace: true },
+      );
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     } finally {

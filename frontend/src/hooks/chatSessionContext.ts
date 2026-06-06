@@ -8,7 +8,6 @@ export type ChatSessionContextValue = {
   conversationId: string | null;
   activePathEntries: ObservableItem<ChatEntry>[];
   allEntries: ObservableItem<ChatEntry>[];
-  activeLeafId: string | null;
   setActiveLeaf: (entryId: string) => Promise<void>;
   /** Open chip per thought slot. Slot key = entry id stable across reasoning/context branches (e.g. prepare.parentId). */
   expandedStageBySlotKey: ReadonlyMap<string, ThoughtStage>;

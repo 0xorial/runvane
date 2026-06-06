@@ -12,6 +12,7 @@ import { ChatComposer } from "../components/chat/ChatComposer";
 import { type SelectedAttachment } from "../components/chat/AttachmentChips";
 import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
 import { AgentCardsEmptyState } from "../components/chat/AgentCardsEmptyState";
+import { Spinner } from "../components/ui/Spinner";
 import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
 import { ChatSessionContext, useThoughtExpandedStageState } from "../hooks/chatSessionContext";
@@ -59,20 +60,24 @@ export function ChatPage({
     setAgentSelection(selection);
   }, []);
 
-  const { activePathEntries: chatEntries, allEntries, activeLeafId, setActiveLeaf, appendOptimisticUserMessage } =
-    useChatSession(conversationId);
+  const {
+    activePathEntries: chatEntries,
+    allEntries,
+    isSessionLoading,
+    setActiveLeaf,
+    appendOptimisticUserMessage,
+  } = useChatSession(conversationId);
   const { expandedStageBySlotKey, setSlotExpandedStage } = useThoughtExpandedStageState();
   const chatSessionContextValue = useMemo(
     () => ({
       conversationId,
       activePathEntries: chatEntries,
       allEntries,
-      activeLeafId,
       setActiveLeaf,
       expandedStageBySlotKey,
       setSlotExpandedStage,
     }),
-    [conversationId, chatEntries, allEntries, activeLeafId, setActiveLeaf, expandedStageBySlotKey, setSlotExpandedStage],
+    [conversationId, chatEntries, allEntries, setActiveLeaf, expandedStageBySlotKey, setSlotExpandedStage],
   );
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);
@@ -177,12 +182,17 @@ export function ChatPage({
                   </div>
                 );
               })
-            : <AgentCardsEmptyState selectedAgentId={agentSelection.agentId} />}
+            : conversationId && isSessionLoading && visibleEntries.length === 0
+              ? (
+                <div className="flex min-h-[12rem] flex-1 items-center justify-center p-8 text-muted-foreground">
+                  <Spinner size={16} />
+                </div>
+              )
+              : <AgentCardsEmptyState selectedAgentId={agentSelection.agentId} />}
         </AnchorTopScrollArea>
       </main>
       <ChatComposer
         conversationId={conversationId}
-        activeLeafId={activeLeafId}
         composerTextareaRef={composerTextareaRef}
         input={input}
         setInput={setInput}

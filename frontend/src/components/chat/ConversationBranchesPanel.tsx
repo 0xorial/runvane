@@ -95,7 +95,8 @@ function deepestDescendantId(entryId: string, childrenByParent: Map<string | nul
 }
 
 export function ConversationBranchesPanel({ onAnchorEntrySelected }: ConversationBranchesPanelProps) {
-  const { conversationId, allEntries, activePathEntries, activeLeafId, setActiveLeaf } = useChatSessionContext();
+  const { conversationId, allEntries, activePathEntries, setActiveLeaf } = useChatSessionContext();
+  const pathTipId = activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null;
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
 
   const activePathIds = useMemo(
@@ -166,7 +167,7 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
             branchDepth={0}
             childrenByParent={childrenByParent}
             activePathIds={activePathIds}
-            activeLeafId={activeLeafId}
+            pathTipId={pathTipId}
             switchingToEntryId={switchingToEntryId}
             onSelectEntry={handleSelectEntry}
           />
@@ -181,7 +182,7 @@ function BranchNode({
   branchDepth,
   childrenByParent,
   activePathIds,
-  activeLeafId,
+  pathTipId,
   switchingToEntryId,
   onSelectEntry,
 }: {
@@ -189,7 +190,7 @@ function BranchNode({
   branchDepth: number;
   childrenByParent: Map<string | null, ObservableItem<ChatEntry>[]>;
   activePathIds: Set<string>;
-  activeLeafId: string | null;
+  pathTipId: string | null;
   switchingToEntryId: string | null;
   onSelectEntry: (entryId: string) => void;
 }) {
@@ -244,7 +245,7 @@ function BranchNode({
           >
             <span className={cn(isActive ? "text-primary" : "text-muted-foreground")}>{entryIcon(entry)}</span>
             <span className="min-w-0 flex-1 truncate">{entryPreview(entry)}</span>
-            {isLeaf && activeLeafId === entry.id ? (
+            {isLeaf && pathTipId === entry.id ? (
               <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wider text-primary">head</span>
             ) : null}
           </button>
@@ -258,7 +259,7 @@ function BranchNode({
               branchDepth={nextBranchDepth}
               childrenByParent={childrenByParent}
               activePathIds={activePathIds}
-              activeLeafId={activeLeafId}
+              pathTipId={pathTipId}
               switchingToEntryId={switchingToEntryId}
               onSelectEntry={onSelectEntry}
             />

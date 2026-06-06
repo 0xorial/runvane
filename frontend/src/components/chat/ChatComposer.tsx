@@ -11,7 +11,6 @@ import { defaultAttachmentMode, sendMessageToConversation } from "./sendMessage"
 
 type ChatComposerProps = {
   conversationId: string | null;
-  activeLeafId: string | null;
   composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
   input: string;
   setInput: (value: string) => void;
@@ -28,13 +27,12 @@ type ChatComposerProps = {
     modelPresetId: number | null;
     llm?: LlmRef;
     attachments: ChatAttachment[];
-  }) => { rowId: string; clientRequestId: string } | null;
+  }) => { rowId: string; clientRequestId: string; parentId: string | null } | null;
   onSent: (optimisticRowId: string) => void;
 };
 
 export function ChatComposer({
   conversationId,
-  activeLeafId,
   composerTextareaRef,
   input,
   setInput,
@@ -103,8 +101,6 @@ export function ChatComposer({
             const uploaded = await uploadFile(file);
             uploadedAttachments.push({ ...uploaded.attachment, mode });
           }
-          let cid = conversationId;
-          const parentLeafIdAtSend = cid ? activeLeafId : null;
           const optimisticInput = {
             text,
             agentId: agentSelection.agentId,
@@ -112,11 +108,21 @@ export function ChatComposer({
             ...(agentSelection.llm ? { llm: agentSelection.llm } : {}),
             attachments: uploadedAttachments,
           };
-          let optimistic: { rowId: string; clientRequestId: string } | null;
-          if (!cid) {
+          if (!conversationId) {
             const created = await createConversation();
-            cid = created.id;
-            optimistic = appendOptimisticUserMessage({ conversationId: cid, ...optimisticInput });
+            const cid = created.id;
+            setInput("");
+            setSelectedFiles([]);
+            const result = await sendMessageToConversation(
+              cid,
+              text,
+              agentSelection.agentId,
+              agentSelection.llm,
+              agentSelection.modelPresetId,
+              uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
+              null,
+              crypto.randomUUID(),
+            );
             const q = searchParams.toString();
             navigate(
               {
@@ -125,21 +131,22 @@ export function ChatComposer({
               },
               { replace: true },
             );
-          } else {
-            optimistic = appendOptimisticUserMessage({ conversationId: cid, ...optimisticInput });
+            return result;
           }
+
+          const optimistic = appendOptimisticUserMessage({ conversationId, ...optimisticInput });
           if (!optimistic) return { ok: false };
           onSent(optimistic.rowId);
           setInput("");
           setSelectedFiles([]);
           return sendMessageToConversation(
-            cid,
+            conversationId,
             text,
             agentSelection.agentId,
             agentSelection.llm,
             agentSelection.modelPresetId,
             uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
-            parentLeafIdAtSend,
+            optimistic.parentId,
             optimistic.clientRequestId,
           );
         })();
