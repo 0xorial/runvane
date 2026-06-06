@@ -1,5 +1,11 @@
 import type { LlmProvider, ProviderSettingsDict } from '../provider.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../types.js';
+import {
+  abortableDelay,
+  isSteerProbeMessage,
+  parseStubDelayMs,
+  steerProbeReply,
+} from './stubLlm.helpers.js';
 
 function requestText(request: LlmRequest): string {
   return request.messages
@@ -11,6 +17,7 @@ function requestText(request: LlmRequest): string {
 
 function pickStubReply(request: LlmRequest): string {
   const blob = requestText(request);
+  if (isSteerProbeMessage(blob)) return steerProbeReply();
   if (/title this conversation/i.test(blob)) return 'Time Inquiry';
 
   if (request.tools?.length) {
@@ -54,6 +61,10 @@ export class StubLlmProvider implements LlmProvider {
     onEvent: (event: LlmStreamEvent) => void,
     signal?: AbortSignal,
   ): Promise<LlmCompletion> {
+    signal?.throwIfAborted();
+    const blob = requestText(request);
+    const delayMs = parseStubDelayMs(blob);
+    if (delayMs !== null) await abortableDelay(delayMs, signal);
     signal?.throwIfAborted();
     const text = pickStubReply(request);
     onEvent({ type: 'text_delta', delta: text });

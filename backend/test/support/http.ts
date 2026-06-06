@@ -54,10 +54,25 @@ export async function createConversation(baseUrl: string): Promise<string> {
 }
 
 export async function postProbeMessage(baseUrl: string, conversationId: string, agentId: string): Promise<void> {
+  await postConversationMessage(baseUrl, conversationId, agentId, PROBE_MESSAGE);
+}
+
+export async function postConversationMessage(
+  baseUrl: string,
+  conversationId: string,
+  agentId: string,
+  message: string,
+  options?: { steer?: boolean; parentId?: string | null },
+): Promise<void> {
   const res = await fetch(`${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message: PROBE_MESSAGE, agentId }),
+    body: JSON.stringify({
+      message,
+      agentId,
+      ...(options?.steer ? { steer: true } : {}),
+      ...(options?.parentId !== undefined ? { parentId: options.parentId } : {}),
+    }),
   });
   if (!res.ok) {
     const detail = await res.text();

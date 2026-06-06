@@ -230,8 +230,12 @@ export class ConversationProcessorService {
     }
   }
 
+  isProcessing(conversationId: string): boolean {
+    return this.activeExecutions.has(conversationId);
+  }
+
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
-    return this.withMessagePostLock(conversationId, async () => {
+    return this.withMessagePostLock(conversationId, Boolean(body.steer), async () => {
       const { scope, chain } = await this.beginRun(conversationId);
       try {
         const llm = await this.resolveLlmRef({
@@ -285,14 +289,22 @@ export class ConversationProcessorService {
     });
   }
 
-  private async withMessagePostLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
-    const prev = this.messagePostLocks.get(conversationId) ?? Promise.resolve();
+  private async withMessagePostLock<T>(
+    conversationId: string,
+    steer: boolean,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (steer) {
+      await this.abortActiveAndWait(conversationId);
+    } else {
+      const prev = this.messagePostLocks.get(conversationId);
+      if (prev) await prev.catch(() => undefined);
+    }
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     this.messagePostLocks.set(conversationId, gate);
-    await prev.catch(() => undefined);
     try {
       return await fn();
     } finally {
@@ -301,6 +313,13 @@ export class ConversationProcessorService {
         this.messagePostLocks.delete(conversationId);
       }
     }
+  }
+
+  private async abortActiveAndWait(conversationId: string): Promise<void> {
+    const scope = this.activeExecutions.get(conversationId);
+    if (!scope) return;
+    scope.abort();
+    await scope.whenFinished();
   }
 
   /**

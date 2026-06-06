@@ -127,6 +127,8 @@ export type PostConversationMessageInput = {
   parentId?: string | null;
   /** Echoed back on the resulting USER_MESSAGE SSE event for optimistic reconciliation. */
   clientRequestId?: string;
+  /** Abort in-flight processing and deliver this message immediately. */
+  steer?: boolean;
 };
 
 export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {

@@ -74,6 +74,8 @@ export const PostConversationMessageRequestSchema = z.object({
   attachments: z.array(PostMessageAttachmentSchema).optional(),
   parentId: z.string().min(1).nullable().optional(),
   clientRequestId: z.string().min(1).optional(),
+  /** Abort in-flight processing and start this message immediately. */
+  steer: z.boolean().optional(),
 });
 export type PostConversationMessageRequest = z.infer<typeof PostConversationMessageRequestSchema>;
 

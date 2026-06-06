@@ -29,6 +29,7 @@ type ChatComposerProps = {
     attachments: ChatAttachment[];
   }) => { rowId: string; clientRequestId: string; parentId: string | null } | null;
   onSent: (optimisticRowId: string) => void;
+  steerOnSend?: boolean;
 };
 
 export function ChatComposer({
@@ -44,6 +45,7 @@ export function ChatComposer({
   canSend,
   appendOptimisticUserMessage,
   onSent,
+  steerOnSend = false,
 }: ChatComposerProps) {
   const sendButtonRef = useRef<AsyncButtonHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +150,7 @@ export function ChatComposer({
             uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
             optimistic.parentId,
             optimistic.clientRequestId,
+            steerOnSend,
           );
         })();
       }}

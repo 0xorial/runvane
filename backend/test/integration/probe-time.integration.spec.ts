@@ -1,5 +1,5 @@
 import { SseType, type SseEvent } from '../../src/contracts/sse';
-import { retainSharedTestApp, shutdownSharedTestApp } from '../support/shared-app';
+import { retainSharedTestApp } from '../support/shared-app';
 import {
   assertProbeParentChain,
   assertProbeShape,
@@ -28,11 +28,6 @@ describeLive('probe time (integration)', () => {
     baseUrl = testApp.baseUrl;
     agentId = await getDefaultAgentId(baseUrl);
   }, 30_000);
-
-  // Last integration file alphabetically — shuts down the shared Nest app once.
-  afterAll(async () => {
-    await shutdownSharedTestApp();
-  });
 
   it('completes probe message with expected entry shape', async () => {
     const conversationId = await createConversation(baseUrl);

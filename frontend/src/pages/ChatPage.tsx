@@ -18,6 +18,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../compone
 import { ChatSessionContext, useThoughtExpandedStageState } from "../hooks/chatSessionContext";
 import { useChatSession } from "../hooks/useChatSession";
 import { useFocusOnFirstFrame } from "../hooks/useFocusOnFirstFrame";
+import { useTasks } from "../hooks/useTasks";
 import { isThoughtStreamEntry } from "../protocol/chatEntry";
 
 type ChatPageProps = {
@@ -69,6 +70,15 @@ export function ChatPage({
     switchToBranch,
     appendOptimisticUserMessage,
   } = useChatSession(conversationId);
+  const { tasks } = useTasks();
+  const steerOnSend = useMemo(
+    () =>
+      Boolean(
+        conversationId &&
+          tasks.some((task) => task.conversationId === conversationId && task.status === "running"),
+      ),
+    [conversationId, tasks],
+  );
   const { expandedStageBySlotKey, setSlotExpandedStage, resetExpandedStages } = useThoughtExpandedStageState();
   const chatSessionContextValue = useMemo(
     () => ({
@@ -227,6 +237,7 @@ export function ChatPage({
         canSend={canSend}
         appendOptimisticUserMessage={appendOptimisticUserMessage}
         onSent={handleSent}
+        steerOnSend={steerOnSend}
       />
     </div>
   );
