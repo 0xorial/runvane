@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setConversationDefaultViewLeaf } from "../api/client";
-import {
-  buildActivePath,
-  rememberBranchTips,
-  resolveBranchLeaf,
-  viewAnchorAfterAppend,
-  type BranchTipMemory,
-} from "@/lib/chatTree";
+import { branchLineTipId, buildActivePath, viewAnchorAfterAppend } from "@/lib/chatTree";
 import { loadConversationSession } from "./queries/conversations";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
@@ -95,31 +89,28 @@ function applySseToStore(
 export function useChatSession(conversationId: string | null | undefined) {
   const boundCid = conversationId ? String(conversationId) : null;
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
-  const [viewAnchorId, setViewAnchorId] = useState<string | null>(null);
-  const viewAnchorIdRef = useRef<string | null>(null);
+  const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
+  const activeLeafIdRef = useRef<string | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
   const pendingByClientRequestIdRef = useRef<Map<string, string>>(new Map());
-  const branchTipMemoryRef = useRef<BranchTipMemory>(new Map());
 
-  const applyViewLeaf = useCallback((leafId: string) => {
-    viewAnchorIdRef.current = leafId;
-    setViewAnchorId(leafId);
-    const entries = storeRef.current.getRows().map((row$) => row$.get());
-    rememberBranchTips(entries, leafId, branchTipMemoryRef.current);
+  const applyActiveLeaf = useCallback((leafId: string) => {
+    activeLeafIdRef.current = leafId;
+    setActiveLeafId(leafId);
   }, []);
 
   const followNewEntry = useCallback(
     (entry: ChatEntry, replacedOptimisticId?: string) => {
-      if (replacedOptimisticId && viewAnchorIdRef.current === replacedOptimisticId) {
-        applyViewLeaf(entry.id);
+      if (replacedOptimisticId && activeLeafIdRef.current === replacedOptimisticId) {
+        applyActiveLeaf(entry.id);
         return;
       }
       const entries = storeRef.current.getRows().map((row$) => row$.get());
-      const next = viewAnchorAfterAppend(entries, viewAnchorIdRef.current, entry);
-      if (next === viewAnchorIdRef.current) return;
-      if (next) applyViewLeaf(next);
+      const next = viewAnchorAfterAppend(entries, activeLeafIdRef.current, entry);
+      if (next === activeLeafIdRef.current) return;
+      if (next) applyActiveLeaf(next);
     },
-    [applyViewLeaf],
+    [applyActiveLeaf],
   );
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
@@ -130,12 +121,12 @@ export function useChatSession(conversationId: string | null | undefined) {
     void rowsVersion;
     const path = buildActivePath(
       storeRef.current.getRows().map((row$) => row$.get()),
-      viewAnchorId,
+      activeLeafId,
     );
     return path
       .map((entry) => storeRef.current.getById(entry.id))
       .filter((row$): row$ is ObservableItem<ChatEntry> => row$ != null);
-  }, [viewAnchorId, rowsVersion]);
+  }, [activeLeafId, rowsVersion]);
 
   const allEntries = useMemo(() => {
     void rowsVersion;
@@ -145,10 +136,9 @@ export function useChatSession(conversationId: string | null | undefined) {
   useEffect(() => {
     if (!boundCid) {
       storeRef.current.replace(defaultChatEntries);
-      viewAnchorIdRef.current = null;
-      setViewAnchorId(null);
+      activeLeafIdRef.current = null;
+      setActiveLeafId(null);
       pendingByClientRequestIdRef.current.clear();
-      branchTipMemoryRef.current.clear();
       setIsSessionLoading(false);
       return;
     }
@@ -156,12 +146,9 @@ export function useChatSession(conversationId: string | null | undefined) {
     const cid = boundCid;
     const store = storeRef.current;
     const pending = pendingByClientRequestIdRef.current;
-    const branchTips = branchTipMemoryRef.current;
-
     store.replace(defaultChatEntries);
-    branchTips.clear();
-    viewAnchorIdRef.current = null;
-    setViewAnchorId(null);
+    activeLeafIdRef.current = null;
+    setActiveLeafId(null);
     pending.clear();
     setIsSessionLoading(true);
 
@@ -175,9 +162,8 @@ export function useChatSession(conversationId: string | null | undefined) {
         const entries = mapApiMessagesToChatEntries(session.entries);
         store.replace(entries);
         if (session.leafId) {
-          viewAnchorIdRef.current = session.leafId;
-          setViewAnchorId(session.leafId);
-          rememberBranchTips(entries, session.leafId, branchTips);
+          activeLeafIdRef.current = session.leafId;
+          setActiveLeafId(session.leafId);
         }
         unsubscribeLive = subscribeGlobalLive({
           onSseEvent: (ev) => {
@@ -205,16 +191,16 @@ export function useChatSession(conversationId: string | null | undefined) {
         const session = await loadConversationSession(boundCid);
         storeRef.current.replace(mapApiMessagesToChatEntries(session.entries));
       }
-      applyViewLeaf(entryId);
+      applyActiveLeaf(entryId);
       await setConversationDefaultViewLeaf(boundCid, entryId);
     },
-    [boundCid, applyViewLeaf],
+    [boundCid, applyActiveLeaf],
   );
 
   const switchToBranch = useCallback(
     async (branchEntryId: string) => {
       const entries = storeRef.current.getRows().map((row$) => row$.get());
-      await setActiveLeaf(resolveBranchLeaf(branchEntryId, entries, branchTipMemoryRef.current));
+      await setActiveLeaf(branchLineTipId(branchEntryId, entries));
     },
     [setActiveLeaf],
   );
@@ -230,7 +216,7 @@ export function useChatSession(conversationId: string | null | undefined) {
 
       const path = buildActivePath(
         storeRef.current.getRows().map((row$) => row$.get()),
-        viewAnchorId,
+        activeLeafId,
       );
       const parentId = path.length > 0 ? path[path.length - 1].id : null;
       const clientRequestId = crypto.randomUUID();
@@ -241,7 +227,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       followNewEntry(row);
       return { rowId, clientRequestId, parentId };
     },
-    [boundCid, viewAnchorId, followNewEntry],
+    [boundCid, activeLeafId, followNewEntry],
   );
 
   return {

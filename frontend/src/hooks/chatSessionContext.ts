@@ -9,7 +9,7 @@ export type ChatSessionContextValue = {
   activePathEntries: ObservableItem<ChatEntry>[];
   allEntries: ObservableItem<ChatEntry>[];
   setActiveLeaf: (entryId: string) => Promise<void>;
-  /** Jump to last-selected tip on a branch line (fork sibling), or its deepest tip if unseen. */
+  /** Choose a fork sibling; persists server default-view-leaf at that line's tip. */
   switchToBranch: (branchEntryId: string) => Promise<void>;
   /** Open chip per thought slot. Slot key = entry id stable across reasoning/context branches (e.g. prepare.parentId). */
   expandedStageBySlotKey: ReadonlyMap<string, ThoughtStage>;
