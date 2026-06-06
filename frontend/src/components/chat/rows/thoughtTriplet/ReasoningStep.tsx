@@ -10,6 +10,7 @@ import { ZodJsonEditor } from "@/components/ui/ZodJsonEditor";
 import { AgenticPlannerOutputSchema } from "@/lib/editorSchemas";
 import { displayStatus } from "./meta";
 import { ReadOnlySection } from "./ReadOnlySection";
+import { ModifierEnterHint } from "@/components/ui/ModifierEnterHint";
 
 export function ReasoningStep({
   stream,
@@ -130,9 +131,20 @@ export function ReasoningStep({
               value={editedResponse}
               onChange={setEditedResponse}
               height={260}
+              onSubmitShortcut={() => {
+                void applyEdit();
+              }}
             />
           ) : (
-            <CodeEditor value={editedResponse} onChange={setEditedResponse} language="json" height={260} />
+            <CodeEditor
+              value={editedResponse}
+              onChange={setEditedResponse}
+              language="json"
+              height={260}
+              onSubmitShortcut={() => {
+                void applyEdit();
+              }}
+            />
           )}
           <div className="flex justify-end gap-1.5">
             <button
@@ -154,7 +166,14 @@ export function ReasoningStep({
               }}
               disabled={!canApply}
             >
-              {isSaving ? "Applying..." : "Apply"}
+              {isSaving ? (
+                "Applying..."
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  Apply
+                  <ModifierEnterHint />
+                </span>
+              )}
             </button>
           </div>
         </div>

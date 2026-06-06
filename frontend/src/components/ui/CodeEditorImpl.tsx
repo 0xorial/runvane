@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -74,6 +74,8 @@ export type CodeEditorProps = {
    * `language` is "json". Pass the output of `z.toJSONSchema(...)`.
    */
   jsonSchema?: object;
+  /** Cmd/Ctrl+Enter — e.g. submit reprocess edits. */
+  onSubmitShortcut?: () => void;
 };
 
 function CodeEditorImpl({
@@ -83,8 +85,11 @@ function CodeEditorImpl({
   height = 220,
   readOnly = false,
   jsonSchema,
+  onSubmitShortcut,
 }: CodeEditorProps) {
   const isDark = useIsDark();
+  const onSubmitShortcutRef = useRef(onSubmitShortcut);
+  onSubmitShortcutRef.current = onSubmitShortcut;
   // Unique, stable model path for this editor instance so its schema can be
   // scoped to its own model without affecting other open editors.
   const rawId = useId();
@@ -94,9 +99,12 @@ function CodeEditorImpl({
   // URI never matches the `**/...` glob Monaco derives from it).
   const [modelUri, setModelUri] = useState<string | null>(null);
 
-  const handleMount: OnMount = (editor) => {
+  const handleMount: OnMount = (editor, monacoApi) => {
     const uri = editor.getModel()?.uri.toString();
     if (uri) setModelUri(uri);
+    editor.addCommand(monacoApi.KeyMod.CtrlCmd | monacoApi.KeyCode.Enter, () => {
+      onSubmitShortcutRef.current?.();
+    });
   };
 
   useEffect(() => {

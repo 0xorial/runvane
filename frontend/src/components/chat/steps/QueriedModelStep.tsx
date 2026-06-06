@@ -11,6 +11,7 @@ import { ChatThreadIndent } from "../ChatMessageShell";
 import { formatTokenCount } from "@/utils/formatTokenCount";
 import { usePricingMap } from "@/hooks/usePricingMap";
 import { TokenTooltip } from "@/components/ui/TokenTooltip";
+import { ModifierEnterHint } from "@/components/ui/ModifierEnterHint";
 
 type QueriedModelStepProps = {
   entry: PlannerLlmStreamEntry | TitleLlmStreamEntry;
@@ -91,6 +92,21 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
 
   void tick;
 
+  async function submitReprocess() {
+    if (!conversationId || isSubmitting || editedResponse.trim().length === 0) return;
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const result = await reprocessThought(conversationId, entry.id, editedResponse);
+      await setActiveLeaf(result.data.leafEntryId);
+      setEditing(false);
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <ChatThreadIndent className="py-0">
       <div className="my-0 border-l-2 border-border/60 pl-3">
@@ -146,23 +162,19 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
                           <button
                             type="button"
                             disabled={isSubmitting || editedResponse.trim().length === 0 || !conversationId}
-                            onClick={async () => {
-                              if (!conversationId) return;
-                              setSubmitError(null);
-                              setIsSubmitting(true);
-                              try {
-                                const result = await reprocessThought(conversationId, entry.id, editedResponse);
-                                await setActiveLeaf(result.data.leafEntryId);
-                                setEditing(false);
-                              } catch (e) {
-                                setSubmitError(e instanceof Error ? e.message : String(e));
-                              } finally {
-                                setIsSubmitting(false);
-                              }
+                            onClick={() => {
+                              void submitReprocess();
                             }}
                             className="rounded bg-primary px-2 py-0.5 text-[10px] text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
                           >
-                            {isSubmitting ? "Reprocessing..." : "Reprocess"}
+                            {isSubmitting ? (
+                              "Reprocessing..."
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5">
+                                Reprocess
+                                <ModifierEnterHint className="text-primary-foreground/70" />
+                              </span>
+                            )}
                           </button>
                         </>
                       ) : (
@@ -189,6 +201,9 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
                     value={editedResponse}
                     onChange={setEditedResponse}
                     height={220}
+                    onSubmitShortcut={() => {
+                      void submitReprocess();
+                    }}
                   />
                 ) : (
                   <pre className="whitespace-pre-wrap break-words rounded border border-border/50 bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-foreground/90">

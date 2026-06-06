@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { Pencil } from "lucide-react";
 import type { UserMessageEntry } from "../../../protocol/chatEntry";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,8 @@ import { formatExactChatTime, formatRelativeChatTime } from "../../../utils/form
 import { ChatMessageShell } from "../ChatMessageShell";
 import { BranchSelector } from "../BranchSelector";
 import { FoldFromHereButton } from "./FoldFromHereButton";
+import { ModifierEnterHint } from "@/components/ui/ModifierEnterHint";
+import { isModifierEnterKey } from "@/lib/submitShortcut";
 
 function formatBytes(sizeBytes: number): string {
   if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${Math.max(0, Math.floor(sizeBytes || 0))} B`;
@@ -27,7 +29,7 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
   const canEdit = Boolean(conversationId);
 
   async function applyEdit() {
-    if (!conversationId) return;
+    if (!conversationId || isSaving) return;
     const text = editedText.trim();
     if (!text) return;
     setIsSaving(true);
@@ -83,6 +85,11 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
             className="h-28 w-full resize-y rounded border border-border/70 bg-background px-2 py-1.5 text-sm leading-relaxed text-foreground focus:outline-none"
             value={editedText}
             onChange={(event) => setEditedText(event.currentTarget.value)}
+            onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+              if (!isModifierEnterKey(event)) return;
+              event.preventDefault();
+              void applyEdit();
+            }}
             disabled={isSaving}
             autoFocus
           />
@@ -106,7 +113,14 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
               }}
               disabled={isSaving || editedText.trim().length === 0}
             >
-              {isSaving ? "Reprocessing..." : "Reprocess"}
+              {isSaving ? (
+                "Reprocessing..."
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  Reprocess
+                  <ModifierEnterHint />
+                </span>
+              )}
             </button>
           </div>
         </div>

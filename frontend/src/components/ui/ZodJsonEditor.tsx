@@ -18,6 +18,8 @@ type ZodJsonEditorProps<T> = {
   height?: number;
   /** Render the editor read-only. */
   readOnly?: boolean;
+  /** Cmd/Ctrl+Enter — e.g. submit reprocess edits. */
+  onSubmitShortcut?: () => void;
 };
 
 type Validation<T> =
@@ -91,6 +93,7 @@ export function ZodJsonEditor<T>({
   onValidityChange,
   height,
   readOnly,
+  onSubmitShortcut,
 }: ZodJsonEditorProps<T>) {
   // Derive a JSON Schema for Monaco's inline diagnostics and the schema view.
   // Schemas with constructs JSON Schema cannot express (transforms, some
@@ -152,6 +155,7 @@ export function ZodJsonEditor<T>({
         height={height}
         readOnly={readOnly}
         jsonSchema={jsonSchema}
+        onSubmitShortcut={onSubmitShortcut}
       />
       {validation.kind === "ok" ? (
         <div className="flex items-center gap-1.5 rounded-md bg-success/10 px-2.5 py-1.5 text-xs text-success">

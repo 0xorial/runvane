@@ -9,6 +9,7 @@ import { ModelSelector } from "@/components/ui/ModelSelector";
 import { ZodJsonEditor } from "@/components/ui/ZodJsonEditor";
 import { LlmRequestSchema } from "@/lib/editorSchemas";
 import { ReadOnlySection } from "./ReadOnlySection";
+import { ModifierEnterHint } from "@/components/ui/ModifierEnterHint";
 
 export function ContextStep({
   prepareEntry,
@@ -96,6 +97,9 @@ export function ContextStep({
             onChange={setEditedPrompt}
             onValidityChange={setPromptValid}
             height={260}
+            onSubmitShortcut={() => {
+              void applyEdit();
+            }}
           />
           <div className="flex justify-end gap-1.5">
             <button
@@ -119,7 +123,14 @@ export function ContextStep({
               }}
               disabled={!canApply}
             >
-              {isSaving ? "Applying..." : "Apply"}
+              {isSaving ? (
+                "Applying..."
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  Apply
+                  <ModifierEnterHint />
+                </span>
+              )}
             </button>
           </div>
         </div>
