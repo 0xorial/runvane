@@ -2,6 +2,7 @@ import "@xterm/xterm/css/xterm.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "@/api/client";
 import { cn } from "@/lib/utils";
 
 // ─── WebSocket protocol types ─────────────────────────────────────────────────
@@ -14,7 +15,12 @@ type ServerMsg =
 
 type ConnectionState = "idle" | "connecting" | "connected" | "error" | "disconnected";
 
-const WS_URL = `ws://${window.location.hostname}:3000/ws/terminal`;
+function terminalWsUrl(): string {
+  const api = new URL(API_BASE_URL);
+  api.protocol = api.protocol === "https:" ? "wss:" : "ws:";
+  api.pathname = "/ws/terminal";
+  return api.toString();
+}
 
 const STORED_ADDRESS_KEY = "runvane_terminal_address";
 
@@ -113,7 +119,7 @@ export function TerminalPanel({ className }: { className?: string }) {
     setState("connecting");
     setErrorMsg("");
 
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(terminalWsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => {

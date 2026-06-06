@@ -1,4 +1,8 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+if (!apiBaseUrl) {
+  throw new Error("VITE_API_BASE_URL is not configured (set via dev-ports or vite.config.ts)");
+}
+export const API_BASE_URL = apiBaseUrl;
 
 import type {
   AgentListItemResponse,

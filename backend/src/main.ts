@@ -9,13 +9,25 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
   app.useWebSocketAdapter(new WsAdapter(app));
+  const frontendOrigin = process.env.FRONTEND_ORIGIN;
+  if (!frontendOrigin) {
+    throw new Error('FRONTEND_ORIGIN is required (set via dev-ports/with-ports.mjs or .env.ports)');
+  }
+  const port = process.env.PORT;
+  if (!port) {
+    throw new Error('PORT is required (set via dev-ports/with-ports.mjs or .env.ports)');
+  }
+  const frontendPort = new URL(frontendOrigin).port;
+  if (!frontendPort) {
+    throw new Error(`FRONTEND_ORIGIN must include a port: ${frontendOrigin}`);
+  }
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: [`http://localhost:${frontendPort}`, `http://127.0.0.1:${frontendPort}`],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new HttpExceptionLoggingFilter());
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(Number(port));
 }
 void bootstrap();

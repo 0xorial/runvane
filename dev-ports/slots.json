@@ -1,0 +1,7 @@
+{
+  "backend": 0,
+  "frontend": 1,
+  "backendDebug": 2,
+  "frontendPreview": 3,
+  "prismaStudio": 4
+}

@@ -32,6 +32,13 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Development/usage
 
+Dev ports are allocated per project in [`dev-ports/registry.json`](dev-ports/registry.json) (100 ports per base). Change the base there, then:
+
+```bash
+node dev-ports/sync-env.mjs   # writes .env.ports for docker compose
+node dev-ports/list.mjs       # show resolved ports
+```
+
 ```bash
 # Backend
 cd backend
