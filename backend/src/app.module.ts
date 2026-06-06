@@ -24,7 +24,7 @@ import { UploadsModule } from './uploads/uploads.module.js';
       pinoHttp: {
         transport:
           process.env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
-        level: process.env.NODE_ENV === 'test' ? 'silent' : undefined,
+        ...(process.env.NODE_ENV === 'test' ? { level: 'silent' as const } : {}),
         serializers: {
           req(req) {
             return { id: req.id, method: req.method, url: req.url };
