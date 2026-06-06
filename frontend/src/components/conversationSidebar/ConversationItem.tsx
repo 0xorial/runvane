@@ -96,6 +96,7 @@ export function ConversationItem({
         </div>
         <button
           type="button"
+          data-testid={`sidebar-conversation-${conversation.id}`}
           className="min-w-0 flex-1 py-2 pl-0.5 pr-2.5 text-left"
           onClick={() => {
             if (multiSelectMode) {

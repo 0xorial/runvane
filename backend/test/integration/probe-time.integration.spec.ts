@@ -1,6 +1,5 @@
-import { INestApplication } from '@nestjs/common';
 import { SseType } from '../../src/contracts/sse';
-import { createTestApp, type TestApp } from '../support/bootstrap-app';
+import { retainSharedTestApp, shutdownSharedTestApp } from '../support/shared-app';
 import {
   assertProbeShape,
   createConversation,
@@ -18,20 +17,18 @@ const runLive = process.env.RUN_INTEGRATION_TESTS === '1';
 const describeLive = runLive ? describe : describe.skip;
 
 describeLive('probe time (integration)', () => {
-  let testApp: TestApp;
-  let app: INestApplication;
   let baseUrl: string;
   let agentId: string;
 
   beforeAll(async () => {
-    testApp = await createTestApp();
-    app = testApp.app;
+    const testApp = await retainSharedTestApp();
     baseUrl = testApp.baseUrl;
     agentId = await getDefaultAgentId(baseUrl);
   }, 30_000);
 
+  // Last integration file alphabetically — shuts down the shared Nest app once.
   afterAll(async () => {
-    await app.close();
+    await shutdownSharedTestApp();
   });
 
   it('completes probe message with expected entry shape', async () => {
@@ -39,7 +36,7 @@ describeLive('probe time (integration)', () => {
     await postProbeMessage(baseUrl, conversationId, agentId);
     const entries = await waitForProbeCompletion(baseUrl, conversationId);
     assertProbeShape(entryTypesInOrder(entries));
-  }, INTEGRATION_LLM_TIMEOUT_MS + 15_000);
+  }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 
   it('streams SSE upserts during probe', async () => {
     const conversationId = await createConversation(baseUrl);
@@ -52,9 +49,16 @@ describeLive('probe time (integration)', () => {
     expect(events.filter((ev) => ev.type === SseType.CHAT_ENTRY_UPSERT).length).toBeGreaterThan(0);
     expect(events.some((ev) => ev.type === SseType.USER_MESSAGE)).toBe(true);
 
+    const viewUpdates = events.filter((ev) => ev.type === SseType.CONVERSATION_UPDATED);
+    expect(viewUpdates.length).toBeGreaterThan(0);
+    const withAnchor = viewUpdates.filter(
+      (ev) => ev.type === SseType.CONVERSATION_UPDATED && ev.conversation.defaultViewLeafAnchorId,
+    );
+    expect(withAnchor.length).toBeGreaterThan(0);
+
     const conversation = await getConversation(baseUrl, conversationId);
     expect(conversation.defaultViewLeafEntryId).toBeTruthy();
-  }, INTEGRATION_LLM_TIMEOUT_MS + 15_000);
+  }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 
   it('default-view-leaf can be repointed to user-message anchor', async () => {
     const conversationId = await createConversation(baseUrl);
@@ -78,5 +82,5 @@ describeLive('probe time (integration)', () => {
 
     expect(path[0]?.id).toBe(user.id);
     expect(path.some((entry) => entry.type === 'assistant-message')).toBe(true);
-  }, INTEGRATION_LLM_TIMEOUT_MS + 15_000);
+  }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 });

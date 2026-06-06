@@ -22,7 +22,9 @@ import { UploadsModule } from './uploads/uploads.module.js';
   imports: [
     LoggerModule.forRoot({
       pinoHttp: {
-        transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
+        transport:
+          process.env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
+        level: process.env.NODE_ENV === 'test' ? 'silent' : undefined,
         serializers: {
           req(req) {
             return { id: req.id, method: req.method, url: req.url };

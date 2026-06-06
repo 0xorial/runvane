@@ -8,6 +8,7 @@ export class HealthController {
       status: 'ok',
       service: 'runvane-backend',
       queue_depth: 0,
+      llmMode: process.env.LLM_TEST_STUB === '1' ? 'stub' : 'live',
     } as const;
   }
 }

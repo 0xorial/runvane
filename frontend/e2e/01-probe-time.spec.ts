@@ -8,7 +8,6 @@ test("sidebar probe shows user message then assistant reply", async ({ app, requ
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
   await app.sidebar.runProbeTime();
-
   await app.chat.transcript.waitForUserMessage();
   await app.chat.transcript.waitForAssistantReply();
 });

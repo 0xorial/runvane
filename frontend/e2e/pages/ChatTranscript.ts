@@ -25,10 +25,12 @@ export class ChatTranscript {
   }
 
   async waitForUserMessage(timeoutMs = E2E_UI_TIMEOUT_MS): Promise<void> {
+    await expect(this.loading).toBeHidden({ timeout: timeoutMs });
     await expect(this.userMessage).toBeVisible({ timeout: timeoutMs });
   }
 
   async waitForAssistantReply(timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.loading).toBeHidden({ timeout: timeoutMs });
     await expect(this.assistantMessage).toBeVisible({ timeout: timeoutMs });
     await expect(this.assistantMessage).not.toHaveText(/^\s*$/);
   }

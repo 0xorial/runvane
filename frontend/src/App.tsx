@@ -58,7 +58,6 @@ function ChatPageShell({
   const cid = !raw || raw === "new" ? null : String(raw);
   return (
     <ChatPage
-      key={cid ?? "new"}
       conversationId={cid}
       sidebarVisible={sidebarVisible}
       onToggleSidebar={onToggleSidebar}

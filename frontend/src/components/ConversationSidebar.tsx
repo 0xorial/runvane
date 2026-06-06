@@ -24,6 +24,7 @@ import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupIt
 import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
 import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
 import { usePricingMap } from "../hooks/usePricingMap";
+import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
 
 type ConversationSidebarProps = {
   activeConversationId: string | null;
@@ -129,6 +130,9 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       });
       const id = String(created.id || "").trim();
       if (!id) throw new Error("No conversation id from server");
+
+      retainChatSessionLive();
+      getChatSessionStore(id);
 
       await postConversationMessage(id, {
         message: PROBE_MESSAGE,

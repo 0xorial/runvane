@@ -26,6 +26,7 @@
     "test:integration": "RUN_INTEGRATION_TESTS=1 jest --config ./test/jest-integration.json --forceExit",
     "test:integration:live": "RUN_INTEGRATION_TESTS=1 INTEGRATION_LIVE_LLM=1 jest --config ./test/jest-integration.json --forceExit",
     "dev:stub": "LLM_TEST_STUB=1 node ../dev-ports/with-ports.mjs --cwd . -- nest start --watch",
+    "start:stub": "LLM_TEST_STUB=1 node ../dev-ports/with-ports.mjs --cwd . -- node dist/main.js",
     "test:metrics": "node ../test-metrics/cli.mjs report",
     "test:metrics:fragile": "node ../test-metrics/cli.mjs fragile"
   },

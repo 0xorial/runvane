@@ -9,8 +9,9 @@
     "preview": "node ../dev-ports/with-ports.mjs --cwd . -- vite preview",
     "ports:sync": "node ../dev-ports/sync-env.mjs --cwd ..",
     "typecheck": "tsc --noEmit --pretty",
-    "test:e2e": "playwright test",
-    "test:e2e:live": "E2E_LIVE_LLM=1 playwright test",
+    "test:e2e": "node ../scripts/run-e2e.mjs",
+    "test:e2e:servers:stop": "node ../scripts/e2e-servers.mjs stop",
+    "test:e2e:live": "RUN_E2E_TESTS=1 E2E_LIVE_LLM=1 playwright test",
     "test:metrics": "node ../test-metrics/cli.mjs report",
     "test:metrics:fragile": "node ../test-metrics/cli.mjs fragile"
   },

@@ -12,11 +12,11 @@ export class ChatPage {
   }
 
   async gotoNew(agentId: string): Promise<void> {
-    await this.page.goto(`/chat/new?agent=${encodeURIComponent(agentId)}`);
+    await this.page.goto(`/chat/new?agent=${encodeURIComponent(agentId)}`, { waitUntil: "domcontentloaded" });
   }
 
   async open(conversationId: string): Promise<void> {
-    await this.page.goto(`/chat/${encodeURIComponent(conversationId)}`);
+    await this.page.goto(`/chat/${encodeURIComponent(conversationId)}`, { waitUntil: "domcontentloaded" });
   }
 
   conversationIdFromUrl(): string {

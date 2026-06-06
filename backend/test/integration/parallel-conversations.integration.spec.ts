@@ -1,5 +1,4 @@
-import { INestApplication } from '@nestjs/common';
-import { createTestApp, type TestApp } from '../support/bootstrap-app';
+import { retainSharedTestApp } from '../support/shared-app';
 import {
   assertProbeShape,
   createConversation,
@@ -14,21 +13,14 @@ const runLive = process.env.RUN_INTEGRATION_TESTS === '1';
 const describeLive = runLive ? describe : describe.skip;
 
 describeLive('parallel conversations (integration)', () => {
-  let testApp: TestApp;
-  let app: INestApplication;
   let baseUrl: string;
   let agentId: string;
 
   beforeAll(async () => {
-    testApp = await createTestApp();
-    app = testApp.app;
+    const testApp = await retainSharedTestApp();
     baseUrl = testApp.baseUrl;
     agentId = await getDefaultAgentId(baseUrl);
   }, 30_000);
-
-  afterAll(async () => {
-    await app.close();
-  });
 
   it('time-travels: two probe runs interleave without losing entries', async () => {
     const convA = await createConversation(baseUrl);
@@ -45,5 +37,5 @@ describeLive('parallel conversations (integration)', () => {
     ]);
     assertProbeShape(entryTypesInOrder(entriesA));
     assertProbeShape(entryTypesInOrder(entriesB));
-  }, INTEGRATION_LLM_TIMEOUT_MS + 15_000);
+  }, INTEGRATION_LLM_TIMEOUT_MS + 5_000);
 });

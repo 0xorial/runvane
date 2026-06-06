@@ -69,7 +69,7 @@ export function ChatPage({
     switchToBranch,
     appendOptimisticUserMessage,
   } = useChatSession(conversationId);
-  const { expandedStageBySlotKey, setSlotExpandedStage } = useThoughtExpandedStageState();
+  const { expandedStageBySlotKey, setSlotExpandedStage, resetExpandedStages } = useThoughtExpandedStageState();
   const chatSessionContextValue = useMemo(
     () => ({
       conversationId,
@@ -123,6 +123,14 @@ export function ChatPage({
     [activePathEntryById, tripletStreamIdByThoughtId],
   );
   const canSend = input.trim().length > 0 || selectedFiles.length > 0;
+
+  useEffect(() => {
+    setInput("");
+    setSelectedFiles([]);
+    setTopAnchorEntryId(null);
+    setSelectedBranchAnchorEntryId(null);
+    resetExpandedStages();
+  }, [conversationId, resetExpandedStages]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => composerTextareaRef.current?.focus());

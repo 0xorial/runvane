@@ -17,6 +17,7 @@ function configureIntegrationLlm(): void {
 
 export async function createTestApp(): Promise<TestApp> {
   configureIntegrationLlm();
+  process.env.NODE_ENV ??= 'test';
   process.env.FRONTEND_ORIGIN ??= 'http://localhost:52201';
 
   const moduleFixture: TestingModule = await Test.createTestingModule({

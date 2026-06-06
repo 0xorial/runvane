@@ -13,20 +13,20 @@ test("time-travel: switching chats keeps messages visible", async ({ app, reques
   await app.chat.open(convA);
   await app.chat.transcript.waitForUserMessage();
 
-  await app.chat.open(convB);
+  await app.sidebar.openConversation(convB);
   await app.chat.transcript.waitForUserMessage();
 
   for (let i = 0; i < 2; i += 1) {
-    await app.chat.open(convA);
+    await app.sidebar.openConversation(convA);
     await app.chat.transcript.waitForUserMessage();
-    await app.chat.open(convB);
+    await app.sidebar.openConversation(convB);
     await app.chat.transcript.waitForUserMessage();
   }
 
-  await app.chat.open(convA);
+  await app.sidebar.openConversation(convA);
   await app.chat.transcript.waitForAssistantReply();
 
-  await app.chat.open(convB);
+  await app.sidebar.openConversation(convB);
   await app.chat.transcript.waitForAssistantReply();
 
   expect(convA).not.toEqual(convB);

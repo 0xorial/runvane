@@ -1,10 +1,5 @@
-import type { SseEvent } from '../../src/contracts/sse';
-
-export type SseCollector = {
-  events: SseEvent[];
-  stop: () => void;
-  done: Promise<void>;
-};
+import { SseType, type SseEvent } from '../../src/contracts/sse';
+import { sleep } from './http';
 
 function parseSseChunk(chunk: string): SseEvent[] {
   const events: SseEvent[] = [];
@@ -21,7 +16,24 @@ function parseSseChunk(chunk: string): SseEvent[] {
   return events;
 }
 
-/** Collect global SSE while an async action runs (live backend integration). */
+function hasAssistantUpsert(events: SseEvent[]): boolean {
+  return events.some((ev) => {
+    if (ev.type !== SseType.CHAT_ENTRY_UPSERT) return false;
+    const entry = ev.entry as { type?: string; text?: string };
+    return entry.type === 'assistant-message' && String(entry.text || '').trim().length > 0;
+  });
+}
+
+async function waitForSseAssistant(events: SseEvent[], deadlineMs: number): Promise<void> {
+  const deadline = Date.now() + deadlineMs;
+  while (Date.now() < deadline) {
+    if (hasAssistantUpsert(events)) return;
+    await sleep(5);
+  }
+  throw new Error(`SSE: no assistant upsert within ${deadlineMs}ms (${events.length} events collected)`);
+}
+
+/** Collect global SSE while an async action runs. */
 export async function collectSseDuring<T>(
   baseUrl: string,
   conversationId: string,
@@ -51,7 +63,7 @@ export async function collectSseDuring<T>(
 
   try {
     const result = await run();
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForSseAssistant(events, 2_000);
     return { result, events };
   } finally {
     controller.abort();

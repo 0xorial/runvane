@@ -36,5 +36,6 @@ export function useThoughtExpandedStageState() {
       return next;
     });
   }, []);
-  return { expandedStageBySlotKey, setSlotExpandedStage };
+  const resetExpandedStages = useCallback(() => setMap(new Map()), []);
+  return { expandedStageBySlotKey, setSlotExpandedStage, resetExpandedStages };
 }

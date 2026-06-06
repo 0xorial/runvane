@@ -22,4 +22,17 @@ export class Sidebar {
       return id != null && id !== "new";
     });
   }
+
+  conversationButton(conversationId: string): Locator {
+    return this.page.getByTestId(`sidebar-conversation-${conversationId}`);
+  }
+
+  async openConversation(conversationId: string): Promise<void> {
+    const button = this.conversationButton(conversationId);
+    await button.waitFor({ state: "visible" });
+    await button.click();
+    await this.page.waitForURL(
+      new RegExp(`/chat/${conversationId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[/?#]|$)`),
+    );
+  }
 }

@@ -6,10 +6,10 @@ export function integrationUsesLiveLlm(): boolean {
 }
 
 export const INTEGRATION_LLM_TIMEOUT_MS = Number(
-  process.env.INTEGRATION_LLM_TIMEOUT_MS ?? (integrationUsesLiveLlm() ? 45_000 : 5_000),
+  process.env.INTEGRATION_LLM_TIMEOUT_MS ?? (integrationUsesLiveLlm() ? 45_000 : 2_000),
 );
 
-const POLL_MS = 50;
+const POLL_MS = 10;
 
 export type ChatEntryRow = {
   id: string;

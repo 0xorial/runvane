@@ -65,3 +65,5 @@ export function dropChatSessionStore(conversationId: string): void {
   stores.delete(cid);
   pendingByConversationId.delete(cid);
 }
+
+ensureLiveSubscription();
