@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
 import { BashTool } from './builtins/bash/tool.js';
 import { CurlTool } from './builtins/curl/tool.js';
+import { MetaTool } from './builtins/meta/tool.js';
 import { RagSearchTool } from './builtins/rag-search/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
@@ -21,6 +22,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     BashTool,
     FilesystemTool,
     RagSearchTool,
+    MetaTool,
     DelegateLlmTool,
     AskAttachmentTool,
     SerialConnectionManager,
@@ -34,6 +36,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         BashTool,
         FilesystemTool,
         RagSearchTool,
+        MetaTool,
         DelegateLlmTool,
         AskAttachmentTool,
         SerialTerminalTool,
