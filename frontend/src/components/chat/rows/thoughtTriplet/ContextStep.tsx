@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { reprocessThoughtContext } from "@/api/client";
 import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { notifyError } from "@/utils/toast";
 import { useLlmSettings } from "@/hooks/llmSettingsContext";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -27,6 +28,7 @@ export function ContextStep({
   const [selectedModel, setSelectedModel] = useState(currentModel);
   const [promptValid, setPromptValid] = useState(false);
   const { modelGroups } = useLlmSettings();
+  const { setActiveLeaf } = useChatSessionContext();
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -46,10 +48,11 @@ export function ContextStep({
     if (!canApply) return;
     setIsSaving(true);
     try {
-      await reprocessThoughtContext(conversationId, prepareEntry.id, {
+      const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
         editedRequestText: editedPrompt.trim(),
         llm: { providerId: selectedProviderId.trim(), model: selectedModel.trim() },
       });
+      await setActiveLeaf(result.data.leafEntryId);
       setIsEditing(false);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

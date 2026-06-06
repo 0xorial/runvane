@@ -17,7 +17,7 @@ function formatBytes(sizeBytes: number): string {
 }
 
 export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
-  const { conversationId } = useChatSessionContext();
+  const { conversationId, setActiveLeaf } = useChatSessionContext();
   const attachments = Array.isArray(entry.attachments) ? entry.attachments : [];
   const relativeTime = formatRelativeChatTime(entry.createdAt);
   const exactTime = formatExactChatTime(entry.createdAt);
@@ -32,7 +32,8 @@ export function UserMessageRow({ entry }: { entry: UserMessageEntry }) {
     if (!text) return;
     setIsSaving(true);
     try {
-      await reprocessUserMessage(conversationId, entry.id, text);
+      const result = await reprocessUserMessage(conversationId, entry.id, text);
+      await setActiveLeaf(result.data.leafEntryId);
       setIsEditing(false);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);

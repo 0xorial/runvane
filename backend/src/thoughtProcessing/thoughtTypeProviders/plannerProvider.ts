@@ -128,8 +128,11 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const decision = toLlmDecision(parsed, requestedToolCalls);
 
     await this.persistStreamEntryDecision(ctx, completion, parseResult, decision);
-    await this.finalizeAssistantMessage(state ?? null, ctx, assistantText);
+    const assistantEntryId = await this.finalizeAssistantMessage(state ?? null, ctx, assistantText);
     await this.finalizeThoughtAction(ctx, action, assistantText, parseResult);
+    if (action === 'final_answer' && assistantEntryId) {
+      await this.chatEntries.setDefaultViewLeaf(input.conversationId, assistantEntryId);
+    }
     await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
 
     if (requestedToolCalls.length === 0) return;

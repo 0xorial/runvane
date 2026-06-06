@@ -20,6 +20,9 @@ export function buildChildrenByParent(entries: ChatEntry[]): Map<string | null, 
   return map;
 }
 
+/** Last tip viewed on each fork-sibling line (key = sibling entry id at the fork). */
+export type BranchTipMemory = Map<string, string>;
+
 export function deepestDescendantId(start: string, childrenByParent: Map<string | null, ChatEntry[]>): string {
   let cursor = start;
   for (;;) {
@@ -60,4 +63,39 @@ export function buildActivePath(entries: ChatEntry[], viewAnchorId: string | nul
   }
   path.reverse();
   return path;
+}
+
+/** Remember the tip for every fork-sibling on the path to `leafId`. */
+export function rememberBranchTips(entries: ChatEntry[], leafId: string, memory: BranchTipMemory): void {
+  const childrenByParent = buildChildrenByParent(entries);
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  let cursor: string | null = leafId;
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    const entry = byId.get(cursor);
+    if (!entry) break;
+    const siblings = childrenByParent.get(entry.parentId) ?? [];
+    if (siblings.length > 1) memory.set(cursor, leafId);
+    cursor = entry.parentId;
+  }
+}
+
+/** Last selected tip on a branch line, or deepest descendant if never visited. */
+export function resolveBranchLeaf(branchEntryId: string, entries: ChatEntry[], memory: BranchTipMemory): string {
+  const remembered = memory.get(branchEntryId);
+  if (remembered && entries.some((entry) => entry.id === remembered)) return remembered;
+  return deepestDescendantId(branchEntryId, buildChildrenByParent(entries));
+}
+
+/** New entry extends the visible path when its parent is already on that path. */
+export function viewAnchorAfterAppend(
+  entries: ChatEntry[],
+  currentAnchor: string | null,
+  entry: ChatEntry,
+): string | null {
+  const path = buildActivePath(entries, currentAnchor);
+  const onPath = entry.parentId == null ? path.length === 0 : path.some((row) => row.id === entry.parentId);
+  if (!onPath) return currentAnchor;
+  return entry.id;
 }

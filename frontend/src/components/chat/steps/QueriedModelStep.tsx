@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronRight, Pencil, Sparkles } from "lucide-react";
 import type { PlannerLlmStreamEntry, TitleLlmStreamEntry } from "@/protocol/chatEntry";
 import { parseDbTimestampMs } from "@/utils/formatDuration";
 import { reprocessThought } from "@/api/client";
+import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { ZodJsonEditor } from "@/components/ui/ZodJsonEditor";
 import { AgenticPlannerOutputSchema } from "@/lib/editorSchemas";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ function formatDurationMs(ms: number): string {
 }
 
 export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProps) {
+  const { setActiveLeaf } = useChatSessionContext();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editedResponse, setEditedResponse] = useState("");
@@ -149,7 +151,8 @@ export function QueriedModelStep({ entry, conversationId }: QueriedModelStepProp
                               setSubmitError(null);
                               setIsSubmitting(true);
                               try {
-                                await reprocessThought(conversationId, entry.id, editedResponse);
+                                const result = await reprocessThought(conversationId, entry.id, editedResponse);
+                                await setActiveLeaf(result.data.leafEntryId);
                                 setEditing(false);
                               } catch (e) {
                                 setSubmitError(e instanceof Error ? e.message : String(e));

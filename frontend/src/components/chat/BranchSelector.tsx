@@ -1,13 +1,31 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { ChatEntry } from "@/protocol/chatEntry";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
-import { buildChildrenByParent, byConversationIndexAsc, deepestDescendantId } from "@/lib/chatTree";
+import { buildChildrenByParent, byConversationIndexAsc } from "@/lib/chatTree";
 import { notifyError } from "@/utils/toast";
 
 export { buildChildrenByParent, deepestDescendantId } from "@/lib/chatTree";
 
+function siblingIndexForTip(
+  siblings: ChatEntry[],
+  byId: Map<string, ChatEntry>,
+  pathTipId: string | null,
+): number {
+  if (!pathTipId || siblings.length === 0) return -1;
+  const siblingIds = new Set(siblings.map((row) => row.id));
+  let cursor: string | null = pathTipId;
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor)) {
+    if (siblingIds.has(cursor)) return siblings.findIndex((row) => row.id === cursor);
+    seen.add(cursor);
+    cursor = byId.get(cursor)?.parentId ?? null;
+  }
+  return -1;
+}
+
 export function useSiblingBranches(entryId: string | null | undefined) {
-  const { allEntries, setActiveLeaf } = useChatSessionContext();
+  const { allEntries, activePathEntries, switchToBranch } = useChatSessionContext();
   const [switching, setSwitching] = useState(false);
 
   const sortedAll = useMemo(
@@ -16,10 +34,11 @@ export function useSiblingBranches(entryId: string | null | undefined) {
   );
   const childrenByParent = useMemo(() => buildChildrenByParent(sortedAll), [sortedAll]);
   const byId = useMemo(() => new Map(sortedAll.map((e) => [e.id, e])), [sortedAll]);
+  const pathTipId = activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null;
 
   const self = entryId ? byId.get(entryId) ?? null : null;
   const siblings = self ? childrenByParent.get(self.parentId) ?? [] : [];
-  const activeIndex = self ? siblings.findIndex((row) => row.id === self.id) : -1;
+  const activeIndex = siblingIndexForTip(siblings, byId, pathTipId);
   const hasBranches = siblings.length > 1 && activeIndex >= 0;
 
   async function switchByOffset(offset: -1 | 1) {
@@ -29,7 +48,7 @@ export function useSiblingBranches(entryId: string | null | undefined) {
     if (!sibling) return;
     setSwitching(true);
     try {
-      await setActiveLeaf(deepestDescendantId(sibling.id, childrenByParent));
+      await switchToBranch(sibling.id);
     } catch (e) {
       notifyError(`Failed to switch branch: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

@@ -26,7 +26,6 @@ type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
 export class ConversationProcessorService {
   private readonly logger = new Logger(ConversationProcessorService.name);
   private readonly activeExecutions = new Map<string, LifecycleScope>();
-
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
     private readonly thoughtProcessing: ThoughtProcessingService,
@@ -111,7 +110,7 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedRequestText: string;
     llm?: LlmRef;
-  }): Promise<{ plannerEntryId: string }> {
+  }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
     const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
     await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
@@ -123,7 +122,7 @@ export class ConversationProcessorService {
     conversationId: string;
     sourceEntryId: string;
     editedResponse: string;
-  }): Promise<{ plannerEntryId: string }> {
+  }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     const { scope, chain } = this.beginRun(args.conversationId);
     const llm = await this.thoughtProcessing.getLlmRef();
     const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
@@ -136,7 +135,7 @@ export class ConversationProcessorService {
     conversationId: string;
     sourceEntryId: string;
     editedText: string;
-  }): Promise<{ userMessageEntryId: string }> {
+  }): Promise<{ userMessageEntryId: string; leafEntryId: string }> {
     const source = await this.chatEntries.getChatEntry(args.conversationId, args.sourceEntryId);
     if (!source) throw new Error(`source entry not found: ${args.sourceEntryId}`);
     if (source.type !== 'user-message') {
@@ -174,7 +173,7 @@ export class ConversationProcessorService {
       llm,
     });
     scope.rootDone();
-    return { userMessageEntryId: sibling.id };
+    return { userMessageEntryId: sibling.id, leafEntryId: sibling.id };
   }
 
   async startSummarize(args: { conversationId: string; firstEntryToSummarize: string }): Promise<void> {

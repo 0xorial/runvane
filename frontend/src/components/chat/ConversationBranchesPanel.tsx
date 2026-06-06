@@ -85,17 +85,8 @@ function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
   return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
 }
 
-function deepestDescendantId(entryId: string, childrenByParent: Map<string | null, ObservableItem<ChatEntry>[]>): string {
-  let cursor = entryId;
-  for (;;) {
-    const children = childrenByParent.get(cursor) ?? [];
-    if (children.length === 0) return cursor;
-    cursor = children[children.length - 1].id;
-  }
-}
-
 export function ConversationBranchesPanel({ onAnchorEntrySelected }: ConversationBranchesPanelProps) {
-  const { conversationId, allEntries, activePathEntries, setActiveLeaf } = useChatSessionContext();
+  const { conversationId, allEntries, activePathEntries, switchToBranch } = useChatSessionContext();
   const pathTipId = activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null;
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
 
@@ -131,11 +122,9 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
 
   async function handleSelectEntry(entryId: string) {
     if (!conversationId) return;
-    const targetLeafId = deepestDescendantId(entryId, childrenByParent);
-    if (!targetLeafId) return;
-    setSwitchingToEntryId(targetLeafId);
+    setSwitchingToEntryId(entryId);
     try {
-      await setActiveLeaf(targetLeafId);
+      await switchToBranch(entryId);
       onAnchorEntrySelected?.(entryId);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);

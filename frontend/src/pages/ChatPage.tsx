@@ -65,6 +65,7 @@ export function ChatPage({
     allEntries,
     isSessionLoading,
     setActiveLeaf,
+    switchToBranch,
     appendOptimisticUserMessage,
   } = useChatSession(conversationId);
   const { expandedStageBySlotKey, setSlotExpandedStage } = useThoughtExpandedStageState();
@@ -74,10 +75,11 @@ export function ChatPage({
       activePathEntries: chatEntries,
       allEntries,
       setActiveLeaf,
+      switchToBranch,
       expandedStageBySlotKey,
       setSlotExpandedStage,
     }),
-    [conversationId, chatEntries, allEntries, setActiveLeaf, expandedStageBySlotKey, setSlotExpandedStage],
+    [conversationId, chatEntries, allEntries, setActiveLeaf, switchToBranch, expandedStageBySlotKey, setSlotExpandedStage],
   );
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);

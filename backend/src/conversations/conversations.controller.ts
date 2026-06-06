@@ -234,7 +234,12 @@ export class ConversationsController {
         sourceEntryId: entryId,
         editedResponse: body.editedResponse,
       });
-      return { conversationId, plannerEntryId: result.plannerEntryId, queuedToolCalls: 0 };
+      return {
+        conversationId,
+        plannerEntryId: result.plannerEntryId,
+        leafEntryId: result.leafEntryId,
+        queuedToolCalls: 0,
+      };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'failed to reprocess thought';
       throw new BadRequestException(detail);
@@ -256,7 +261,11 @@ export class ConversationsController {
         sourceEntryId: entryId,
         editedText: body.editedText,
       });
-      return { conversationId, userMessageEntryId: result.userMessageEntryId };
+      return {
+        conversationId,
+        userMessageEntryId: result.userMessageEntryId,
+        leafEntryId: result.leafEntryId,
+      };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'failed to reprocess user message';
       throw new BadRequestException(detail);
@@ -299,7 +308,12 @@ export class ConversationsController {
         editedRequestText: body.editedRequestText,
         ...(body.llm ? { llm: body.llm } : {}),
       });
-      return { conversationId, plannerEntryId: result.plannerEntryId, queuedToolCalls: 0 };
+      return {
+        conversationId,
+        plannerEntryId: result.plannerEntryId,
+        leafEntryId: result.leafEntryId,
+        queuedToolCalls: 0,
+      };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'failed to reprocess thought';
       throw new BadRequestException(detail);

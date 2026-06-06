@@ -149,7 +149,7 @@ export class ThoughtProcessingService {
     },
     scope: LifecycleScope,
     chain: ChatChain,
-  ): Promise<{ plannerEntryId: string }> {
+  ): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     scope.throwIfAborted();
     const editedRequestText = args.editedRequestText.trim();
     if (!editedRequestText) throw new Error('editedRequestText is required');
@@ -189,7 +189,7 @@ export class ThoughtProcessingService {
       const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
       await this.decisionStep.run(provider, input, ctx, completion, scope);
     });
-    return { plannerEntryId };
+    return { plannerEntryId, leafEntryId: plannerEntryId };
   }
 
   async startReprocessReason(
@@ -197,7 +197,7 @@ export class ThoughtProcessingService {
     scope: LifecycleScope,
     chain: ChatChain,
     llm: LlmRef,
-  ): Promise<{ plannerEntryId: string }> {
+  ): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     scope.throwIfAborted();
     const editedResponse = args.editedResponse.trim();
     if (!editedResponse) throw new Error('editedResponse is required');
@@ -213,17 +213,18 @@ export class ThoughtProcessingService {
     ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.llmRequest, editedResponse);
     ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
     const plannerEntryId = ctx.streamEntryId;
-    await this.chatEntries.setDefaultViewLeaf(args.conversationId, ctx.thoughtActionEntryId);
+    const leafEntryId = ctx.thoughtActionEntryId!;
+    await this.chatEntries.setDefaultViewLeaf(args.conversationId, leafEntryId);
 
     scope.spawn(async () => {
-      const input = await provider.buildInputFromConversation!(args.conversationId, ctx.thoughtActionEntryId!);
+      const input = await provider.buildInputFromConversation!(args.conversationId, leafEntryId);
       const completion: LlmCompletion = {
         parts: [{ kind: 'text', text: editedResponse }],
         finishReason: 'stop',
       };
       await this.decisionStep.run(provider, input, ctx, completion, scope);
     });
-    return { plannerEntryId };
+    return { plannerEntryId, leafEntryId };
   }
 
   private createContext(

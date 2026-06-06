@@ -256,7 +256,9 @@ export async function reprocessThought(
   conversationId: string,
   entryId: string,
   editedResponse: string,
-): Promise<PostAcceptedResult<{ conversationId: string; plannerEntryId: string; queuedToolCalls: number }>> {
+): Promise<
+  PostAcceptedResult<{ conversationId: string; plannerEntryId: string; leafEntryId: string; queuedToolCalls: number }>
+> {
   const result = await postJsonAccepted(
     `/api/conversations/${encodeURIComponent(conversationId)}/thoughts/${encodeURIComponent(entryId)}/reprocess-reason`,
     { editedResponse },
@@ -268,15 +270,17 @@ export async function reprocessThought(
   const row = data as {
     conversationId?: unknown;
     plannerEntryId?: unknown;
+    leafEntryId?: unknown;
     queuedToolCalls?: unknown;
   };
   const conversationIdOut = String(row.conversationId ?? "").trim();
   const plannerEntryId = String(row.plannerEntryId ?? "").trim();
+  const leafEntryId = String(row.leafEntryId ?? "").trim();
   const queuedToolCalls =
     typeof row.queuedToolCalls === "number" && Number.isFinite(row.queuedToolCalls)
       ? Math.max(0, Math.trunc(row.queuedToolCalls))
       : NaN;
-  if (!conversationIdOut || !plannerEntryId || Number.isNaN(queuedToolCalls)) {
+  if (!conversationIdOut || !plannerEntryId || !leafEntryId || Number.isNaN(queuedToolCalls)) {
     throw new Error("POST /api/conversations/:id/thoughts/:entryId/reprocess: invalid response fields");
   }
   return {
@@ -284,6 +288,7 @@ export async function reprocessThought(
     data: {
       conversationId: conversationIdOut,
       plannerEntryId,
+      leafEntryId,
       queuedToolCalls,
     },
   };
@@ -293,7 +298,7 @@ export async function reprocessUserMessage(
   conversationId: string,
   entryId: string,
   editedText: string,
-): Promise<PostAcceptedResult<{ conversationId: string; userMessageEntryId: string }>> {
+): Promise<PostAcceptedResult<{ conversationId: string; userMessageEntryId: string; leafEntryId: string }>> {
   const result = await postJsonAccepted(
     `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(entryId)}/reprocess`,
     { editedText },
@@ -302,15 +307,16 @@ export async function reprocessUserMessage(
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("POST /api/conversations/:id/messages/:entryId/reprocess: invalid response envelope");
   }
-  const row = data as { conversationId?: unknown; userMessageEntryId?: unknown };
+  const row = data as { conversationId?: unknown; userMessageEntryId?: unknown; leafEntryId?: unknown };
   const conversationIdOut = String(row.conversationId ?? "").trim();
   const userMessageEntryId = String(row.userMessageEntryId ?? "").trim();
-  if (!conversationIdOut || !userMessageEntryId) {
+  const leafEntryId = String(row.leafEntryId ?? "").trim();
+  if (!conversationIdOut || !userMessageEntryId || !leafEntryId) {
     throw new Error("POST /api/conversations/:id/messages/:entryId/reprocess: invalid response fields");
   }
   return {
     status: result.status,
-    data: { conversationId: conversationIdOut, userMessageEntryId },
+    data: { conversationId: conversationIdOut, userMessageEntryId, leafEntryId },
   };
 }
 
@@ -321,7 +327,9 @@ export async function reprocessThoughtContext(
     editedRequestText: string;
     llm: LlmRef;
   },
-): Promise<PostAcceptedResult<{ conversationId: string; plannerEntryId: string; queuedToolCalls: number }>> {
+): Promise<
+  PostAcceptedResult<{ conversationId: string; plannerEntryId: string; leafEntryId: string; queuedToolCalls: number }>
+> {
   const result = await postJsonAccepted(
     `/api/conversations/${encodeURIComponent(conversationId)}/thoughts/${encodeURIComponent(entryId)}/reprocess-context`,
     input,
@@ -333,15 +341,17 @@ export async function reprocessThoughtContext(
   const row = data as {
     conversationId?: unknown;
     plannerEntryId?: unknown;
+    leafEntryId?: unknown;
     queuedToolCalls?: unknown;
   };
   const conversationIdOut = String(row.conversationId ?? "").trim();
   const plannerEntryId = String(row.plannerEntryId ?? "").trim();
+  const leafEntryId = String(row.leafEntryId ?? "").trim();
   const queuedToolCalls =
     typeof row.queuedToolCalls === "number" && Number.isFinite(row.queuedToolCalls)
       ? Math.max(0, Math.trunc(row.queuedToolCalls))
       : NaN;
-  if (!conversationIdOut || !plannerEntryId || Number.isNaN(queuedToolCalls)) {
+  if (!conversationIdOut || !plannerEntryId || !leafEntryId || Number.isNaN(queuedToolCalls)) {
     throw new Error("POST /api/conversations/:id/thoughts/:entryId/reprocess: invalid response fields");
   }
   return {
@@ -349,6 +359,7 @@ export async function reprocessThoughtContext(
     data: {
       conversationId: conversationIdOut,
       plannerEntryId,
+      leafEntryId,
       queuedToolCalls,
     },
   };

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Layers, GitBranch } from "lucide-react";
@@ -6,7 +6,7 @@ import type { CheckpointSummaryEntry } from "../../../protocol/chatEntry";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { formatExactChatTime, formatRelativeChatTime } from "../../../utils/formatRelativeChatTime";
 import { ChatMessageShell } from "../ChatMessageShell";
-import { BranchSelector, buildChildrenByParent, deepestDescendantId } from "../BranchSelector";
+import { BranchSelector } from "../BranchSelector";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { notifyError } from "@/utils/toast";
 import { formatTokenCount } from "@/utils/formatTokenCount";
@@ -22,16 +22,9 @@ const proseChat =
  * exposes the branch switcher for users who want to retrieve the originals.
  */
 function ViewOriginalButton({ fromEntryId }: { fromEntryId: string }) {
-  const { allEntries, setActiveLeaf } = useChatSessionContext();
+  const { switchToBranch } = useChatSessionContext();
   const [switching, setSwitching] = useState(false);
 
-  const originalLeafId = useMemo(() => {
-    const all = allEntries.map((r$) => r$.get());
-    const childrenByParent = buildChildrenByParent(all);
-    return childrenByParent.has(fromEntryId) ? deepestDescendantId(fromEntryId, childrenByParent) : null;
-  }, [allEntries, fromEntryId]);
-
-  if (!originalLeafId) return null;
 
   return (
     <button
@@ -40,7 +33,7 @@ function ViewOriginalButton({ fromEntryId }: { fromEntryId: string }) {
       onClick={(e) => {
         e.stopPropagation();
         setSwitching(true);
-        setActiveLeaf(originalLeafId)
+        switchToBranch(fromEntryId)
           .catch((err) => notifyError(`Failed to switch branch: ${err instanceof Error ? err.message : String(err)}`))
           .finally(() => setSwitching(false));
       }}

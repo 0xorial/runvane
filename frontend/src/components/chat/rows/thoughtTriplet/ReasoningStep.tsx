@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pencil, RefreshCw } from "lucide-react";
 import { reprocessThought, reprocessThoughtContext } from "@/api/client";
 import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+import { useChatSessionContext } from "@/hooks/chatSessionContext";
 import { notifyError } from "@/utils/toast";
 import { formatTokenCount } from "@/utils/formatTokenCount";
 import { CodeEditor } from "@/components/ui/CodeEditor";
@@ -23,6 +24,7 @@ export function ReasoningStep({
   const thinking = String(stream.thinkingText || "").trim();
   const [isEditing, setIsEditing] = useState(false);
   const [editedResponse, setEditedResponse] = useState(response);
+  const { setActiveLeaf } = useChatSessionContext();
   const [isSaving, setIsSaving] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
 
@@ -43,7 +45,8 @@ export function ReasoningStep({
     if (!canApply) return;
     setIsSaving(true);
     try {
-      await reprocessThought(conversationId, stream.id, editedResponse.trim());
+      const result = await reprocessThought(conversationId, stream.id, editedResponse.trim());
+      await setActiveLeaf(result.data.leafEntryId);
       setIsEditing(false);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -66,10 +69,11 @@ export function ReasoningStep({
     }
     setIsRetrying(true);
     try {
-      await reprocessThoughtContext(conversationId, prepareEntry.id, {
+      const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
         editedRequestText: requestText,
         llm: { providerId, model },
       });
+      await setActiveLeaf(result.data.leafEntryId);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       notifyError(`Failed to retry thought: ${detail}`);
