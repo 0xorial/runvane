@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setConversationDefaultViewLeaf } from "../api/client";
-import { fetchConversationSession } from "./queries/conversations";
+import { queryClient } from "@/lib/queryClient";
+import { fetchConversationSession, refetchConversationSession } from "./queries/conversations";
+import { queryKeys } from "./queries/keys";
 import { subscribeGlobalLive, isGlobalSseOpen } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
@@ -25,8 +27,6 @@ type AppendOptimisticUserMessageInput = {
   attachments?: ChatAttachment[];
 };
 
-const POLL_RELOAD_MIN_GAP_MS = 3_000;
-
 function buildOptimisticUserEntry(
   input: AppendOptimisticUserMessageInput,
   rowId: string,
@@ -50,21 +50,16 @@ export function useChatSession(conversationId: string | null | undefined) {
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const pendingByClientRequestIdRef = useRef<Map<string, string>>(new Map());
-  const lastHttpLoadAtRef = useRef(0);
-  const sseEventAtRef = useRef(0);
 
   const applySession = useCallback((entries: ChatEntry[], leafId: string | null) => {
     storeRef.current.replace(entries);
     setActiveLeafId(leafId);
-    lastHttpLoadAtRef.current = Date.now();
   }, []);
 
   useEffect(() => {
     storeRef.current.replace(defaultChatEntries);
     setActiveLeafId(null);
     pendingByClientRequestIdRef.current.clear();
-    lastHttpLoadAtRef.current = 0;
-    sseEventAtRef.current = 0;
     if (!conversationId) return;
 
     const cid = String(conversationId);
@@ -86,7 +81,7 @@ export function useChatSession(conversationId: string | null | undefined) {
   const reloadFromServer = useCallback(async () => {
     if (!conversationId) return;
     const cid = String(conversationId);
-    const session = await fetchConversationSession(cid);
+    const session = await refetchConversationSession(cid);
     const pendingOptimistic = [...pendingByClientRequestIdRef.current.values()]
       .map((rowId) => storeRef.current.getById(rowId)?.get())
       .filter((entry): entry is UserMessageEntry => entry?.type === "user-message");
@@ -115,12 +110,17 @@ export function useChatSession(conversationId: string | null | undefined) {
   useEffect(() => {
     if (!conversationId) return;
     const cid = String(conversationId);
+    let sseWasOpen = isGlobalSseOpen();
     const unsubscribeLive = subscribeGlobalLive({
       onPollTick: async () => {
-        if (isGlobalSseOpen()) return false;
-        const sinceLoad = Date.now() - lastHttpLoadAtRef.current;
-        const sinceSse = Date.now() - sseEventAtRef.current;
-        if (sinceLoad < POLL_RELOAD_MIN_GAP_MS || sinceSse < POLL_RELOAD_MIN_GAP_MS) {
+        if (isGlobalSseOpen()) {
+          sseWasOpen = true;
+          return false;
+        }
+        // Fresh HTTP bootstrap is authoritative until SSE has connected at least once.
+        if (!sseWasOpen) return false;
+        const sessionState = queryClient.getQueryState(queryKeys.conversationSession(cid));
+        if (sessionState?.fetchStatus === "fetching" || sessionState?.status !== "success") {
           return false;
         }
         try {
@@ -135,7 +135,6 @@ export function useChatSession(conversationId: string | null | undefined) {
         if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
           return;
         }
-        sseEventAtRef.current = Date.now();
         const store = storeRef.current;
         if (ev.type === SseType.USER_MESSAGE) {
           if (reconcileOptimisticUserMessage(ev.clientRequestId, ev.entry)) return;

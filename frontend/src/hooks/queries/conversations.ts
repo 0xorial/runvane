@@ -30,23 +30,31 @@ export type ConversationSession = {
   leafId: string | null;
 };
 
-/** One in-flight load per conversation — dedupes mount + SSE poll overlap. */
+async function loadConversationSession(conversationId: string): Promise<ConversationSession> {
+  const cid = conversationId.trim();
+  const [entries, conversation] = await Promise.all([
+    getConversationMessages(cid, { all: true }),
+    queryClient.fetchQuery({
+      queryKey: queryKeys.conversation(cid),
+      queryFn: () => getConversation(cid),
+    }),
+  ]);
+  return { entries, leafId: conversation.defaultViewLeafEntryId };
+}
+
 export function fetchConversationSession(conversationId: string): Promise<ConversationSession> {
   const cid = conversationId.trim();
   return queryClient.fetchQuery({
     queryKey: queryKeys.conversationSession(cid),
-    queryFn: async (): Promise<ConversationSession> => {
-      const [entries, conversation] = await Promise.all([
-        getConversationMessages(cid, { all: true }),
-        queryClient.fetchQuery({
-          queryKey: queryKeys.conversation(cid),
-          queryFn: () => getConversation(cid),
-        }),
-      ]);
-      return { entries, leafId: conversation.defaultViewLeafEntryId };
-    },
-    staleTime: 0,
+    queryFn: () => loadConversationSession(cid),
+    staleTime: 60_000,
   });
+}
+
+export async function refetchConversationSession(conversationId: string): Promise<ConversationSession> {
+  const cid = conversationId.trim();
+  await queryClient.invalidateQueries({ queryKey: queryKeys.conversationSession(cid) });
+  return fetchConversationSession(cid);
 }
 
 export function refreshConversations(deletedOnly: boolean): Promise<GetConversationsResponse> {

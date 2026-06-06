@@ -1,0 +1,50 @@
+---
+description: Fix root causes; no timer hacks, redundant refs, or layered patches
+alwaysApply: true
+---
+
+# No Defensive Slop
+
+When fixing a bug, find **why** it happens and remove/fix that path. Do not stack compensating logic on top.
+
+## Banned patterns
+
+- **Timer heuristics** (`sinceX`, `MIN_GAP_MS`, debounce to paper over ordering bugs). If timing/order is wrong, fix the trigger or gate — don't rate-limit the symptom.
+- **Redundant in-flight refs** (`loadInFlightRef`, `sessionReadyRef`, module `Map` dedupers) when the stack already exposes this (`queryClient.getQueryState()`, `isFetching`, `fetchQuery` dedupe, `cancelled` in effects).
+- **Patch-on-patch**: adding a guard because a previous guard failed (e.g. `loadedAt === 0` special-case for broken `sinceLoad` math). Delete the broken guard instead.
+- **Unstable fallbacks in deps** (`data ?? []` inline in render → new array every render → `useEffect` loop). Use a module-level empty constant or bail out of `setState` when value unchanged.
+- **Code that adds no invariant**: if removing it doesn't change correct behavior, don't add it.
+
+## Required workflow
+
+1. Name the duplicate/wrong call or loop: *what triggers it, in what order*.
+2. Check existing primitives first (Query cache, SSE open check, effect cleanup, framework dedupe).
+3. Prefer **one source of truth** over parallel tracking.
+4. If the fix needs a comment longer than the code, the approach is probably wrong.
+
+## Examples from this repo
+
+```ts
+// Bad — timer slop masking poll-before-bootstrap
+const sinceLoad = Date.now() - lastHttpLoadAtRef.current;
+if (sinceLoad < 3000) return;
+
+// Good — gate on real state
+const s = queryClient.getQueryState(queryKeys.conversationSession(cid));
+if (s?.fetchStatus === "fetching" || s?.status !== "success") return;
+```
+
+```ts
+// Bad — new [] every render
+const rows = query.data?.rows ?? [];
+
+// Good
+const EMPTY_ROWS: Row[] = [];
+const rows = query.data?.rows ?? EMPTY_ROWS;
+```
+
+## Quick check
+
+- Can I delete code instead of adding more? Try that first.
+- Am I tracking state the library already tracks? Use the library.
+- Would a senior engineer ask "why not just fix X?" — then fix X.

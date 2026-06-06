@@ -32,6 +32,8 @@ type ConversationSidebarProps = {
 };
 
 const PROBE_MESSAGE = "what is the time?";
+const EMPTY_CONVERSATIONS: ConversationRow[] = [];
+const EMPTY_GROUPS: ConversationGroupRow[] = [];
 
 function timestampMs(value: string | undefined): number | null {
   const raw = String(value || "").trim();
@@ -46,8 +48,8 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   const [searchParams] = useSearchParams();
   const [showDeletedOnly, setShowDeletedOnly] = useState(false);
   const conversationsQuery = useConversationsQuery(showDeletedOnly);
-  const conversations = conversationsQuery.data?.conversations ?? [];
-  const groups = conversationsQuery.data?.groups ?? [];
+  const conversations = conversationsQuery.data?.conversations ?? EMPTY_CONVERSATIONS;
+  const groups = conversationsQuery.data?.groups ?? EMPTY_GROUPS;
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
   const [probeBusy, setProbeBusy] = useState(false);
@@ -58,7 +60,13 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   }, [showDeletedOnly]);
 
   useEffect(() => {
-    setSelectedConversationIds((prev) => prev.filter((id) => conversations.some((row) => row.id === id)));
+    setSelectedConversationIds((prev) => {
+      const next = prev.filter((id) => conversations.some((row) => row.id === id));
+      if (next.length === prev.length && next.every((id, index) => id === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
   }, [conversations]);
 
   useEffect(() => {
