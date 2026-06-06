@@ -95,11 +95,15 @@ export function useChatSession(conversationId: string | null | undefined) {
 
     const cid = boundCid;
     const releaseLive = retainChatSessionLive();
-    const needsInitialLoad = store.getAllRows().length === 0;
-    if (needsInitialLoad) setIsSessionLoading(true);
+    const warmCache = store.getAllRows().length > 0;
+    if (!warmCache) setIsSessionLoading(true);
 
     let cancelled = false;
     void (async () => {
+      if (warmCache) {
+        setIsSessionLoading(false);
+        return;
+      }
       try {
         const session = await loadConversationSession(cid);
         if (cancelled) return;

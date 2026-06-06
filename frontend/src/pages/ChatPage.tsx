@@ -174,6 +174,7 @@ export function ChatPage({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AnchorTopScrollArea
+          data-testid="chat-transcript"
           className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
           topAnchorEntryId={topAnchorEntryId}
         >
@@ -188,7 +189,10 @@ export function ChatPage({
               })
             : conversationId && isSessionLoading && visibleEntries.length === 0
               ? (
-                <div className="flex min-h-[12rem] flex-1 items-center justify-center p-8 text-muted-foreground">
+                <div
+                  data-testid="chat-loading"
+                  className="flex min-h-[12rem] flex-1 items-center justify-center p-8 text-muted-foreground"
+                >
                   <Spinner size={16} />
                 </div>
               )

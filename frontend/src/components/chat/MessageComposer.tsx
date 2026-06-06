@@ -68,6 +68,7 @@ export function MessageComposer({
           )}
         >
           <textarea
+            data-testid="chat-user-input"
             ref={textareaRef}
             rows={1}
             value={value}
@@ -105,6 +106,7 @@ export function MessageComposer({
 
             <AsyncButton
               ref={sendButtonRef}
+              data-testid="chat-send-button"
               iconOnly
               disabled={!canSend}
               spinnerSize={12}

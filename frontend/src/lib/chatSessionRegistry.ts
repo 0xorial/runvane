@@ -6,18 +6,25 @@ const stores = new Map<string, ChatSessionStore>();
 const pendingByConversationId = new Map<string, Map<string, string>>();
 let emptyStore: ChatSessionStore | undefined;
 
+export function routeSessionSseEvent(ev: SseEvent): void {
+  const cid = String(ev.conversationId || "").trim();
+  if (!cid) return;
+  const store = stores.get(cid);
+  if (!store) return;
+  const pending = pendingByConversationId.get(cid);
+  if (!pending) return;
+  store.applySseEvent(ev, pending);
+}
+
+export function resetChatSessionRegistry(): void {
+  stores.clear();
+  pendingByConversationId.clear();
+}
+
 function ensureLiveSubscription(): void {
   if (liveDispose) return;
   liveDispose = subscribeGlobalLive({
-    onSseEvent: (ev: SseEvent) => {
-      const cid = String(ev.conversationId || "").trim();
-      if (!cid) return;
-      const store = stores.get(cid);
-      if (!store) return;
-      const pending = pendingByConversationId.get(cid);
-      if (!pending) return;
-      store.applySseEvent(ev, pending);
-    },
+    onSseEvent: routeSessionSseEvent,
   });
 }
 

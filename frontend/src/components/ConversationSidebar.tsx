@@ -405,6 +405,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         <div className="space-y-1.5 border-b border-sidebar-border px-2.5 py-2">
           <button
             type="button"
+            data-testid="sidebar-new-chat"
             onClick={onNewChat}
             className="flex w-full items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
           >
@@ -413,6 +414,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
           </button>
           <button
             type="button"
+            data-testid="sidebar-probe-time"
             className="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
             onClick={() => void onProbeTime()}
             disabled={probeBusy}

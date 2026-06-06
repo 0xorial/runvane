@@ -17,6 +17,8 @@ export type AsyncButtonProps = {
   iconOnly?: boolean;
   /** When children are non-text (e.g. icon-only), set for a11y */
   ariaLabel?: string;
+  /** Stable selector for e2e page objects */
+  "data-testid"?: string;
   spinnerSize?: number;
   successDurationMs?: number;
   errorDurationMs?: number;
@@ -38,6 +40,7 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
     children,
     iconOnly = false,
     ariaLabel,
+    "data-testid": testId,
     spinnerSize = 12,
     successDurationMs = 5000,
     errorDurationMs = 5000,
@@ -111,6 +114,7 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
           className,
         )}
         data-state={state}
+        data-testid={testId}
         disabled={disabled || isLoading}
         onClick={handleClick}
         aria-label={ariaLabel}
@@ -166,6 +170,7 @@ export const AsyncButton = forwardRef<AsyncButtonHandle, AsyncButtonProps>(funct
         className,
       )}
       data-state={state}
+      data-testid={testId}
       disabled={disabled || isLoading}
       onClick={handleClick}
       aria-label={ariaLabel}

@@ -1,0 +1,142 @@
+export const PROBE_MESSAGE = 'what is the time?';
+
+/** True when INTEGRATION_LIVE_LLM=1 (real provider; slow). Default integration uses stub. */
+export function integrationUsesLiveLlm(): boolean {
+  return process.env.INTEGRATION_LIVE_LLM === '1';
+}
+
+export const INTEGRATION_LLM_TIMEOUT_MS = Number(
+  process.env.INTEGRATION_LLM_TIMEOUT_MS ?? (integrationUsesLiveLlm() ? 45_000 : 5_000),
+);
+
+const POLL_MS = 50;
+
+export type ChatEntryRow = {
+  id: string;
+  type: string;
+  conversationIndex: number;
+  parentId: string | null;
+  text?: string;
+};
+
+export type AgentRow = {
+  id: string;
+  is_default?: boolean;
+};
+
+export async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function getDefaultAgentId(baseUrl: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/api/agents`);
+  if (!res.ok) throw new Error(`GET /api/agents failed: ${res.status}`);
+  const agents = (await res.json()) as AgentRow[];
+  if (!Array.isArray(agents) || agents.length === 0) {
+    throw new Error('integration setup: no agents in database');
+  }
+  const agent = agents.find((row) => row.is_default) ?? agents[0];
+  if (!agent?.id) throw new Error('integration setup: agent row missing id');
+  return agent.id;
+}
+
+export async function createConversation(baseUrl: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/api/conversations`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'integration test' }),
+  });
+  if (!res.ok) throw new Error(`POST /api/conversations failed: ${res.status}`);
+  const row = (await res.json()) as { id?: string };
+  if (!row.id) throw new Error('POST /api/conversations: missing id');
+  return row.id;
+}
+
+export async function postProbeMessage(baseUrl: string, conversationId: string, agentId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ message: PROBE_MESSAGE, agentId }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`POST /api/conversations/:id/messages failed: ${res.status} ${detail}`);
+  }
+}
+
+export async function listAllMessages(baseUrl: string, conversationId: string): Promise<ChatEntryRow[]> {
+  const res = await fetch(
+    `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages?all=1`,
+  );
+  if (!res.ok) throw new Error(`GET messages failed: ${res.status}`);
+  const rows = (await res.json()) as ChatEntryRow[];
+  if (!Array.isArray(rows)) throw new Error('GET messages: expected array');
+  return rows;
+}
+
+export async function waitForProbeCompletion(
+  baseUrl: string,
+  conversationId: string,
+  timeoutMs = INTEGRATION_LLM_TIMEOUT_MS,
+): Promise<ChatEntryRow[]> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const entries = await listAllMessages(baseUrl, conversationId);
+    const assistant = entries.find(
+      (entry) => entry.type === 'assistant-message' && String(entry.text || '').trim().length > 0,
+    );
+    if (assistant) return entries;
+    await sleep(POLL_MS);
+  }
+  throw new Error(`timeout (${timeoutMs}ms) waiting for assistant in conversation ${conversationId}`);
+}
+
+export function entryTypesInOrder(entries: ChatEntryRow[]): string[] {
+  return [...entries].sort((a, b) => a.conversationIndex - b.conversationIndex).map((entry) => entry.type);
+}
+
+export function assertProbeShape(types: string[]): void {
+  const userIdx = types.indexOf('user-message');
+  const assistantIdx = types.lastIndexOf('assistant-message');
+  if (userIdx < 0) throw new Error(`probe shape: missing user-message in ${types.join(',')}`);
+  if (assistantIdx < 0) throw new Error(`probe shape: missing assistant-message in ${types.join(',')}`);
+  if (assistantIdx <= userIdx) throw new Error(`probe shape: assistant before user in ${types.join(',')}`);
+
+  const thoughtPrepares = types.filter((type) => type === 'thought-prepare').length;
+  if (thoughtPrepares < 2) {
+    throw new Error(`probe shape: expected >=2 thought-prepare, got ${thoughtPrepares}`);
+  }
+}
+
+export async function getConversation(
+  baseUrl: string,
+  conversationId: string,
+): Promise<{ id: string; defaultViewLeafEntryId: string | null }> {
+  const res = await fetch(`${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}`);
+  if (!res.ok) throw new Error(`GET conversation failed: ${res.status}`);
+  const row = (await res.json()) as { id?: string; defaultViewLeafEntryId?: string | null };
+  if (!row.id) throw new Error('GET conversation: missing id');
+  return { id: row.id, defaultViewLeafEntryId: row.defaultViewLeafEntryId ?? null };
+}
+
+export async function setDefaultViewLeaf(
+  baseUrl: string,
+  conversationId: string,
+  entryId: string,
+): Promise<string> {
+  const res = await fetch(
+    `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/default-view-leaf`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryId }),
+    },
+  );
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`POST default-view-leaf failed: ${res.status} ${detail}`);
+  }
+  const row = (await res.json()) as { defaultViewLeafEntryId?: string };
+  if (!row.defaultViewLeafEntryId) throw new Error('POST default-view-leaf: missing defaultViewLeafEntryId');
+  return row.defaultViewLeafEntryId;
+}

@@ -163,7 +163,12 @@ export class ChatSessionStore {
   private upsert(entry: ChatEntry): "appended" | "patched" | "unchanged" {
     const existing = this.lookup().getById(entry.id);
     if (existing) {
+      const prevParentId = existing.parentId;
       this.rows.replaceById(entry.id, patchLinked(existing, entry));
+      if (prevParentId !== entry.parentId && extendsChosenPath(this.lookup(), entry.parentId)) {
+        chooseEntry(entry.id, this.lookup(), (id, chosen) => this.setChosen(id, chosen));
+        this.bumpActivePath();
+      }
       return "patched";
     }
     if (this.append(entry)) return "appended";

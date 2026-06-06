@@ -15,3 +15,8 @@ backend/data/
 .env.user
 .env.ports
 backend/prisma/backend.sqlite
+
+test-metrics/ledger.json
+test-metrics/last-run.json
+frontend/test-results/
+frontend/playwright-report/
