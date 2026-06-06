@@ -20,6 +20,10 @@ export function buildModelPricingByName(capabilities: ModelCapabilityRow[]): Map
   for (const cap of capabilities) {
     const model = String(cap.model_name || "").trim();
     if (!model || out.has(model)) continue;
+    if (cap.self_hosted) {
+      out.set(model, { inCostPer1m: 0, cachedInCostPer1m: 0, outCostPer1m: 0 });
+      continue;
+    }
     const inCost = finiteOrNull(cap.usd_per_1m_tokens_in) ?? finiteOrNull(cap.input_cost_per_1m);
     const outCost = finiteOrNull(cap.usd_per_1m_tokens_out) ?? finiteOrNull(cap.output_cost_per_1m);
     const cachedInCost =
@@ -52,4 +56,16 @@ export function estimateConversationCostUsd(
       (boundedCompletion / 1_000_000) * prices.outCostPer1m;
   }
   return Number(total.toFixed(8));
+}
+
+/** Returns true if any usage row with tokens has no matching pricing entry. */
+export function hasUnpricedUsage(
+  usageRows: TokenUsageByModelRow[],
+  pricingByModel: Map<string, ModelPricing>,
+): boolean {
+  return usageRows.some((usage) => {
+    const totalTokens = usage.promptTokens + usage.cachedPromptTokens + usage.completionTokens;
+    if (totalTokens === 0) return false;
+    return !pricingByModel.has(String(usage.modelName || "").trim());
+  });
 }

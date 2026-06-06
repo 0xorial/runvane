@@ -5,18 +5,22 @@ export function sortAgents(list: AgentListItemResponse[] | null | undefined): Ag
   return [...(list || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
-export function normalizeSection(section: string | undefined): string {
-  const s = (section || "").toLowerCase();
-  if (s === "model-providers" || s === "model_provider" || s === "providers") {
-    return "model_provider";
-  }
-  if (s === "model-presets" || s === "model_presets" || s === "presets") {
-    return "model_presets";
-  }
-  if (s === "tools") return "tools";
-  if (s === "skills") return "skills";
-  if (s === "agents") return "agents";
-  return "model_provider";
+export const SETTINGS_SECTIONS = [
+  "model-providers",
+  "model-presets",
+  "model-pricing",
+  "agents",
+  "tools",
+  "skills",
+] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+export const DEFAULT_SETTINGS_SECTION: SettingsSection = "model-providers";
+
+export function parseSettingsSection(section: string | undefined): SettingsSection {
+  return (SETTINGS_SECTIONS as readonly string[]).includes(section ?? "")
+    ? (section as SettingsSection)
+    : DEFAULT_SETTINGS_SECTION;
 }
 
 export function normalizeSearchToken(value: unknown): string {

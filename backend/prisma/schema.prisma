@@ -107,6 +107,7 @@ model ModelCapability {
   inputCostPer1m         Float?   @map("input_cost_per_1m")
   cachedInputCostPer1m   Float?   @map("cached_input_cost_per_1m")
   outputCostPer1m        Float?   @map("output_cost_per_1m")
+  selfHosted             Boolean? @map("self_hosted")
   currency               String?
   source                 String?  @default("discovered")
   createdAt              DateTime @default(now()) @map("created_at")
@@ -126,6 +127,7 @@ model ModelCapabilityOverride {
   inputCostPer1m         Float?   @map("input_cost_per_1m")
   cachedInputCostPer1m   Float?   @map("cached_input_cost_per_1m")
   outputCostPer1m        Float?   @map("output_cost_per_1m")
+  selfHosted             Boolean? @map("self_hosted")
   currency               String?
   notes                  String?
   updatedBy              String?  @map("updated_by")

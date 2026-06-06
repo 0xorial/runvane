@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { TokenUsageMapper, type EntryTokenUsage } from "../../../../backend/src/contracts/token-usage";
 
@@ -8,7 +9,10 @@ export type LlmMetaBadgeProps = {
   usage?: EntryTokenUsage;
   durationMs?: number;
   showTokenBreakdown?: boolean;
-  estimatedCostUsd?: number;
+  /** `null` = cost unknown (missing pricing), `undefined` = don't show, `number` = formatted value */
+  estimatedCostUsd?: number | null;
+  /** Model names that lack pricing — used to deep-link "set pricing" to the right rows. */
+  unpricedModels?: string[];
   className?: string;
 };
 
@@ -39,6 +43,7 @@ export function LlmMetaBadge({
   durationMs,
   showTokenBreakdown = false,
   estimatedCostUsd,
+  unpricedModels,
   className,
 }: LlmMetaBadgeProps) {
   const m = String(model ?? "").trim();
@@ -78,7 +83,22 @@ export function LlmMetaBadge({
     }
   }
   if (hasDuration) segments.push(<span key="s">{(durationMs / 1000).toFixed(1)}s</span>);
-  if (estimatedCostUsd != null) {
+  if (estimatedCostUsd === null) {
+    const focusQuery =
+      unpricedModels && unpricedModels.length > 0
+        ? `?focus=${encodeURIComponent(unpricedModels.join(","))}`
+        : "";
+    segments.push(
+      <Link
+        key="usd"
+        to={`/settings/model-pricing${focusQuery}`}
+        title="Pricing not configured for one or more models used. Click to configure."
+        className="text-muted-foreground/70 underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 hover:text-foreground hover:decoration-foreground"
+      >
+        set pricing
+      </Link>,
+    );
+  } else if (typeof estimatedCostUsd === "number") {
     segments.push(
       <span key="usd" title={`$${formatExactUsd(estimatedCostUsd)}`}>
         ${formatUsd(estimatedCostUsd)}

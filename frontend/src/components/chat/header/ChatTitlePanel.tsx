@@ -18,6 +18,7 @@ import { TokenUsageMapper } from "../../../../../backend/src/contracts/token-usa
 import {
   buildModelPricingByName,
   estimateConversationCostUsd,
+  hasUnpricedUsage,
   type ModelPricing,
   type TokenUsageByModelRow,
 } from "@/lib/costEstimation";
@@ -62,8 +63,24 @@ export function ChatTitlePanel({
   const [pricingByModel, setPricingByModel] = useState<Map<string, ModelPricing>>(() => new Map());
   const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
-  const estimatedCostUsd = useMemo(
-    () => estimateConversationCostUsd(tokenUsageByModel, pricingByModel),
+  const estimatedCostUsd = useMemo((): number | null => {
+    const totalTokens =
+      (tokenTotals.promptTokens ?? 0) +
+      (tokenTotals.cachedPromptTokens ?? 0) +
+      (tokenTotals.completionTokens ?? 0);
+    if (totalTokens === 0) return 0;
+    // Tokens exist but no per-model breakdown → can't price
+    if (tokenUsageByModel.length === 0) return null;
+    if (hasUnpricedUsage(tokenUsageByModel, pricingByModel)) return null;
+    return estimateConversationCostUsd(tokenUsageByModel, pricingByModel);
+  }, [tokenTotals, tokenUsageByModel, pricingByModel]);
+
+  const unpricedModels = useMemo(
+    () =>
+      tokenUsageByModel
+        .filter((u) => !pricingByModel.has(String(u.modelName || "").trim()))
+        .map((u) => String(u.modelName || "").trim())
+        .filter((name) => name.length > 0),
     [tokenUsageByModel, pricingByModel],
   );
 
@@ -160,7 +177,12 @@ export function ChatTitlePanel({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <EditableConversationTitle title={title} disabled={!conversationId} onCommit={onCommit} />
-          <LlmMetaBadge usage={tokenTotals} showTokenBreakdown estimatedCostUsd={estimatedCostUsd} />
+          <LlmMetaBadge
+            usage={tokenTotals}
+            showTokenBreakdown
+            estimatedCostUsd={estimatedCostUsd}
+            unpricedModels={unpricedModels}
+          />
         </div>
       </div>
       <div className="flex items-center gap-0.5">

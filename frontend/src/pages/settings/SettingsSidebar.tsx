@@ -1,8 +1,9 @@
 import type { NavigateFunction } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import type { SettingsSection } from "./helpers";
 
 type SettingsSidebarProps = {
-  activeSection: string;
+  activeSection: SettingsSection;
   navigate: NavigateFunction;
   settingsSearch?: string;
 };
@@ -12,50 +13,34 @@ const navBtn =
 
 const navBtnActive = "border-primary/40 bg-primary/10 hover:bg-primary/10";
 
+const NAV_ITEMS: ReadonlyArray<{ section: SettingsSection; label: string }> = [
+  { section: "model-providers", label: "Model Providers" },
+  { section: "model-presets", label: "Model Presets" },
+  { section: "model-pricing", label: "Model Pricing" },
+  { section: "tools", label: "Tools" },
+  { section: "skills", label: "Skills" },
+  { section: "agents", label: "Agents" },
+];
+
 export function SettingsSidebar({ activeSection, navigate, settingsSearch = "" }: SettingsSidebarProps) {
-  function go(pathname: string) {
-    navigate({ pathname, search: settingsSearch || "" });
+  function go(section: SettingsSection) {
+    navigate({ pathname: `/settings/${section}`, search: settingsSearch || "" });
   }
 
   return (
     <aside className="flex flex-col gap-3.5 rounded-lg border border-border bg-card p-3">
       <div>
         <div className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">WORKSPACE</div>
-        <button
-          type="button"
-          className={cn(navBtn, activeSection === "model_provider" && navBtnActive)}
-          onClick={() => go("/settings/model-providers")}
-        >
-          Model Providers
-        </button>
-        <button
-          type="button"
-          className={cn(navBtn, activeSection === "model_presets" && navBtnActive)}
-          onClick={() => go("/settings/model-presets")}
-        >
-          Model Presets
-        </button>
-        <button
-          type="button"
-          className={cn(navBtn, activeSection === "tools" && navBtnActive)}
-          onClick={() => go("/settings/tools")}
-        >
-          Tools
-        </button>
-        <button
-          type="button"
-          className={cn(navBtn, activeSection === "skills" && navBtnActive)}
-          onClick={() => go("/settings/skills")}
-        >
-          Skills
-        </button>
-        <button
-          type="button"
-          className={cn(navBtn, activeSection === "agents" && navBtnActive)}
-          onClick={() => go("/settings/agents")}
-        >
-          Agents
-        </button>
+        {NAV_ITEMS.map(({ section, label }) => (
+          <button
+            key={section}
+            type="button"
+            className={cn(navBtn, activeSection === section && navBtnActive)}
+            onClick={() => go(section)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
     </aside>
   );

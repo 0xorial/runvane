@@ -42,9 +42,13 @@ export function TokenTooltip({
           <div>input: {formatTokenCount(promptTokens)}</div>
           <div>cached: {formatTokenCount(cachedTokens)}</div>
           <div>output: {formatTokenCount(completionTokens)}</div>
-          {cost !== null ? (
-            <div className="mt-1 border-t border-border/40 pt-1">cost: {formatCostUsd(cost)}</div>
-          ) : null}
+          <div className="mt-1 border-t border-border/40 pt-1">
+            {cost !== null ? (
+              <>cost: {formatCostUsd(cost)}</>
+            ) : (
+              <span className="italic text-muted-foreground/60">cost: unknown</span>
+            )}
+          </div>
         </div>
       </TooltipContent>
     </Tooltip>

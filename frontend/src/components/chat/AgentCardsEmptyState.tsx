@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Check, Settings as SettingsIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import { getAgents } from "../../api/client";
 import { getAgentIcon } from "../../pages/settings/agentIcons";
@@ -80,15 +81,24 @@ export function AgentCardsEmptyState({ selectedAgentId }: AgentCardsEmptyStatePr
                 selected && "border-primary/70 bg-primary/5",
               )}
             >
-              <span className={cn("inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", color.wrap)}>
+              <span className={cn("relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", color.wrap)}>
                 <Icon className="h-4.5 w-4.5" strokeWidth={1.85} />
+                {agent.is_default ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="absolute -bottom-1 -right-1 inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-card bg-primary text-primary-foreground">
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      Default agent
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate pr-6 text-sm font-medium text-foreground">
                   {agent.name.trim() || "Untitled agent"}
-                  {agent.is_default ? (
-                    <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">default</span>
-                  ) : null}
                 </span>
                 {model ? (
                   <span className="mt-0.5 block break-all font-mono text-[11px] leading-snug text-muted-foreground">

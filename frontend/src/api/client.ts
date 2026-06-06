@@ -28,7 +28,7 @@ import type {
   LlmProviderRow,
   LlmProviderSettingsDocument,
 } from "../../../backend/src/contracts/settings";
-import type { ModelCapabilityRow } from "../../../backend/src/contracts/model-catalog";
+import type { ModelCapabilityRow, ModelCapabilityOverrideUpsert } from "../../../backend/src/contracts/model-catalog";
 import {
   validateGetLlmSettingsResponse,
   validateLlmProviderConnectionTestResponse,
@@ -416,6 +416,17 @@ export function getModelCapabilities(): Promise<{
       return raw as ModelCapabilityRow;
     });
     return { models };
+  });
+}
+
+export function updateModelCapabilityOverride(
+  body: ModelCapabilityOverrideUpsert,
+): Promise<{ models: ModelCapabilityRow[] }> {
+  return sendJson("/api/settings/model_capabilities/override", "PUT", body).then((data) => {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("PUT /api/settings/model_capabilities/override: invalid response envelope");
+    }
+    return data as { models: ModelCapabilityRow[] };
   });
 }
 

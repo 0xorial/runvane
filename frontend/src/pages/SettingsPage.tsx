@@ -26,7 +26,8 @@ import { cn } from "@/lib/utils";
 import { AgentsEditor } from "./settings/AgentsEditor";
 import { GlobalModelSettingsCard } from "./settings/GlobalModelSettingsCard";
 import { ModelPresetsEditor } from "./settings/ModelPresetsEditor";
-import { filterProviders, normalizeSection, buildModelGroups } from "./settings/helpers";
+import { ModelPricingEditor } from "./settings/ModelPricingEditor";
+import { filterProviders, parseSettingsSection, buildModelGroups } from "./settings/helpers";
 import type { LlmSettings } from "../types/llmSettings";
 import { useLlmSettings } from "../hooks/llmSettingsContext";
 import { ProviderCard } from "./settings/ProviderCard";
@@ -93,7 +94,7 @@ export function SettingsPage() {
   const { section } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const activeSection = normalizeSection(section);
+  const activeSection = parseSettingsSection(section);
 
   async function load() {
     setLoadingSettings(true);
@@ -309,7 +310,7 @@ export function SettingsPage() {
   }, [activeSection, agentEditId]);
 
   useEffect(() => {
-    if (activeSection !== "model_presets") return;
+    if (activeSection !== "model-presets") return;
     void loadPresets().then((list) => {
       if (list.length === 0) return;
       if (presetEditId != null && list.some((p) => p.id === presetEditId)) return;
@@ -318,7 +319,7 @@ export function SettingsPage() {
   }, [activeSection]);
 
   useEffect(() => {
-    if (activeSection === "model_presets" && presetEditId != null) {
+    if (activeSection === "model-presets" && presetEditId != null) {
       void loadPreset(presetEditId);
     }
   }, [activeSection, presetEditId]);
@@ -347,13 +348,14 @@ export function SettingsPage() {
         <SettingsSidebar activeSection={activeSection} navigate={navigate} settingsSearch={location.search} />
 
         <main className="flex min-w-0 flex-col gap-3.5">
-          {activeSection === "model_provider" ||
-          activeSection === "model_presets" ||
+          {activeSection === "model-providers" ||
+          activeSection === "model-presets" ||
+          activeSection === "model-pricing" ||
           activeSection === "agents" ? null : (
             <SettingsHeader activeSection={activeSection} search={search} setSearch={setSearch} />
           )}
 
-          {activeSection === "model_provider" ? (
+          {activeSection === "model-providers" ? (
             <div className="flex flex-col gap-3">
               <GlobalModelSettingsCard settings={settings} setSettings={setSettings} modelGroups={modelGroups} />
               {providerCards.map((p) => (
@@ -370,7 +372,7 @@ export function SettingsPage() {
                 />
               ))}
             </div>
-          ) : activeSection === "model_presets" ? (
+          ) : activeSection === "model-presets" ? (
             <ModelPresetsEditor
               presets={presets}
               presetEditId={presetEditId}
@@ -401,13 +403,15 @@ export function SettingsPage() {
               agentLoading={agentLoading}
               modelGroups={modelGroups}
             />
+          ) : activeSection === "model-pricing" ? (
+            <ModelPricingEditor />
           ) : activeSection === "tools" ? (
             <ToolsSettingsPlaceholder />
           ) : (
             <div className={settingsPlaceholderBox}>Skills UI placeholder.</div>
           )}
 
-          {activeSection === "model_provider" ? (
+          {activeSection === "model-providers" ? (
             <div className="flex items-center gap-2.5">
               <AsyncButton onClickAsync={save} className={cn(ghostBtn, "border-slate-300")}>
                 Save

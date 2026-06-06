@@ -7,7 +7,11 @@ export function getPricingMap(): Promise<Map<string, ModelPricing>> {
   if (!cached) {
     cached = getModelCapabilities()
       .then((data) => buildModelPricingByName(data.models))
-      .catch(() => new Map<string, ModelPricing>());
+      .catch((e: unknown) => { throw e; });
   }
   return cached;
+}
+
+export function invalidatePricingCache(): void {
+  cached = null;
 }
