@@ -1,13 +1,14 @@
 import { createContext, useCallback, useContext, useState } from "react";
-import type { ChatEntry } from "../protocol/chatEntry";
-import type { ObservableItem } from "../utils/observableCollection";
+import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
+import type { ObservableItem, ObservableItemCollection } from "../utils/observableCollection";
 
 export type ThoughtStage = "context" | "reasoning" | "action";
 
 export type ChatSessionContextValue = {
   conversationId: string | null;
-  activePathEntries: ObservableItem<ChatEntry>[];
-  allEntries: ObservableItem<ChatEntry>[];
+  sessionStore: ObservableItemCollection<LinkedChatEntry>;
+  activePathEntries: ObservableItem<LinkedChatEntry>[];
+  allEntries: ObservableItem<LinkedChatEntry>[];
   setActiveLeaf: (entryId: string) => Promise<void>;
   /** Choose a fork sibling; persists server default-view-leaf at that line's tip. */
   switchToBranch: (branchEntryId: string) => Promise<void>;

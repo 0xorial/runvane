@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setConversationDefaultViewLeaf } from "../api/client";
-import { branchLineTipId, buildActivePath, viewAnchorAfterAppend } from "@/lib/chatTree";
+import {
+  appendSessionEntry,
+  rekeySessionEntry,
+  replaceSessionEntries,
+  upsertSessionEntry,
+} from "@/lib/chatSessionStore";
+import { leafAfterAppend, lineTipId, pathFromLeaf, type LinkedChatEntry } from "@/lib/linkedChatEntry";
 import { loadConversationSession } from "./queries/conversations";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
-import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
+import { mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
 import { SseType, type SseEvent } from "../protocol/sseTypes";
 import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import { createObservableItemCollection, type ObservableItem } from "../utils/observableCollection";
+
+const emptyEntries: LinkedChatEntry[] = [];
 
 export type OptimisticUserMessage = {
   rowId: string;
@@ -45,7 +53,7 @@ function buildOptimisticUserEntry(
 }
 
 function applySseToStore(
-  store: ReturnType<typeof createObservableItemCollection<ChatEntry>>,
+  store: ReturnType<typeof createObservableItemCollection<LinkedChatEntry>>,
   pending: Map<string, string>,
   ev: SseEvent,
   onNewEntry: (entry: ChatEntry, replacedOptimisticId?: string) => void,
@@ -60,17 +68,20 @@ function applySseToStore(
       const optimisticId = ev.clientRequestId ? pending.get(ev.clientRequestId) : undefined;
       if (optimisticId && ev.clientRequestId) {
         pending.delete(ev.clientRequestId);
-        if (!store.replaceById(optimisticId, ev.entry)) store.append(ev.entry);
+        if (!rekeySessionEntry(store, optimisticId, ev.entry)) {
+          appendSessionEntry(store, ev.entry);
+        }
         onNewEntry(ev.entry, optimisticId);
         return;
       }
-      if (store.append(ev.entry)) onNewEntry(ev.entry);
+      if (appendSessionEntry(store, ev.entry)) onNewEntry(ev.entry);
       return;
     }
-    case SseType.CHAT_ENTRY_UPSERT:
-      if (store.getById(ev.entry.id)) store.replaceById(ev.entry.id, ev.entry);
-      else if (store.append(ev.entry)) onNewEntry(ev.entry);
+    case SseType.CHAT_ENTRY_UPSERT: {
+      const result = upsertSessionEntry(store, ev.entry);
+      if (result === "appended") onNewEntry(ev.entry);
       return;
+    }
     case SseType.CHAT_ENTRY_DELTA: {
       const row$ = store.getById(ev.chatEntryId);
       if (!row$) return;
@@ -88,7 +99,7 @@ function applySseToStore(
 
 export function useChatSession(conversationId: string | null | undefined) {
   const boundCid = conversationId ? String(conversationId) : null;
-  const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
+  const storeRef = useRef(createObservableItemCollection<LinkedChatEntry>(emptyEntries));
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
   const activeLeafIdRef = useRef<string | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
@@ -105,8 +116,7 @@ export function useChatSession(conversationId: string | null | undefined) {
         applyActiveLeaf(entry.id);
         return;
       }
-      const entries = storeRef.current.getRows().map((row$) => row$.get());
-      const next = viewAnchorAfterAppend(entries, activeLeafIdRef.current, entry);
+      const next = leafAfterAppend(storeRef.current, activeLeafIdRef.current, entry);
       if (next === activeLeafIdRef.current) return;
       if (next) applyActiveLeaf(next);
     },
@@ -117,15 +127,11 @@ export function useChatSession(conversationId: string | null | undefined) {
   const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);
   const rowsVersion = useSyncExternalStore(subscribeRows, getRowsVersion, getRowsVersion);
 
-  const activePathEntries = useMemo((): ObservableItem<ChatEntry>[] => {
+  const activePathEntries = useMemo((): ObservableItem<LinkedChatEntry>[] => {
     void rowsVersion;
-    const path = buildActivePath(
-      storeRef.current.getRows().map((row$) => row$.get()),
-      activeLeafId,
-    );
-    return path
+    return pathFromLeaf(storeRef.current, activeLeafId)
       .map((entry) => storeRef.current.getById(entry.id))
-      .filter((row$): row$ is ObservableItem<ChatEntry> => row$ != null);
+      .filter((row$): row$ is ObservableItem<LinkedChatEntry> => row$ != null);
   }, [activeLeafId, rowsVersion]);
 
   const allEntries = useMemo(() => {
@@ -135,7 +141,7 @@ export function useChatSession(conversationId: string | null | undefined) {
 
   useEffect(() => {
     if (!boundCid) {
-      storeRef.current.replace(defaultChatEntries);
+      replaceSessionEntries(storeRef.current, emptyEntries);
       activeLeafIdRef.current = null;
       setActiveLeafId(null);
       pendingByClientRequestIdRef.current.clear();
@@ -146,7 +152,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     const cid = boundCid;
     const store = storeRef.current;
     const pending = pendingByClientRequestIdRef.current;
-    store.replace(defaultChatEntries);
+    replaceSessionEntries(store, emptyEntries);
     activeLeafIdRef.current = null;
     setActiveLeafId(null);
     pending.clear();
@@ -159,8 +165,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       try {
         const session = await loadConversationSession(cid);
         if (unmounted) return;
-        const entries = mapApiMessagesToChatEntries(session.entries);
-        store.replace(entries);
+        replaceSessionEntries(store, mapApiMessagesToChatEntries(session.entries));
         if (session.leafId) {
           activeLeafIdRef.current = session.leafId;
           setActiveLeafId(session.leafId);
@@ -189,7 +194,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       if (!boundCid) return;
       if (!storeRef.current.getById(entryId)) {
         const session = await loadConversationSession(boundCid);
-        storeRef.current.replace(mapApiMessagesToChatEntries(session.entries));
+        replaceSessionEntries(storeRef.current, mapApiMessagesToChatEntries(session.entries));
       }
       applyActiveLeaf(entryId);
       await setConversationDefaultViewLeaf(boundCid, entryId);
@@ -199,8 +204,7 @@ export function useChatSession(conversationId: string | null | undefined) {
 
   const switchToBranch = useCallback(
     async (branchEntryId: string) => {
-      const entries = storeRef.current.getRows().map((row$) => row$.get());
-      await setActiveLeaf(branchLineTipId(branchEntryId, entries));
+      await setActiveLeaf(lineTipId(storeRef.current, branchEntryId));
     },
     [setActiveLeaf],
   );
@@ -214,23 +218,22 @@ export function useChatSession(conversationId: string | null | undefined) {
       const agentId = String(input.agentId || "").trim();
       if (!agentId) throw new Error("appendOptimisticUserMessage requires agentId");
 
-      const path = buildActivePath(
-        storeRef.current.getRows().map((row$) => row$.get()),
-        activeLeafId,
-      );
+      const store = storeRef.current;
+      const path = pathFromLeaf(store, activeLeafIdRef.current);
       const parentId = path.length > 0 ? path[path.length - 1].id : null;
       const clientRequestId = crypto.randomUUID();
       const rowId = `optimistic-user-${clientRequestId}`;
       pendingByClientRequestIdRef.current.set(clientRequestId, rowId);
       const row = buildOptimisticUserEntry({ ...input, text, agentId }, rowId, parentId);
-      storeRef.current.append(row);
+      appendSessionEntry(store, row);
       followNewEntry(row);
       return { rowId, clientRequestId, parentId };
     },
-    [boundCid, activeLeafId, followNewEntry],
+    [boundCid, followNewEntry],
   );
 
   return {
+    sessionStore: storeRef.current,
     activePathEntries,
     allEntries,
     isSessionLoading,

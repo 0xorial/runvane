@@ -61,6 +61,7 @@ export function ChatPage({
   }, []);
 
   const {
+    sessionStore,
     activePathEntries: chatEntries,
     allEntries,
     isSessionLoading,
@@ -72,6 +73,7 @@ export function ChatPage({
   const chatSessionContextValue = useMemo(
     () => ({
       conversationId,
+      sessionStore,
       activePathEntries: chatEntries,
       allEntries,
       setActiveLeaf,
@@ -79,7 +81,7 @@ export function ChatPage({
       expandedStageBySlotKey,
       setSlotExpandedStage,
     }),
-    [conversationId, chatEntries, allEntries, setActiveLeaf, switchToBranch, expandedStageBySlotKey, setSlotExpandedStage],
+    [conversationId, sessionStore, chatEntries, allEntries, setActiveLeaf, switchToBranch, expandedStageBySlotKey, setSlotExpandedStage],
   );
   const activePathEntries = chatEntries.map((entry$) => entry$.get());
   const activePathEntryById = useMemo(() => new Map(activePathEntries.map((entry) => [entry.id, entry])), [activePathEntries]);

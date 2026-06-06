@@ -4,6 +4,9 @@ import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
+import { childEntries, siblingsOf } from "@/lib/linkedChatEntry";
+import type { ObservableItemCollection } from "@/utils/observableCollection";
+import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
 import { useObservableValue } from "@/hooks/useObservable";
 import type { ObservableItem } from "@/utils/observableCollection";
 
@@ -78,15 +81,8 @@ function entryIcon(entry: ChatEntry) {
   return <Dot className="mt-0.5 h-3 w-3 shrink-0" />;
 }
 
-function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
-  const ai = typeof a.conversationIndex === "number" ? a.conversationIndex : 0;
-  const bi = typeof b.conversationIndex === "number" ? b.conversationIndex : 0;
-  if (ai !== bi) return ai - bi;
-  return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
-}
-
 export function ConversationBranchesPanel({ onAnchorEntrySelected }: ConversationBranchesPanelProps) {
-  const { conversationId, allEntries, activePathEntries, switchToBranch } = useChatSessionContext();
+  const { conversationId, sessionStore, allEntries, activePathEntries, switchToBranch } = useChatSessionContext();
   const pathTipId = activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null;
   const [switchingToEntryId, setSwitchingToEntryId] = useState<string | null>(null);
 
@@ -95,30 +91,18 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
     [activePathEntries],
   );
 
-  // Tree topology is derived from immutable fields (id, parentId,
-  // conversationIndex), so we sort once on the rows array. Per-entry mutable
-  // fields (status, tokens, text deltas) re-render via per-row subscription
-  // inside BranchNode (`useObservableValue(entry$)`).
-  const sortedRows = useMemo(
+  const rowById = useMemo(() => new Map(allEntries.map((row$) => [row$.id, row$])), [allEntries]);
+
+  const childRowsOf = useMemo(
     () =>
-      [...allEntries].sort((a, b) => byConversationIndexAsc(a.get(), b.get())),
-    [allEntries],
+      (parentId: string | null): ObservableItem<LinkedChatEntry>[] =>
+        childEntries(sessionStore, parentId)
+          .map((entry) => rowById.get(entry.id))
+          .filter((row$): row$ is ObservableItem<LinkedChatEntry> => row$ != null),
+    [sessionStore, rowById],
   );
 
-  const childrenByParent = useMemo(() => {
-    const idSet = new Set(sortedRows.map((row$) => row$.id));
-    const map = new Map<string | null, ObservableItem<ChatEntry>[]>();
-    for (const row$ of sortedRows) {
-      const parentId = row$.get().parentId;
-      const bucket = parentId && !idSet.has(parentId) ? null : parentId;
-      const list = map.get(bucket) ?? [];
-      list.push(row$);
-      map.set(bucket, list);
-    }
-    return map;
-  }, [sortedRows]);
-
-  const rootNodes = childrenByParent.get(null) ?? [];
+  const rootNodes = childRowsOf(null);
 
   async function handleSelectEntry(entryId: string) {
     if (!conversationId) return;
@@ -154,7 +138,8 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
             key={row$.id}
             entry$={row$}
             branchDepth={0}
-            childrenByParent={childrenByParent}
+            childRowsOf={childRowsOf}
+            sessionStore={sessionStore}
             activePathIds={activePathIds}
             pathTipId={pathTipId}
             switchingToEntryId={switchingToEntryId}
@@ -169,23 +154,25 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
 function BranchNode({
   entry$,
   branchDepth,
-  childrenByParent,
+  childRowsOf,
+  sessionStore,
   activePathIds,
   pathTipId,
   switchingToEntryId,
   onSelectEntry,
 }: {
-  entry$: ObservableItem<ChatEntry>;
+  entry$: ObservableItem<LinkedChatEntry>;
   branchDepth: number;
-  childrenByParent: Map<string | null, ObservableItem<ChatEntry>[]>;
+  childRowsOf: (parentId: string | null) => ObservableItem<LinkedChatEntry>[];
+  sessionStore: ObservableItemCollection<LinkedChatEntry>;
   activePathIds: Set<string>;
   pathTipId: string | null;
   switchingToEntryId: string | null;
   onSelectEntry: (entryId: string) => void;
 }) {
   const entry = useObservableValue(entry$);
-  const children = childrenByParent.get(entry.id) ?? [];
-  const siblings = childrenByParent.get(entry.parentId) ?? [];
+  const children = childRowsOf(entry.id);
+  const siblings = siblingsOf(sessionStore, entry.id);
   const hasSiblings = siblings.length > 1;
   const nextBranchDepth = branchDepth + (hasSiblings ? 1 : 0);
   const isActive = activePathIds.has(entry.id);
@@ -246,7 +233,8 @@ function BranchNode({
               key={child$.id}
               entry$={child$}
               branchDepth={nextBranchDepth}
-              childrenByParent={childrenByParent}
+              childRowsOf={childRowsOf}
+              sessionStore={sessionStore}
               activePathIds={activePathIds}
               pathTipId={pathTipId}
               switchingToEntryId={switchingToEntryId}
