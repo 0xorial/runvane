@@ -4,8 +4,7 @@ import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 import { notifyError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
-import { childEntries, siblingsOf } from "@/lib/linkedChatEntry";
-import type { ObservableItemCollection } from "@/utils/observableCollection";
+import type { ChatSessionStore } from "@/lib/chatSessionStore";
 import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
 import { useObservableValue } from "@/hooks/useObservable";
 import type { ObservableItem } from "@/utils/observableCollection";
@@ -96,7 +95,7 @@ export function ConversationBranchesPanel({ onAnchorEntrySelected }: Conversatio
   const childRowsOf = useMemo(
     () =>
       (parentId: string | null): ObservableItem<LinkedChatEntry>[] =>
-        childEntries(sessionStore, parentId)
+        sessionStore.childEntries(parentId)
           .map((entry) => rowById.get(entry.id))
           .filter((row$): row$ is ObservableItem<LinkedChatEntry> => row$ != null),
     [sessionStore, rowById],
@@ -164,7 +163,7 @@ function BranchNode({
   entry$: ObservableItem<LinkedChatEntry>;
   branchDepth: number;
   childRowsOf: (parentId: string | null) => ObservableItem<LinkedChatEntry>[];
-  sessionStore: ObservableItemCollection<LinkedChatEntry>;
+  sessionStore: ChatSessionStore;
   activePathIds: Set<string>;
   pathTipId: string | null;
   switchingToEntryId: string | null;
@@ -172,7 +171,7 @@ function BranchNode({
 }) {
   const entry = useObservableValue(entry$);
   const children = childRowsOf(entry.id);
-  const siblings = siblingsOf(sessionStore, entry.id);
+  const siblings = sessionStore.siblingsOf(entry.id);
   const hasSiblings = siblings.length > 1;
   const nextBranchDepth = branchDepth + (hasSiblings ? 1 : 0);
   const isActive = activePathIds.has(entry.id);

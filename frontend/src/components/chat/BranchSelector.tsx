@@ -1,30 +1,14 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { ChatEntry } from "@/protocol/chatEntry";
 import { useChatSessionContext } from "@/hooks/chatSessionContext";
-import { siblingsOf } from "@/lib/linkedChatEntry";
 import { notifyError } from "@/utils/toast";
 
-function siblingIndexForTip(siblings: ChatEntry[], pathTipId: string | null, parentOf: (id: string) => ChatEntry | undefined): number {
-  if (!pathTipId || siblings.length === 0) return -1;
-  const siblingIds = new Set(siblings.map((row) => row.id));
-  let cursor: string | null = pathTipId;
-  const seen = new Set<string>();
-  while (cursor && !seen.has(cursor)) {
-    if (siblingIds.has(cursor)) return siblings.findIndex((row) => row.id === cursor);
-    seen.add(cursor);
-    cursor = parentOf(cursor)?.parentId ?? null;
-  }
-  return -1;
-}
-
 export function useSiblingBranches(entryId: string | null | undefined) {
-  const { sessionStore, activePathEntries, switchToBranch } = useChatSessionContext();
+  const { sessionStore, switchToBranch } = useChatSessionContext();
   const [switching, setSwitching] = useState(false);
 
-  const pathTipId = activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null;
-  const siblings = entryId ? siblingsOf(sessionStore, entryId) : [];
-  const activeIndex = siblingIndexForTip(siblings, pathTipId, (id) => sessionStore.getById(id)?.get());
+  const siblings = entryId ? sessionStore.siblingsOf(entryId) : [];
+  const activeIndex = siblings.findIndex((sibling) => sibling.isChosen);
   const hasBranches = siblings.length > 1 && activeIndex >= 0;
 
   async function switchByOffset(offset: -1 | 1) {

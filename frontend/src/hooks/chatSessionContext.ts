@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useState } from "react";
+import type { ChatSessionStore } from "@/lib/chatSessionStore";
 import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
-import type { ObservableItem, ObservableItemCollection } from "../utils/observableCollection";
+import type { ObservableItem } from "../utils/observableCollection";
 
 export type ThoughtStage = "context" | "reasoning" | "action";
 
 export type ChatSessionContextValue = {
   conversationId: string | null;
-  sessionStore: ObservableItemCollection<LinkedChatEntry>;
+  sessionStore: ChatSessionStore;
   activePathEntries: ObservableItem<LinkedChatEntry>[];
   allEntries: ObservableItem<LinkedChatEntry>[];
   setActiveLeaf: (entryId: string) => Promise<void>;

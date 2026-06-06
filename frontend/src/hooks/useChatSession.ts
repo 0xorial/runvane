@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setConversationDefaultViewLeaf } from "../api/client";
 import {
-  appendSessionEntry,
-  rekeySessionEntry,
-  replaceSessionEntries,
-  upsertSessionEntry,
-} from "@/lib/chatSessionStore";
-import { leafAfterAppend, lineTipId, pathFromLeaf, type LinkedChatEntry } from "@/lib/linkedChatEntry";
+  getChatSessionPending,
+  getChatSessionStore,
+  getEmptyChatSessionStore,
+  retainChatSessionLive,
+} from "@/lib/chatSessionRegistry";
 import { loadConversationSession } from "./queries/conversations";
-import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { mapApiMessagesToChatEntries } from "../utils/chatEntries";
-import { assertNever } from "../utils/assertNever";
-import { SseType, type SseEvent } from "../protocol/sseTypes";
-import type { ChatAttachment, ChatEntry, UserMessageEntry } from "../protocol/chatEntry";
+import type { ChatAttachment, UserMessageEntry } from "../protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
-import { createObservableItemCollection, type ObservableItem } from "../utils/observableCollection";
-
-const emptyEntries: LinkedChatEntry[] = [];
+import type { ObservableItem } from "../utils/observableCollection";
+import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
+import type { ChatSessionStore } from "@/lib/chatSessionStore";
 
 export type OptimisticUserMessage = {
   rowId: string;
@@ -52,188 +48,122 @@ function buildOptimisticUserEntry(
   };
 }
 
-function applySseToStore(
-  store: ReturnType<typeof createObservableItemCollection<LinkedChatEntry>>,
-  pending: Map<string, string>,
-  ev: SseEvent,
-  onNewEntry: (entry: ChatEntry, replacedOptimisticId?: string) => void,
-): void {
-  switch (ev.type) {
-    case SseType.CONVERSATION_CREATED:
-    case SseType.CONVERSATION_UPDATED:
-    case SseType.TOOL_INVOCATION_START:
-    case SseType.TOOL_INVOCATION_END:
-      return;
-    case SseType.USER_MESSAGE: {
-      const optimisticId = ev.clientRequestId ? pending.get(ev.clientRequestId) : undefined;
-      if (optimisticId && ev.clientRequestId) {
-        pending.delete(ev.clientRequestId);
-        if (!rekeySessionEntry(store, optimisticId, ev.entry)) {
-          appendSessionEntry(store, ev.entry);
-        }
-        onNewEntry(ev.entry, optimisticId);
-        return;
-      }
-      if (appendSessionEntry(store, ev.entry)) onNewEntry(ev.entry);
-      return;
-    }
-    case SseType.CHAT_ENTRY_UPSERT: {
-      const result = upsertSessionEntry(store, ev.entry);
-      if (result === "appended") onNewEntry(ev.entry);
-      return;
-    }
-    case SseType.CHAT_ENTRY_DELTA: {
-      const row$ = store.getById(ev.chatEntryId);
-      if (!row$) return;
-      row$.mutate((current) => {
-        const row = current as Record<string, unknown>;
-        const prev = typeof row[ev.field] === "string" ? (row[ev.field] as string) : "";
-        row[ev.field] = `${prev}${ev.delta}`;
-      });
-      return;
-    }
-    default:
-      assertNever(ev);
-  }
-}
-
 export function useChatSession(conversationId: string | null | undefined) {
   const boundCid = conversationId ? String(conversationId) : null;
-  const storeRef = useRef(createObservableItemCollection<LinkedChatEntry>(emptyEntries));
-  const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
-  const activeLeafIdRef = useRef<string | null>(null);
-  const [isSessionLoading, setIsSessionLoading] = useState(false);
-  const pendingByClientRequestIdRef = useRef<Map<string, string>>(new Map());
+  const storeRef = useRef<ChatSessionStore | null>(null);
+  if (boundCid) {
+    storeRef.current = getChatSessionStore(boundCid);
+  } else {
+    storeRef.current = null;
+  }
+  const store = storeRef.current;
 
-  const applyActiveLeaf = useCallback((leafId: string) => {
-    activeLeafIdRef.current = leafId;
-    setActiveLeafId(leafId);
-  }, []);
-
-  const followNewEntry = useCallback(
-    (entry: ChatEntry, replacedOptimisticId?: string) => {
-      if (replacedOptimisticId && activeLeafIdRef.current === replacedOptimisticId) {
-        applyActiveLeaf(entry.id);
-        return;
-      }
-      const next = leafAfterAppend(storeRef.current, activeLeafIdRef.current, entry);
-      if (next === activeLeafIdRef.current) return;
-      if (next) applyActiveLeaf(next);
-    },
-    [applyActiveLeaf],
+  const [isSessionLoading, setIsSessionLoading] = useState(() =>
+    boundCid ? getChatSessionStore(boundCid).getAllRows().length === 0 : false,
   );
 
-  const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
-  const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);
+  const subscribeRows = useCallback(
+    (listener: () => void) => store?.subscribeRows(listener) ?? (() => {}),
+    [store],
+  );
+  const getRowsVersion = useCallback(() => store?.getRowsVersion() ?? 0, [store]);
   const rowsVersion = useSyncExternalStore(subscribeRows, getRowsVersion, getRowsVersion);
+
+  const subscribeActivePath = useCallback(
+    (listener: () => void) => store?.subscribeActivePath(listener) ?? (() => {}),
+    [store],
+  );
+  const getActivePathVersion = useCallback(() => store?.getActivePathVersion() ?? 0, [store]);
+  const activePathVersion = useSyncExternalStore(subscribeActivePath, getActivePathVersion, getActivePathVersion);
 
   const activePathEntries = useMemo((): ObservableItem<LinkedChatEntry>[] => {
     void rowsVersion;
-    return pathFromLeaf(storeRef.current, activeLeafId)
-      .map((entry) => storeRef.current.getById(entry.id))
-      .filter((row$): row$ is ObservableItem<LinkedChatEntry> => row$ != null);
-  }, [activeLeafId, rowsVersion]);
+    void activePathVersion;
+    return store?.getActivePathRows() ?? [];
+  }, [store, rowsVersion, activePathVersion]);
 
   const allEntries = useMemo(() => {
     void rowsVersion;
-    return storeRef.current.getRows().slice();
-  }, [rowsVersion]);
+    return store?.getAllRows() ?? [];
+  }, [store, rowsVersion]);
 
   useEffect(() => {
-    if (!boundCid) {
-      replaceSessionEntries(storeRef.current, emptyEntries);
-      activeLeafIdRef.current = null;
-      setActiveLeafId(null);
-      pendingByClientRequestIdRef.current.clear();
+    if (!boundCid || !store) {
       setIsSessionLoading(false);
       return;
     }
 
     const cid = boundCid;
-    const store = storeRef.current;
-    const pending = pendingByClientRequestIdRef.current;
-    replaceSessionEntries(store, emptyEntries);
-    activeLeafIdRef.current = null;
-    setActiveLeafId(null);
-    pending.clear();
-    setIsSessionLoading(true);
+    const releaseLive = retainChatSessionLive();
+    const needsInitialLoad = store.getAllRows().length === 0;
+    if (needsInitialLoad) setIsSessionLoading(true);
 
-    let unmounted = false;
-    let unsubscribeLive: (() => void) | undefined;
-
+    let cancelled = false;
     void (async () => {
       try {
         const session = await loadConversationSession(cid);
-        if (unmounted) return;
-        replaceSessionEntries(store, mapApiMessagesToChatEntries(session.entries));
-        if (session.leafId) {
-          activeLeafIdRef.current = session.leafId;
-          setActiveLeafId(session.leafId);
-        }
-        unsubscribeLive = subscribeGlobalLive({
-          onSseEvent: (ev) => {
-            if (ev.conversationId !== cid) return;
-            applySseToStore(store, pending, ev, followNewEntry);
-          },
-        });
+        if (cancelled) return;
+        store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId);
       } catch (err) {
         console.error("[useChatSession] Failed to load conversation messages:", err);
       } finally {
-        if (!unmounted) setIsSessionLoading(false);
+        if (!cancelled) setIsSessionLoading(false);
       }
     })();
 
     return () => {
-      unmounted = true;
-      unsubscribeLive?.();
+      cancelled = true;
+      releaseLive();
     };
-  }, [boundCid, followNewEntry]);
+  }, [boundCid, store]);
 
   const setActiveLeaf = useCallback(
     async (entryId: string) => {
-      if (!boundCid) return;
-      if (!storeRef.current.getById(entryId)) {
+      if (!boundCid || !store) return;
+      if (!store.getById(entryId)) {
         const session = await loadConversationSession(boundCid);
-        replaceSessionEntries(storeRef.current, mapApiMessagesToChatEntries(session.entries));
+        store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId);
       }
-      applyActiveLeaf(entryId);
-      await setConversationDefaultViewLeaf(boundCid, entryId);
+      store.setChosenPathFromLeaf(entryId);
+      const tipId = store.activePathTipId() ?? entryId;
+      await setConversationDefaultViewLeaf(boundCid, tipId);
     },
-    [boundCid, applyActiveLeaf],
+    [boundCid, store],
   );
 
   const switchToBranch = useCallback(
     async (branchEntryId: string) => {
-      await setActiveLeaf(lineTipId(storeRef.current, branchEntryId));
+      if (!boundCid || !store) return;
+      const tipId = store.chooseBranchLine(branchEntryId);
+      await setConversationDefaultViewLeaf(boundCid, tipId);
     },
-    [setActiveLeaf],
+    [boundCid, store],
   );
 
   const appendOptimisticUserMessage = useCallback(
     (input: AppendOptimisticUserMessageInput): OptimisticUserMessage | null => {
       const cid = String(input.conversationId || "").trim();
-      if (!boundCid || cid !== boundCid) return null;
+      if (!boundCid || cid !== boundCid || !store) return null;
       const text = String(input.text || "").trim();
       if (!text) return null;
       const agentId = String(input.agentId || "").trim();
       if (!agentId) throw new Error("appendOptimisticUserMessage requires agentId");
 
-      const store = storeRef.current;
-      const path = pathFromLeaf(store, activeLeafIdRef.current);
+      const path = store.getActivePathRows().map((row$) => row$.get());
       const parentId = path.length > 0 ? path[path.length - 1].id : null;
       const clientRequestId = crypto.randomUUID();
       const rowId = `optimistic-user-${clientRequestId}`;
-      pendingByClientRequestIdRef.current.set(clientRequestId, rowId);
+      const pending = getChatSessionPending(boundCid);
+      pending.set(clientRequestId, rowId);
       const row = buildOptimisticUserEntry({ ...input, text, agentId }, rowId, parentId);
-      appendSessionEntry(store, row);
-      followNewEntry(row);
+      store.appendEntry(row);
       return { rowId, clientRequestId, parentId };
     },
-    [boundCid, followNewEntry],
+    [boundCid, store],
   );
 
   return {
-    sessionStore: storeRef.current,
+    sessionStore: store ?? getEmptyChatSessionStore(),
     activePathEntries,
     allEntries,
     isSessionLoading,

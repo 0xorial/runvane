@@ -1,8 +1,12 @@
 import type { ChatEntry } from "@/protocol/chatEntry";
-import type { ObservableItemCollection } from "@/utils/observableCollection";
 
-/** Session copy: protocol fields + childIds maintained on insert. parentId is the back-link. */
-export type LinkedChatEntry = ChatEntry & { childIds: string[] };
+/** Session copy: parentId from server + isChosen at each fork for the active view. */
+export type LinkedChatEntry = ChatEntry & { isChosen: boolean };
+
+export type ChatEntryLookup = {
+  getById: (id: string) => LinkedChatEntry | undefined;
+  getRows: () => LinkedChatEntry[];
+};
 
 export function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
   const ai = typeof a.conversationIndex === "number" ? a.conversationIndex : 0;
@@ -11,132 +15,152 @@ export function byConversationIndexAsc(a: ChatEntry, b: ChatEntry): number {
   return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
 }
 
-export function toLinkedEntries(entries: ChatEntry[]): LinkedChatEntry[] {
-  const linked = entries.map((entry) => ({ ...entry, childIds: [] as string[] }));
-  const byId = new Map(linked.map((entry) => [entry.id, entry]));
-  for (const entry of [...linked].sort(byConversationIndexAsc)) {
-    linkChild(entry, byId);
+/** Child list derived from parentId — stays correct after backend reparents. */
+export function childrenByParentId(lookup: ChatEntryLookup): Map<string | null, LinkedChatEntry[]> {
+  const map = new Map<string | null, LinkedChatEntry[]>();
+  for (const entry of lookup.getRows()) {
+    const list = map.get(entry.parentId) ?? [];
+    list.push(entry);
+    map.set(entry.parentId, list);
+  }
+  for (const list of map.values()) {
+    list.sort(byConversationIndexAsc);
+  }
+  return map;
+}
+
+export function toLinkedEntries(entries: ChatEntry[], viewLeafId?: string | null): LinkedChatEntry[] {
+  const linked: LinkedChatEntry[] = entries.map((entry) => ({ ...entry, isChosen: false }));
+  const lookup = lookupFromRows(linked);
+  if (viewLeafId && lookup.getById(viewLeafId)) {
+    applyChosenPathFromLeaf(viewLeafId, lookup);
+  } else if (linked.length > 0) {
+    applyChosenPathFromLeaf(defaultLineTipId(lookup), lookup);
   }
   return linked;
 }
 
-function sortChildIds(parent: LinkedChatEntry, byId: Map<string, LinkedChatEntry>): void {
-  parent.childIds.sort((a, b) => byConversationIndexAsc(byId.get(a)!, byId.get(b)!));
+function lookupFromRows(rows: LinkedChatEntry[]): ChatEntryLookup {
+  const byId = new Map(rows.map((entry) => [entry.id, entry]));
+  return {
+    getById: (id) => byId.get(id),
+    getRows: () => rows,
+  };
 }
 
-export function linkChild(entry: LinkedChatEntry, byId: Map<string, LinkedChatEntry>): void {
-  entry.childIds = [];
-  if (entry.parentId === null) return;
-  const parent = byId.get(entry.parentId);
-  if (!parent) throw new Error(`linkedChatEntry: missing parent ${entry.parentId} for ${entry.id}`);
-  parent.childIds.push(entry.id);
-  sortChildIds(parent, byId);
+function defaultLineTipId(lookup: ChatEntryLookup): string {
+  const roots = lookup.getRows().filter((entry) => entry.parentId === null).sort(byConversationIndexAsc);
+  if (roots.length === 0) throw new Error("linkedChatEntry: no roots");
+  return lineTipIdFrom(lookup, roots[roots.length - 1].id);
 }
 
-export function linkAppend(entry: LinkedChatEntry, get: (id: string) => LinkedChatEntry | undefined): void {
-  entry.childIds = [];
-  if (entry.parentId === null) return;
-  const parent = get(entry.parentId);
-  if (!parent) throw new Error(`linkedChatEntry: missing parent ${entry.parentId} for ${entry.id}`);
-  parent.childIds.push(entry.id);
-  parent.childIds.sort((a, b) => byConversationIndexAsc(get(a)!, get(b)!));
-}
-
-export function linkRekey(
-  oldId: string,
-  next: LinkedChatEntry,
-  get: (id: string) => LinkedChatEntry | undefined,
-): void {
-  if (next.id === oldId) return;
-  const parentId = next.parentId;
-  if (parentId === null) return;
-  const parent = get(parentId);
-  if (!parent) throw new Error(`linkedChatEntry.rekey: missing parent ${parentId}`);
-  const childIndex = parent.childIds.indexOf(oldId);
-  if (childIndex >= 0) parent.childIds[childIndex] = next.id;
+function lineTipIdFrom(lookup: ChatEntryLookup, startId: string): string {
+  const childrenByParent = childrenByParentId(lookup);
+  let cursor = startId;
+  for (;;) {
+    const children = childrenByParent.get(cursor) ?? [];
+    if (children.length === 0) return cursor;
+    cursor = children[children.length - 1].id;
+  }
 }
 
 export function patchLinked(existing: LinkedChatEntry, next: ChatEntry): LinkedChatEntry {
-  return { ...next, childIds: existing.childIds };
+  return { ...next, isChosen: existing.isChosen };
 }
 
-export function rootsOf(store: ObservableItemCollection<LinkedChatEntry>): LinkedChatEntry[] {
-  return store
-    .getRows()
-    .map((row$) => row$.get())
-    .filter((entry) => entry.parentId === null)
-    .sort(byConversationIndexAsc);
+function siblingsOfEntry(entry: LinkedChatEntry, lookup: ChatEntryLookup): LinkedChatEntry[] {
+  return childEntries(lookup, entry.parentId);
 }
 
-export function childEntries(
-  store: ObservableItemCollection<LinkedChatEntry>,
-  parentId: string | null,
-): LinkedChatEntry[] {
-  if (parentId === null) return rootsOf(store);
-  const parent = store.getById(parentId)?.get();
-  if (!parent) return [];
-  return parent.childIds
-    .map((id) => store.getById(id)?.get())
-    .filter((entry): entry is LinkedChatEntry => entry != null);
-}
-
-export function siblingsOf(
-  store: ObservableItemCollection<LinkedChatEntry>,
+/** Mark one entry chosen and clear siblings at its fork. */
+export function chooseEntry(
   entryId: string,
-): LinkedChatEntry[] {
-  const entry = store.getById(entryId)?.get();
-  if (!entry) return [];
-  return childEntries(store, entry.parentId);
-}
-
-export function lineTipId(
-  store: ObservableItemCollection<LinkedChatEntry>,
-  startId: string,
-): string {
-  let cursor = startId;
-  for (;;) {
-    const childIds = store.getById(cursor)?.get().childIds ?? [];
-    if (childIds.length === 0) return cursor;
-    cursor = childIds[childIds.length - 1];
+  lookup: ChatEntryLookup,
+  setChosen: (id: string, chosen: boolean) => void,
+): void {
+  const entry = lookup.getById(entryId);
+  if (!entry) throw new Error(`linkedChatEntry.chooseEntry: unknown entry ${entryId}`);
+  setChosen(entryId, true);
+  for (const sibling of siblingsOfEntry(entry, lookup)) {
+    if (sibling.id !== entryId) setChosen(sibling.id, false);
   }
 }
 
-export function pathFromLeaf(
-  store: ObservableItemCollection<LinkedChatEntry>,
-  leafId: string | null,
-): LinkedChatEntry[] {
-  const tipId = resolvePathTipId(store, leafId);
-  if (!tipId) return [];
-  const path: LinkedChatEntry[] = [];
+function applyChosenPathFromLeaf(leafId: string, lookup: ChatEntryLookup): void {
+  const pathIds: string[] = [];
+  let cursor: string | null = leafId;
   const seen = new Set<string>();
-  let cursor: string | null = tipId;
   while (cursor && !seen.has(cursor)) {
     seen.add(cursor);
-    const entry: LinkedChatEntry | undefined = store.getById(cursor)?.get();
-    if (!entry) break;
-    path.push(entry);
-    cursor = entry.parentId;
+    if (!lookup.getById(cursor)) throw new Error(`linkedChatEntry: unknown leaf ${leafId}`);
+    pathIds.push(cursor);
+    cursor = lookup.getById(cursor)?.parentId ?? null;
   }
-  path.reverse();
+  const setChosen = (id: string, chosen: boolean) => {
+    lookup.getById(id)!.isChosen = chosen;
+  };
+  for (const id of pathIds) {
+    chooseEntry(id, lookup, setChosen);
+  }
+}
+
+/** Branch switch: choose sibling line down to its tip (last child at each fork). */
+export function chooseBranchLine(
+  startId: string,
+  lookup: ChatEntryLookup,
+  setChosen: (id: string, chosen: boolean) => void,
+): string {
+  const childrenByParent = childrenByParentId(lookup);
+  const start = lookup.getById(startId);
+  if (!start) throw new Error(`linkedChatEntry.chooseBranchLine: unknown entry ${startId}`);
+  let cursor: LinkedChatEntry = start;
+  for (;;) {
+    chooseEntry(cursor.id, lookup, setChosen);
+    const children = childrenByParent.get(cursor.id) ?? [];
+    if (children.length === 0) return cursor.id;
+    const next = children[children.length - 1]!;
+    cursor = next;
+  }
+}
+
+export function rootsOf(lookup: ChatEntryLookup): LinkedChatEntry[] {
+  return lookup.getRows().filter((entry) => entry.parentId === null).sort(byConversationIndexAsc);
+}
+
+export function childEntries(lookup: ChatEntryLookup, parentId: string | null): LinkedChatEntry[] {
+  return childrenByParentId(lookup).get(parentId) ?? [];
+}
+
+export function siblingsOf(lookup: ChatEntryLookup, entryId: string): LinkedChatEntry[] {
+  const entry = lookup.getById(entryId);
+  if (!entry) return [];
+  return childEntries(lookup, entry.parentId);
+}
+
+/** Root → tip by following isChosen at each fork. */
+export function pathFromChosen(lookup: ChatEntryLookup): LinkedChatEntry[] {
+  const childrenByParent = childrenByParentId(lookup);
+  const roots = childrenByParent.get(null) ?? [];
+  const start = roots.find((entry) => entry.isChosen) ?? roots[roots.length - 1];
+  if (!start) return [];
+  const path: LinkedChatEntry[] = [start];
+  let cursor = start;
+  for (;;) {
+    const next = (childrenByParent.get(cursor.id) ?? []).find((entry) => entry.isChosen);
+    if (!next) break;
+    path.push(next);
+    cursor = next;
+  }
   return path;
 }
 
-export function leafAfterAppend(
-  store: ObservableItemCollection<LinkedChatEntry>,
-  leafId: string | null,
-  entry: ChatEntry,
-): string | null {
-  const path = pathFromLeaf(store, leafId);
-  const onPath =
-    entry.parentId == null ? path.length === 0 : path.some((row) => row.id === entry.parentId);
-  if (!onPath) return leafId;
-  return entry.id;
+export function activePathTipId(lookup: ChatEntryLookup): string | null {
+  const path = pathFromChosen(lookup);
+  return path.length > 0 ? path[path.length - 1].id : null;
 }
 
-function resolvePathTipId(store: ObservableItemCollection<LinkedChatEntry>, leafId: string | null): string | null {
-  if (store.getRows().length === 0) return null;
-  if (leafId && store.getById(leafId)) return lineTipId(store, leafId);
-  const roots = rootsOf(store);
-  if (roots.length === 0) return null;
-  return lineTipId(store, roots[roots.length - 1].id);
+export function extendsChosenPath(lookup: ChatEntryLookup, parentId: string | null): boolean {
+  const path = pathFromChosen(lookup);
+  if (parentId === null) return path.length === 0;
+  return path.some((entry) => entry.id === parentId);
 }

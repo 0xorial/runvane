@@ -34,11 +34,9 @@ export async function loadConversationSession(conversationId: string): Promise<C
   const cid = conversationId.trim();
   const [entries, conversation] = await Promise.all([
     getConversationMessages(cid, { all: true }),
-    queryClient.fetchQuery({
-      queryKey: queryKeys.conversation(cid),
-      queryFn: () => getConversation(cid),
-    }),
+    getConversation(cid),
   ]);
+  queryClient.setQueryData(queryKeys.conversation(cid), conversation);
   return { entries, leafId: conversation.defaultViewLeafEntryId };
 }
 
