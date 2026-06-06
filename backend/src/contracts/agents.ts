@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 import {
-  AgentDefaultLlmConfigurationSchema,
+  AgentConfigurationSchema,
   AgentModelReferenceSchema,
-  type AgentDefaultLlmConfiguration,
+  type AgentConfiguration,
   type AgentEntity,
 } from '../agents/agent.entity.js';
 import type { AgentRouteResponse } from '../agents/agents.api.js';
 export type { AgentRouteResponse } from '../agents/agents.api.js';
-export type { AgentDefaultLlmConfiguration, AgentEntity };
+export type { AgentConfiguration, AgentEntity };
 
 // AgentListItemResponse is the same shape as AgentRouteResponse
 export type AgentListItemResponse = AgentRouteResponse;
@@ -16,7 +16,7 @@ export type AgentListItemResponse = AgentRouteResponse;
 export const AgentUpsertRequestSchema = z.object({
   name: z.string().optional(),
   system_prompt: z.string().optional(),
-  default_llm_configuration: AgentDefaultLlmConfigurationSchema.nullable().optional(),
+  default_llm_configuration: AgentConfigurationSchema.nullable().optional(),
   default_model_preset_id: z.number().finite().nullable().optional(),
   model_reference: AgentModelReferenceSchema.partial().nullable().optional(),
   icon: z.string().nullable().optional(),
@@ -30,7 +30,7 @@ export type DeleteAgentResponse = z.infer<typeof DeleteAgentResponseSchema>;
 export const AgentUpsertInputSchema = z.object({
   name: z.string(),
   system_prompt: z.string(),
-  default_llm_configuration: AgentDefaultLlmConfigurationSchema.nullable(),
+  default_llm_configuration: AgentConfigurationSchema.nullable(),
   default_model_preset_id: z.number().finite().nullable(),
   model_reference: AgentModelReferenceSchema.partial().nullable(),
 });
@@ -40,7 +40,7 @@ const AgentListItemResponseSchema: z.ZodType<AgentListItemResponse> = z.object({
   id: z.string(),
   name: z.string(),
   system_prompt: z.string(),
-  default_llm_configuration: AgentDefaultLlmConfigurationSchema.nullable(),
+  default_llm_configuration: AgentConfigurationSchema.nullable(),
   default_model_preset_id: z.number().finite().nullable(),
   model_reference: AgentModelReferenceSchema.nullable(),
   is_default: z.boolean(),

@@ -26,9 +26,9 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - token and cost visibility
 - configurable model/tool behavior
 
-## TODO features
+## Planned features
 
-- sterring
+- steering
 - RAG tool
 - meta tool
 - filesystem tool

@@ -13,8 +13,7 @@ export const AgentGuardrailConfigSchema = z.object({
   system_prompt: z.string().optional(),
 });
 
-// todo shoudl be AgentConfigurationSchema
-export const AgentDefaultLlmConfigurationSchema = z.object({
+export const AgentConfigurationSchema = z.object({
   provider_id: z.string().optional(),
   model_name: z.string().optional(),
   tool_call_provider_id: z.string().optional(),
@@ -33,7 +32,7 @@ export const AgentEntitySchema = z.object({
   id: z.string(),
   name: z.string(),
   system_prompt: z.string(),
-  default_llm_configuration: AgentDefaultLlmConfigurationSchema.nullable(),
+  default_llm_configuration: AgentConfigurationSchema.nullable(),
   default_model_preset_id: z.number().finite().nullable(),
   model_reference: AgentModelReferenceSchema.nullable(),
   is_default: z.boolean(),
@@ -45,5 +44,5 @@ export const AgentEntitySchema = z.object({
 
 export type AgentToolConfig = z.infer<typeof AgentToolConfigSchema>;
 export type AgentGuardrailConfig = z.infer<typeof AgentGuardrailConfigSchema>;
-export type AgentDefaultLlmConfiguration = z.infer<typeof AgentDefaultLlmConfigurationSchema>;
+export type AgentConfiguration = z.infer<typeof AgentConfigurationSchema>;
 export type AgentEntity = z.infer<typeof AgentEntitySchema>;

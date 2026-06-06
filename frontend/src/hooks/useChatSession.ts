@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getConversationDefaultViewLeafEntryId, getConversationMessages, setConversationDefaultViewLeaf } from "../api/client";
-import { subscribeGlobalLive, subscribeGlobalPoll } from "../protocol/runLiveClient";
+import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
@@ -76,6 +76,21 @@ export function useChatSession(conversationId: string | null | undefined) {
     };
   }, [conversationId]);
 
+  const reloadFromServer = useCallback(async () => {
+    if (!conversationId) return;
+    const cid = String(conversationId);
+    const [entries, leafId] = await Promise.all([
+      getConversationMessages(cid, { all: true }),
+      getConversationDefaultViewLeafEntryId(cid),
+    ]);
+    const pendingOptimistic = [...pendingByClientRequestIdRef.current.values()]
+      .map((rowId) => storeRef.current.getById(rowId)?.get())
+      .filter((entry): entry is UserMessageEntry => entry?.type === "user-message");
+    storeRef.current.replace([...mapApiMessagesToChatEntries(entries), ...pendingOptimistic]);
+    const activeOptimisticId = pendingOptimistic.at(-1)?.id ?? null;
+    setActiveLeafId(activeOptimisticId ?? leafId);
+  }, [conversationId]);
+
   const reconcileOptimisticUserMessage = useCallback(
     (clientRequestId: string | undefined, incoming: UserMessageEntry): boolean => {
       if (!clientRequestId) return false;
@@ -98,6 +113,14 @@ export function useChatSession(conversationId: string | null | undefined) {
     if (!conversationId) return;
     const cid = String(conversationId);
     const unsubscribeLive = subscribeGlobalLive({
+      onPollTick: async () => {
+        try {
+          await reloadFromServer();
+        } catch (err) {
+          console.error("[useChatSession] SSE fallback reload failed:", err);
+        }
+        return false;
+      },
       onSseEvent: (ev) => {
         if (ev.conversationId !== cid) return;
         if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
@@ -138,13 +161,9 @@ export function useChatSession(conversationId: string | null | undefined) {
         assertNever(ev);
       },
     });
-    const unsubscribePoll = subscribeGlobalPoll(async () => false);
 
-    return () => {
-      unsubscribeLive();
-      unsubscribePoll();
-    };
-  }, [conversationId, reconcileOptimisticUserMessage]);
+    return unsubscribeLive;
+  }, [conversationId, reconcileOptimisticUserMessage, reloadFromServer]);
 
   const subscribeRows = useCallback((listener: () => void) => storeRef.current.subscribeRows(listener), []);
   const getRowsVersion = useCallback(() => storeRef.current.getRowsVersion(), []);

@@ -18,6 +18,7 @@ import { UploadsService } from '../uploads/uploads.service.js';
 import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { LifecycleScope } from './lifecycle-scope.js';
+import { resolveSummarizeRange } from './summarizeRange.js';
 
 type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
 
@@ -320,60 +321,4 @@ export class ConversationProcessorService {
       });
     }
   }
-}
-
-/**
- * Resolve the entries to fold + their anchor parent.
- *
- * `firstEntryToSummarize` is the inclusive start of the range; the range
- * extends through the active-chain leaf. The summary anchors as a child
- * of the entry preceding `firstEntryToSummarize`.
- *
- * The "active chain" passed in is whatever the user is currently viewing
- * (default-view-leaf lineage). Scaffolding entries (thought prepares,
- * stream entries, action entries) are filtered out of `rangeEntries` —
- * they're internal plumbing and don't belong in the summary input — but
- * the range bounds stay anchored to the original entry ids regardless of
- * type, so the link back to the unfolded sibling branch is preserved.
- */
-function resolveSummarizeRange(
-  activeChain: import('../contracts/chatEntry.js').ChatEntry[],
-  firstEntryToSummarize: string,
-): {
-  fromEntryId: string;
-  toEntryId: string;
-  fromParentId: string;
-  rangeEntries: import('../contracts/chatEntry.js').ChatEntry[];
-  rangeEntryCount: number;
-} {
-  if (activeChain.length === 0) throw new Error('active chain is empty');
-  const startIdx = activeChain.findIndex((e) => e.id === firstEntryToSummarize);
-  if (startIdx < 0) {
-    throw new Error(`firstEntryToSummarize ${firstEntryToSummarize} is not on the active chain`);
-  }
-  if (startIdx === 0) {
-    // We need a parent BEFORE the range so the new branch has somewhere to
-    // hang. Folding the very first entry would orphan the summary's parent
-    // pointer, defeating the purpose of branching. Disallow.
-    throw new Error('cannot summarize from the very first entry of the conversation');
-  }
-  const parent = activeChain[startIdx - 1]!;
-  const slice = activeChain.slice(startIdx);
-  const visibleSlice = slice.filter(
-    (e) =>
-      e.type === 'user-message' ||
-      e.type === 'assistant-message' ||
-      e.type === 'tool-invocation' ||
-      e.type === 'checkpoint-summary',
-  );
-  if (visibleSlice.length === 0) {
-    throw new Error('summarize range contains no user-visible turns');
-  }
-  return {
-    fromEntryId: slice[0]!.id,
-    toEntryId: activeChain[activeChain.length - 1]!.id,
-    fromParentId: parent.id,
-    rangeEntries: visibleSlice,
-    rangeEntryCount: visibleSlice.length,
-  };
 }

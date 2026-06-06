@@ -1,11 +1,11 @@
-import type { AgentDefaultLlmConfiguration, AgentEntity } from './agent.entity.js';
+import type { AgentConfiguration, AgentEntity } from './agent.entity.js';
 
 export type AgentRouteResponse = AgentEntity & {
   llms: Array<Record<string, unknown>>;
 };
 
 export function llmsFromAgent(
-  cfg: AgentDefaultLlmConfiguration | null,
+  cfg: AgentConfiguration | null,
   modelRef: { provider_id: string; model_name: string } | null,
 ): Array<Record<string, unknown>> {
   const provider_id = String(cfg?.provider_id ?? modelRef?.provider_id ?? '');

@@ -3,16 +3,20 @@ import { rvInfo } from "../utils/runvaneDiag";
 import { parseSseEventObject } from "./parseSseEventObject";
 import type { SseEvent } from "./sseTypes";
 
+type PollTick = () => Promise<boolean> | boolean;
+
 export type GlobalLiveHandlers = {
   onSseEvent: (ev: SseEvent) => void;
+  /** HTTP catch-up while SSE is down. Return true to stop polling for this subscription. */
+  onPollTick?: PollTick;
 };
-
-export type GlobalPollHandler = () => Promise<boolean> | boolean;
 
 const DEFAULT_POLL_MS = 450;
 const DEFAULT_RECOVERY_MS = 2500;
 const DEFAULT_MAX_RECOVERY_WAITS = 12;
 const LAST_SEQ_STORAGE_KEY = "runvane:sse:last-seq";
+
+type LiveSubscription = GlobalLiveHandlers;
 
 function readLastSeenSeq(): number | null {
   try {
@@ -44,15 +48,15 @@ let es: EventSource | null = null;
 let disposed = false;
 let recoveryWaits = 0;
 let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
-let pollId: ReturnType<typeof setInterval> | null = null;
-const subscribers = new Set<GlobalLiveHandlers>();
-const pollSubscribers = new Set<GlobalPollHandler>();
+let fallbackPollId: ReturnType<typeof setInterval> | null = null;
+let activeOptions: GlobalLiveOptions | undefined;
+const subscribers = new Set<LiveSubscription>();
 
 function cleanupGlobal(): void {
   if (recoveryTimer != null) clearTimeout(recoveryTimer);
   recoveryTimer = null;
-  if (pollId != null) clearInterval(pollId);
-  pollId = null;
+  if (fallbackPollId != null) clearInterval(fallbackPollId);
+  fallbackPollId = null;
   if (es != null) {
     try {
       es.close();
@@ -64,17 +68,34 @@ function cleanupGlobal(): void {
 }
 
 function maybeCleanupGlobal(): void {
-  if (subscribers.size === 0 && pollSubscribers.size === 0) cleanupGlobal();
+  if (subscribers.size === 0) cleanupGlobal();
 }
 
-function startPoll(pollMs: number): void {
-  if (pollId != null) return;
-  pollId = setInterval(() => {
+function hasPollTicks(): boolean {
+  for (const sub of subscribers) {
+    if (sub.onPollTick) return true;
+  }
+  return false;
+}
+
+function startFallbackLoop(pollMs: number): void {
+  if (fallbackPollId != null) return;
+  fallbackPollId = setInterval(() => {
     void (async () => {
-      for (const pollTick of [...pollSubscribers]) {
+      ensureGlobalSse();
+      if (es?.readyState === EventSource.OPEN) return;
+
+      if (!hasPollTicks()) {
+        maybeCleanupGlobal();
+        return;
+      }
+
+      for (const sub of [...subscribers]) {
+        const tick = sub.onPollTick;
+        if (!tick) continue;
         try {
-          const stop = await pollTick();
-          if (stop === true) pollSubscribers.delete(pollTick);
+          const stop = await tick();
+          if (stop === true) sub.onPollTick = undefined;
         } catch (e) {
           console.error("[runvane] global poll tick failed", e);
         }
@@ -85,16 +106,18 @@ function startPoll(pollMs: number): void {
 }
 
 function ensureGlobalSse(options?: GlobalLiveOptions): void {
+  if (options) activeOptions = options;
   if (es != null || disposed) return;
-  const base = options?.apiBaseUrl ?? API_BASE_URL;
+
+  const base = activeOptions?.apiBaseUrl ?? API_BASE_URL;
   const afterSeq = readLastSeenSeq();
   const streamUrl =
     afterSeq != null && afterSeq > 0
       ? `${base}/api/stream?after_seq=${encodeURIComponent(String(afterSeq))}`
       : `${base}/api/stream`;
-  const pollMs = options?.pollIntervalMs ?? DEFAULT_POLL_MS;
-  const recoveryMs = options?.recoveryCheckMs ?? DEFAULT_RECOVERY_MS;
-  const maxWaits = options?.maxRecoveryWaits ?? DEFAULT_MAX_RECOVERY_WAITS;
+  const pollMs = activeOptions?.pollIntervalMs ?? DEFAULT_POLL_MS;
+  const recoveryMs = activeOptions?.recoveryCheckMs ?? DEFAULT_RECOVERY_MS;
+  const maxWaits = activeOptions?.maxRecoveryWaits ?? DEFAULT_MAX_RECOVERY_WAITS;
   es = new EventSource(streamUrl);
 
   const scheduleRecovery = () => {
@@ -105,13 +128,13 @@ function ensureGlobalSse(options?: GlobalLiveOptions): void {
       if (es.readyState === EventSource.OPEN) return;
       if (es.readyState === EventSource.CLOSED) {
         cleanupGlobal();
-        startPoll(pollMs);
+        startFallbackLoop(pollMs);
         return;
       }
       recoveryWaits += 1;
       if (recoveryWaits >= maxWaits) {
         cleanupGlobal();
-        startPoll(pollMs);
+        startFallbackLoop(pollMs);
         return;
       }
       scheduleRecovery();
@@ -122,16 +145,16 @@ function ensureGlobalSse(options?: GlobalLiveOptions): void {
     recoveryWaits = 0;
     if (recoveryTimer != null) clearTimeout(recoveryTimer);
     recoveryTimer = null;
-    if (pollId != null) {
-      clearInterval(pollId);
-      pollId = null;
+    if (fallbackPollId != null) {
+      clearInterval(fallbackPollId);
+      fallbackPollId = null;
     }
     rvInfo("[runvane:sse] EventSource OPEN", streamUrl);
   };
 
   es.onerror = () => {
     if (disposed || es === null) return;
-    if (pollId != null) return;
+    if (fallbackPollId != null) return;
     scheduleRecovery();
   };
 
@@ -155,38 +178,17 @@ function ensureGlobalSse(options?: GlobalLiveOptions): void {
 
 export function subscribeGlobalLive(
   handlers: GlobalLiveHandlers,
-  options?: {
-    apiBaseUrl?: string;
-    pollIntervalMs?: number;
-    recoveryCheckMs?: number;
-    maxRecoveryWaits?: number;
-  },
+  options?: GlobalLiveOptions,
 ): () => void {
   disposed = false;
-  subscribers.add(handlers);
-  ensureGlobalSse(options);
-  return () => {
-    subscribers.delete(handlers);
-    maybeCleanupGlobal();
+  const sub: LiveSubscription = {
+    onSseEvent: handlers.onSseEvent,
+    onPollTick: handlers.onPollTick,
   };
-}
-
-// TODO AI SLOP thinks polling should be exposed
-
-export function subscribeGlobalPoll(
-  pollTick: GlobalPollHandler,
-  options?: {
-    apiBaseUrl?: string;
-    pollIntervalMs?: number;
-    recoveryCheckMs?: number;
-    maxRecoveryWaits?: number;
-  },
-): () => void {
-  disposed = false;
-  pollSubscribers.add(pollTick);
+  subscribers.add(sub);
   ensureGlobalSse(options);
   return () => {
-    pollSubscribers.delete(pollTick);
+    subscribers.delete(sub);
     maybeCleanupGlobal();
   };
 }

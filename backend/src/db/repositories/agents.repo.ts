@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AgentDefaultLlmConfiguration, AgentEntity } from '../../agents/agent.entity.js';
+import type { AgentConfiguration, AgentEntity } from '../../agents/agent.entity.js';
 import { PrismaService } from '../prisma.service.js';
 
 type AgentDbRow = {
@@ -39,13 +39,13 @@ function asModelReference(providerId: string | null, modelName: string | null): 
   return { provider_id, model_name };
 }
 
-function parseDefaultConfig(raw: unknown): AgentDefaultLlmConfiguration | null {
+function parseDefaultConfig(raw: unknown): AgentConfiguration | null {
   if (raw == null) return null;
   const value = typeof raw === 'string' ? (JSON.parse(raw) as unknown) : raw;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('agents: invalid default_llm_configuration_json');
   }
-  return value as AgentDefaultLlmConfiguration;
+  return value as AgentConfiguration;
 }
 
 function toAgentEntity(row: AgentDbRow): AgentEntity {
@@ -105,7 +105,7 @@ export class AgentsRepo {
   async create(input: {
     name: string;
     system_prompt?: string;
-    default_llm_configuration?: AgentDefaultLlmConfiguration | null;
+    default_llm_configuration?: AgentConfiguration | null;
     default_model_preset_id?: number | null;
     model_reference?: { provider_id?: string; model_name?: string } | null;
     icon?: string | null;
@@ -143,7 +143,7 @@ export class AgentsRepo {
     input: {
       name: string;
       system_prompt?: string;
-      default_llm_configuration?: AgentDefaultLlmConfiguration | null;
+      default_llm_configuration?: AgentConfiguration | null;
       default_model_preset_id?: number | null;
       model_reference?: { provider_id?: string; model_name?: string } | null;
       icon?: string | null;
