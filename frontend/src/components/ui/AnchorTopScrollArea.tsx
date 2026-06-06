@@ -4,6 +4,7 @@ export type AnchorTopScrollAreaProps = {
   className?: string;
   topAnchorEntryId?: string | null;
   children: ReactNode;
+  "data-testid"?: string;
 };
 
 type AnchorScrollInputs = {
@@ -51,7 +52,12 @@ function smoothScrollTo(el: HTMLElement, to: number, animRafRef: React.MutableRe
   animRafRef.current = requestAnimationFrame(tick);
 }
 
-export function AnchorTopScrollArea({ className, topAnchorEntryId = null, children }: AnchorTopScrollAreaProps) {
+export function AnchorTopScrollArea({
+  className,
+  topAnchorEntryId = null,
+  children,
+  "data-testid": testId,
+}: AnchorTopScrollAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -161,7 +167,7 @@ export function AnchorTopScrollArea({ className, topAnchorEntryId = null, childr
   }, [cancelAlignRaf, scheduleAlign, topAnchorEntryId]);
 
   return (
-    <div ref={scrollRef} className={className}>
+    <div ref={scrollRef} className={className} data-testid={testId}>
       <div ref={contentRef} className="relative flex min-h-full flex-col gap-0">
         {children}
       </div>

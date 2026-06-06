@@ -190,7 +190,14 @@ export function ChatPage({
             ? visibleEntries.map((entry$) => {
                 const entry = entry$.get();
                 return (
-                  <div key={messageRowKey(entry$)} data-chat-entry-id={entry.id} data-chat-entry-type={entry.type}>
+                  <div
+                    key={messageRowKey(entry$)}
+                    data-chat-entry-id={entry.id}
+                    data-chat-entry-type={entry.type}
+                    {...(entry.type === "thought-prepare"
+                      ? { "data-chat-prepare-title": entry.title ?? "" }
+                      : {})}
+                  >
                     <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
                   </div>
                 );
