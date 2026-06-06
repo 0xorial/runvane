@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { getConversationDefaultViewLeafEntryId, getConversationMessages, setConversationDefaultViewLeaf } from "../api/client";
-import { subscribeGlobalLive } from "../protocol/runLiveClient";
+import { setConversationDefaultViewLeaf } from "../api/client";
+import { fetchConversationSession } from "./queries/conversations";
+import { subscribeGlobalLive, isGlobalSseOpen } from "../protocol/runLiveClient";
 import { defaultChatEntries, mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import { assertNever } from "../utils/assertNever";
 import { SseType } from "../protocol/sseTypes";
@@ -24,6 +25,8 @@ type AppendOptimisticUserMessageInput = {
   attachments?: ChatAttachment[];
 };
 
+const POLL_RELOAD_MIN_GAP_MS = 3_000;
+
 function buildOptimisticUserEntry(
   input: AppendOptimisticUserMessageInput,
   rowId: string,
@@ -46,27 +49,31 @@ function buildOptimisticUserEntry(
 export function useChatSession(conversationId: string | null | undefined) {
   const storeRef = useRef(createObservableItemCollection<ChatEntry>(defaultChatEntries));
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
-  // clientRequestId -> ephemeral local row id. Lives only for the round-trip
-  // between POST and the matching USER_MESSAGE SSE event.
   const pendingByClientRequestIdRef = useRef<Map<string, string>>(new Map());
+  const lastHttpLoadAtRef = useRef(0);
+  const sseEventAtRef = useRef(0);
+
+  const applySession = useCallback((entries: ChatEntry[], leafId: string | null) => {
+    storeRef.current.replace(entries);
+    setActiveLeafId(leafId);
+    lastHttpLoadAtRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
     storeRef.current.replace(defaultChatEntries);
     setActiveLeafId(null);
     pendingByClientRequestIdRef.current.clear();
+    lastHttpLoadAtRef.current = 0;
+    sseEventAtRef.current = 0;
     if (!conversationId) return;
 
     const cid = String(conversationId);
     let cancelled = false;
     void (async () => {
       try {
-        const [entries, leafId] = await Promise.all([
-          getConversationMessages(cid, { all: true }),
-          getConversationDefaultViewLeafEntryId(cid),
-        ]);
+        const session = await fetchConversationSession(cid);
         if (cancelled) return;
-        storeRef.current.replace(mapApiMessagesToChatEntries(entries));
-        setActiveLeafId(leafId);
+        applySession(mapApiMessagesToChatEntries(session.entries), session.leafId);
       } catch (err) {
         console.error("[useChatSession] Failed to load conversation messages:", err);
       }
@@ -74,22 +81,20 @@ export function useChatSession(conversationId: string | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, applySession]);
 
   const reloadFromServer = useCallback(async () => {
     if (!conversationId) return;
     const cid = String(conversationId);
-    const [entries, leafId] = await Promise.all([
-      getConversationMessages(cid, { all: true }),
-      getConversationDefaultViewLeafEntryId(cid),
-    ]);
+    const session = await fetchConversationSession(cid);
     const pendingOptimistic = [...pendingByClientRequestIdRef.current.values()]
       .map((rowId) => storeRef.current.getById(rowId)?.get())
       .filter((entry): entry is UserMessageEntry => entry?.type === "user-message");
-    storeRef.current.replace([...mapApiMessagesToChatEntries(entries), ...pendingOptimistic]);
-    const activeOptimisticId = pendingOptimistic.at(-1)?.id ?? null;
-    setActiveLeafId(activeOptimisticId ?? leafId);
-  }, [conversationId]);
+    applySession(
+      [...mapApiMessagesToChatEntries(session.entries), ...pendingOptimistic],
+      pendingOptimistic.at(-1)?.id ?? session.leafId,
+    );
+  }, [conversationId, applySession]);
 
   const reconcileOptimisticUserMessage = useCallback(
     (clientRequestId: string | undefined, incoming: UserMessageEntry): boolean => {
@@ -99,8 +104,6 @@ export function useChatSession(conversationId: string | null | undefined) {
       pendingByClientRequestIdRef.current.delete(clientRequestId);
       const reKeyed = storeRef.current.replaceById(optimisticRowId, incoming);
       if (!reKeyed) {
-        // Optimistic row was already evicted (e.g. by a conversation switch) —
-        // fall back to a plain append so we don't drop the canonical entry.
         storeRef.current.append(incoming);
       }
       setActiveLeafId((prev) => (prev === optimisticRowId ? incoming.id : prev ?? incoming.id));
@@ -114,6 +117,12 @@ export function useChatSession(conversationId: string | null | undefined) {
     const cid = String(conversationId);
     const unsubscribeLive = subscribeGlobalLive({
       onPollTick: async () => {
+        if (isGlobalSseOpen()) return false;
+        const sinceLoad = Date.now() - lastHttpLoadAtRef.current;
+        const sinceSse = Date.now() - sseEventAtRef.current;
+        if (sinceLoad < POLL_RELOAD_MIN_GAP_MS || sinceSse < POLL_RELOAD_MIN_GAP_MS) {
+          return false;
+        }
         try {
           await reloadFromServer();
         } catch (err) {
@@ -126,6 +135,7 @@ export function useChatSession(conversationId: string | null | undefined) {
         if (ev.type === SseType.CONVERSATION_CREATED || ev.type === SseType.CONVERSATION_UPDATED) {
           return;
         }
+        sseEventAtRef.current = Date.now();
         const store = storeRef.current;
         if (ev.type === SseType.USER_MESSAGE) {
           if (reconcileOptimisticUserMessage(ev.clientRequestId, ev.entry)) return;
@@ -193,7 +203,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       setActiveLeafId(entryId);
       await setConversationDefaultViewLeaf(String(conversationId), entryId);
     },
-    [conversationId]
+    [conversationId],
   );
 
   const appendOptimisticUserMessage = useCallback(
@@ -214,7 +224,7 @@ export function useChatSession(conversationId: string | null | undefined) {
       setActiveLeafId(rowId);
       return { rowId, clientRequestId };
     },
-    [activeLeafId]
+    [activeLeafId],
   );
 
   return {

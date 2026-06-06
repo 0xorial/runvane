@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bot, Plus } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   createConversation,
-  getConversations,
   permanentlyDeleteConversation,
   postConversationMessage,
   renameConversation,
   softDeleteConversation,
   undeleteConversation,
 } from "../api/client";
+import {
+  mergeSseConversation,
+  patchConversationsList,
+  refreshConversations,
+  upsertConversationInList,
+  useConversationsQuery,
+} from "../hooks/queries/conversations";
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
 import { notifyError } from "../utils/toast";
@@ -39,23 +45,13 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [showDeletedOnly, setShowDeletedOnly] = useState(false);
-  const [conversations, setConversations] = useState<ConversationRow[]>([]);
-  const [groups, setGroups] = useState<ConversationGroupRow[]>([]);
+  const conversationsQuery = useConversationsQuery(showDeletedOnly);
+  const conversations = conversationsQuery.data?.conversations ?? [];
+  const groups = conversationsQuery.data?.groups ?? [];
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
   const [probeBusy, setProbeBusy] = useState(false);
   const pricingByModel = usePricingMap();
-
-  const loadConversations = useCallback(async () => {
-    const data = await getConversations({ deletedOnly: showDeletedOnly });
-    setConversations(data.conversations);
-    setGroups(data.groups);
-    return data;
-  }, [showDeletedOnly]);
-
-  useEffect(() => {
-    void loadConversations();
-  }, [loadConversations]);
 
   useEffect(() => {
     setSelectedConversationIds([]);
@@ -70,37 +66,40 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       onSseEvent: (ev) => {
         if (ev.type === SseType.CONVERSATION_CREATED) {
           if (showDeletedOnly || ev.conversation.isDeleted) return;
-          setConversations((prev) => {
-            if (prev.some((item) => item.id === ev.conversation.id)) return prev;
-            return [ev.conversation, ...prev];
+          patchConversationsList(showDeletedOnly, (prev) => {
+            if (prev.conversations.some((item) => item.id === ev.conversation.id)) return prev;
+            return {
+              ...prev,
+              conversations: [mergeSseConversation(undefined, ev.conversation), ...prev.conversations],
+            };
           });
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
           const shouldShow = showDeletedOnly ? ev.conversation.isDeleted : !ev.conversation.isDeleted;
-          setConversations((prev) =>
-            (() => {
-              const index = prev.findIndex((item) => item.id === ev.conversation.id);
-              if (!shouldShow) {
-                if (index === -1) return prev;
-                const next = prev.slice();
-                next.splice(index, 1);
-                return next;
-              }
-              if (index === -1) return [ev.conversation, ...prev];
-              const next = prev.slice();
-              const currentMs = timestampMs(next[index].updatedAt);
-              const incomingMs = timestampMs(ev.conversation.updatedAt);
-              if (currentMs != null && incomingMs != null && incomingMs < currentMs) {
-                return prev;
-              }
-              next[index] = {
-                ...next[index],
-                ...ev.conversation,
+          patchConversationsList(showDeletedOnly, (prev) => {
+            const index = prev.conversations.findIndex((item) => item.id === ev.conversation.id);
+            if (!shouldShow) {
+              if (index === -1) return prev;
+              const next = prev.conversations.slice();
+              next.splice(index, 1);
+              return { ...prev, conversations: next };
+            }
+            if (index === -1) {
+              return {
+                ...prev,
+                conversations: [mergeSseConversation(undefined, ev.conversation), ...prev.conversations],
               };
-              return next;
-            })(),
-          );
+            }
+            const next = prev.conversations.slice();
+            const currentMs = timestampMs(next[index].updatedAt);
+            const incomingMs = timestampMs(ev.conversation.updatedAt);
+            if (currentMs != null && incomingMs != null && incomingMs < currentMs) {
+              return prev;
+            }
+            next[index] = mergeSseConversation(next[index], ev.conversation);
+            return { ...prev, conversations: next };
+          });
           return;
         }
       },
@@ -147,7 +146,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     if (!title || title === current) return;
     try {
       const updated = await renameConversation(conversation.id, { title });
-      setConversations((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+      upsertConversationInList(showDeletedOnly, updated);
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
@@ -164,7 +163,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
           ? String(target.newGroupName ?? "")
           : undefined,
       });
-      const data = await loadConversations();
+      const data = await refreshConversations(showDeletedOnly);
       const groupId = target.groupId;
       if (typeof groupId === "string" && groupId.trim()) {
         setCollapsedGroups((prev) => ({ ...prev, [groupId]: false }));
@@ -187,7 +186,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   async function onSoftDeleteConversation(conversation: ConversationRow) {
     try {
       await softDeleteConversation(conversation.id);
-      await loadConversations();
+      await refreshConversations(showDeletedOnly);
       if (selectedConversationIds.includes(conversation.id)) {
         setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
       }
@@ -199,7 +198,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
   async function onUndeleteConversation(conversation: ConversationRow) {
     try {
       await undeleteConversation(conversation.id);
-      await loadConversations();
+      await refreshConversations(showDeletedOnly);
       if (selectedConversationIds.includes(conversation.id)) {
         setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
       }
@@ -213,7 +212,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     if (!confirmed) return;
     try {
       await permanentlyDeleteConversation(conversation.id);
-      await loadConversations();
+      await refreshConversations(showDeletedOnly);
       if (selectedConversationIds.includes(conversation.id)) {
         setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
       }
@@ -242,7 +241,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         firstReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
       }
     });
-    await loadConversations();
+    await refreshConversations(showDeletedOnly);
     if (failedIds.length > 0) {
       setSelectedConversationIds(failedIds);
       notifyError(`Deleted ${selectedIds.length - failedIds.length}/${selectedIds.length}. ${firstReason}`);
@@ -422,7 +421,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
               knownGroups={knownGroups}
               deletedMode={showDeletedOnly}
               reloadConversations={async () => {
-                const data = await loadConversations();
+                const data = await refreshConversations(showDeletedOnly);
                 return { groups: data.groups };
               }}
               onSelectionChange={setSelectedConversationIds}

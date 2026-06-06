@@ -176,6 +176,10 @@ function ensureGlobalSse(options?: GlobalLiveOptions): void {
   };
 }
 
+export function isGlobalSseOpen(): boolean {
+  return es?.readyState === EventSource.OPEN;
+}
+
 export function subscribeGlobalLive(
   handlers: GlobalLiveHandlers,
   options?: GlobalLiveOptions,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings } from "lucide-react";
-import { getConversation, renameConversation } from "../../../api/client";
+import { renameConversation } from "../../../api/client";
+import { useConversationQuery } from "../../../hooks/queries/conversations";
 import { usePricingMap } from "../../../hooks/usePricingMap";
 import { subscribeGlobalLive } from "../../../protocol/runLiveClient";
 import { SseType } from "../../../protocol/sseTypes";
@@ -56,6 +57,7 @@ export function ChatTitlePanel({
   });
   const [tokenUsageByModel, setTokenUsageByModel] = useState<TokenUsageByModelRow[]>([]);
   const pricingByModel = usePricingMap();
+  const conversationQuery = useConversationQuery(conversationId);
   const [conversationUpdatedAt, setConversationUpdatedAt] = useState<string>("");
   const [settingsClickPressed, setSettingsClickPressed] = useState(false);
   const estimatedCostUsd = useMemo((): number | null => {
@@ -80,30 +82,29 @@ export function ChatTitlePanel({
   );
 
   useEffect(() => {
-    setTitle(conversationId ? "Untitled" : "New chat");
-    setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
-    setTokenUsageByModel([]);
-    setConversationUpdatedAt("");
-    if (!conversationId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const row = await getConversation(conversationId);
-        if (cancelled) return;
-        setTitle(row.title || "Untitled");
-        setTokenTotals(TokenUsageMapper.fromConversationTotals(row));
-        setTokenUsageByModel(row.tokenUsageByModel ?? []);
-        setConversationUpdatedAt(String(row.updatedAt ?? ""));
-      } catch (e) {
-        if (cancelled) return;
-        const detail = e instanceof Error ? e.message : String(e);
-        notifyError(`Failed to load conversation: ${detail}`);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [conversationId]);
+    if (!conversationId) {
+      setTitle("New chat");
+      setTokenTotals({ promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0 });
+      setTokenUsageByModel([]);
+      setConversationUpdatedAt("");
+      return;
+    }
+    const row = conversationQuery.data;
+    if (!row) return;
+    setTitle(row.title || "Untitled");
+    setTokenTotals(TokenUsageMapper.fromConversationTotals(row));
+    setTokenUsageByModel(row.tokenUsageByModel ?? []);
+    setConversationUpdatedAt(String(row.updatedAt ?? ""));
+  }, [conversationId, conversationQuery.data]);
+
+  useEffect(() => {
+    if (!conversationQuery.isError) return;
+    const detail =
+      conversationQuery.error instanceof Error
+        ? conversationQuery.error.message
+        : String(conversationQuery.error);
+    notifyError(`Failed to load conversation: ${detail}`);
+  }, [conversationQuery.isError, conversationQuery.error]);
 
   useEffect(() => {
     const cid = conversationId;
