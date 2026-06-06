@@ -44,6 +44,7 @@ export function BranchSelector({ entryId }: { entryId: string | null | undefined
   if (!hasBranches) return null;
   return (
     <div
+      data-testid="branch-selector"
       className="inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground"
       onClick={(e) => e.stopPropagation()}
     >

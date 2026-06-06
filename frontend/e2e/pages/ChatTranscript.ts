@@ -14,7 +14,6 @@ export const PROBE_EXPECTED_PREPARE_TITLES = ["Title generation", "Decision plan
 export type ProbeTranscriptSnapshot = {
   entryTypes: string[];
   prepareTitles: string[];
-  parentIds: string[];
   userText: string;
   assistantText: string;
 };
@@ -28,6 +27,10 @@ export class ChatTranscript {
 
   get loading(): Locator {
     return this.root.getByTestId("chat-loading");
+  }
+
+  get branchSelectors(): Locator {
+    return this.container.getByTestId("branch-selector");
   }
 
   entry(type: string): Locator {
@@ -57,19 +60,21 @@ export class ChatTranscript {
     return this.container.locator("[data-chat-entry-type]");
   }
 
+  async expectNoBranchSelectors(): Promise<void> {
+    await expect(this.branchSelectors).toHaveCount(0);
+  }
+
   async snapshotProbeTranscript(timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<ProbeTranscriptSnapshot> {
     await this.waitForAssistantReply(timeoutMs);
     const rows = this.entryRows();
     const count = await rows.count();
     const entryTypes: string[] = [];
     const prepareTitles: string[] = [];
-    const parentIds: string[] = [];
     for (let i = 0; i < count; i += 1) {
       const row = rows.nth(i);
       const type = await row.getAttribute("data-chat-entry-type");
       if (!type) throw new Error("transcript row missing data-chat-entry-type");
       entryTypes.push(type);
-      parentIds.push((await row.getAttribute("data-chat-parent-id")) ?? "");
       if (type === "thought-prepare") {
         const title = await row.getAttribute("data-chat-prepare-title");
         if (!title) throw new Error(`thought-prepare row ${i} missing data-chat-prepare-title`);
@@ -79,18 +84,19 @@ export class ChatTranscript {
     return {
       entryTypes,
       prepareTitles,
-      parentIds,
       userText: (await this.userMessage.innerText()).trim(),
       assistantText: (await this.assistantMessage.innerText()).trim(),
     };
   }
 
+  /** Probe: correct row order, no spurious sibling branches in the transcript. */
   async expectProbeSequence(timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<ProbeTranscriptSnapshot> {
     const snap = await this.snapshotProbeTranscript(timeoutMs);
     expect(snap.entryTypes).toEqual([...PROBE_EXPECTED_ENTRY_TYPES]);
     expect(snap.prepareTitles).toEqual([...PROBE_EXPECTED_PREPARE_TITLES]);
     expect(snap.userText).toContain(PROBE_MESSAGE);
     expect(snap.assistantText.length).toBeGreaterThan(0);
+    await this.expectNoBranchSelectors();
     return snap;
   }
 }
