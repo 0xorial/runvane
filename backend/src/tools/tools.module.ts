@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
 import { BashTool } from './builtins/bash/tool.js';
 import { CurlTool } from './builtins/curl/tool.js';
+import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
 import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
@@ -17,6 +18,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     GetCurrentTimeTool,
     CurlTool,
     BashTool,
+    FilesystemTool,
     DelegateLlmTool,
     AskAttachmentTool,
     SerialConnectionManager,
@@ -24,7 +26,15 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     {
       provide: TOOL_TOKEN,
       useFactory: (...tools) => tools,
-      inject: [GetCurrentTimeTool, CurlTool, BashTool, DelegateLlmTool, AskAttachmentTool, SerialTerminalTool],
+      inject: [
+        GetCurrentTimeTool,
+        CurlTool,
+        BashTool,
+        FilesystemTool,
+        DelegateLlmTool,
+        AskAttachmentTool,
+        SerialTerminalTool,
+      ],
     },
     ToolRegistry,
   ],
