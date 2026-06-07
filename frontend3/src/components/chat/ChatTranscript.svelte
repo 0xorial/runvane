@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ObservableItem } from "@/utils/observableCollection";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
-  import { isThoughtStreamEntry } from "@/protocol/chatEntry";
+  import { buildThoughtTripletsById, visibleTranscriptEntries } from "@/lib/thoughtTriplets";
   import ObservableEntry from "./ObservableEntry.svelte";
 
   let {
@@ -14,12 +14,8 @@
     isSessionLoading: boolean;
   } = $props();
 
-  const visibleEntries = $derived(
-    entries.filter((entry$) => {
-      const entry = entry$.get();
-      return !isThoughtStreamEntry(entry) && entry.type !== "thought-action";
-    }),
-  );
+  const thoughtTripletsById = $derived(buildThoughtTripletsById(entries));
+  const visibleEntries = $derived(visibleTranscriptEntries(entries));
 </script>
 
 <div
@@ -28,7 +24,7 @@
 >
   {#if conversationId && visibleEntries.length > 0}
     {#each visibleEntries as entry$ (entry$.id)}
-      <ObservableEntry {entry$} {conversationId} />
+      <ObservableEntry {entry$} {conversationId} {thoughtTripletsById} />
     {/each}
   {:else if conversationId && isSessionLoading}
     <div

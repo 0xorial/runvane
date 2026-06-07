@@ -24,6 +24,8 @@
     <main class="flex min-h-0 min-w-0 flex-1 flex-col">
       {#if $pathname.startsWith("/chat")}
         <ChatPage conversationId={$chatConversationId} search={$chatSearch} />
+      {:else if $pathname.startsWith("/settings")}
+        <div class="p-8 text-sm text-muted-foreground">Settings (frontend3 stub)</div>
       {:else}
         <div class="p-8 text-sm text-muted-foreground">Unknown route {$pathname}</div>
       {/if}

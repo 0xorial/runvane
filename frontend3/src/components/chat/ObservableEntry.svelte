@@ -2,14 +2,17 @@
   import type { ObservableItem } from "@/utils/observableCollection";
   import type { ChatEntry } from "@/protocol/chatEntry";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
+  import type { ThoughtTripletRefs } from "@/lib/thoughtTriplets";
   import ChatMessageRow from "./ChatMessageRow.svelte";
 
   let {
     entry$,
     conversationId,
+    thoughtTripletsById,
   }: {
     entry$: ObservableItem<LinkedChatEntry>;
     conversationId: string;
+    thoughtTripletsById: ReadonlyMap<string, ThoughtTripletRefs>;
   } = $props();
 
   let entry = $state<ChatEntry | null>(null);
@@ -29,6 +32,6 @@
     data-chat-entry-type={entry.type}
     data-chat-prepare-title={entry.type === "thought-prepare" ? (entry.title ?? "") : undefined}
   >
-    <ChatMessageRow {entry} {conversationId} />
+    <ChatMessageRow {entry} {conversationId} {thoughtTripletsById} />
   </div>
 {/if}
