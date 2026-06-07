@@ -3,6 +3,7 @@
   import { getTasksSnapshot, ensureTasksStream } from "@/lib/tasksStore.svelte";
   import { notifyError } from "@/utils/toast";
   import { onMount } from "svelte";
+  import Icon from "@/components/ui/Icon.svelte";
   import TaskGroup from "./TaskGroup.svelte";
 
   let { conversationId }: { conversationId: string | null } = $props();
@@ -56,7 +57,11 @@
     aria-label={active ? `${total} tasks running` : "No tasks running"}
     onclick={() => (open = !open)}
   >
-    {active ? "◌" : "◎"}
+    {#if active}
+      <Icon name="loader" class="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
+    {:else}
+      <Icon name="activity" class="h-3.5 w-3.5" />
+    {/if}
     {#if active}<span class="tabular-nums">{total}</span>{/if}
   </button>
   {#if open}

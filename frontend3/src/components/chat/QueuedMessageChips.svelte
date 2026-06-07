@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
 
   let {
@@ -27,7 +28,7 @@
           aria-label="Cancel queued message"
           onclick={() => onCancel(message.clientRequestId)}
         >
-          ×
+          <Icon name="x" class="h-3 w-3" strokeWidth={2.25} />
         </button>
       </span>
     {/each}

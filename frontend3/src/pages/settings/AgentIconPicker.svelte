@@ -1,6 +1,8 @@
 <script lang="ts">
+  import AgentIcon from "@/components/ui/AgentIcon.svelte";
+  import Icon from "@/components/ui/Icon.svelte";
   import { getAgentColor } from "./agentColors";
-  import { AGENT_ICONS, getAgentIconGlyph } from "./agentIcons";
+  import { AGENT_ICONS } from "./agentIcons";
 
   let {
     value,
@@ -23,13 +25,13 @@
     type="button"
     {disabled}
     title="Agent icon"
-    class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-input transition-colors hover:opacity-90 {color.wrap} {disabled
+    class="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-0.5 rounded-md border border-input transition-colors hover:opacity-90 {color.wrap} {disabled
       ? 'cursor-not-allowed opacity-55'
       : ''}"
     onclick={() => (open = !open)}
   >
-    <span class="text-base leading-none">{getAgentIconGlyph(value)}</span>
-    <span class="ml-0.5 text-[10px] opacity-60">▾</span>
+    <AgentIcon iconId={value} class="h-4 w-4" />
+    <Icon name="chevron-down" class="h-2.5 w-2.5 opacity-60" strokeWidth={2.5} />
   </button>
   {#if open && !disabled}
     <div
@@ -41,7 +43,7 @@
           <button
             type="button"
             title={icon.label}
-            class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-base hover:bg-primary/10 {value === icon.id
+            class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent hover:bg-primary/10 {value === icon.id
               ? 'border-primary/60 bg-primary/15'
               : ''}"
             onclick={() => {
@@ -49,7 +51,7 @@
               open = false;
             }}
           >
-            {icon.glyph}
+            <AgentIcon iconId={icon.id} class="h-4 w-4" />
           </button>
         {/each}
       </div>

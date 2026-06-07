@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
   import type { ModelPricing } from "@/lib/costEstimation";
   import type { SidebarSection } from "./sidebarSections";
@@ -67,7 +68,14 @@
       onclick={() => onToggleGroup(section.groupId)}
     >
       <span class="truncate">{section.groupName}</span>
-      <span class="ml-2 shrink-0">{collapsed ? "▸" : "▾"} {section.rows.length}</span>
+      <span class="ml-2 inline-flex shrink-0 items-center gap-1">
+        {#if collapsed}
+          <Icon name="chevron-right" class="h-3.5 w-3.5" />
+        {:else}
+          <Icon name="chevron-down" class="h-3.5 w-3.5" />
+        {/if}
+        {section.rows.length}
+      </span>
     </button>
     {#if !collapsed}
       {#each section.rows as row (row.id)}

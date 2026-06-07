@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import type { ModelCapabilityRow } from "../../../../backend/src/contracts/model-catalog";
   import { updateModelCapabilityOverride } from "@/api/client";
   import { createModelCapabilitiesQuery } from "@/hooks/queries/referenceData";
@@ -206,8 +207,8 @@
                       >
                         {state.saving ? "Saving…" : "Save"}
                       </button>
-                      <button type="button" class="rounded p-1 text-muted-foreground hover:text-foreground" onclick={() => cancelEdit(row)}>
-                        ✕
+                      <button type="button" class="rounded p-1 text-muted-foreground hover:text-foreground" onclick={() => cancelEdit(row)} aria-label="Cancel edit">
+                        <Icon name="x" class="h-3.5 w-3.5" />
                       </button>
                     </div>
                     {#if state.error}
@@ -258,7 +259,7 @@
                       title="Edit pricing"
                       onclick={() => startEdit(row)}
                     >
-                      ✎
+                      <Icon name="pencil" class="h-3.5 w-3.5" />
                     </button>
                   </td>
                 {/if}

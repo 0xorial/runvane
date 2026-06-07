@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
+
   let dark = $state(
     typeof localStorage !== "undefined" ? localStorage.getItem("theme") !== "light" : true,
   );
@@ -16,5 +18,9 @@
   aria-label="Toggle theme"
   onclick={() => (dark = !dark)}
 >
-  {dark ? "☀" : "☾"}
+  {#if dark}
+    <Icon name="sun" class="h-4 w-4" />
+  {:else}
+    <Icon name="moon" class="h-4 w-4" />
+  {/if}
 </button>

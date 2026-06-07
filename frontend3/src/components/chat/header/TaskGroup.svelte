@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import type { TaskInfo } from "../../../../../backend/src/contracts/task";
 
   let {
@@ -29,7 +30,7 @@
           class="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
           onclick={() => onCancel(task.id)}
         >
-          ×
+          <Icon name="x" class="h-3.5 w-3.5" strokeWidth={2.25} />
         </button>
       </li>
     {/each}

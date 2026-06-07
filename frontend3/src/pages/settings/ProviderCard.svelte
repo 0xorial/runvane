@@ -1,5 +1,6 @@
 <script lang="ts">
   import AsyncButton from "@/components/ui/AsyncButton.svelte";
+  import Icon from "@/components/ui/Icon.svelte";
   import type { LlmSettings, ProviderRow } from "@/types/llmSettings";
   import { normalizeSearchToken } from "./helpers";
   import { providerGhostBtn } from "./settingsClasses";
@@ -114,7 +115,7 @@
         onclick={() => onCollapsedChange(!collapsed)}
       >
         {allModels.length} Models
-        <span class="inline-block transition-transform duration-150 {collapsed ? '-rotate-90' : ''}">⌄</span>
+        <Icon name="chevron-down" class="h-3.5 w-3.5 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}" />
       </button>
       <input
         class="min-w-[180px] rounded-md border border-input bg-muted/40 px-2 py-1.5 text-sm"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import { AGENT_COLOR_DEFAULT, AGENT_COLORS, getAgentColor } from "./agentColors";
 
   let {
@@ -26,7 +27,7 @@
     onclick={() => (open = !open)}
   >
     <span class="h-3.5 w-3.5 rounded-full {current.swatch}"></span>
-    <span class="text-[10px] opacity-60">▾</span>
+    <Icon name="chevron-down" class="h-2.5 w-2.5 opacity-60" strokeWidth={2.5} />
   </button>
   {#if open && !disabled}
     <div

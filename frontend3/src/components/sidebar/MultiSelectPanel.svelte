@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import type { ConversationGroupRow } from "../../../../backend/src/contracts/conversations";
   import { renameConversation } from "@/api/client";
   import { notifyError } from "@/utils/toast";
@@ -93,7 +94,7 @@
       class="inline-flex h-6 w-6 items-center justify-center rounded text-destructive/70"
       onclick={() => void onDeleteSelected()}
     >
-      🗑
+      <Icon name="trash" class="h-3.5 w-3.5" />
     </button>
     <button
       type="button"
@@ -101,7 +102,7 @@
       class="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary/80"
       onclick={() => onSelectionChange([])}
     >
-      ×
+      <Icon name="x" class="h-3.5 w-3.5" />
     </button>
   </div>
 </div>

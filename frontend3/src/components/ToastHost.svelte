@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Icon from "@/components/ui/Icon.svelte";
   import { dismissToast, subscribeToastStore, type ToastItem } from "@/utils/toast";
 
   let items = $state<ToastItem[]>([]);
@@ -34,7 +35,9 @@
     >
       <div class="flex items-start justify-between gap-2">
         <span>{item.message}</span>
-        <button type="button" class="shrink-0 opacity-70" onclick={() => dismissToast(item.id)}>×</button>
+        <button type="button" class="shrink-0 opacity-70" onclick={() => dismissToast(item.id)} aria-label="Dismiss">
+          <Icon name="x" class="h-4 w-4" />
+        </button>
       </div>
     </div>
   {/each}

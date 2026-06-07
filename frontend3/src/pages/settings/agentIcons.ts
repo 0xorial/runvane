@@ -1,36 +1,38 @@
-export type AgentIconDef = { id: string; label: string; glyph: string };
+export type AgentIconDef = { id: string; label: string };
 
 export const AGENT_ICONS: AgentIconDef[] = [
-  { id: "bot", label: "Bot", glyph: "🤖" },
-  { id: "brain", label: "Brain", glyph: "🧠" },
-  { id: "sparkles", label: "Sparkles", glyph: "✨" },
-  { id: "code", label: "Code", glyph: "💻" },
-  { id: "terminal", label: "Terminal", glyph: "⌨️" },
-  { id: "wrench", label: "Wrench", glyph: "🔧" },
-  { id: "hammer", label: "Hammer", glyph: "🔨" },
-  { id: "search", label: "Search", glyph: "🔍" },
-  { id: "globe", label: "Globe", glyph: "🌐" },
-  { id: "file-text", label: "File", glyph: "📄" },
-  { id: "database", label: "Database", glyph: "🗄️" },
-  { id: "cpu", label: "Cpu", glyph: "⚙️" },
-  { id: "beaker", label: "Beaker", glyph: "🧪" },
-  { id: "shield", label: "Shield", glyph: "🛡️" },
-  { id: "compass", label: "Compass", glyph: "🧭" },
-  { id: "message-square", label: "Chat", glyph: "💬" },
-  { id: "zap", label: "Zap", glyph: "⚡" },
-  { id: "mic", label: "Mic", glyph: "🎤" },
-  { id: "cog", label: "Cog", glyph: "⚙️" },
-  { id: "rocket", label: "Rocket", glyph: "🚀" },
+  { id: "bot", label: "Bot" },
+  { id: "brain", label: "Brain" },
+  { id: "sparkles", label: "Sparkles" },
+  { id: "code", label: "Code" },
+  { id: "terminal", label: "Terminal" },
+  { id: "wrench", label: "Wrench" },
+  { id: "hammer", label: "Hammer" },
+  { id: "search", label: "Search" },
+  { id: "globe", label: "Globe" },
+  { id: "file-text", label: "File" },
+  { id: "database", label: "Database" },
+  { id: "cpu", label: "Cpu" },
+  { id: "beaker", label: "Beaker" },
+  { id: "shield", label: "Shield" },
+  { id: "compass", label: "Compass" },
+  { id: "message-square", label: "Chat" },
+  { id: "zap", label: "Zap" },
+  { id: "mic", label: "Mic" },
+  { id: "cog", label: "Cog" },
+  { id: "rocket", label: "Rocket" },
 ];
 
-const ICON_BY_ID = new Map(AGENT_ICONS.map((i) => [i.id, i] as const));
+export const DEFAULT_AGENT_ICON_ID = AGENT_ICONS[0].id;
 
-export function getAgentIconGlyph(iconId: string | null | undefined): string {
-  if (!iconId) return "🤖";
-  return ICON_BY_ID.get(iconId)?.glyph ?? "🤖";
+const ICON_BY_ID = new Set(AGENT_ICONS.map((i) => i.id));
+
+export function resolveAgentIconId(iconId: string | null | undefined): string {
+  if (!iconId || !ICON_BY_ID.has(iconId)) return DEFAULT_AGENT_ICON_ID;
+  return iconId;
 }
 
 export function getAgentIconDef(iconId: string | null | undefined): AgentIconDef {
-  if (!iconId) return AGENT_ICONS[0];
-  return ICON_BY_ID.get(iconId) ?? AGENT_ICONS[0];
+  const id = resolveAgentIconId(iconId);
+  return AGENT_ICONS.find((icon) => icon.id === id) ?? AGENT_ICONS[0];
 }

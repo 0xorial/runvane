@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "@/components/ui/Icon.svelte";
   import type { SettingsSection } from "./helpers";
 
   const SECTION_TITLES: Record<SettingsSection, string> = {
@@ -38,7 +39,7 @@
           aria-label="Clear search"
           onclick={() => onProviderSearchChange("")}
         >
-          ×
+          <Icon name="x" class="h-4 w-4" />
         </button>
       {/if}
     </div>
