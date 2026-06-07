@@ -3,6 +3,7 @@ import { retainSharedTestApp } from '../support/shared-app';
 import {
   assertProbeParentChain,
   assertProbeShape,
+  assertProbeToolInvocation,
   createConversation,
   entryTypesInOrder,
   getConversation,
@@ -34,6 +35,7 @@ describeLive('probe time (integration)', () => {
     await postProbeMessage(baseUrl, conversationId, agentId);
     const entries = await waitForProbeCompletion(baseUrl, conversationId);
     assertProbeShape(entryTypesInOrder(entries));
+    assertProbeToolInvocation(entries);
     const conversation = await getConversation(baseUrl, conversationId);
     if (!conversation.defaultViewLeafEntryId) {
       throw new Error('probe: missing defaultViewLeafEntryId');
@@ -49,6 +51,7 @@ describeLive('probe time (integration)', () => {
     });
 
     assertProbeShape(entryTypesInOrder(entries));
+    assertProbeToolInvocation(entries);
     expect(events.filter((ev) => ev.type === SseType.CHAT_ENTRY_UPSERT).length).toBeGreaterThan(0);
     expect(events.some((ev) => ev.type === SseType.USER_MESSAGE)).toBe(true);
 

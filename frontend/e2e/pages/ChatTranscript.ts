@@ -7,9 +7,18 @@ export const PROBE_EXPECTED_ENTRY_TYPES = [
   "thought-prepare",
   "thought-prepare",
   "assistant-message",
+  "thought-prepare",
+  "tool-invocation",
+  "thought-prepare",
+  "assistant-message",
 ] as const;
 
-export const PROBE_EXPECTED_PREPARE_TITLES = ["Title generation", "Decision planning"] as const;
+export const PROBE_EXPECTED_PREPARE_TITLES = [
+  "Title generation",
+  "Decision planning",
+  "Resolve tool parameters",
+  "Decision planning",
+] as const;
 
 export type ProbeTranscriptSnapshot = {
   entryTypes: string[];

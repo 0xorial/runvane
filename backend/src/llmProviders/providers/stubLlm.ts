@@ -2,40 +2,10 @@ import type { LlmProvider, ProviderSettingsDict } from '../provider.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../types.js';
 import {
   abortableDelay,
-  isSteerProbeMessage,
   parseStubDelayMs,
-  steerProbeReply,
+  pickStubReply,
+  stubRequestText,
 } from './stubLlm.helpers.js';
-
-function requestText(request: LlmRequest): string {
-  return request.messages
-    .flatMap((message) => message.parts)
-    .filter((part) => part.kind === 'text')
-    .map((part) => part.text)
-    .join('\n');
-}
-
-function pickStubReply(request: LlmRequest): string {
-  const blob = requestText(request);
-  if (isSteerProbeMessage(blob)) return steerProbeReply();
-  if (/title this conversation/i.test(blob)) return 'Time Inquiry';
-
-  if (request.tools?.length) {
-    return JSON.stringify({
-      assistant_output: 'The current time is 12:00 UTC.',
-      tool_requests: [],
-      followup: 'finalize',
-    });
-  }
-
-  if (/tool parameters|parameters for the/i.test(blob)) return '{}';
-
-  return JSON.stringify({
-    assistant_output: 'The current time is 12:00 UTC.',
-    tool_requests: [],
-    followup: 'finalize',
-  });
-}
 
 /** Instant deterministic LLM when LLM_TEST_STUB=1 (default for integration tests / dev:stub). */
 export class StubLlmProvider implements LlmProvider {
@@ -62,7 +32,7 @@ export class StubLlmProvider implements LlmProvider {
     signal?: AbortSignal,
   ): Promise<LlmCompletion> {
     signal?.throwIfAborted();
-    const blob = requestText(request);
+    const blob = stubRequestText(request);
     const delayMs = parseStubDelayMs(blob);
     if (delayMs !== null) await abortableDelay(delayMs, signal);
     signal?.throwIfAborted();

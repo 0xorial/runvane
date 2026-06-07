@@ -1,5 +1,6 @@
 import { SseType, type SseEvent } from '../../src/contracts/sse';
-import { sleep } from './http';
+import { STUB_PROBE_TIME_REPLY } from '../../src/llmProviders/providers/stubLlm.helpers.js';
+import { integrationUsesLiveLlm, sleep } from './http';
 
 function parseSseChunk(chunk: string): SseEvent[] {
   const events: SseEvent[] = [];
@@ -16,21 +17,31 @@ function parseSseChunk(chunk: string): SseEvent[] {
   return events;
 }
 
-function hasAssistantUpsert(events: SseEvent[]): boolean {
-  return events.some((ev) => {
-    if (ev.type !== SseType.CHAT_ENTRY_UPSERT) return false;
-    const entry = ev.entry as { type?: string; text?: string };
-    return entry.type === 'assistant-message' && String(entry.text || '').trim().length > 0;
-  });
+function probeSseUpserts(events: SseEvent[]): Array<{ type?: string; text?: string }> {
+  return events
+    .filter((ev) => ev.type === SseType.CHAT_ENTRY_UPSERT)
+    .map((ev) => ev.entry as { type?: string; text?: string });
 }
 
-async function waitForSseAssistant(events: SseEvent[], deadlineMs: number): Promise<void> {
+function isProbeSseComplete(events: SseEvent[]): boolean {
+  const upserts = probeSseUpserts(events);
+  const hasTool = upserts.some((entry) => entry.type === 'tool-invocation');
+  const hasFinalAssistant = upserts.some((entry) => {
+    if (entry.type !== 'assistant-message') return false;
+    const text = String(entry.text || '').trim();
+    if (!text) return false;
+    return integrationUsesLiveLlm() ? true : text.includes(STUB_PROBE_TIME_REPLY);
+  });
+  return hasTool && hasFinalAssistant;
+}
+
+async function waitForProbeSse(events: SseEvent[], deadlineMs: number): Promise<void> {
   const deadline = Date.now() + deadlineMs;
   while (Date.now() < deadline) {
-    if (hasAssistantUpsert(events)) return;
+    if (isProbeSseComplete(events)) return;
     await sleep(5);
   }
-  throw new Error(`SSE: no assistant upsert within ${deadlineMs}ms (${events.length} events collected)`);
+  throw new Error(`SSE: probe flow incomplete within ${deadlineMs}ms (${events.length} events collected)`);
 }
 
 /** Collect global SSE while an async action runs. */
@@ -41,9 +52,11 @@ export async function collectSseDuring<T>(
 ): Promise<{ result: T; events: SseEvent[] }> {
   const events: SseEvent[] = [];
   const controller = new AbortController();
+  let sseConnected = false;
   const readerTask = (async () => {
     const res = await fetch(`${baseUrl}/api/stream`, { signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`SSE connect failed: ${res.status}`);
+    sseConnected = true;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -62,8 +75,14 @@ export async function collectSseDuring<T>(
   })();
 
   try {
+    const connectDeadline = Date.now() + 2_000;
+    while (!sseConnected && Date.now() < connectDeadline) {
+      await sleep(5);
+    }
+    if (!sseConnected) throw new Error('SSE: connection not established before probe run');
+
     const result = await run();
-    await waitForSseAssistant(events, 2_000);
+    await waitForProbeSse(events, 2_000);
     return { result, events };
   } finally {
     controller.abort();

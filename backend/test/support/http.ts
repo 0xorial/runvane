@@ -18,6 +18,7 @@ export type ChatEntryRow = {
   parentId: string | null;
   text?: string;
   title?: string;
+  toolId?: string;
 };
 
 export type AgentRow = {
@@ -62,7 +63,7 @@ export async function postConversationMessage(
   conversationId: string,
   agentId: string,
   message: string,
-  options?: { steer?: boolean; parentId?: string | null },
+  options?: { steer?: boolean; enqueue?: boolean; parentId?: string | null; clientRequestId?: string },
 ): Promise<void> {
   const res = await fetch(`${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST',
@@ -71,6 +72,8 @@ export async function postConversationMessage(
       message,
       agentId,
       ...(options?.steer ? { steer: true } : {}),
+      ...(options?.enqueue ? { enqueue: true } : {}),
+      ...(options?.clientRequestId ? { clientRequestId: options.clientRequestId } : {}),
       ...(options?.parentId !== undefined ? { parentId: options.parentId } : {}),
     }),
   });
@@ -98,13 +101,22 @@ export async function waitForProbeCompletion(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const entries = await listAllMessages(baseUrl, conversationId);
-    const assistant = entries.find(
-      (entry) => entry.type === 'assistant-message' && String(entry.text || '').trim().length > 0,
-    );
-    if (assistant) return entries;
+    const sorted = [...entries].sort((a, b) => a.conversationIndex - b.conversationIndex);
+    const toolIdx = sorted.findIndex((entry) => entry.type === 'tool-invocation');
+    if (toolIdx < 0) {
+      await sleep(POLL_MS);
+      continue;
+    }
+    const finalAssistant = [...sorted]
+      .slice(toolIdx + 1)
+      .reverse()
+      .find((entry) => entry.type === 'assistant-message' && String(entry.text || '').trim().length > 0);
+    if (finalAssistant) return entries;
     await sleep(POLL_MS);
   }
-  throw new Error(`timeout (${timeoutMs}ms) waiting for assistant in conversation ${conversationId}`);
+  throw new Error(
+    `timeout (${timeoutMs}ms) waiting for probe tool + final assistant in conversation ${conversationId}`,
+  );
 }
 
 export function entryTypesInOrder(entries: ChatEntryRow[]): string[] {
@@ -157,14 +169,29 @@ export function assertProbeParentChain(entries: ChatEntryRow[], tipId: string): 
 
 export function assertProbeShape(types: string[]): void {
   const userIdx = types.indexOf('user-message');
+  const toolIdx = types.indexOf('tool-invocation');
   const assistantIdx = types.lastIndexOf('assistant-message');
   if (userIdx < 0) throw new Error(`probe shape: missing user-message in ${types.join(',')}`);
+  if (toolIdx < 0) throw new Error(`probe shape: missing tool-invocation in ${types.join(',')}`);
   if (assistantIdx < 0) throw new Error(`probe shape: missing assistant-message in ${types.join(',')}`);
-  if (assistantIdx <= userIdx) throw new Error(`probe shape: assistant before user in ${types.join(',')}`);
+  if (toolIdx <= userIdx) {
+    throw new Error(`probe shape: tool-invocation before user-message in ${types.join(',')}`);
+  }
+  if (assistantIdx <= toolIdx) {
+    throw new Error(`probe shape: final assistant before tool-invocation in ${types.join(',')}`);
+  }
 
   const thoughtPrepares = types.filter((type) => type === 'thought-prepare').length;
-  if (thoughtPrepares < 2) {
-    throw new Error(`probe shape: expected >=2 thought-prepare, got ${thoughtPrepares}`);
+  if (thoughtPrepares < 4) {
+    throw new Error(`probe shape: expected >=4 thought-prepare, got ${thoughtPrepares}`);
+  }
+}
+
+export function assertProbeToolInvocation(entries: ChatEntryRow[]): void {
+  const tool = entries.find((entry) => entry.type === 'tool-invocation');
+  if (!tool) throw new Error('probe: missing tool-invocation entry');
+  if (tool.toolId !== 'get_current_time') {
+    throw new Error(`probe: expected get_current_time tool, got ${tool.toolId ?? '(missing)'}`);
   }
 }
 
