@@ -56,10 +56,18 @@ npm run dev
 ```
 
 ```bash
-# Frontend
+# Frontend (React)
 cd frontend
 npm install
 npm run dev
+```
+
+```bash
+# Frontend3 (Svelte, WIP — see docs/frontend3-parity-plan.md)
+cd frontend3
+npm install
+npm run dev    # http://localhost:52205
+npm run test:e2e
 ```
 
 ## Roadmap

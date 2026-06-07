@@ -11,7 +11,8 @@ const pidFile = path.join(repoRoot, ".e2e-servers.json");
 
 export const E2E_DEV_BASE = 523;
 export const backendPort = E2E_DEV_BASE * 100;
-export const frontendPort = backendPort + 1;
+const frontendPortOffset = Number(process.env.E2E_FRONTEND_PORT_OFFSET ?? "1");
+export const frontendPort = backendPort + frontendPortOffset;
 export const backendOrigin = `http://127.0.0.1:${backendPort}`;
 export const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 
@@ -85,7 +86,7 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
     frontend: spawnDetached(
       "npx",
       ["vite", "--host", "127.0.0.1", "--strictPort", "--port", String(frontendPort)],
-      path.join(repoRoot, "frontend"),
+      path.join(repoRoot, process.env.E2E_FRONTEND_DIR ?? "frontend"),
       { VITE_API_BASE_URL: backendOrigin },
     ),
   };
