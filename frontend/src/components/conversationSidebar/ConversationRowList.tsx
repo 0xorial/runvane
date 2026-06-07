@@ -18,7 +18,6 @@ export type ConversationRowHandlers = {
 
 type ConversationRowListProps = {
   rows: ConversationRow[];
-  activeConversationId: string | null;
   nested?: boolean;
   knownGroups: ConversationGroupRow[];
   multiSelectMode: boolean;
@@ -29,7 +28,6 @@ type ConversationRowListProps = {
 
 function ConversationRowListImpl({
   rows,
-  activeConversationId,
   nested = false,
   knownGroups,
   multiSelectMode,
@@ -51,7 +49,6 @@ function ConversationRowListImpl({
         <ConversationItem
           key={conversation.id}
           conversation={conversation}
-          active={activeConversationId === conversation.id}
           nested={nested}
           knownGroups={knownGroups}
           multiSelectMode={multiSelectMode}

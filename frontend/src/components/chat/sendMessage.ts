@@ -11,7 +11,7 @@ export async function sendMessageToConversation(
   attachments: PostMessageAttachment[],
   parentId: string | null,
   clientRequestId: string,
-  steer?: boolean,
+  opts?: { steer?: boolean; enqueue?: boolean },
 ): Promise<AsyncResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
@@ -21,7 +21,8 @@ export async function sendMessageToConversation(
     ...(attachments.length > 0 ? { attachments } : {}),
     parentId,
     clientRequestId,
-    ...(steer ? { steer: true } : {}),
+    ...(opts?.steer ? { steer: true } : {}),
+    ...(opts?.enqueue ? { enqueue: true } : {}),
   });
   return { ok: status >= 200 && status < 300 };
 }

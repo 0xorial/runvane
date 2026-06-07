@@ -50,7 +50,7 @@ export function fetchConversationSession(conversationId: string): Promise<Conver
   return queryClient.fetchQuery({
     queryKey: queryKeys.conversationSession(cid),
     queryFn: () => loadConversationSession(cid),
-    staleTime: 0,
+    staleTime: 60_000,
   });
 }
 

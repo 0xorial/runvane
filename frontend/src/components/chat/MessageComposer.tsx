@@ -12,8 +12,15 @@ import type { AsyncButtonHandle, AsyncResult } from "@/components/ui/AsyncButton
 import { isModifierEnterKey, isShiftEnterKey } from "@/lib/submitShortcut";
 import { ComposerSendActions } from "./ComposerSendActions";
 
+/**
+ * How a composed message is delivered:
+ *  - neither flag → plain send (agent idle).
+ *  - `steer` → abort the in-flight run and deliver now.
+ *  - `enqueue` → hold until the in-flight run finishes, then deliver.
+ */
 export type MessageSendMode = {
-  steer: boolean;
+  steer?: boolean;
+  enqueue?: boolean;
 };
 
 /** Props for the chat footer where the user types and sends the next message. */
@@ -30,6 +37,8 @@ export type MessageComposerProps = {
   onPickFiles: () => void;
   attachmentsSlot?: ReactNode;
   selectionSlot?: ReactNode;
+  /** Pending (enqueued) message chips, rendered just above the input. */
+  queuedSlot?: ReactNode;
   placeholder?: string;
 };
 
@@ -50,16 +59,24 @@ export function MessageComposer({
   onPickFiles,
   attachmentsSlot,
   selectionSlot,
+  queuedSlot,
   placeholder = "Send a message…",
 }: MessageComposerProps) {
   const sendButtonRef = useRef<AsyncButtonHandle>(null);
   const steerButtonRef = useRef<AsyncButtonHandle>(null);
+  const enqueueButtonRef = useRef<AsyncButtonHandle>(null);
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (agentRunning) {
+      // While running: ⌘/Ctrl+Enter interrupts (steer), Shift+Enter queues.
       if (isModifierEnterKey(e)) {
         e.preventDefault();
         steerButtonRef.current?.trigger();
+        return;
+      }
+      if (isShiftEnterKey(e)) {
+        e.preventDefault();
+        enqueueButtonRef.current?.trigger();
       }
       return;
     }
@@ -73,6 +90,7 @@ export function MessageComposer({
     <footer className="shrink-0 bg-card/40 px-2 pb-1.5 pt-1 backdrop-blur-sm">
       <input ref={fileInputRef} className="hidden" type="file" multiple onChange={onFileInputChange} />
       <div className="mx-auto w-full max-w-3xl">
+        {queuedSlot ? <div className="mb-1.5">{queuedSlot}</div> : null}
         {attachmentsSlot ? <div className="mb-1.5">{attachmentsSlot}</div> : null}
 
         <div
@@ -125,6 +143,7 @@ export function MessageComposer({
               onSendAsync={onSendAsync}
               sendButtonRef={sendButtonRef}
               steerButtonRef={steerButtonRef}
+              enqueueButtonRef={enqueueButtonRef}
             />
           </div>
         </div>

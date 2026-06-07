@@ -21,7 +21,6 @@ import { TokenUsageMapper } from "../../../../backend/src/contracts/token-usage"
 
 type ConversationItemProps = {
   conversation: ConversationRow;
-  active: boolean;
   nested?: boolean;
   knownGroups: ConversationGroupRow[];
   multiSelectMode: boolean;
@@ -42,7 +41,6 @@ type ConversationItemProps = {
 
 function ConversationItemImpl({
   conversation,
-  active,
   nested = false,
   knownGroups,
   multiSelectMode,
@@ -76,10 +74,13 @@ function ConversationItemImpl({
   return (
     <>
       <div
+        data-conversation-row
+        data-conversation-id={conversation.id}
+        data-active="false"
         className={cn(
           "group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs transition-colors",
           nested && "ml-3",
-          active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+          "text-muted-foreground hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground",
         )}
       >
         <div className="flex w-6 shrink-0 items-center justify-center">
@@ -134,8 +135,7 @@ function ConversationItemImpl({
                 className={cn(
                   "h-auto w-7 shrink-0 rounded-none shadow-none",
                   "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
-                  "opacity-60 group-hover/row:opacity-100",
-                  active && "text-foreground opacity-100",
+                  "opacity-60 group-hover/row:opacity-100 group-data-[active=true]/row:text-foreground group-data-[active=true]/row:opacity-100",
                 )}
                 aria-label="Chat menu"
                 onClick={(e) => e.stopPropagation()}

@@ -21,9 +21,13 @@ import {
   type LinkedChatEntry,
 } from "./linkedChatEntry";
 
+/** A message held server-side, awaiting the current run to finish before it posts. */
+export type PendingMessage = { clientRequestId: string; text: string };
+
 export class ChatSessionStore {
   private readonly rows: ObservableItemCollection<LinkedChatEntry>;
   private readonly pathVersion$ = createObservable({ value: 0 });
+  private readonly pending$ = createObservable<{ items: PendingMessage[] }>({ items: [] });
   private viewAnchorId: string | null = null;
 
   constructor(initial: LinkedChatEntry[] = []) {
@@ -44,6 +48,14 @@ export class ChatSessionStore {
 
   getActivePathVersion(): number {
     return this.pathVersion$.get().value;
+  }
+
+  subscribePending(listener: () => void): () => void {
+    return this.pending$.subscribe(listener);
+  }
+
+  getPendingMessages(): PendingMessage[] {
+    return this.pending$.get().items;
   }
 
   getById(id: string): ObservableItem<LinkedChatEntry> | undefined {
@@ -115,6 +127,21 @@ export class ChatSessionStore {
       case SseType.TOOL_INVOCATION_START:
       case SseType.TOOL_INVOCATION_END:
         return;
+      case SseType.MESSAGE_ENQUEUED: {
+        const { clientRequestId, text } = ev;
+        this.pending$.mutate((state) => {
+          if (state.items.some((m) => m.clientRequestId === clientRequestId)) return;
+          state.items = [...state.items, { clientRequestId, text }];
+        });
+        return;
+      }
+      case SseType.MESSAGE_DEQUEUED: {
+        const { clientRequestId } = ev;
+        this.pending$.mutate((state) => {
+          state.items = state.items.filter((m) => m.clientRequestId !== clientRequestId);
+        });
+        return;
+      }
       case SseType.USER_MESSAGE: {
         const optimisticId = ev.clientRequestId ? pending.get(ev.clientRequestId) : undefined;
         if (optimisticId && ev.clientRequestId) {

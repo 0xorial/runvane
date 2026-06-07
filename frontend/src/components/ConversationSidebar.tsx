@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Plus } from "lucide-react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   createConversation,
   permanentlyDeleteConversation,
@@ -19,15 +19,15 @@ import {
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
 import { notifyError } from "../utils/toast";
-import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupItem";
-import { ConversationRowList } from "./conversationSidebar/ConversationRowList";
+import { ConversationSidebarList } from "./conversationSidebar/ConversationSidebarList";
+import type { SidebarSection } from "./conversationSidebar/ConversationSidebarSections";
+import { VirtualizedConversationSidebarSections } from "./conversationSidebar/VirtualizedConversationSidebarSections";
 import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
 import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
 import { usePricingMap } from "../hooks/usePricingMap";
 import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
 
 type ConversationSidebarProps = {
-  activeConversationId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
 };
@@ -43,10 +43,8 @@ function timestampMs(value: string | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: ConversationSidebarProps) {
+function ConversationSidebarImpl({ onSelect, onNewChat }: ConversationSidebarProps) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
   const [showDeletedOnly, setShowDeletedOnly] = useState(false);
   const conversationsQuery = useConversationsQuery(showDeletedOnly);
   const conversations = conversationsQuery.data?.conversations ?? EMPTY_CONVERSATIONS;
@@ -120,7 +118,7 @@ function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: 
     if (probeBusy) return;
     setProbeBusy(true);
     try {
-      const agentId = searchParams.get("agent")?.trim() || "";
+      const agentId = new URLSearchParams(window.location.search).get("agent")?.trim() || "";
       if (!agentId) {
         notifyError("Select an agent first");
         return;
@@ -142,7 +140,7 @@ function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: 
       navigate(
         {
           pathname: `/chat/${encodeURIComponent(id)}`,
-          search: location.search,
+          search: window.location.search,
         },
         { replace: true },
       );
@@ -309,15 +307,6 @@ function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: 
       byGroupId.set(groupId, list);
     }
     const groupIds = Array.from(byGroupId.keys());
-    type SidebarSection =
-      | { kind: "conversation"; row: ConversationRow; latestMs: number }
-      | {
-          kind: "group";
-          groupId: string;
-          groupName: string;
-          rows: ConversationRow[];
-          latestMs: number;
-        };
     const orderedSections: SidebarSection[] = [
       ...ungrouped.map((row) => ({
         kind: "conversation" as const,
@@ -327,13 +316,14 @@ function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: 
       ...groupIds.map((groupId) => {
         const rows = byGroupId.get(groupId) ?? [];
         const groupName = groupById.get(groupId)?.name ?? "Unnamed group";
-        const latestMs = latestSectionTimestamp(rows).ms;
+        const latest = latestSectionTimestamp(rows);
         return {
           kind: "group" as const,
           groupId,
           groupName,
           rows,
-          latestMs,
+          latestMs: latest.ms,
+          latestTimestampIso: latest.raw,
         };
       }),
     ]
@@ -379,21 +369,42 @@ function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: 
     setCollapsedGroups((prev) => ({ ...prev, [groupId]: !(prev[groupId] ?? false) }));
   }, []);
 
-  const rowListSharedProps = {
-    activeConversationId,
-    knownGroups,
-    multiSelectMode,
-    deletedMode: showDeletedOnly,
-    pricingByModel,
-    selectedConversationIds,
-    onSelect,
-    onToggleSelected,
-    onRenameConversation,
-    onMoveConversationToGroup,
-    onSoftDeleteConversation,
-    onUndeleteConversation,
-    onPermanentlyDeleteConversation,
-  };
+  const sectionListProps = useMemo(
+    () => ({
+      orderedSections: grouped.orderedSections,
+      collapsedGroups,
+      knownGroups,
+      multiSelectMode,
+      deletedMode: showDeletedOnly,
+      pricingByModel,
+      selectedConversationIds,
+      onSelect,
+      onToggleSelected,
+      onRenameConversation,
+      onMoveConversationToGroup,
+      onSoftDeleteConversation,
+      onUndeleteConversation,
+      onPermanentlyDeleteConversation,
+      onToggleGroup: toggleGroup,
+    }),
+    [
+      grouped.orderedSections,
+      collapsedGroups,
+      knownGroups,
+      multiSelectMode,
+      showDeletedOnly,
+      pricingByModel,
+      selectedConversationIds,
+      onSelect,
+      onToggleSelected,
+      onRenameConversation,
+      onMoveConversationToGroup,
+      onSoftDeleteConversation,
+      onUndeleteConversation,
+      onPermanentlyDeleteConversation,
+      toggleGroup,
+    ],
+  );
 
   return (
     <aside className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
@@ -447,39 +458,16 @@ function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: 
           ) : null}
         </div>
 
-        <div className="scrollbar-thin flex h-full min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 py-1.5">
-          {grouped.orderedSections.map((section) => {
-            if (section.kind === "conversation") {
-              return (
-                <ConversationRowList
-                  key={section.row.id}
-                  rows={[section.row]}
-                  {...rowListSharedProps}
-                />
-              );
-            }
-            const groupName = section.groupName;
-            const groupId = section.groupId;
-            const rows = section.rows;
-            const collapsed = collapsedGroups[groupId] ?? false;
-            return (
-              <ConversationGroupItem
-                key={groupId}
-                groupId={groupId}
-                groupName={groupName}
-                rowCount={rows.length}
-                latestTimestampIso={latestSectionTimestamp(rows).raw}
-                collapsed={collapsed}
-                onToggle={toggleGroup}
-              >
-                <ConversationRowList rows={rows} nested {...rowListSharedProps} />
-              </ConversationGroupItem>
-            );
-          })}
-        </div>
+        <ConversationSidebarList>
+          <VirtualizedConversationSidebarSections {...sectionListProps} />
+        </ConversationSidebarList>
       </div>
     </aside>
   );
 }
 
-export const ConversationSidebar = memo(ConversationSidebarImpl);
+function sidebarPropsAreEqual(prev: ConversationSidebarProps, next: ConversationSidebarProps): boolean {
+  return prev.onSelect === next.onSelect && prev.onNewChat === next.onNewChat;
+}
+
+export const ConversationSidebar = memo(ConversationSidebarImpl, sidebarPropsAreEqual);

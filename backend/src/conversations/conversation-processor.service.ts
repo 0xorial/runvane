@@ -22,11 +22,20 @@ import { resolveSummarizeRange } from './summarizeRange.js';
 
 type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
 
+/** True for AbortController/AbortSignal cancellations (expected, not failures). */
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException || error instanceof Error) && error.name === 'AbortError'
+  );
+}
+
 @Injectable()
 export class ConversationProcessorService {
   private readonly logger = new Logger(ConversationProcessorService.name);
   private readonly activeExecutions = new Map<string, LifecycleScope>();
   private readonly messagePostLocks = new Map<string, Promise<unknown>>();
+  /** Messages posted with `enqueue` while a run was in flight, FIFO per conversation. */
+  private readonly pendingMessages = new Map<string, PostConversationMessageDto[]>();
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -93,8 +102,16 @@ export class ConversationProcessorService {
         if (this.activeExecutions.get(conversationId) === scope) {
           this.activeExecutions.delete(conversationId);
         }
+        // A run just finished — release the next queued message, if any.
+        void this.drainPendingMessages(conversationId);
       },
       (error) => {
+        // Aborts are expected control flow (steer / cancel tore down the run),
+        // not failures — don't log them as errors.
+        if (isAbortError(error)) {
+          this.logger.debug(`lifecycle scope task aborted: conversation=${conversationId}`);
+          return;
+        }
         this.logger.error(
           `lifecycle scope task failed: conversation=${conversationId}`,
           error instanceof Error ? error.stack : String(error),
@@ -114,6 +131,60 @@ export class ConversationProcessorService {
     if (!scope) return 0;
     scope.abort();
     return 1;
+  }
+
+  /** Snapshot of queued (not-yet-posted) messages for a conversation. */
+  listPendingMessages(conversationId: string): Array<{ clientRequestId: string; text: string }> {
+    const queue = this.pendingMessages.get(conversationId) ?? [];
+    return queue
+      .filter((m): m is PostConversationMessageDto & { clientRequestId: string } => Boolean(m.clientRequestId))
+      .map((m) => ({ clientRequestId: m.clientRequestId, text: m.message }));
+  }
+
+  /** Remove a queued message before it drains. Returns true if one was removed. */
+  cancelPendingMessage(conversationId: string, clientRequestId: string): boolean {
+    const queue = this.pendingMessages.get(conversationId);
+    if (!queue) return false;
+    const idx = queue.findIndex((m) => m.clientRequestId === clientRequestId);
+    if (idx === -1) return false;
+    queue.splice(idx, 1);
+    if (queue.length === 0) this.pendingMessages.delete(conversationId);
+    this.hub.publish(conversationId, { type: SseType.MESSAGE_DEQUEUED, clientRequestId });
+    return true;
+  }
+
+  /**
+   * Post the next queued message after a run completes. Re-anchors to the
+   * conversation's live leaf — while the message waited, the finished run
+   * advanced the tip, so the captured parent is stale. Re-entrant: the drained
+   * message's own completion drains the one after it, in FIFO order.
+   */
+  private async drainPendingMessages(conversationId: string): Promise<void> {
+    if (this.isProcessing(conversationId)) return;
+    const queue = this.pendingMessages.get(conversationId);
+    if (!queue || queue.length === 0) return;
+    const next = queue.shift()!;
+    if (queue.length === 0) this.pendingMessages.delete(conversationId);
+
+    if (next.clientRequestId) {
+      this.hub.publish(conversationId, {
+        type: SseType.MESSAGE_DEQUEUED,
+        clientRequestId: next.clientRequestId,
+      });
+    }
+
+    const entries = await this.chatEntries.listChatEntries(conversationId);
+    const tipId = entries.length > 0 ? entries[entries.length - 1].id : null;
+    const drained = { ...next, parentId: tipId, enqueue: false, steer: false } as PostConversationMessageDto;
+
+    try {
+      await this.processMessage(conversationId, drained);
+    } catch (error) {
+      this.logger.error(
+        `failed to drain queued message: conversation=${conversationId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   async startReprocessContext(args: {
@@ -235,6 +306,22 @@ export class ConversationProcessorService {
   }
 
   async processMessage(conversationId: string, body: PostConversationMessageDto): Promise<void> {
+    // Enqueue: if a run is in flight, hold the message and let the active
+    // scope's completion drain it (with a freshly-resolved parent). When
+    // nothing is running, fall through and post immediately.
+    if (body.enqueue && !body.steer && this.isProcessing(conversationId)) {
+      const queue = this.pendingMessages.get(conversationId) ?? [];
+      queue.push(body);
+      this.pendingMessages.set(conversationId, queue);
+      if (body.clientRequestId) {
+        this.hub.publish(conversationId, {
+          type: SseType.MESSAGE_ENQUEUED,
+          clientRequestId: body.clientRequestId,
+          text: body.message,
+        });
+      }
+      return;
+    }
     return this.withMessagePostLock(conversationId, Boolean(body.steer), async () => {
       const { scope, chain } = await this.beginRun(conversationId);
       try {

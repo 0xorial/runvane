@@ -129,6 +129,8 @@ export type PostConversationMessageInput = {
   clientRequestId?: string;
   /** Abort in-flight processing and deliver this message immediately. */
   steer?: boolean;
+  /** If a run is in flight, hold this message and post it once the run finishes. */
+  enqueue?: boolean;
 };
 
 export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
@@ -232,6 +234,16 @@ export async function postConversationMessage(
     status: result.status,
     data: validatePostConversationMessageResponse(result.data),
   };
+}
+
+export async function cancelPendingMessage(
+  conversationId: string,
+  clientRequestId: string,
+): Promise<void> {
+  await postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages/cancel-pending`,
+    { clientRequestId },
+  );
 }
 
 export async function approveToolInvocation(

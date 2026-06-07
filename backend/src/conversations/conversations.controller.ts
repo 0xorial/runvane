@@ -28,6 +28,7 @@ import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-hel
 import { ConversationsService } from './conversations.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
+import { CancelPendingMessageDto } from './dto/cancel-pending-message.dto.js';
 import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
 import { SetDefaultViewLeafDto } from './dto/set-default-view-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
@@ -172,6 +173,18 @@ export class ConversationsController {
     if (!exists) throw new NotFoundException('conversation not found');
     await this.conversationProcessor.processMessage(conversationId, body);
     return { conversationId };
+  }
+
+  @Post(':conversationId/messages/cancel-pending')
+  @HttpCode(200)
+  async cancelPendingMessage(
+    @Param('conversationId') conversationId: string,
+    @Body() body: CancelPendingMessageDto,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+    const cancelled = this.conversationProcessor.cancelPendingMessage(conversationId, body.clientRequestId);
+    return { conversationId, cancelled };
   }
 
   @Post(':conversationId/default-view-leaf')

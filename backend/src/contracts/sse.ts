@@ -9,6 +9,8 @@ export const SseType = {
   CHAT_ENTRY_DELTA: 'chat_entry_delta',
   TOOL_INVOCATION_START: 'tool_invocation_start',
   TOOL_INVOCATION_END: 'tool_invocation_end',
+  MESSAGE_ENQUEUED: 'message_enqueued',
+  MESSAGE_DEQUEUED: 'message_dequeued',
 } as const;
 
 export type SseEventType = (typeof SseType)[keyof typeof SseType];
@@ -95,6 +97,21 @@ export const ToolInvocationEndSsePayloadSchema = z.object({
 });
 export type ToolInvocationEndSsePayload = z.infer<typeof ToolInvocationEndSsePayloadSchema>;
 
+/** A user message held in the per-conversation queue, awaiting drain. */
+export const MessageEnqueuedSsePayloadSchema = z.object({
+  type: z.literal(SseType.MESSAGE_ENQUEUED),
+  clientRequestId: z.string(),
+  text: z.string(),
+});
+export type MessageEnqueuedSsePayload = z.infer<typeof MessageEnqueuedSsePayloadSchema>;
+
+/** A queued message left the queue — drained into a real run, or cancelled. */
+export const MessageDequeuedSsePayloadSchema = z.object({
+  type: z.literal(SseType.MESSAGE_DEQUEUED),
+  clientRequestId: z.string(),
+});
+export type MessageDequeuedSsePayload = z.infer<typeof MessageDequeuedSsePayloadSchema>;
+
 export const SsePayloadSchema = z.discriminatedUnion('type', [
   UserMessageSsePayloadSchema,
   ConversationCreatedSsePayloadSchema,
@@ -103,6 +120,8 @@ export const SsePayloadSchema = z.discriminatedUnion('type', [
   ChatEntryDeltaSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
+  MessageEnqueuedSsePayloadSchema,
+  MessageDequeuedSsePayloadSchema,
 ]);
 export type SsePayload = z.infer<typeof SsePayloadSchema>;
 

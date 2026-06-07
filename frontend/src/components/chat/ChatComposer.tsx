@@ -1,12 +1,14 @@
 import { useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { MessageSendMode } from "./MessageComposer";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { createConversation, uploadFile } from "../../api/client";
+import { cancelPendingMessage, createConversation, uploadFile } from "../../api/client";
 import type { ChatAttachment } from "../../protocol/chatEntry";
 import type { LlmRef } from "../../../../backend/src/contracts/llm";
+import type { PendingMessage } from "@/lib/chatSessionStore";
 import { ChatAgentToolbar, type ChatAgentSelection } from "./ChatAgentToolbar";
 import { AttachmentChips, type SelectedAttachment } from "./AttachmentChips";
 import { MessageComposer } from "./MessageComposer";
+import { QueuedMessageChips } from "./QueuedMessageChips";
 import { defaultAttachmentMode, sendMessageToConversation } from "./sendMessage";
 
 type ChatComposerProps = {
@@ -30,6 +32,7 @@ type ChatComposerProps = {
   }) => { rowId: string; clientRequestId: string; parentId: string | null } | null;
   onSent: (optimisticRowId: string) => void;
   agentRunning?: boolean;
+  pendingMessages?: PendingMessage[];
 };
 
 export function ChatComposer({
@@ -46,6 +49,7 @@ export function ChatComposer({
   appendOptimisticUserMessage,
   onSent,
   agentRunning = false,
+  pendingMessages = [],
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchParams] = useSearchParams();
@@ -81,6 +85,14 @@ export function ChatComposer({
       canSend={canSend}
       placeholder="Send a message…"
       selectionSlot={<ChatAgentToolbar onSelectionChange={onAgentSelectionChange} embedded />}
+      queuedSlot={
+        conversationId && pendingMessages.length > 0 ? (
+          <QueuedMessageChips
+            messages={pendingMessages}
+            onCancel={(clientRequestId) => cancelPendingMessage(conversationId, clientRequestId)}
+          />
+        ) : undefined
+      }
       attachmentsSlot={
         selectedFiles.length > 0 ? (
           <AttachmentChips
@@ -93,7 +105,7 @@ export function ChatComposer({
           />
         ) : undefined
       }
-      onSendAsync={({ steer }: MessageSendMode) => {
+      onSendAsync={({ steer, enqueue }: MessageSendMode) => {
         return (async () => {
           const text = input.trim();
           if (!text && selectedFiles.length === 0) return { ok: false };
@@ -102,6 +114,26 @@ export function ChatComposer({
             const uploaded = await uploadFile(file);
             uploadedAttachments.push({ ...uploaded.attachment, mode });
           }
+
+          // Enqueue: don't add to the transcript yet — it posts after the
+          // current run finishes (server resolves the parent at drain time).
+          // It surfaces as a queued chip until then.
+          if (enqueue && conversationId) {
+            setInput("");
+            setSelectedFiles([]);
+            return sendMessageToConversation(
+              conversationId,
+              text,
+              agentSelection.agentId,
+              agentSelection.llm,
+              agentSelection.modelPresetId,
+              uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
+              null,
+              crypto.randomUUID(),
+              { enqueue: true },
+            );
+          }
+
           const optimisticInput = {
             text,
             agentId: agentSelection.agentId,
@@ -123,7 +155,7 @@ export function ChatComposer({
               uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
               null,
               crypto.randomUUID(),
-              steer,
+              { steer },
             );
             const q = searchParams.toString();
             navigate(
@@ -150,7 +182,7 @@ export function ChatComposer({
             uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
             optimistic.parentId,
             optimistic.clientRequestId,
-            steer,
+            { steer },
           );
         })();
       }}

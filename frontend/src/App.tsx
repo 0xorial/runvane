@@ -5,10 +5,12 @@ import { ResizableSidePanel } from "@/components/ui/ResizableSidePanel";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ConversationSidebar } from "./components/ConversationSidebar";
+import { SidebarSelectionHighlight } from "./components/conversationSidebar/SidebarSelectionHighlight";
 import { ErrorInboxButton } from "./components/ErrorInboxButton";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { ToastHost } from "./components/ToastHost";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { fetchConversationSession } from "./hooks/queries/conversations";
 import { queryClient } from "./lib/queryClient";
 import { ChatPage } from "./pages/ChatPage";
 import { ComponentsPlaygroundPage } from "./pages/playground/ComponentsPlaygroundPage";
@@ -92,7 +94,13 @@ export function App() {
   const handleToggleRightSidebar = useCallback(() => setChatRightSidebarVisible((v) => !v), []);
   const handleToggleTerminal = useCallback(() => setChatTerminalVisible((v) => !v), []);
   const handleNewChat = useCallback(() => navigate("/chat/new"), [navigate]);
-  const handleSelectConversation = useCallback((id: string) => navigate(`/chat/${id}`), [navigate]);
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      void fetchConversationSession(id);
+      void navigate(`/chat/${encodeURIComponent(id)}`);
+    },
+    [navigate],
+  );
   const handleOpenSettings = useCallback(() => navigate(settingsLinkTo(location)), [navigate, location]);
   const chatPageShell = useMemo(
     () => (
@@ -118,21 +126,39 @@ export function App() {
       settingsTab,
     ],
   );
-  const appRoutes = (
-    <Routes>
-      <Route path="/chat/:conversationId" element={chatPageShell} />
-      <Route path="/chat" element={<Navigate to="/chat/new" replace />} />
-      <Route path="/permissions" element={<Navigate to="/settings/tools" replace />} />
-      <Route path="/settings" element={<Navigate to="/settings/model-providers" replace />} />
-      <Route path="/settings/:section" element={<SettingsPage />} />
-      <Route path="/playground/components" element={<ComponentsPlaygroundPage />} />
-      <Route path="*" element={<Navigate to="/chat/new" replace />} />
-    </Routes>
+  const appRoutes = useMemo(
+    () => (
+      <Routes>
+        <Route path="/chat/:conversationId" element={chatPageShell} />
+        <Route path="/chat" element={<Navigate to="/chat/new" replace />} />
+        <Route path="/permissions" element={<Navigate to="/settings/tools" replace />} />
+        <Route path="/settings" element={<Navigate to="/settings/model-providers" replace />} />
+        <Route path="/settings/:section" element={<SettingsPage />} />
+        <Route path="/playground/components" element={<ComponentsPlaygroundPage />} />
+        <Route path="*" element={<Navigate to="/chat/new" replace />} />
+      </Routes>
+    ),
+    [chatPageShell],
+  );
+
+  const conversationSidebarPanel = useMemo(
+    () => (
+      <div
+        className={cn(
+          "h-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-200",
+          chatSidebarVisible ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        <ConversationSidebar onNewChat={handleNewChat} onSelect={handleSelectConversation} />
+      </div>
+    ),
+    [chatSidebarVisible, handleNewChat, handleSelectConversation],
   );
 
   return (
     <QueryClientProvider client={queryClient}>
     <TooltipProvider delayDuration={300}>
+      <SidebarSelectionHighlight activeConversationId={activeConversationId} />
       <div className="flex h-full max-h-full min-h-0 flex-col overflow-hidden bg-background">
         <ToastHost />
         {showTopHeader ? (
@@ -192,20 +218,7 @@ export function App() {
               onOpenChange={setChatSidebarVisible}
               defaultSize={sidebarDefaultSize}
               minSize={10}
-              side={
-                <div
-                  className={cn(
-                    "h-full min-h-0 min-w-0 overflow-hidden transition-opacity duration-200",
-                    chatSidebarVisible ? "opacity-100" : "pointer-events-none opacity-0",
-                  )}
-                >
-                  <ConversationSidebar
-                    activeConversationId={activeConversationId}
-                    onNewChat={handleNewChat}
-                    onSelect={handleSelectConversation}
-                  />
-                </div>
-              }
+              side={conversationSidebarPanel}
             >
               <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{appRoutes}</section>
             </ResizableSidePanel>

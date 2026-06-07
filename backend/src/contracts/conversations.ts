@@ -76,6 +76,12 @@ export const PostConversationMessageRequestSchema = z.object({
   clientRequestId: z.string().min(1).optional(),
   /** Abort in-flight processing and start this message immediately. */
   steer: z.boolean().optional(),
+  /**
+   * If a run is in flight, hold this message and post it automatically once
+   * the run finishes (instead of aborting). No-op when nothing is running —
+   * it posts immediately. Mutually exclusive with `steer`.
+   */
+  enqueue: z.boolean().optional(),
 });
 export type PostConversationMessageRequest = z.infer<typeof PostConversationMessageRequestSchema>;
 
@@ -83,6 +89,9 @@ export const PostConversationMessageAcceptedResponseSchema = z.object({
   conversationId: z.string(),
 });
 export type PostConversationMessageAcceptedResponse = z.infer<typeof PostConversationMessageAcceptedResponseSchema>;
+
+export const CancelPendingMessageRequestSchema = z.object({ clientRequestId: z.string().min(1) });
+export type CancelPendingMessageRequest = z.infer<typeof CancelPendingMessageRequestSchema>;
 
 export const SetConversationActiveLeafRequestSchema = z.object({ entryId: z.string().min(1) });
 export type SetConversationActiveLeafRequest = z.infer<typeof SetConversationActiveLeafRequestSchema>;

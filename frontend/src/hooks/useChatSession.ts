@@ -6,7 +6,9 @@ import {
   getEmptyChatSessionStore,
   retainChatSessionLive,
 } from "@/lib/chatSessionRegistry";
-import { loadConversationSession } from "./queries/conversations";
+import { fetchConversationSession, type ConversationSession } from "./queries/conversations";
+import { queryClient } from "@/lib/queryClient";
+import { queryKeys } from "./queries/keys";
 import { mapApiMessagesToChatEntries } from "../utils/chatEntries";
 import type { ChatAttachment, UserMessageEntry } from "../protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
@@ -103,13 +105,22 @@ export function useChatSession(conversationId: string | null | undefined) {
 
     const cid = boundCid;
     const releaseLive = retainChatSessionLive();
-    const warmCache = store.getAllRows().length > 0;
-    setIsSessionLoading(!warmCache);
+    const warmStore = store.getAllRows().length > 0;
+    const cachedSession = queryClient.getQueryData<ConversationSession>(queryKeys.conversationSession(cid));
+
+    if (warmStore && cachedSession) {
+      setIsSessionLoading(false);
+      return () => {
+        releaseLive();
+      };
+    }
+
+    setIsSessionLoading(!warmStore);
 
     let cancelled = false;
     void (async () => {
       try {
-        const session = await loadConversationSession(cid);
+        const session = await fetchConversationSession(cid);
         if (cancelled) return;
         const entries = mapApiMessagesToChatEntries(session.entries);
         if (store.getAllRows().length === 0) {
@@ -137,7 +148,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     async (entryId: string) => {
       if (!boundCid || !store) return;
       if (!store.getById(entryId)) {
-        const session = await loadConversationSession(boundCid);
+        const session = await fetchConversationSession(boundCid);
         store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId, session.anchorId);
       }
       store.setChosenPathFromLeaf(entryId);
