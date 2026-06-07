@@ -2,8 +2,14 @@
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
   import { TokenUsageMapper } from "../../../../backend/src/contracts/token-usage";
   import LlmMetaBadge from "@/components/chat/LlmMetaBadge.svelte";
+  import {
+    conversationSelectionRevision,
+    getSelectedConversationIds,
+    toggleConversationSelected,
+  } from "@/lib/conversationMultiSelect.svelte";
   import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
+  import ConversationRowMenu from "./ConversationRowMenu.svelte";
   import NewGroupDialog from "./NewGroupDialog.svelte";
 
   let {
@@ -13,14 +19,12 @@
     multiSelectMode,
     deletedMode,
     pricingByModel,
-    selected,
-    onSelect,
-    onToggleSelected,
-    onRenameConversation,
-    onMoveConversationToGroup,
-    onSoftDeleteConversation,
-    onUndeleteConversation,
-    onPermanentlyDeleteConversation,
+    selectConversation,
+    renameConversation,
+    moveConversationToGroup,
+    softDeleteConversation,
+    undeleteConversation,
+    permanentlyDeleteConversation,
   }: {
     conversation: ConversationRow;
     nested?: boolean;
@@ -28,23 +32,26 @@
     multiSelectMode: boolean;
     deletedMode: boolean;
     pricingByModel: Map<string, ModelPricing>;
-    selected: boolean;
-    onSelect: (id: string) => void;
-    onToggleSelected: (id: string, checked: boolean) => void;
-    onRenameConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onMoveConversationToGroup: (
+    selectConversation: (id: string) => void;
+    renameConversation: (conversation: ConversationRow) => void | Promise<void>;
+    moveConversationToGroup: (
       conversation: ConversationRow,
       target: { groupId?: string | null; newGroupName?: string },
     ) => void | Promise<void>;
-    onSoftDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onUndeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onPermanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
+    softDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
+    undeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
+    permanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
   } = $props();
 
   let menuOpen = $state(false);
-  let moveSubOpen = $state(false);
+  let menuAnchor = $state<HTMLButtonElement | null>(null);
   let moveDialogOpen = $state(false);
   let newGroupName = $state("");
+
+  const selected = $derived.by(() => {
+    void $conversationSelectionRevision;
+    return getSelectedConversationIds().includes(conversation.id);
+  });
 
   const timestampIso = $derived(
     conversation.lastMessageAt || conversation.createdAt || conversation.updatedAt,
@@ -59,7 +66,7 @@
   async function submitNewGroupDialog(): Promise<void> {
     const groupName = newGroupName.trim();
     if (!groupName) return;
-    await onMoveConversationToGroup(conversation, { newGroupName: groupName });
+    await moveConversationToGroup(conversation, { newGroupName: groupName });
     moveDialogOpen = false;
     newGroupName = "";
   }
@@ -69,18 +76,22 @@
   data-conversation-row
   data-conversation-id={conversation.id}
   data-active="false"
-  class="group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground {nested
+  class="group/row flex w-full shrink-0 items-stretch rounded-md text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground {nested
     ? 'ml-3'
     : ''}"
 >
   <div class="flex w-6 shrink-0 items-center justify-center">
     <input
       type="checkbox"
+      data-testid={`sidebar-select-${conversation.id}`}
       class="h-4 w-4 {multiSelectMode ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}"
       checked={selected}
       aria-label={`Select conversation ${conversation.title || conversation.id}`}
-      onclick={(e) => e.stopPropagation()}
-      onchange={(e) => onToggleSelected(conversation.id, e.currentTarget.checked)}
+      onclick={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        toggleConversationSelected(conversation.id, !selected);
+      }}
     />
   </div>
   <button
@@ -88,8 +99,8 @@
     data-testid={`sidebar-conversation-${conversation.id}`}
     class="min-w-0 flex-1 py-2 pl-0.5 pr-2.5 text-left"
     onclick={() => {
-      if (multiSelectMode) onToggleSelected(conversation.id, !selected);
-      else onSelect(conversation.id);
+      if (multiSelectMode) toggleConversationSelected(conversation.id, !selected);
+      else selectConversation(conversation.id);
     }}
   >
     <span class="block truncate font-medium text-foreground/90 group-hover/row:text-foreground">
@@ -106,102 +117,37 @@
     />
   </button>
   {#if !multiSelectMode}
-    <div class="relative">
-      <button
-        type="button"
-        class="inline-flex h-auto w-7 shrink-0 items-center justify-center rounded-none text-muted-foreground opacity-60 hover:bg-secondary/80 hover:text-foreground group-hover/row:opacity-100"
-        aria-label="Chat menu"
-        onclick={(e) => {
-          e.stopPropagation();
-          menuOpen = !menuOpen;
-          if (!menuOpen) moveSubOpen = false;
-        }}
-      >
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
-        </svg>
-      </button>
-      {#if menuOpen}
-        <div
-          role="menu"
-          tabindex="-1"
-          class="absolute right-0 top-full z-30 min-w-[10rem] rounded-md border border-border bg-popover py-1 text-xs shadow-md"
-          onmousedown={(e) => e.stopPropagation()}
-        >
-          {#if deletedMode || conversation.isDeleted}
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onUndeleteConversation(conversation); }}>
-              Undelete
-            </button>
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onPermanentlyDeleteConversation(conversation); }}>
-              Delete permanently
-            </button>
-          {:else}
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; moveSubOpen = false; onRenameConversation(conversation); }}>
-              Rename
-            </button>
-            <div
-              role="group"
-              class="relative"
-              onmouseenter={() => (moveSubOpen = true)}
-              onmouseleave={() => (moveSubOpen = false)}
-            >
-              <button
-                type="button"
-                class="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-muted"
-                onclick={() => (moveSubOpen = !moveSubOpen)}
-              >
-                Move to group
-                <span class="text-muted-foreground">›</span>
-              </button>
-              {#if moveSubOpen}
-                <div
-                  role="menu"
-                  tabindex="-1"
-                  class="absolute left-full top-0 z-40 ml-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
-                  onmousedown={(e) => e.stopPropagation()}
-                >
-                  <button
-                    class="block w-full px-3 py-1.5 text-left hover:bg-muted"
-                    onclick={() => {
-                      menuOpen = false;
-                      moveSubOpen = false;
-                      void onMoveConversationToGroup(conversation, { groupId: null });
-                    }}
-                  >
-                    No group
-                  </button>
-                  {#each knownGroups as group (group.id)}
-                    <button
-                      class="block w-full px-3 py-1.5 text-left hover:bg-muted"
-                      onclick={() => {
-                        menuOpen = false;
-                        moveSubOpen = false;
-                        void onMoveConversationToGroup(conversation, { groupId: group.id });
-                      }}
-                    >
-                      {group.name}
-                    </button>
-                  {/each}
-                  <button
-                    class="block w-full px-3 py-1.5 text-left hover:bg-muted"
-                    onclick={() => {
-                      menuOpen = false;
-                      moveSubOpen = false;
-                      moveDialogOpen = true;
-                    }}
-                  >
-                    New group…
-                  </button>
-                </div>
-              {/if}
-            </div>
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onSoftDeleteConversation(conversation); }}>
-              Delete
-            </button>
-          {/if}
-        </div>
-      {/if}
-    </div>
+    <button
+      bind:this={menuAnchor}
+      type="button"
+      class="inline-flex h-auto w-7 shrink-0 items-center justify-center rounded-none text-muted-foreground opacity-60 hover:bg-secondary/80 hover:text-foreground group-hover/row:opacity-100"
+      aria-label="Chat menu"
+      aria-expanded={menuOpen}
+      onclick={(e) => {
+        e.stopPropagation();
+        menuOpen = !menuOpen;
+      }}
+    >
+      <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
+      </svg>
+    </button>
+    {#if menuAnchor}
+      <ConversationRowMenu
+        open={menuOpen}
+        anchor={menuAnchor}
+        {conversation}
+        {deletedMode}
+        {knownGroups}
+        closeMenu={() => (menuOpen = false)}
+        {renameConversation}
+        {moveConversationToGroup}
+        {softDeleteConversation}
+        {undeleteConversation}
+        {permanentlyDeleteConversation}
+        openNewGroupDialog={() => (moveDialogOpen = true)}
+      />
+    {/if}
   {/if}
 </div>
 

@@ -12,15 +12,13 @@
     multiSelectMode,
     deletedMode,
     pricingByModel,
-    selectedConversationIds,
-    onSelect,
-    onToggleSelected,
-    onRenameConversation,
-    onMoveConversationToGroup,
-    onSoftDeleteConversation,
-    onUndeleteConversation,
-    onPermanentlyDeleteConversation,
-    onToggleGroup,
+    selectConversation,
+    renameConversation,
+    moveConversationToGroup,
+    softDeleteConversation,
+    undeleteConversation,
+    permanentlyDeleteConversation,
+    toggleGroup,
   }: {
     sections: SidebarSection[];
     collapsedGroups: Record<string, boolean>;
@@ -28,18 +26,16 @@
     multiSelectMode: boolean;
     deletedMode: boolean;
     pricingByModel: Map<string, ModelPricing>;
-    selectedConversationIds: string[];
-    onSelect: (id: string) => void;
-    onToggleSelected: (id: string, checked: boolean) => void;
-    onRenameConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onMoveConversationToGroup: (
+    selectConversation: (id: string) => void;
+    renameConversation: (conversation: ConversationRow) => void | Promise<void>;
+    moveConversationToGroup: (
       conversation: ConversationRow,
       target: { groupId?: string | null; newGroupName?: string },
     ) => void | Promise<void>;
-    onSoftDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onUndeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onPermanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
-    onToggleGroup: (groupId: string) => void;
+    softDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
+    undeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
+    permanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
+    toggleGroup: (groupId: string) => void;
   } = $props();
 </script>
 
@@ -51,21 +47,19 @@
       {multiSelectMode}
       {deletedMode}
       {pricingByModel}
-      selected={selectedConversationIds.includes(section.row.id)}
-      {onSelect}
-      {onToggleSelected}
-      {onRenameConversation}
-      {onMoveConversationToGroup}
-      {onSoftDeleteConversation}
-      {onUndeleteConversation}
-      {onPermanentlyDeleteConversation}
+      {selectConversation}
+      {renameConversation}
+      {moveConversationToGroup}
+      {softDeleteConversation}
+      {undeleteConversation}
+      {permanentlyDeleteConversation}
     />
   {:else}
     {@const collapsed = collapsedGroups[section.groupId] ?? false}
     <button
       type="button"
       class="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-secondary/40"
-      onclick={() => onToggleGroup(section.groupId)}
+      onclick={() => toggleGroup(section.groupId)}
     >
       <span class="truncate">{section.groupName}</span>
       <span class="ml-2 inline-flex shrink-0 items-center gap-1">
@@ -86,14 +80,12 @@
           {multiSelectMode}
           {deletedMode}
           {pricingByModel}
-          selected={selectedConversationIds.includes(row.id)}
-          {onSelect}
-          {onToggleSelected}
-          {onRenameConversation}
-          {onMoveConversationToGroup}
-          {onSoftDeleteConversation}
-          {onUndeleteConversation}
-          {onPermanentlyDeleteConversation}
+          {selectConversation}
+          {renameConversation}
+          {moveConversationToGroup}
+          {softDeleteConversation}
+          {undeleteConversation}
+          {permanentlyDeleteConversation}
         />
       {/each}
     {/if}

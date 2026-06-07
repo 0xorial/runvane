@@ -28,6 +28,13 @@
   import MultiSelectPanel from "./MultiSelectPanel.svelte";
   import SidebarSectionsList from "./SidebarSectionsList.svelte";
   import TextInputDialog from "./TextInputDialog.svelte";
+  import {
+    clearConversationSelection,
+    conversationSelectionRevision,
+    getSelectedConversationIds,
+    setSelectedConversationIds,
+    toggleConversationSelected,
+  } from "@/lib/conversationMultiSelect.svelte";
   import { groupConversations } from "./sidebarSections";
 
   const PROBE_MESSAGE = "what is the time?";
@@ -45,7 +52,6 @@
   let showDeletedOnly = $state(false);
   let probeBusy = $state(false);
   let collapsedGroups = $state<Record<string, boolean>>({});
-  let selectedConversationIds = $state<string[]>([]);
   let renameDialogOpen = $state(false);
   let renameTitleDraft = $state("");
   let renameTarget = $state<ConversationRow | null>(null);
@@ -61,22 +67,23 @@
   const groups = $derived(conversationsQuery.data?.groups ?? []);
   const knownGroups = $derived(groups.filter((g: ConversationGroupRow) => String(g.id || "").trim()));
   const sections = $derived(groupConversations(conversations, groups));
+  const selectedConversationIds = $derived.by(() => {
+    void $conversationSelectionRevision;
+    return getSelectedConversationIds();
+  });
   const multiSelectMode = $derived(selectedConversationIds.length > 0);
 
   $effect(() => {
     void showDeletedOnly;
-    if (selectedConversationIds.length > 0) selectedConversationIds = [];
+    clearConversationSelection();
   });
 
   $effect(() => {
-    const valid = selectedConversationIds.filter((id) =>
-      conversations.some((row: ConversationRow) => row.id === id),
-    );
-    if (
-      valid.length !== selectedConversationIds.length ||
-      valid.some((id, index) => id !== selectedConversationIds[index])
-    ) {
-      selectedConversationIds = valid;
+    if (conversations.length === 0) return;
+    const current = getSelectedConversationIds();
+    const valid = current.filter((id) => conversations.some((row: ConversationRow) => row.id === id));
+    if (valid.length !== current.length || valid.some((id, index) => id !== current[index])) {
+      setSelectedConversationIds(valid);
     }
   });
 
@@ -209,8 +216,8 @@
   }
 
   function deselect(id: string): void {
-    if (selectedConversationIds.includes(id)) {
-      selectedConversationIds = selectedConversationIds.filter((x) => x !== id);
+    if (getSelectedConversationIds().includes(id)) {
+      toggleConversationSelected(id, false);
     }
   }
 
@@ -265,21 +272,11 @@
     });
     await refreshConversations(showDeletedOnly);
     if (failedIds.length > 0) {
-      selectedConversationIds = failedIds;
+      setSelectedConversationIds(failedIds);
       notifyError(`Deleted ${ids.length - failedIds.length}/${ids.length}. ${firstReason}`);
       return;
     }
-    selectedConversationIds = [];
-  }
-
-  function onToggleSelected(conversationId: string, checked: boolean): void {
-    if (checked) {
-      if (!selectedConversationIds.includes(conversationId)) {
-        selectedConversationIds = [...selectedConversationIds, conversationId];
-      }
-    } else {
-      selectedConversationIds = selectedConversationIds.filter((id) => id !== conversationId);
-    }
+    clearConversationSelection();
   }
 </script>
 
@@ -325,7 +322,7 @@
           {knownGroups}
           deletedMode={showDeletedOnly}
           reloadConversations={() => refreshConversations(showDeletedOnly)}
-          onSelectionChange={(ids) => (selectedConversationIds = ids)}
+          onSelectionChange={setSelectedConversationIds}
           onExpandGroup={(groupId) => (collapsedGroups = { ...collapsedGroups, [groupId]: false })}
           onDeleteSelected={onDeleteSelectedConversations}
         />
@@ -343,15 +340,13 @@
         {multiSelectMode}
         deletedMode={showDeletedOnly}
         {pricingByModel}
-        {selectedConversationIds}
-        {onSelect}
-        onToggleSelected={onToggleSelected}
-        {onRenameConversation}
-        {onMoveConversationToGroup}
-        {onSoftDeleteConversation}
-        {onUndeleteConversation}
-        {onPermanentlyDeleteConversation}
-        onToggleGroup={(groupId) =>
+        selectConversation={onSelect}
+        renameConversation={onRenameConversation}
+        moveConversationToGroup={onMoveConversationToGroup}
+        softDeleteConversation={onSoftDeleteConversation}
+        undeleteConversation={onUndeleteConversation}
+        permanentlyDeleteConversation={onPermanentlyDeleteConversation}
+        toggleGroup={(groupId) =>
           (collapsedGroups = { ...collapsedGroups, [groupId]: !(collapsedGroups[groupId] ?? false) })}
       />
       </div>
