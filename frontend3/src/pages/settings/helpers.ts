@@ -49,7 +49,7 @@ export function filterProviders(providers: ProviderRow[] | null | undefined, sea
   });
 }
 
-export type DropdownItem = string | { value: string; label: string };
+export type DropdownItem = string | { value: string; label: string; className?: string };
 export type ModelGroup = { id: string; label: string; models: DropdownItem[] };
 
 export function buildModelGroups(providers: ProviderRow[] | null | undefined): ModelGroup[] {

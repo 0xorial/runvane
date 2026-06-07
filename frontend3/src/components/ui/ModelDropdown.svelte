@@ -16,6 +16,10 @@
     return typeof item === "string" ? item : item.label;
   }
 
+  function itemClassName(item: DropdownItem): string | undefined {
+    return typeof item === "string" ? undefined : item.className;
+  }
+
   let {
     value,
     onChange,
@@ -39,15 +43,27 @@
   let open = $state(false);
   let query = $state("");
   let searchInput = $state<HTMLInputElement | null>(null);
+  let root = $state<HTMLDivElement | null>(null);
 
   $effect(() => {
     if (disabled) open = false;
   });
 
   $effect(() => {
-    if (!open) return;
+    if (!open) {
+      query = "";
+      return;
+    }
     const id = requestAnimationFrame(() => searchInput?.focus());
-    return () => cancelAnimationFrame(id);
+    function onDocMouseDown(event: MouseEvent): void {
+      const target = event.target;
+      if (!(target instanceof Node) || !root?.contains(target)) open = false;
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => {
+      cancelAnimationFrame(id);
+      document.removeEventListener("mousedown", onDocMouseDown);
+    };
   });
 
   const normalizedQuery = $derived(normalizeToken(query));
@@ -76,7 +92,7 @@
   });
 </script>
 
-<div class="relative">
+<div class="relative" bind:this={root}>
   <button
     type="button"
     class="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground {disabled
@@ -116,9 +132,10 @@
             {#each g.models as m (`${g.id}:${itemValue(m)}`)}
               {@const v = itemValue(m)}
               {@const l = itemLabel(m)}
+              {@const extra = itemClassName(m)}
               <button
                 type="button"
-                class="block w-full cursor-pointer whitespace-nowrap rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10 {v === value ? 'bg-primary/15' : ''}"
+                class="block w-full cursor-pointer whitespace-nowrap rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10 {v === value ? 'bg-primary/15' : ''} {extra ?? ''}"
                 onclick={() => {
                   onChange(v, g.id);
                   open = false;
