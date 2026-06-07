@@ -10,6 +10,7 @@
     readOnly = false,
     jsonSchema,
     onSubmitShortcut,
+    onEscapeShortcut,
   }: {
     value: string;
     onchange?: (value: string) => void;
@@ -18,6 +19,7 @@
     readOnly?: boolean;
     jsonSchema?: object;
     onSubmitShortcut?: () => void;
+    onEscapeShortcut?: () => void;
   } = $props();
 
   let container = $state<HTMLDivElement | null>(null);
@@ -41,6 +43,7 @@
           onchange?.(next);
         },
         onSubmitShortcut,
+        onEscapeShortcut,
       });
       loading = false;
     })();

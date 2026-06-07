@@ -18,6 +18,7 @@
     height = 220,
     readOnly = false,
     onSubmitShortcut,
+    onEscapeShortcut,
   }: {
     schema: z.ZodType;
     value: string;
@@ -27,6 +28,7 @@
     height?: number;
     readOnly?: boolean;
     onSubmitShortcut?: () => void;
+    onEscapeShortcut?: () => void;
   } = $props();
 
   const jsonSchema = $derived.by((): JsonSchemaNode | undefined => {
@@ -96,6 +98,7 @@
     {readOnly}
     jsonSchema={jsonSchema}
     {onSubmitShortcut}
+    {onEscapeShortcut}
   />
   {#if validation.kind === "ok"}
     <div class="flex items-center gap-1.5 rounded-md bg-success/10 px-2.5 py-1.5 text-xs text-success">

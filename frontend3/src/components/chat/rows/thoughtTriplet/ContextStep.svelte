@@ -7,6 +7,7 @@
   import { LlmRequestSchema } from "@/lib/editorSchemas";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
   import { buildModelGroups } from "@/pages/settings/helpers";
+  import ShiftEnterHint from "@/components/ui/ShiftEnterHint.svelte";
   import { notifyError } from "@/utils/toast";
   import ReadOnlySection from "../ReadOnlySection.svelte";
 
@@ -46,6 +47,11 @@
   const canApply = $derived(
     promptValid && selectedProviderId.trim().length > 0 && selectedModel.trim().length > 0 && !isSaving,
   );
+  const hasChanges = $derived(
+    editedPrompt.trim() !== prompt ||
+      selectedProviderId.trim() !== currentProviderId ||
+      selectedModel.trim() !== currentModel,
+  );
 
   async function applyEdit(): Promise<void> {
     if (!canApply) return;
@@ -62,6 +68,17 @@
     } finally {
       isSaving = false;
     }
+  }
+
+  function cancelEdit(): void {
+    editedPrompt = prompt;
+    selectedProviderId = currentProviderId;
+    selectedModel = currentModel;
+    isEditing = false;
+  }
+
+  function cancelEditIfUnchanged(): void {
+    if (!hasChanges) cancelEdit();
   }
 </script>
 
@@ -99,17 +116,13 @@
         onValidityChange={(v: boolean) => (promptValid = v)}
         height={260}
         onSubmitShortcut={() => void applyEdit()}
+        onEscapeShortcut={cancelEditIfUnchanged}
       />
       <div class="flex justify-end gap-1.5">
         <button
           type="button"
           class="rounded border border-border/70 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
-          onclick={() => {
-            editedPrompt = prompt;
-            selectedProviderId = currentProviderId;
-            selectedModel = currentModel;
-            isEditing = false;
-          }}
+          onclick={cancelEdit}
           disabled={isSaving}
         >
           Cancel
@@ -117,11 +130,17 @@
         <button
           type="button"
           data-testid="thought-context-apply"
-          class="rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex items-center gap-1.5 rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Apply context edit (Shift+Enter)"
           onclick={() => void applyEdit()}
           disabled={!canApply}
         >
-          {isSaving ? "Applying…" : "Apply"}
+          {#if isSaving}
+            Applying…
+          {:else}
+            Apply
+            <ShiftEnterHint />
+          {/if}
         </button>
       </div>
     </div>

@@ -6,6 +6,7 @@
   import { AgenticPlannerOutputSchema } from "@/lib/editorSchemas";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
   import { formatTokenCount } from "@/utils/formatTokenCount";
+  import ShiftEnterHint from "@/components/ui/ShiftEnterHint.svelte";
   import { notifyError } from "@/utils/toast";
   import { displayStatus } from "./meta";
   import ReadOnlySection from "../ReadOnlySection.svelte";
@@ -41,6 +42,7 @@
   const statusLabel = $derived(displayStatus(stream.status ?? "running"));
   const canEdit = $derived(response.length > 0);
   const canApply = $derived(editedResponse.trim().length > 0 && !isSaving);
+  const hasChanges = $derived(editedResponse.trim() !== response.trim());
   const canRetry = $derived(stream.status === "failed" || stream.status === "cancelled");
 
   async function applyEdit(): Promise<void> {
@@ -78,6 +80,15 @@
     } finally {
       isRetrying = false;
     }
+  }
+
+  function cancelEdit(): void {
+    editedResponse = response;
+    isEditing = false;
+  }
+
+  function cancelEditIfUnchanged(): void {
+    if (!hasChanges) cancelEdit();
   }
 </script>
 
@@ -132,6 +143,7 @@
           onchange={(v: string) => (editedResponse = v)}
           height={260}
           onSubmitShortcut={() => void applyEdit()}
+          onEscapeShortcut={cancelEditIfUnchanged}
         />
       {:else}
         <CodeEditor
@@ -140,16 +152,14 @@
           language="json"
           height={260}
           onSubmitShortcut={() => void applyEdit()}
+          onEscapeShortcut={cancelEditIfUnchanged}
         />
       {/if}
       <div class="flex justify-end gap-1.5">
         <button
           type="button"
           class="rounded border border-border/70 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
-          onclick={() => {
-            editedResponse = response;
-            isEditing = false;
-          }}
+          onclick={cancelEdit}
           disabled={isSaving}
         >
           Cancel
@@ -157,11 +167,17 @@
         <button
           type="button"
           data-testid="thought-reprocess-apply"
-          class="rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex items-center gap-1.5 rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Apply reasoning edit (Shift+Enter)"
           onclick={() => void applyEdit()}
           disabled={!canApply}
         >
-          {isSaving ? "Applying…" : "Apply"}
+          {#if isSaving}
+            Applying…
+          {:else}
+            Apply
+            <ShiftEnterHint />
+          {/if}
         </button>
       </div>
     </div>

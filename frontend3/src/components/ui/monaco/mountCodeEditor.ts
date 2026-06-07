@@ -12,6 +12,7 @@ export type CodeEditorMountOptions = {
   jsonSchema?: object;
   onChange?: (value: string) => void;
   onSubmitShortcut?: () => void;
+  onEscapeShortcut?: () => void;
 };
 
 export type CodeEditorHandle = {
@@ -65,8 +66,14 @@ export async function mountCodeEditor(
   });
 
   if (options.onSubmitShortcut) {
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
       options.onSubmitShortcut?.();
+    });
+  }
+
+  if (options.onEscapeShortcut) {
+    editor.addCommand(monaco.KeyCode.Escape, () => {
+      options.onEscapeShortcut?.();
     });
   }
 

@@ -2,7 +2,8 @@
   import { API_BASE_URL, reprocessUserMessage } from "@/api/client";
   import type { UserMessageEntry } from "@/protocol/chatEntry";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
-  import { isModifierEnterKey } from "@/lib/submitShortcut";
+  import ShiftEnterHint from "@/components/ui/ShiftEnterHint.svelte";
+  import { isShiftEnterKey } from "@/lib/submitShortcut";
   import { notifyError } from "@/utils/toast";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import BranchSelector from "../BranchSelector.svelte";
@@ -20,6 +21,8 @@
   const exactTime = $derived(formatExactChatTime(entry.createdAt));
   const canEdit = $derived(Boolean(session.getConversationId()));
   const attachments = $derived(Array.isArray(entry.attachments) ? entry.attachments : []);
+  const originalText = $derived((entry.text ?? "").trim());
+  const hasChanges = $derived(editedText.trim() !== originalText);
 
   function formatBytes(sizeBytes: number): string {
     if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${Math.max(0, Math.floor(sizeBytes || 0))} B`;
@@ -41,6 +44,23 @@
       notifyError(`Failed to reprocess message: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       isSaving = false;
+    }
+  }
+
+  function cancelEdit(): void {
+    editedText = entry.text;
+    isEditing = false;
+  }
+
+  function onEditKeydown(event: KeyboardEvent): void {
+    if (isShiftEnterKey(event)) {
+      event.preventDefault();
+      void applyEdit();
+      return;
+    }
+    if (event.key === "Escape" && !hasChanges) {
+      event.preventDefault();
+      cancelEdit();
     }
   }
 </script>
@@ -86,21 +106,14 @@
         <textarea
           class="h-28 w-full resize-y rounded border border-border/70 bg-background px-2 py-1.5 text-sm leading-relaxed text-foreground focus:outline-none"
           bind:value={editedText}
-          onkeydown={(event) => {
-            if (!isModifierEnterKey(event)) return;
-            event.preventDefault();
-            void applyEdit();
-          }}
+          onkeydown={onEditKeydown}
           disabled={isSaving}
         ></textarea>
         <div class="flex justify-end gap-1.5">
           <button
             type="button"
             class="rounded border border-border/70 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
-            onclick={() => {
-              editedText = entry.text;
-              isEditing = false;
-            }}
+            onclick={cancelEdit}
             disabled={isSaving}
           >
             Cancel
@@ -108,11 +121,17 @@
           <button
             type="button"
             data-testid="user-message-reprocess"
-            class="rounded border border-primary/50 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            class="inline-flex items-center gap-1.5 rounded border border-primary/50 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Reprocess message (Shift+Enter)"
             onclick={() => void applyEdit()}
             disabled={isSaving || editedText.trim().length === 0}
           >
-            {isSaving ? "Reprocessing…" : "Reprocess"}
+            {#if isSaving}
+              Reprocessing…
+            {:else}
+              Reprocess
+              <ShiftEnterHint />
+            {/if}
           </button>
         </div>
       </div>
