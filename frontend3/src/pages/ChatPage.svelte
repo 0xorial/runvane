@@ -31,6 +31,7 @@
     {conversationId}
     {agentId}
     {search}
+    pendingMessages={session.pendingMessages}
     appendOptimisticUserMessage={session.appendOptimisticUserMessage}
   />
 </div>

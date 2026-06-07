@@ -8,7 +8,7 @@ import {
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ChatAttachment } from "@/protocol/chatEntry";
-import type { ChatSessionStore } from "@/lib/chatSessionStore";
+import type { ChatSessionStore, PendingMessage } from "@/lib/chatSessionStore";
 import { fetchConversationSession, type ConversationSession } from "@/hooks/queries/conversations";
 import { queryClient } from "@/lib/queryClient";
 import { queryKeys } from "@/hooks/queries/keys";
@@ -148,6 +148,10 @@ export function createChatSessionState(getConversationId: () => string | null) {
       void rowsTick;
       void pathTick;
       return store?.getActivePathRows() ?? [];
+    },
+    get pendingMessages(): PendingMessage[] {
+      void rowsTick;
+      return store?.getPendingMessages() ?? [];
     },
     async setActiveLeaf(entryId: string): Promise<void> {
       const boundCid = getConversationId();

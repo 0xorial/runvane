@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { createConversation } from "@/api/client";
+  import { cancelPendingMessage, createConversation } from "@/api/client";
+  import QueuedMessageChips from "./QueuedMessageChips.svelte";
+  import type { PendingMessage } from "@/lib/chatSessionStore";
   import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
   import type { OptimisticUserMessage } from "@/lib/chatSessionState.svelte";
   import { replacePath } from "@/lib/router";
@@ -9,11 +11,13 @@
     conversationId,
     agentId,
     search,
+    pendingMessages = [],
     appendOptimisticUserMessage,
   }: {
     conversationId: string | null;
     agentId: string;
     search: string;
+    pendingMessages?: PendingMessage[];
     appendOptimisticUserMessage: (input: {
       conversationId: string;
       text: string;
@@ -78,6 +82,12 @@
 </script>
 
 <div class="border-t border-border bg-card/50 p-3">
+  {#if conversationId}
+    <QueuedMessageChips
+      messages={pendingMessages}
+      onCancel={(clientRequestId) => void cancelPendingMessage(conversationId, clientRequestId)}
+    />
+  {/if}
   <textarea
     data-testid="chat-user-input"
     class="mb-2 min-h-[4rem] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
