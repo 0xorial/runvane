@@ -5,7 +5,7 @@ import {
   getEmptyChatSessionStore,
   retainChatSessionLive,
 } from "@/lib/chatSessionRegistry";
-import { seedChatToolDraftFromUserMessage } from "@/lib/chatToolDraft.svelte";
+import { resetChatToolDraft, seedChatToolDraftFromUserMessage } from "@/lib/chatToolDraft.svelte";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ChatAttachment } from "@/protocol/chatEntry";
@@ -98,6 +98,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
     if (!boundCid) {
       store = null;
       isSessionLoading = false;
+      resetChatToolDraft();
       return;
     }
 

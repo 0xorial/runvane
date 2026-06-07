@@ -71,18 +71,27 @@ export function setSelectedToolForEdit(toolName: string | null): void {
   selectedToolForEdit = toolName;
 }
 
+function draftsEqual(a: ChatToolDraft, b: ChatToolDraft): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => JSON.stringify(a[key]) === JSON.stringify(b[key]));
+}
+
 export function resetChatToolDraft(): void {
+  const hadOverrides = draftHasOverrides(draft);
+  const hadSelection = selectedToolForEdit !== null;
+  if (!hadOverrides && !hadSelection) return;
   draft = {};
   selectedToolForEdit = null;
   touchDraft();
 }
 
-export function clearChatToolDraftOnConversationChange(): void {
-  resetChatToolDraft();
-}
-
 export function seedChatToolDraftFromUserMessage(entry: UserMessageEntry | null): void {
-  draft = draftFromStoredOverrides(entry?.overrides?.tools);
+  const next = draftFromStoredOverrides(entry?.overrides?.tools);
+  const changed = !draftsEqual(draft, next) || selectedToolForEdit !== null;
+  if (!changed) return;
+  draft = next;
   selectedToolForEdit = null;
   touchDraft();
 }

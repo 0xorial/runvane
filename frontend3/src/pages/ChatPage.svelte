@@ -4,7 +4,7 @@
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
   import ChatToolOverrideEditor from "@/components/chat/ChatToolOverrideEditor.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
-  import { clearChatToolDraftOnConversationChange, getSelectedToolForEdit } from "@/lib/chatToolDraft.svelte";
+  import { getSelectedToolForEdit } from "@/lib/chatToolDraft.svelte";
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
@@ -75,10 +75,12 @@
     navigate(settingsLinkFromSearch($chatSearch));
   }
 
+  let lastConversationId = $state<string | null | undefined>(undefined);
   $effect(() => {
-    void conversationId;
-    if (selectedBranchAnchorEntryId !== null) selectedBranchAnchorEntryId = null;
-    clearChatToolDraftOnConversationChange();
+    const id = conversationId;
+    if (id === lastConversationId) return;
+    lastConversationId = id;
+    selectedBranchAnchorEntryId = null;
   });
 
   $effect(() => {

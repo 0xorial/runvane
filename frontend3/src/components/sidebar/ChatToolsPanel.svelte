@@ -87,10 +87,10 @@
       <p class="px-1 py-2 text-[11px] text-muted-foreground">Loading tools…</p>
     {:else}
       <ul class="space-y-1.5">
-        {#key draftRevision}
         {#each toolCatalog as raw (String(raw.name ?? ""))}
           {@const name = String(raw.name ?? "").trim()}
           {#if name}
+            {@const _draftRev = draftRevision}
             {@const agentCfg = getToolConfigFromAgent(agent, name)}
             {@const entry = getToolDraftEntry(name)}
             {@const effectiveMode = effectiveAgentToolMode(agentCfg, getToolDefaultConfig(toolCatalog, name))}
@@ -113,7 +113,6 @@
             </li>
           {/if}
         {/each}
-        {/key}
       </ul>
     {/if}
   </div>
