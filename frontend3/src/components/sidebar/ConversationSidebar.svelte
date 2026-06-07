@@ -26,6 +26,7 @@
   import { onMount } from "svelte";
   import MultiSelectPanel from "./MultiSelectPanel.svelte";
   import SidebarSectionsList from "./SidebarSectionsList.svelte";
+  import TextInputDialog from "./TextInputDialog.svelte";
   import { groupConversations } from "./sidebarSections";
 
   const PROBE_MESSAGE = "what is the time?";
@@ -42,6 +43,9 @@
   let probeBusy = $state(false);
   let collapsedGroups = $state<Record<string, boolean>>({});
   let selectedConversationIds = $state<string[]>([]);
+  let renameDialogOpen = $state(false);
+  let renameTitleDraft = $state("");
+  let renameTarget = $state<ConversationRow | null>(null);
 
   const conversationsQuery = createQuery(() => ({
     queryKey: queryKeys.conversationList(showDeletedOnly),
@@ -147,15 +151,29 @@
     }
   }
 
-  async function onRenameConversation(conversation: ConversationRow): Promise<void> {
+  function onRenameConversation(conversation: ConversationRow): void {
+    renameTarget = conversation;
+    renameTitleDraft = String(conversation.title || "").trim();
+    renameDialogOpen = true;
+  }
+
+  async function submitRenameConversation(): Promise<void> {
+    const conversation = renameTarget;
+    if (!conversation) return;
     const current = String(conversation.title || "").trim();
-    const next = window.prompt("Rename chat", current);
-    if (next == null) return;
-    const title = next.trim();
-    if (!title || title === current) return;
+    const title = renameTitleDraft.trim();
+    if (!title || title === current) {
+      renameDialogOpen = false;
+      renameTarget = null;
+      renameTitleDraft = "";
+      return;
+    }
     try {
       const updated = await renameConversation(conversation.id, { title });
       upsertConversationInList(showDeletedOnly, updated);
+      renameDialogOpen = false;
+      renameTarget = null;
+      renameTitleDraft = "";
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
@@ -332,3 +350,20 @@
     </div>
   </div>
 </aside>
+
+<TextInputDialog
+  open={renameDialogOpen}
+  title="Rename chat"
+  value={renameTitleDraft}
+  placeholder="Chat title"
+  submitLabel="Rename"
+  onOpenChange={(open) => {
+    renameDialogOpen = open;
+    if (!open) {
+      renameTarget = null;
+      renameTitleDraft = "";
+    }
+  }}
+  onValueChange={(v) => (renameTitleDraft = v)}
+  onSubmit={submitRenameConversation}
+/>
