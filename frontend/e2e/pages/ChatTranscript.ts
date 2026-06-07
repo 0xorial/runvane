@@ -65,6 +65,14 @@ export class ChatTranscript {
     await expect(this.assistantMessage).not.toHaveText(/^\s*$/);
   }
 
+  /** Probe stub: tool call + two assistant rows — don't snapshot after the first assistant only. */
+  async waitForProbeComplete(timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.loading).toBeHidden({ timeout: timeoutMs });
+    await expect(this.entry("tool-invocation")).toBeVisible({ timeout: timeoutMs });
+    await expect(this.entry("assistant-message")).toHaveCount(2, { timeout: timeoutMs });
+    await expect(this.assistantMessage).not.toHaveText(/^\s*$/);
+  }
+
   private entryRows(): Locator {
     return this.container.locator("[data-chat-entry-type]");
   }
@@ -74,7 +82,7 @@ export class ChatTranscript {
   }
 
   async snapshotProbeTranscript(timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<ProbeTranscriptSnapshot> {
-    await this.waitForAssistantReply(timeoutMs);
+    await this.waitForProbeComplete(timeoutMs);
     const rows = this.entryRows();
     const count = await rows.count();
     const entryTypes: string[] = [];
