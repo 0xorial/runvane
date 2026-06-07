@@ -64,6 +64,7 @@
   async function saveProviders(): Promise<void> {
     if (!settings) return;
     await updateLlmProviderSettings(settings as unknown as LlmProviderSettingsDocument);
+    queryClient.setQueryData(queryKeys.llmProviders, settings.providers);
     notifySuccess("Providers saved");
   }
 

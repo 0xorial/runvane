@@ -4,9 +4,10 @@
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
+  import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
   import { setChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
-  import { chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
+  import { agentIdFromSearch, chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
   import { Pane, PaneGroup } from "paneforge";
 
   let {
@@ -31,6 +32,10 @@
 
   let expandedStageBySlotKey = $state(new Map<string, ThoughtStage>());
   let expandedStageVersion = $state(0);
+  let topAnchorEntryId = $state<string | null>(null);
+  let selectedBranchAnchorEntryId = $state<string | null>(null);
+  let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
+  const selectedAgentId = $derived(agentIdFromSearch(search));
 
   setChatSessionContext({
     getConversationId: () => conversationId,
@@ -53,15 +58,71 @@
     },
   });
 
-  $effect(() => {
-    void conversationId;
-    expandedStageBySlotKey = new Map();
-    expandedStageVersion += 1;
+  const activePathEntries = $derived(session.activePathEntries.map((row$) => row$.get()));
+  const activePathEntryById = $derived(new Map(activePathEntries.map((entry) => [entry.id, entry])));
+  const tripletStreamIdByThoughtId = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const entry of activePathEntries) {
+      if (isThoughtStreamEntry(entry)) map.set(entry.thoughtId, entry.id);
+    }
+    return map;
   });
+
+  function resolveVisibleAnchorEntryId(entryId: string): string {
+    const selected = activePathEntryById.get(entryId);
+    if (!selected) return entryId;
+    if (selected.type !== "thought-prepare" && selected.type !== "thought-action") return entryId;
+    return tripletStreamIdByThoughtId.get(selected.thoughtId) ?? entryId;
+  }
+
+  function handleSent(optimisticRowId: string): void {
+    selectedBranchAnchorEntryId = null;
+    topAnchorEntryId = optimisticRowId;
+  }
 
   function openSettings(): void {
     navigate(settingsLinkFromSearch($chatSearch));
   }
+
+  $effect(() => {
+    void conversationId;
+    topAnchorEntryId = null;
+    selectedBranchAnchorEntryId = null;
+    expandedStageBySlotKey = new Map();
+    expandedStageVersion += 1;
+  });
+
+  $effect(() => {
+    const id = requestAnimationFrame(() => composerTextareaRef?.focus());
+    return () => cancelAnimationFrame(id);
+  });
+
+  $effect(() => {
+    const entries = session.activePathEntries;
+    void entries.length;
+    if (!conversationId || entries.length === 0) {
+      topAnchorEntryId = null;
+      selectedBranchAnchorEntryId = null;
+      return;
+    }
+    if (selectedBranchAnchorEntryId) {
+      const exists = entries.some((row$) => row$.id === selectedBranchAnchorEntryId);
+      if (exists) {
+        topAnchorEntryId = selectedBranchAnchorEntryId;
+        return;
+      }
+      selectedBranchAnchorEntryId = null;
+    }
+    for (let i = entries.length - 1; i >= 0; i -= 1) {
+      const row = entries[i].get();
+      if (row.type === "user-message") {
+        topAnchorEntryId = row.id;
+        return;
+      }
+    }
+    topAnchorEntryId = null;
+  });
+
 </script>
 
 <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -75,22 +136,22 @@
     {settingsPressed}
   />
   {#if rightSidebarVisible}
-    <PaneGroup
-      direction="horizontal"
-      autoSaveId="chat-right-branches-layout"
-      class="min-h-0 min-w-0 flex-1"
-    >
+    <PaneGroup direction="horizontal" autoSaveId="chat-right-branches-layout" class="min-h-0 min-w-0 flex-1">
       <Pane minSize={30} class="flex min-h-0 min-w-0 flex-col overflow-hidden">
         <ChatTranscript
           {conversationId}
           entries={session.activePathEntries}
           isSessionLoading={session.isSessionLoading}
+          {selectedAgentId}
+          {topAnchorEntryId}
         />
         <ChatComposer
           {conversationId}
           {search}
           pendingMessages={session.pendingMessages}
           appendOptimisticUserMessage={session.appendOptimisticUserMessage}
+          onSent={handleSent}
+          bind:textareaRef={composerTextareaRef}
         />
       </Pane>
       <ResizablePaneHandle withHandle />
@@ -101,6 +162,11 @@
             allEntries={session.allEntries}
             activePathEntries={session.activePathEntries}
             switchToBranch={session.switchToBranch}
+            onAnchorEntrySelected={(entryId) => {
+              const visibleAnchorId = resolveVisibleAnchorEntryId(entryId);
+              selectedBranchAnchorEntryId = visibleAnchorId;
+              topAnchorEntryId = visibleAnchorId;
+            }}
           />
         </aside>
       </Pane>
@@ -111,12 +177,16 @@
         {conversationId}
         entries={session.activePathEntries}
         isSessionLoading={session.isSessionLoading}
+        {selectedAgentId}
+        {topAnchorEntryId}
       />
       <ChatComposer
         {conversationId}
         {search}
         pendingMessages={session.pendingMessages}
         appendOptimisticUserMessage={session.appendOptimisticUserMessage}
+        onSent={handleSent}
+        bind:textareaRef={composerTextareaRef}
       />
     </div>
   {/if}

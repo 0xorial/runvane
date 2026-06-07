@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from "@/components/ui/Icon.svelte";
+  import NewGroupDialog from "./NewGroupDialog.svelte";
   import type { ConversationGroupRow } from "../../../../backend/src/contracts/conversations";
   import { renameConversation } from "@/api/client";
   import { notifyError } from "@/utils/toast";
@@ -23,6 +24,8 @@
   } = $props();
 
   let moveOpen = $state(false);
+  let newGroupDialogOpen = $state(false);
+  let newGroupName = $state("");
 
   async function moveToGroup(groupId: string | null): Promise<void> {
     moveOpen = false;
@@ -40,8 +43,10 @@
   }
 
   async function createGroupAndMove(): Promise<void> {
-    const name = window.prompt("New group name")?.trim();
+    const name = newGroupName.trim();
     if (!name) return;
+    moveOpen = false;
+    newGroupDialogOpen = false;
     try {
       const firstId = selectedConversationIds[0];
       if (!firstId) return;
@@ -55,6 +60,7 @@
         onExpandGroup(group.id);
       }
       onSelectionChange([]);
+      newGroupName = "";
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
@@ -82,7 +88,14 @@
               {group.name}
             </button>
           {/each}
-          <button type="button" class="block w-full px-3 py-1 text-left text-xs hover:bg-muted" onclick={() => void createGroupAndMove()}>
+          <button
+            type="button"
+            class="block w-full px-3 py-1 text-left text-xs hover:bg-muted"
+            onclick={() => {
+              moveOpen = false;
+              newGroupDialogOpen = true;
+            }}
+          >
             New group…
           </button>
         </div>
@@ -106,3 +119,14 @@
     </button>
   </div>
 </div>
+
+<NewGroupDialog
+  open={newGroupDialogOpen}
+  {newGroupName}
+  onOpenChange={(open) => {
+    newGroupDialogOpen = open;
+    if (!open) newGroupName = "";
+  }}
+  onNewGroupNameChange={(v) => (newGroupName = v)}
+  onSubmit={createGroupAndMove}
+/>

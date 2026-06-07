@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { reprocessUserMessage } from "@/api/client";
+  import { API_BASE_URL, reprocessUserMessage } from "@/api/client";
   import type { UserMessageEntry } from "@/protocol/chatEntry";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
   import { isModifierEnterKey } from "@/lib/submitShortcut";
@@ -19,6 +19,13 @@
   const relativeTime = $derived(formatRelativeChatTime(entry.createdAt));
   const exactTime = $derived(formatExactChatTime(entry.createdAt));
   const canEdit = $derived(Boolean(session.getConversationId()));
+  const attachments = $derived(Array.isArray(entry.attachments) ? entry.attachments : []);
+
+  function formatBytes(sizeBytes: number): string {
+    if (!Number.isFinite(sizeBytes) || sizeBytes < 1024) return `${Math.max(0, Math.floor(sizeBytes || 0))} B`;
+    if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   async function applyEdit(): Promise<void> {
     const cid = session.getConversationId();
@@ -109,6 +116,25 @@
       </div>
     {:else if entry.text}
       <div class="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{entry.text}</div>
+    {/if}
+    {#if !isEditing && attachments.length > 0}
+      <div class="grid gap-2">
+        {#each attachments as file (file.id)}
+          {@const href = `${API_BASE_URL}${file.url}`}
+          <a
+            class="grid gap-1 rounded-md border border-border bg-card/50 p-2 text-inherit no-underline"
+            {href}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {#if file.mimeType.startsWith("image/")}
+              <img class="max-h-40 max-w-[240px] rounded-sm object-cover" src={href} alt={file.name} />
+            {/if}
+            <span class="break-words font-semibold">{file.name}</span>
+            <span class="break-words text-xs opacity-75">{file.mimeType} - {formatBytes(file.sizeBytes)}</span>
+          </a>
+        {/each}
+      </div>
     {/if}
   {/snippet}
 </ChatMessageShell>

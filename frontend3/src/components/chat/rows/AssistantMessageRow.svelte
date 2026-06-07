@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AssistantMessageEntry } from "@/protocol/chatEntry";
   import CopyButton from "@/components/ui/CopyButton.svelte";
+  import MarkdownContent from "@/components/ui/MarkdownContent.svelte";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import BranchSelector from "../BranchSelector.svelte";
   import ChatMessageShell from "../ChatMessageShell.svelte";
@@ -38,7 +39,7 @@
   {/snippet}
   {#snippet children()}
     {#if entry.text}
-      <div class="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{entry.text}</div>
+      <MarkdownContent content={entry.text} />
     {/if}
   {/snippet}
 </ChatMessageShell>

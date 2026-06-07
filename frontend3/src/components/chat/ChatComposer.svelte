@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { cancelPendingMessage, createConversation } from "@/api/client";
+  import { cancelPendingMessage, createConversation, uploadFile } from "@/api/client";
+  import type { ChatAttachment } from "@/protocol/chatEntry";
   import type { LlmRef } from "../../../../backend/src/contracts/llm";
   import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
   import type { OptimisticUserMessage } from "@/lib/chatSessionState.svelte";
@@ -7,16 +8,19 @@
   import { agentIdFromSearch, replacePath } from "@/lib/router";
   import { onMount } from "svelte";
   import type { ChatAgentSelection } from "./ChatAgentToolbar.svelte";
+  import AttachmentChips, { type SelectedAttachment } from "./AttachmentChips.svelte";
   import MessageComposer from "./MessageComposer.svelte";
   import QueuedMessageChips from "./QueuedMessageChips.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
-  import { sendMessageToConversation, type MessageSendMode } from "./sendMessage";
+  import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
   let {
     conversationId,
     search,
     pendingMessages = [],
     appendOptimisticUserMessage,
+    onSent,
+    textareaRef = $bindable(null),
   }: {
     conversationId: string | null;
     search: string;
@@ -27,19 +31,42 @@
       agentId: string;
       llm?: LlmRef;
       modelPresetId?: number | null;
+      attachments?: ChatAttachment[];
     }) => OptimisticUserMessage | null;
+    onSent?: (optimisticRowId: string) => void;
+    textareaRef?: HTMLTextAreaElement | null;
   } = $props();
 
   let input = $state("");
   let sending = $state(false);
+  let selectedFiles = $state<SelectedAttachment[]>([]);
+  let previewUrls = $state<string[]>([]);
   let agentSelection = $state<ChatAgentSelection>({ agentId: "", llm: null, modelPresetId: null });
 
   onMount(() => ensureTasksStream());
 
   const urlAgentId = $derived(agentIdFromSearch(search));
   const effectiveAgentId = $derived(agentSelection.agentId.trim() || urlAgentId);
-  const canSend = $derived(input.trim().length > 0 && Boolean(effectiveAgentId));
+  const canSend = $derived((input.trim().length > 0 || selectedFiles.length > 0) && Boolean(effectiveAgentId));
   const agentRunning = $derived(conversationHasRunningTask(conversationId));
+
+  $effect(() => {
+    const urls = selectedFiles.map(({ file }) =>
+      file.type.startsWith("image/") || file.type === "application/pdf" ? URL.createObjectURL(file) : "",
+    );
+    previewUrls = urls;
+    return () => {
+      for (const url of urls) {
+        if (url) URL.revokeObjectURL(url);
+      }
+    };
+  });
+
+  function addFiles(files: File[]): void {
+    if (files.length === 0) return;
+    const wrapped = files.map((file) => ({ file, mode: defaultAttachmentMode(file) }));
+    selectedFiles = [...selectedFiles, ...wrapped];
+  }
 
   async function onSend(mode: MessageSendMode): Promise<void> {
     if (!canSend || sending) return;
@@ -50,15 +77,23 @@
     const { llm, modelPresetId } = agentSelection;
 
     try {
+      const uploadedAttachments: ChatAttachment[] = [];
+      for (const { file, mode: attachmentMode } of selectedFiles) {
+        const uploaded = await uploadFile(file);
+        uploadedAttachments.push({ ...uploaded.attachment, mode: attachmentMode });
+      }
+      const postAttachments = uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode }));
+
       if (mode.enqueue && conversationId) {
         input = "";
+        selectedFiles = [];
         await sendMessageToConversation(
           conversationId,
           text,
           agentId,
           llm,
           modelPresetId,
-          [],
+          postAttachments,
           null,
           clientRequestId,
           { enqueue: true },
@@ -73,13 +108,14 @@
         retainChatSessionLive();
         getChatSessionStore(cid);
         input = "";
+        selectedFiles = [];
         await sendMessageToConversation(
           cid,
           text,
           agentId,
           llm,
           modelPresetId,
-          [],
+          postAttachments,
           null,
           clientRequestId,
           { steer: mode.steer },
@@ -95,16 +131,19 @@
           agentId,
           llm: llm ?? undefined,
           modelPresetId,
+          attachments: uploadedAttachments,
         });
         if (!optimistic) throw new Error("appendOptimisticUserMessage failed");
+        onSent?.(optimistic.rowId);
         input = "";
+        selectedFiles = [];
         await sendMessageToConversation(
           conversationId,
           text,
           agentId,
           llm,
           modelPresetId,
-          [],
+          postAttachments,
           optimistic.parentId,
           optimistic.clientRequestId,
           { steer: mode.steer },
@@ -121,6 +160,7 @@
 </script>
 
 <MessageComposer
+  bind:textareaRef
   value={input}
   onValueChange={(v) => (input = v)}
   {canSend}
@@ -128,12 +168,28 @@
   {sending}
   onSend={onSend}
   onAgentSelectionChange={(sel) => (agentSelection = sel)}
+  onPasteFiles={addFiles}
+  onFileInputChange={addFiles}
 >
   {#snippet queuedSlot()}
     {#if conversationId && pendingMessages.length > 0}
       <QueuedMessageChips
         messages={pendingMessages}
         onCancel={(clientRequestId) => void cancelPendingMessage(conversationId, clientRequestId)}
+      />
+    {/if}
+  {/snippet}
+  {#snippet attachmentsSlot()}
+    {#if selectedFiles.length > 0}
+      <AttachmentChips
+        files={selectedFiles}
+        {previewUrls}
+        onChangeMode={(idx, next) => {
+          selectedFiles = selectedFiles.map((entry, x) => (x === idx ? { ...entry, mode: next } : entry));
+        }}
+        onRemove={(idx) => {
+          selectedFiles = selectedFiles.filter((_, x) => x !== idx);
+        }}
       />
     {/if}
   {/snippet}

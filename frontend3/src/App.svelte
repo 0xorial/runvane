@@ -4,6 +4,7 @@
   import ChatPage from "@/pages/ChatPage.svelte";
   import SettingsPage from "@/pages/SettingsPage.svelte";
   import ToastHost from "@/components/ToastHost.svelte";
+  import ErrorInboxButton from "@/components/ErrorInboxButton.svelte";
   import ThemeToggle from "@/components/ThemeToggle.svelte";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "@/lib/queryClient";
@@ -36,6 +37,11 @@
     retainChatSessionLive();
     if ($pathOnly === "/chat") navigate(`/chat/new${$chatSearch}`);
     if ($pathOnly === "/settings") navigate(settingsLinkFromSearch($chatSearch));
+    if ($pathOnly === "/permissions") navigate("/settings/tools");
+  });
+
+  $effect(() => {
+    if ($pathOnly === "/permissions") navigate("/settings/tools");
   });
 
   $effect(() => {
@@ -84,7 +90,10 @@
             </button>
           </nav>
         </div>
-        <ThemeToggle />
+        <div class="flex items-center gap-2">
+          <ErrorInboxButton />
+          <ThemeToggle />
+        </div>
       </header>
     {/if}
 

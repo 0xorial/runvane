@@ -46,7 +46,7 @@
   {:else if entry.type === "assistant-message"}
     <AssistantMessageRow {entry} {conversationId} />
   {:else if entry.type === "tool-invocation"}
-    <ToolRunRow {entry} />
+    <ToolRunRow {entry} {conversationId} />
   {:else if entry.type === "checkpoint-summary"}
     <CheckpointSummaryRow {entry} />
   {/if}

@@ -180,7 +180,8 @@ export function createChatSessionState(getConversationId: () => string | null) {
       const cid = String(input.conversationId || "").trim();
       if (!boundCid || cid !== boundCid || !store) return null;
       const text = String(input.text || "").trim();
-      if (!text) return null;
+      const hasAttachments = (input.attachments?.length ?? 0) > 0;
+      if (!text && !hasAttachments) return null;
       const agentId = String(input.agentId || "").trim();
       if (!agentId) throw new Error("appendOptimisticUserMessage requires agentId");
 

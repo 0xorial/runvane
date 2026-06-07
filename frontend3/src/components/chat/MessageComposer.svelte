@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { focusOnFirstFrame } from "@/lib/focusOnFirstFrame";
   import { isModifierEnterKey, isShiftEnterKey } from "@/lib/submitShortcut";
   import ChatAgentToolbar from "./ChatAgentToolbar.svelte";
   import ComposerSendActions from "./ComposerSendActions.svelte";
@@ -13,8 +14,11 @@
     sending = false,
     onSend,
     onAgentSelectionChange,
+    onPasteFiles,
+    onFileInputChange,
     queuedSlot,
     attachmentsSlot,
+    textareaRef = $bindable(null),
   }: {
     value: string;
     onValueChange: (v: string) => void;
@@ -23,8 +27,11 @@
     sending?: boolean;
     onSend: (mode: MessageSendMode) => void | Promise<void>;
     onAgentSelectionChange: (selection: ChatAgentSelection) => void;
+    onPasteFiles?: (files: File[]) => void;
+    onFileInputChange?: (files: File[]) => void;
     queuedSlot?: import("svelte").Snippet;
     attachmentsSlot?: import("svelte").Snippet;
+    textareaRef?: HTMLTextAreaElement | null;
   } = $props();
 
   let fileInput = $state<HTMLInputElement | null>(null);
@@ -47,10 +54,32 @@
       void onSend({});
     }
   }
+
+  function onPaste(event: ClipboardEvent): void {
+    if (!onPasteFiles) return;
+    const items = Array.from(event.clipboardData?.items ?? []);
+    const images: File[] = [];
+    for (const item of items) {
+      if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (file) images.push(file);
+    }
+    if (images.length > 0) onPasteFiles(images);
+  }
 </script>
 
 <footer class="shrink-0 bg-card/40 px-2 pb-1.5 pt-1 backdrop-blur-sm">
-  <input bind:this={fileInput} class="hidden" type="file" multiple disabled />
+  <input
+    bind:this={fileInput}
+    class="hidden"
+    type="file"
+    multiple
+    onchange={(e) => {
+      const files = Array.from(e.currentTarget.files ?? []);
+      onFileInputChange?.(files);
+      e.currentTarget.value = "";
+    }}
+  />
   <div class="mx-auto w-full max-w-3xl">
     {#if queuedSlot}
       <div class="mb-1.5">{@render queuedSlot()}</div>
@@ -62,6 +91,8 @@
       class="flex flex-col gap-0 rounded-2xl border border-border/80 bg-card/70 p-1.5 shadow-sm transition-[box-shadow,border-color] focus-within:border-primary/35 focus-within:shadow-[0_0_0_1px_hsl(var(--primary)/0.22)] dark:bg-card/55 dark:focus-within:border-primary/40"
     >
       <textarea
+        bind:this={textareaRef}
+        use:focusOnFirstFrame
         data-testid="chat-user-input"
         rows={1}
         class="scrollbar-thin min-h-[3.25rem] max-h-[80px] w-full resize-none bg-transparent px-1 py-1.5 text-sm leading-snug text-foreground outline-none placeholder:text-muted-foreground"
@@ -69,6 +100,7 @@
         {value}
         oninput={(e) => onValueChange(e.currentTarget.value)}
         onkeydown={onKeydown}
+        onpaste={onPaste}
       ></textarea>
       <div class="mt-1 flex items-end justify-between gap-2 border-t border-border/60 px-0.5 pt-1.5">
         <div class="flex min-w-0 flex-1 items-center gap-1.5 pb-0.5">
@@ -76,7 +108,7 @@
             type="button"
             class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
             aria-label="Attach files"
-            disabled
+            onclick={() => fileInput?.click()}
           >
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
               <path
