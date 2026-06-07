@@ -1,27 +1,26 @@
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import { formatExactChatTime, formatRelativeChatTime } from "../../utils/formatRelativeChatTime";
-import type { ConversationRow } from "./types";
 
 type ConversationGroupItemProps = {
   groupId: string;
   groupName: string;
-  rows: ConversationRow[];
+  rowCount: number;
   latestTimestampIso?: string;
   collapsed: boolean;
   /** Receives the group id so the parent can pass one stable callback for all groups. */
   onToggle: (groupId: string) => void;
-  renderConversationRow: (conversation: ConversationRow, opts?: { nested?: boolean }) => JSX.Element;
+  children: ReactNode;
 };
 
 function ConversationGroupItemImpl({
   groupId,
   groupName,
-  rows,
+  rowCount,
   latestTimestampIso,
   collapsed,
   onToggle,
-  renderConversationRow,
+  children,
 }: ConversationGroupItemProps) {
   const stamp = formatRelativeChatTime(latestTimestampIso);
   const stampExact = formatExactChatTime(latestTimestampIso);
@@ -51,13 +50,9 @@ function ConversationGroupItemImpl({
             ) : null}
           </span>
         </span>
-        <span className="ml-2 shrink-0 self-start pt-0.5 text-[10px] text-muted-foreground">{rows.length}</span>
+        <span className="ml-2 shrink-0 self-start pt-0.5 text-[10px] text-muted-foreground">{rowCount}</span>
       </button>
-      {collapsed ? null : (
-        <div className="mt-0.5 flex flex-col gap-0.5">
-          {rows.map((conversation) => renderConversationRow(conversation, { nested: true }))}
-        </div>
-      )}
+      {collapsed ? null : <div className="mt-0.5 flex flex-col gap-0.5">{children}</div>}
     </div>
   );
 }

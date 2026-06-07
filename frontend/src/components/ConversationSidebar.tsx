@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Plus } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -19,8 +19,8 @@ import {
 import { subscribeGlobalLive } from "../protocol/runLiveClient";
 import { SseType } from "../protocol/sseTypes";
 import { notifyError } from "../utils/toast";
-import { ConversationItem } from "./conversationSidebar/ConversationItem";
 import { ConversationGroupItem } from "./conversationSidebar/ConversationGroupItem";
+import { ConversationRowList } from "./conversationSidebar/ConversationRowList";
 import { MultiSelectPanel } from "./conversationSidebar/MultiSelectPanel";
 import type { ConversationGroupRow, ConversationRow } from "./conversationSidebar/types";
 import { usePricingMap } from "../hooks/usePricingMap";
@@ -43,7 +43,7 @@ function timestampMs(value: string | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-export function ConversationSidebar({ activeConversationId, onSelect, onNewChat }: ConversationSidebarProps) {
+function ConversationSidebarImpl({ activeConversationId, onSelect, onNewChat }: ConversationSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -379,43 +379,21 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     setCollapsedGroups((prev) => ({ ...prev, [groupId]: !(prev[groupId] ?? false) }));
   }, []);
 
-  const renderConversationRow = useCallback(
-    (c: ConversationRow, opts?: { nested?: boolean }) => (
-      <ConversationItem
-        key={c.id}
-        conversation={c}
-        active={activeConversationId === c.id}
-        nested={opts?.nested}
-        knownGroups={knownGroups}
-        multiSelectMode={multiSelectMode}
-        deletedMode={showDeletedOnly}
-        pricingByModel={pricingByModel}
-        selected={selectedConversationIds.includes(c.id)}
-        onSelect={onSelect}
-        onToggleSelected={onToggleSelected}
-        onRenameConversation={onRenameConversation}
-        onMoveConversationToGroup={onMoveConversationToGroup}
-        onSoftDeleteConversation={onSoftDeleteConversation}
-        onUndeleteConversation={onUndeleteConversation}
-        onPermanentlyDeleteConversation={onPermanentlyDeleteConversation}
-      />
-    ),
-    [
-      activeConversationId,
-      knownGroups,
-      multiSelectMode,
-      showDeletedOnly,
-      pricingByModel,
-      selectedConversationIds,
-      onSelect,
-      onToggleSelected,
-      onRenameConversation,
-      onMoveConversationToGroup,
-      onSoftDeleteConversation,
-      onUndeleteConversation,
-      onPermanentlyDeleteConversation,
-    ],
-  );
+  const rowListSharedProps = {
+    activeConversationId,
+    knownGroups,
+    multiSelectMode,
+    deletedMode: showDeletedOnly,
+    pricingByModel,
+    selectedConversationIds,
+    onSelect,
+    onToggleSelected,
+    onRenameConversation,
+    onMoveConversationToGroup,
+    onSoftDeleteConversation,
+    onUndeleteConversation,
+    onPermanentlyDeleteConversation,
+  };
 
   return (
     <aside className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
@@ -472,7 +450,13 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         <div className="scrollbar-thin flex h-full min-h-0 flex-1 flex-col space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 py-1.5">
           {grouped.orderedSections.map((section) => {
             if (section.kind === "conversation") {
-              return renderConversationRow(section.row);
+              return (
+                <ConversationRowList
+                  key={section.row.id}
+                  rows={[section.row]}
+                  {...rowListSharedProps}
+                />
+              );
             }
             const groupName = section.groupName;
             const groupId = section.groupId;
@@ -483,12 +467,13 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
                 key={groupId}
                 groupId={groupId}
                 groupName={groupName}
-                rows={rows}
+                rowCount={rows.length}
                 latestTimestampIso={latestSectionTimestamp(rows).raw}
                 collapsed={collapsed}
                 onToggle={toggleGroup}
-                renderConversationRow={renderConversationRow}
-              />
+              >
+                <ConversationRowList rows={rows} nested {...rowListSharedProps} />
+              </ConversationGroupItem>
             );
           })}
         </div>
@@ -496,3 +481,5 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     </aside>
   );
 }
+
+export const ConversationSidebar = memo(ConversationSidebarImpl);

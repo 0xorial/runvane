@@ -12,7 +12,10 @@ import type { ChatAttachment, UserMessageEntry } from "../protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ObservableItem } from "../utils/observableCollection";
 import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
-import type { ChatSessionStore } from "@/lib/chatSessionStore";
+import type { ChatSessionStore, PendingMessage } from "@/lib/chatSessionStore";
+
+/** Stable empty reference so useSyncExternalStore doesn't loop when there's no store. */
+const EMPTY_PENDING: PendingMessage[] = [];
 
 export type OptimisticUserMessage = {
   rowId: string;
@@ -58,9 +61,7 @@ export function useChatSession(conversationId: string | null | undefined) {
   }
   const store = storeRef.current;
 
-  const [isSessionLoading, setIsSessionLoading] = useState(() =>
-    boundCid ? getChatSessionStore(boundCid).getAllRows().length === 0 : false,
-  );
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
 
   const subscribeRows = useCallback(
     (listener: () => void) => store?.subscribeRows(listener) ?? (() => {}),
@@ -75,6 +76,13 @@ export function useChatSession(conversationId: string | null | undefined) {
   );
   const getActivePathVersion = useCallback(() => store?.getActivePathVersion() ?? 0, [store]);
   const activePathVersion = useSyncExternalStore(subscribeActivePath, getActivePathVersion, getActivePathVersion);
+
+  const subscribePending = useCallback(
+    (listener: () => void) => store?.subscribePending(listener) ?? (() => {}),
+    [store],
+  );
+  const getPending = useCallback(() => store?.getPendingMessages() ?? EMPTY_PENDING, [store]);
+  const pendingMessages = useSyncExternalStore(subscribePending, getPending, getPending);
 
   const activePathEntries = useMemo((): ObservableItem<LinkedChatEntry>[] => {
     void rowsVersion;
@@ -96,7 +104,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     const cid = boundCid;
     const releaseLive = retainChatSessionLive();
     const warmCache = store.getAllRows().length > 0;
-    if (!warmCache) setIsSessionLoading(true);
+    setIsSessionLoading(!warmCache);
 
     let cancelled = false;
     void (async () => {
@@ -176,6 +184,7 @@ export function useChatSession(conversationId: string | null | undefined) {
     sessionStore: store ?? getEmptyChatSessionStore(),
     activePathEntries,
     allEntries,
+    pendingMessages,
     isSessionLoading,
     setActiveLeaf,
     switchToBranch,

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { cn } from "@/lib/utils";
 import {
   agentIdFromSearchParams,
   type ChatAgentSelection,
@@ -10,10 +9,8 @@ import { ConversationBranchesPanel } from "../components/chat/ConversationBranch
 import { TerminalPanel } from "../components/terminal/TerminalPanel";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { type SelectedAttachment } from "../components/chat/AttachmentChips";
-import { ChatMessageRow, messageRowKey, type ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
-import { AgentCardsEmptyState } from "../components/chat/AgentCardsEmptyState";
-import { Spinner } from "../components/ui/Spinner";
-import { AnchorTopScrollArea } from "../components/ui/AnchorTopScrollArea";
+import type { ThoughtTripletRefs } from "../components/chat/ChatMessageRow";
+import { ChatTranscriptPane } from "../components/chat/ChatTranscriptPane";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../components/ui/resizable";
 import { ChatSessionContext, useThoughtExpandedStageState } from "../hooks/chatSessionContext";
 import { useChatSession } from "../hooks/useChatSession";
@@ -33,7 +30,7 @@ type ChatPageProps = {
   settingsPressed?: boolean;
 };
 
-export function ChatPage({
+const ChatPage = memo(function ChatPage({
   conversationId,
   sidebarVisible,
   onToggleSidebar,
@@ -65,6 +62,7 @@ export function ChatPage({
     sessionStore,
     activePathEntries: chatEntries,
     allEntries,
+    pendingMessages,
     isSessionLoading,
     setActiveLeaf,
     switchToBranch,
@@ -104,23 +102,30 @@ export function ChatPage({
     }
     return map;
   }, [activePathEntries]);
-  const thoughtTripletsById = new Map<string, ThoughtTripletRefs>();
-  for (const entry$ of chatEntries) {
-    const entry = entry$.get();
-    if (isThoughtStreamEntry(entry)) {
-      const current = thoughtTripletsById.get(entry.thoughtId) ?? {};
-      current.streamEntry$ = entry$;
-      thoughtTripletsById.set(entry.thoughtId, current);
-    } else if (entry.type === "thought-action") {
-      const current = thoughtTripletsById.get(entry.thoughtId) ?? {};
-      current.actionEntry = entry;
-      thoughtTripletsById.set(entry.thoughtId, current);
+  const thoughtTripletsById = useMemo(() => {
+    const map = new Map<string, ThoughtTripletRefs>();
+    for (const entry$ of chatEntries) {
+      const entry = entry$.get();
+      if (isThoughtStreamEntry(entry)) {
+        const current = map.get(entry.thoughtId) ?? {};
+        current.streamEntry$ = entry$;
+        map.set(entry.thoughtId, current);
+      } else if (entry.type === "thought-action") {
+        const current = map.get(entry.thoughtId) ?? {};
+        current.actionEntry = entry;
+        map.set(entry.thoughtId, current);
+      }
     }
-  }
-  const visibleEntries = chatEntries.filter((entry$) => {
-    const entry = entry$.get();
-    return !isThoughtStreamEntry(entry) && entry.type !== "thought-action";
-  });
+    return map;
+  }, [chatEntries]);
+  const visibleEntries = useMemo(
+    () =>
+      chatEntries.filter((entry$) => {
+        const entry = entry$.get();
+        return !isThoughtStreamEntry(entry) && entry.type !== "thought-action";
+      }),
+    [chatEntries],
+  );
   const resolveVisibleAnchorEntryId = useCallback(
     (entryId: string): string => {
       const selected = activePathEntryById.get(entryId);
@@ -191,38 +196,14 @@ export function ChatPage({
   const chatPane = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <AnchorTopScrollArea
-          data-testid="chat-transcript"
-          className={cn("scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden")}
+        <ChatTranscriptPane
+          conversationId={conversationId}
+          visibleEntries={visibleEntries}
+          thoughtTripletsById={thoughtTripletsById}
+          isSessionLoading={isSessionLoading}
+          selectedAgentId={agentSelection.agentId}
           topAnchorEntryId={topAnchorEntryId}
-        >
-          {conversationId && visibleEntries.length > 0
-            ? visibleEntries.map((entry$) => {
-                const entry = entry$.get();
-                return (
-                  <div
-                    key={messageRowKey(entry$)}
-                    data-chat-entry-id={entry.id}
-                    data-chat-entry-type={entry.type}
-                    {...(entry.type === "thought-prepare"
-                      ? { "data-chat-prepare-title": entry.title ?? "" }
-                      : {})}
-                  >
-                    <ChatMessageRow entry$={entry$} conversationId={conversationId} thoughtTripletsById={thoughtTripletsById} />
-                  </div>
-                );
-              })
-            : conversationId && isSessionLoading && visibleEntries.length === 0
-              ? (
-                <div
-                  data-testid="chat-loading"
-                  className="flex min-h-[12rem] flex-1 items-center justify-center p-8 text-muted-foreground"
-                >
-                  <Spinner size={16} />
-                </div>
-              )
-              : <AgentCardsEmptyState selectedAgentId={agentSelection.agentId} />}
-        </AnchorTopScrollArea>
+        />
       </main>
       <ChatComposer
         conversationId={conversationId}
@@ -238,6 +219,7 @@ export function ChatPage({
         appendOptimisticUserMessage={appendOptimisticUserMessage}
         onSent={handleSent}
         agentRunning={agentRunning}
+        pendingMessages={pendingMessages}
       />
     </div>
   );
@@ -294,4 +276,6 @@ export function ChatPage({
     </div>
     </ChatSessionContext.Provider>
   );
-}
+});
+
+export { ChatPage };

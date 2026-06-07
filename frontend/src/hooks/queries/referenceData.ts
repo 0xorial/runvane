@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
@@ -20,11 +21,14 @@ export function useModelCapabilitiesQuery() {
   });
 }
 
+const EMPTY_PRICING_BY_MODEL = new Map<string, ModelPricing>();
+
 export function usePricingMapQuery(): { pricingByModel: Map<string, ModelPricing>; isLoading: boolean } {
   const query = useModelCapabilitiesQuery();
-  const pricingByModel = query.data
-    ? buildModelPricingByName(query.data.models)
-    : new Map<string, ModelPricing>();
+  const pricingByModel = useMemo(
+    () => (query.data ? buildModelPricingByName(query.data.models) : EMPTY_PRICING_BY_MODEL),
+    [query.data],
+  );
   return { pricingByModel, isLoading: query.isLoading };
 }
 

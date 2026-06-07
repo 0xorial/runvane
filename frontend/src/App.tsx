@@ -1,5 +1,5 @@
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { ResizableSidePanel } from "@/components/ui/ResizableSidePanel";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -35,7 +35,7 @@ function chatActiveIdFromPath(pathname: string): string | null {
   return segment === "new" || !segment ? null : segment;
 }
 
-function ChatPageShell({
+const ChatPageShell = memo(function ChatPageShell({
   sidebarVisible,
   onToggleSidebar,
   rightSidebarVisible,
@@ -69,7 +69,7 @@ function ChatPageShell({
       settingsPressed={settingsPressed}
     />
   );
-}
+});
 
 export function App() {
   const navigate = useNavigate();
@@ -88,23 +88,39 @@ export function App() {
     const rawPercent = (300 / Math.max(1, window.innerWidth)) * 100;
     return Math.max(1, Math.min(95, rawPercent));
   }, []);
+  const handleToggleSidebar = useCallback(() => setChatSidebarVisible((v) => !v), []);
+  const handleToggleRightSidebar = useCallback(() => setChatRightSidebarVisible((v) => !v), []);
+  const handleToggleTerminal = useCallback(() => setChatTerminalVisible((v) => !v), []);
+  const handleNewChat = useCallback(() => navigate("/chat/new"), [navigate]);
+  const handleSelectConversation = useCallback((id: string) => navigate(`/chat/${id}`), [navigate]);
+  const handleOpenSettings = useCallback(() => navigate(settingsLinkTo(location)), [navigate, location]);
+  const chatPageShell = useMemo(
+    () => (
+      <ChatPageShell
+        sidebarVisible={chatSidebarVisible}
+        onToggleSidebar={handleToggleSidebar}
+        rightSidebarVisible={chatRightSidebarVisible}
+        onToggleRightSidebar={handleToggleRightSidebar}
+        terminalVisible={chatTerminalVisible}
+        onToggleTerminal={handleToggleTerminal}
+        onOpenSettings={handleOpenSettings}
+        settingsPressed={settingsTab}
+      />
+    ),
+    [
+      chatSidebarVisible,
+      handleToggleSidebar,
+      chatRightSidebarVisible,
+      handleToggleRightSidebar,
+      chatTerminalVisible,
+      handleToggleTerminal,
+      handleOpenSettings,
+      settingsTab,
+    ],
+  );
   const appRoutes = (
     <Routes>
-      <Route
-        path="/chat/:conversationId"
-        element={
-          <ChatPageShell
-            sidebarVisible={chatSidebarVisible}
-            onToggleSidebar={() => setChatSidebarVisible((v) => !v)}
-            rightSidebarVisible={chatRightSidebarVisible}
-            onToggleRightSidebar={() => setChatRightSidebarVisible((v) => !v)}
-            terminalVisible={chatTerminalVisible}
-            onToggleTerminal={() => setChatTerminalVisible((v) => !v)}
-            onOpenSettings={() => navigate(settingsLinkTo(location))}
-            settingsPressed={settingsTab}
-          />
-        }
-      />
+      <Route path="/chat/:conversationId" element={chatPageShell} />
       <Route path="/chat" element={<Navigate to="/chat/new" replace />} />
       <Route path="/permissions" element={<Navigate to="/settings/tools" replace />} />
       <Route path="/settings" element={<Navigate to="/settings/model-providers" replace />} />
@@ -185,8 +201,8 @@ export function App() {
                 >
                   <ConversationSidebar
                     activeConversationId={activeConversationId}
-                    onNewChat={() => navigate("/chat/new")}
-                    onSelect={(id) => navigate(`/chat/${id}`)}
+                    onNewChat={handleNewChat}
+                    onSelect={handleSelectConversation}
                   />
                 </div>
               }
