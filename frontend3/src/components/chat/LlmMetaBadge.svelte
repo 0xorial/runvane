@@ -20,13 +20,22 @@
 
   function formatCompactNumber(value: number): string {
     const abs = Math.abs(value);
+    if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}b`;
     if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
     if (abs >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
     return value.toLocaleString();
   }
 
+  function formatExactUsd(value: number): string {
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 8,
+    });
+  }
+
   function formatUsd(value: number): string {
     if (value > 0 && value < 0.01) return "<0.01";
+    if (value < 0 && value > -0.01) return ">-0.01";
     return value.toFixed(2);
   }
 
@@ -39,37 +48,76 @@
     return m.includes("/") ? (m.split("/").pop() ?? m) : m;
   });
 
-  const hasContent = $derived(
-    Boolean(modelShort) ||
-      totalTokens > 0 ||
-      estimatedCostUsd != null ||
-      unpricedModels.length > 0,
-  );
+  type Segment = { key: string; label: string; title?: string; href?: string };
 
-  function openPricing(): void {
-    const q = unpricedModels.length > 0 ? `?models=${encodeURIComponent(unpricedModels.join(","))}` : "";
-    navigate(`/settings/model-pricing${q}`);
-  }
+  const segments = $derived.by((): Segment[] => {
+    const out: Segment[] = [];
+    if (modelShort) out.push({ key: "model", label: modelShort });
+    if (normalizedUsage && totalTokens > 0) {
+      const prompt = normalizedUsage.promptTokens;
+      const cachedPrompt = normalizedUsage.cachedPromptTokens ?? 0;
+      const completion = normalizedUsage.completionTokens;
+      if (showTokenBreakdown) {
+        out.push({
+          key: "tok",
+          label: `in ${formatCompactNumber(prompt)} / out ${formatCompactNumber(completion)} tok`,
+          title: `in ${prompt.toLocaleString()} / cached ${cachedPrompt.toLocaleString()} / out ${completion.toLocaleString()} tok`,
+        });
+      } else {
+        out.push({
+          key: "tok",
+          label: `${formatCompactNumber(totalTokens)} tok`,
+          title: `${totalTokens.toLocaleString()} tok`,
+        });
+      }
+      if (cachedPrompt > 0) {
+        out.push({
+          key: "cached",
+          label: `cached ${formatCompactNumber(cachedPrompt)} tok`,
+          title: `${cachedPrompt.toLocaleString()} cached input tok`,
+        });
+      }
+    }
+    if (estimatedCostUsd === null) {
+      const focusQuery =
+        unpricedModels.length > 0 ? `?focus=${encodeURIComponent(unpricedModels.join(","))}` : "";
+      out.push({
+        key: "usd",
+        label: "set pricing",
+        title: "Pricing not configured for one or more models used. Click to configure.",
+        href: `/settings/model-pricing${focusQuery}`,
+      });
+    } else if (typeof estimatedCostUsd === "number") {
+      out.push({
+        key: "usd",
+        label: `$${formatUsd(estimatedCostUsd)}`,
+        title: `$${formatExactUsd(estimatedCostUsd)}`,
+      });
+    }
+    return out;
+  });
 </script>
 
-{#if hasContent}
-  <span class="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground {className}">
-    {#if modelShort}
-      <span>{modelShort}</span>
-    {/if}
-    {#if normalizedUsage && totalTokens > 0}
-      {#if showTokenBreakdown}
-        <span title="token breakdown">
-          in {formatCompactNumber(normalizedUsage.promptTokens)} / out {formatCompactNumber(normalizedUsage.completionTokens)} tok
-        </span>
-      {:else}
-        <span>{formatCompactNumber(totalTokens)} tok</span>
+{#if segments.length > 0}
+  <div
+    class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground {className}"
+  >
+    {#each segments as seg, i (seg.key)}
+      {#if i > 0}
+        <span class="text-border">•</span>
       {/if}
-    {/if}
-    {#if estimatedCostUsd != null}
-      <span>${formatUsd(estimatedCostUsd)}</span>
-    {:else if unpricedModels.length > 0}
-      <button type="button" class="underline hover:text-foreground" onclick={openPricing}>set pricing</button>
-    {/if}
-  </span>
+      {#if seg.href}
+        <button
+          type="button"
+          class="border-0 bg-transparent p-0 text-muted-foreground/70 underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 hover:text-foreground hover:decoration-foreground"
+          title={seg.title}
+          onclick={() => navigate(seg.href!)}
+        >
+          {seg.label}
+        </button>
+      {:else}
+        <span title={seg.title}>{seg.label}</span>
+      {/if}
+    {/each}
+  </div>
 {/if}

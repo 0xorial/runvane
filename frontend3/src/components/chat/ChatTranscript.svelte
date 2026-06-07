@@ -20,7 +20,7 @@
 
 <div
   data-testid="chat-transcript"
-  class="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3"
+  class="scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden"
 >
   {#if conversationId && visibleEntries.length > 0}
     {#each visibleEntries as entry$ (entry$.id)}

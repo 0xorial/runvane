@@ -2,43 +2,55 @@
   import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
   import type { ThoughtTripletRefs } from "@/lib/thoughtTriplets";
   import type { ObservableItem } from "@/utils/observableCollection";
+  import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
+  import AssistantMessageRow from "./rows/AssistantMessageRow.svelte";
+  import ThoughtTripletRow from "./rows/ThoughtTripletRow.svelte";
+  import UserMessageRow from "./rows/UserMessageRow.svelte";
 
   let {
-    entry,
+    entry$,
     conversationId,
     thoughtTripletsById,
   }: {
-    entry: ChatEntry;
+    entry$: ObservableItem<LinkedChatEntry>;
     conversationId: string;
     thoughtTripletsById: ReadonlyMap<string, ThoughtTripletRefs>;
   } = $props();
 
-  function streamText(streamEntry$: ObservableItem<ChatEntry> | undefined): string {
-    if (!streamEntry$) return "";
-    const stream = streamEntry$.get();
-    return isThoughtStreamEntry(stream) ? String(stream.llmResponse ?? "") : "";
-  }
+  let entry = $state<ChatEntry | null>(null);
+
+  $effect(() => {
+    const row$ = entry$;
+    entry = row$.get();
+    return row$.subscribe(() => {
+      entry = row$.get();
+    });
+  });
 </script>
 
-{#if entry.type === "user-message"}
-  <div class="mb-3 rounded-lg bg-primary/10 px-3 py-2 text-sm text-foreground">{entry.text}</div>
-{:else if entry.type === "thought-prepare"}
-  {@const refs = thoughtTripletsById.get(entry.thoughtId)}
-  <div class="mb-2 border-l-2 border-border/60 pl-3">
-    <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{entry.title}</div>
-    {#if refs?.streamEntry$}
-      {@const text = streamText(refs.streamEntry$)}
-      {#if text}
-        <div class="mt-1 whitespace-pre-wrap text-sm text-foreground">{text}</div>
-      {/if}
-    {/if}
-  </div>
-{:else if entry.type === "assistant-message"}
-  <div class="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{entry.text}</div>
-{:else if entry.type === "tool-invocation"}
-  <div class="mb-2 font-mono text-xs text-muted-foreground">
-    {entry.toolId}({JSON.stringify(entry.parameters ?? {})})
-  </div>
-{:else if entry.type === "checkpoint-summary"}
-  <div class="mb-2 text-xs italic text-muted-foreground">{entry.summaryText}</div>
+{#if entry}
+  {#if entry.type === "user-message"}
+    <UserMessageRow {entry} />
+  {:else if entry.type === "thought-prepare"}
+    {@const refs = thoughtTripletsById.get(entry.thoughtId)}
+    <ThoughtTripletRow
+      prepareEntry={entry}
+      streamEntry$={refs?.streamEntry$}
+      actionEntry={refs?.actionEntry ?? null}
+    />
+  {:else if isThoughtStreamEntry(entry) || entry.type === "thought-action"}
+    <!-- rendered inside prepare-anchored triplet -->
+  {:else if entry.type === "assistant-message"}
+    <AssistantMessageRow {entry} />
+  {:else if entry.type === "tool-invocation"}
+    <div class="animate-slide-in group py-1.5">
+      <div class="mx-auto max-w-3xl font-mono text-xs text-muted-foreground">
+        {entry.toolId}({JSON.stringify(entry.parameters ?? {})})
+      </div>
+    </div>
+  {:else if entry.type === "checkpoint-summary"}
+    <div class="animate-slide-in group py-1.5">
+      <div class="mx-auto max-w-3xl text-xs italic text-muted-foreground">{entry.summaryText}</div>
+    </div>
+  {/if}
 {/if}

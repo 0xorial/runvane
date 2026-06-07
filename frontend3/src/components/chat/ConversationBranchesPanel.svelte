@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
   import type { ChatSessionStore } from "@/lib/chatSessionStore";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import { notifyError } from "@/utils/toast";
+  import RowIcon from "./RowIcon.svelte";
+  import BranchNode from "./branches/BranchNode.svelte";
 
   let {
     sessionStore,
@@ -23,28 +24,20 @@
 
   const activePathIds = $derived(new Set(activePathEntries.map((row$) => row$.id)));
   const rowById = $derived(new Map(allEntries.map((row$) => [row$.id, row$])));
+  const pathTipId = $derived(
+    activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null,
+  );
 
-  function childRows(parentId: string | null): ObservableItem<LinkedChatEntry>[] {
+  function childRowsOf(parentId: string | null): ObservableItem<LinkedChatEntry>[] {
     return sessionStore
       .childEntries(parentId)
       .map((entry) => rowById.get(entry.id))
       .filter((row$): row$ is ObservableItem<LinkedChatEntry> => row$ != null);
   }
 
-  function entryPreview(entry: ChatEntry): string {
-    if (entry.type === "user-message" || entry.type === "assistant-message") {
-      const text = entry.text.trim();
-      return text.length > 0 ? text : "(empty message)";
-    }
-    if (entry.type === "tool-invocation") return `Tool: ${entry.toolId || "unknown"}`;
-    if (entry.type === "thought-prepare") return String(entry.title || "").trim() || "(context)";
-    if (isThoughtStreamEntry(entry)) return String(entry.llm?.model || "").trim() || "stream";
-    if (entry.type === "thought-action") return "Decided";
-    if (entry.type === "checkpoint-summary") return "Summary";
-    return String((entry as ChatEntry).type);
-  }
+  const rootNodes = $derived(childRowsOf(null));
 
-  async function selectEntry(entryId: string): Promise<void> {
+  async function handleSelectEntry(entryId: string): Promise<void> {
     if (switchingToEntryId) return;
     switchingToEntryId = entryId;
     try {
@@ -59,32 +52,30 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col border-l border-border bg-sidebar">
-  <div class="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">Activity</div>
-  <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2 text-xs">
-    {#if allEntries.length === 0}
-      <p class="px-2 py-4 text-muted-foreground">No messages yet.</p>
+  <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+    {#if rootNodes.length === 0}
+      <p class="p-3 text-xs text-muted-foreground">No messages yet.</p>
     {:else}
-      {@render branchList(null, 0)}
+      <div class="space-y-3 p-3">
+        <div class="flex items-center gap-2 px-1">
+          <RowIcon name="activity" class="h-4 w-4 text-primary" />
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Activity</h3>
+        </div>
+        <div class="text-[11px] leading-snug">
+          {#each rootNodes as row$ (row$.id)}
+            <BranchNode
+              entry$={row$}
+              branchDepth={0}
+              {childRowsOf}
+              {sessionStore}
+              {activePathIds}
+              {pathTipId}
+              {switchingToEntryId}
+              onSelectEntry={(id) => void handleSelectEntry(id)}
+            />
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 </div>
-
-{#snippet branchList(parentId: string | null, depth: number)}
-  {#each childRows(parentId) as row$ (row$.id)}
-    {@const entry = row$.get()}
-    {@const active = activePathIds.has(entry.id)}
-    <button
-      type="button"
-      class="mb-0.5 flex w-full items-start gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary/50 {active
-        ? 'bg-secondary text-foreground'
-        : 'text-muted-foreground'}"
-      style={`padding-left: ${depth * 12 + 4}px`}
-      disabled={switchingToEntryId === entry.id}
-      onclick={() => void selectEntry(entry.id)}
-    >
-      <span class="shrink-0 opacity-60">•</span>
-      <span class="min-w-0 truncate">{entryPreview(entry)}</span>
-    </button>
-    {@render branchList(entry.id, depth + 1)}
-  {/each}
-{/snippet}
