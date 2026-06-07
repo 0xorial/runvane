@@ -10,6 +10,16 @@ import {
 
 let draft = $state<ChatToolDraft>({});
 let selectedToolForEdit = $state<string | null>(null);
+let draftRevision = $state(0);
+
+function touchDraft(): void {
+  draftRevision += 1;
+}
+
+/** Subscribe in $derived so UI updates when draft mutates. */
+export function getChatToolDraftRevision(): number {
+  return draftRevision;
+}
 
 export function getChatToolDraft(): ChatToolDraft {
   return draft;
@@ -34,6 +44,7 @@ export function setToolDraftMode(toolName: string, mode: ToolOverrideUiMode): vo
     delete next[toolName];
     draft = next;
     if (selectedToolForEdit === toolName) selectedToolForEdit = null;
+    touchDraft();
     return;
   }
   draft = {
@@ -45,6 +56,7 @@ export function setToolDraftMode(toolName: string, mode: ToolOverrideUiMode): vo
   };
   if (mode === "custom") selectedToolForEdit = toolName;
   else if (selectedToolForEdit === toolName) selectedToolForEdit = null;
+  touchDraft();
 }
 
 export function setToolDraftCustom(toolName: string, custom: AgentToolConfig): void {
@@ -52,6 +64,7 @@ export function setToolDraftCustom(toolName: string, custom: AgentToolConfig): v
     ...draft,
     [toolName]: { mode: "custom", custom },
   };
+  touchDraft();
 }
 
 export function setSelectedToolForEdit(toolName: string | null): void {
@@ -61,6 +74,7 @@ export function setSelectedToolForEdit(toolName: string | null): void {
 export function resetChatToolDraft(): void {
   draft = {};
   selectedToolForEdit = null;
+  touchDraft();
 }
 
 export function clearChatToolDraftOnConversationChange(): void {
@@ -70,4 +84,5 @@ export function clearChatToolDraftOnConversationChange(): void {
 export function seedChatToolDraftFromUserMessage(entry: UserMessageEntry | null): void {
   draft = draftFromStoredOverrides(entry?.overrides?.tools);
   selectedToolForEdit = null;
+  touchDraft();
 }

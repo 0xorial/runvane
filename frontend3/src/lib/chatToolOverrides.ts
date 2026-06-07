@@ -3,6 +3,8 @@ import type { UserMessageOverrides } from "../../../backend/src/contracts/user-m
 
 export type ToolOverrideUiMode = "inherit" | "off" | "allow_all" | "custom";
 
+export type ExplicitToolOverrideMode = Exclude<ToolOverrideUiMode, "inherit">;
+
 export type ChatToolDraftEntry = {
   mode: ToolOverrideUiMode;
   custom?: AgentToolConfig;
@@ -45,6 +47,23 @@ function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {
     return { mode: "allow_all" };
   }
   return { mode: "custom", custom: cfg };
+}
+
+/** Maps agent tool settings to the tri-state segment that best represents them. */
+export function effectiveAgentToolMode(cfg: {
+  enabled: boolean;
+  guardrail: boolean;
+  config: Record<string, unknown>;
+}): ExplicitToolOverrideMode {
+  if (!cfg.enabled) return "off";
+  if (cfg.config.allowed === "always" && !cfg.guardrail) return "allow_all";
+  return "custom";
+}
+
+export function explicitModeLabel(mode: ExplicitToolOverrideMode): string {
+  if (mode === "off") return "Off";
+  if (mode === "allow_all") return "Allow all";
+  return "Custom";
 }
 
 export function draftFromStoredOverrides(tools: Record<string, AgentToolConfig> | undefined): ChatToolDraft {
