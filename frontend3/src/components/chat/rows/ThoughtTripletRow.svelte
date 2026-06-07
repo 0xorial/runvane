@@ -4,8 +4,9 @@
   import Icon from "@/components/ui/Icon.svelte";
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import { createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
-  import { getChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
+  import type { ThoughtStage } from "@/lib/chatSessionContext";
   import { formatTokenCount } from "@/utils/formatTokenCount";
+  import BranchSelector from "../BranchSelector.svelte";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
   import StepChip from "./StepChip.svelte";
@@ -24,8 +25,8 @@
     actionEntry?: ChatEntry | null;
   } = $props();
 
-  const session = getChatSessionContext();
   const capabilitiesQuery = createModelCapabilitiesQuery();
+  let expanded = $state<ThoughtStage | null>(null);
   const pricingByModel = $derived(pricingFromCapabilities(capabilitiesQuery.data));
 
   let streamRaw = $state<ChatEntry | null>(null);
@@ -47,15 +48,14 @@
     });
   });
 
-  function slotKey(prep: ThoughtPrepareEntry, streamEntry: NonNullable<typeof stream>): string {
-    return prep.parentId ?? streamEntry.thoughtId;
+  function toggle(stage: ThoughtStage): void {
+    expanded = expanded === stage ? null : stage;
   }
 
-  function toggle(prep: ThoughtPrepareEntry, streamEntry: NonNullable<typeof stream>, stage: ThoughtStage): void {
-    const key = slotKey(prep, streamEntry);
-    const current = session.getExpandedStage(key);
-    session.setSlotExpandedStage(key, current === stage ? null : stage);
-  }
+  $effect(() => {
+    void conversationId;
+    expanded = null;
+  });
 
   function reasonMetaParts(streamEntry: NonNullable<typeof stream>) {
     const provider = String(streamEntry.llm?.providerId || "").trim() || "unknown-provider";
@@ -76,22 +76,22 @@
 {:else if streamEntry$ && stream}
   {@const prep = prepareEntry as ThoughtPrepareEntry}
   {@const actionStep = actionEntry?.type === "thought-action" ? actionEntry : null}
-  {@const key = slotKey(prep, stream)}
   {@const contextTitle = String(prep.title ?? "").trim() || "Preparation"}
   {@const actionMeta = actionMetaLabel(actionStep, stream)}
   {@const actionLabel = actionMeta.usesTool ? `call ${actionMeta.toolName ?? "tool"}` : "Reply"}
   {@const reasonFailed = stream.status === "failed" || stream.status === "cancelled"}
   {@const reasonMeta = reasonMetaParts(stream)}
-  {@const expanded = (() => { session.getExpandedStageVersion(); return session.getExpandedStage(key); })()}
   <ChatThreadIndent class="py-0 mb-1">
     {#snippet children()}
       <div class="my-0 border-l-2 border-border/60 pl-3">
         <div class="flex items-stretch gap-2 py-0.5 text-[11px] text-muted-foreground">
-          <StepChip label={contextTitle} active={expanded === "context"} onclick={() => toggle(prep, stream, "context")}>
+          <StepChip testId="thought-step-context" label={contextTitle} active={expanded === "context"} onclick={() => toggle("context")}>
             {#snippet icon()}<RowIcon name="file" />{/snippet}
+            {#snippet badge()}<BranchSelector entryId={prep.id} />{/snippet}
           </StepChip>
           <Icon name="arrow-right" class="h-3 w-3 self-center opacity-60" />
-          <StepChip label="" active={expanded === "reasoning"} onclick={() => toggle(prep, stream, "reasoning")}>
+          <StepChip testId="thought-step-reasoning" label="" active={expanded === "reasoning"} onclick={() => toggle("reasoning")}>
+            {#snippet badge()}<BranchSelector entryId={stream.id} />{/snippet}
             {#snippet icon()}
               {#if reasonFailed}
                 <RowIcon name="alert" />
@@ -123,10 +123,14 @@
             meta={actionMeta.status}
             align="right"
             active={expanded === "action"}
-            onclick={() => toggle(prep, stream, "action")}
+            testId="thought-step-action"
+            onclick={() => toggle("action")}
           >
             {#snippet icon()}
               <RowIcon name={actionMeta.usesTool ? "wrench" : "message"} />
+            {/snippet}
+            {#snippet badge()}
+              {#if actionStep}<BranchSelector entryId={actionStep.id} />{/if}
             {/snippet}
           </StepChip>
         </div>

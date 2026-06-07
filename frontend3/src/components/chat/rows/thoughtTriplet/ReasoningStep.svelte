@@ -109,6 +109,7 @@
       {#if canEdit}
         <button
           type="button"
+          data-testid="thought-reprocess-edit"
           class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           onclick={() => (isEditing = !isEditing)}
           title="Edit reasoning and branch"
@@ -155,6 +156,7 @@
         </button>
         <button
           type="button"
+          data-testid="thought-reprocess-apply"
           class="rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
           onclick={() => void applyEdit()}
           disabled={!canApply}

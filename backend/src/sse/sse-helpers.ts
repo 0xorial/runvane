@@ -4,6 +4,7 @@ import type { ConversationsRepo } from '../db/repositories/conversations.repo.js
 import type { ChatEntryDeltaField, ConversationSseRow, SseEvent } from '../contracts/sse.js';
 import { SseType } from '../contracts/sse.js';
 import type { LlmStreamEvent } from '../llmProviders/types.js';
+import { toClientChatEntry } from '../thoughtProcessing/inputSnapshot.js';
 import type { SseHubService } from './sse-hub.service.js';
 
 export function incrementalDelta(prev: string, next: string): string {
@@ -51,7 +52,7 @@ export async function publishChatEntryUpsert(
 ): Promise<void> {
   const entry = await chatEntries.getChatEntry(conversationId, entryId);
   if (!entry) throw new Error(`chat entry not found: ${conversationId}/${entryId}`);
-  hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
+  hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry: toClientChatEntry(entry) });
 }
 
 /**

@@ -36,6 +36,7 @@
 {#if canFold}
   <button
     type="button"
+    data-testid="fold-from-here"
     class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
     onclick={() => void submit()}
     disabled={submitting}

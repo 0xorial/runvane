@@ -48,6 +48,7 @@ export function FoldFromHereButton({
 
   return (
     <button
+      data-testid="fold-from-here"
       type="button"
       className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       onClick={() => void submit()}

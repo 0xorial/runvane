@@ -1,6 +1,15 @@
 import { APIRequestContext, expect } from "@playwright/test";
 
 export const PROBE_MESSAGE = "what is the time?";
+export const STUB_SUMMARIZE_REPLY = "e2e stub summary of folded turns.";
+export const STUB_GUARDRAIL_FLAG_REASON = "e2e stub guardrail flag";
+export const STUB_ATTACHMENT_SUMMARY_REPLY = "e2e stub attachment summary.";
+export const FOLD_MSG_ONE = "e2e fold message one";
+export const FOLD_MSG_TWO = "e2e fold message two";
+export const USER_MSG_HELLO = "hello e2e user message";
+export const ATTACHMENT_MSG = "see attached e2e notes";
+export const GUARDED_AGENT_ID = "e2e00000-0000-4000-8000-000000000002";
+export const FORBID_AGENT_ID = "e2e00000-0000-4000-8000-000000000003";
 
 type AgentRow = { id: string; is_default?: boolean };
 

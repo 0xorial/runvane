@@ -16,6 +16,7 @@ import {
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
+import { stripPrepareInputJson } from '../inputSnapshot.js';
 import { buildPlannerMessages } from '../lib/plannerPrompt.js';
 import {
   extractAssistantOutputFromJsonLike,
@@ -62,7 +63,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   ) {}
 
   buildInputFromConversation = async (conversationId: string, leafEntryId: string): Promise<PlannerInput> => {
-    const entries = await this.chatEntries.listChatEntriesFromLeaf(conversationId, leafEntryId);
+    const entries = (await this.chatEntries.listChatEntriesFromLeaf(conversationId, leafEntryId)).map(
+      stripPrepareInputJson,
+    );
     const anchorUserMessage = [...entries].reverse().find((entry) => entry.type === 'user-message');
     if (!anchorUserMessage) throw new Error(`planner requires a user-message in conversation ${conversationId}`);
     const agentId = anchorUserMessage.agentId;

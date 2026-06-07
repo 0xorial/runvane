@@ -33,6 +33,7 @@ import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
 import { SetDefaultViewLeafDto } from './dto/set-default-view-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
+import { toClientChatEntry } from '../thoughtProcessing/inputSnapshot.js';
 import { ValidateResponse } from '../validation/validate-response.decorator.js';
 
 const ChatEntryArraySchema = z.array(ChatEntrySchema);
@@ -160,7 +161,10 @@ export class ConversationsController {
   ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    return this.conversations.listChatEntries(conversationId, { all: allRaw === '1' || allRaw === 'true' });
+    const entries = await this.conversations.listChatEntries(conversationId, {
+      all: allRaw === '1' || allRaw === 'true',
+    });
+    return entries.map(toClientChatEntry);
   }
 
   @Post(':conversationId/messages')

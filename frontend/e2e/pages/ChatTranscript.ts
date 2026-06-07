@@ -1,5 +1,5 @@
 import { expect, Locator, Page } from "@playwright/test";
-import { PROBE_MESSAGE } from "../api/client";
+import { PROBE_MESSAGE, STUB_SUMMARIZE_REPLY } from "../api/client";
 import { E2E_LLM_TIMEOUT_MS, E2E_UI_TIMEOUT_MS } from "../timeouts";
 
 export const PROBE_EXPECTED_ENTRY_TYPES = [
@@ -115,5 +115,88 @@ export class ChatTranscript {
     expect(snap.assistantText.length).toBeGreaterThan(0);
     await this.expectNoBranchSelectors();
     return snap;
+  }
+
+  async waitForUserMessageCount(count: number, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.loading).toBeHidden({ timeout: timeoutMs });
+    await expect(this.entry("user-message")).toHaveCount(count, { timeout: timeoutMs });
+  }
+
+  async waitForAssistantMessageCount(count: number, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.loading).toBeHidden({ timeout: timeoutMs });
+    await expect(this.entry("assistant-message")).toHaveCount(count, { timeout: timeoutMs });
+  }
+
+  async foldFromUserMessage(index: number): Promise<void> {
+    const row = this.entry("user-message").nth(index);
+    await expect(row).toBeVisible();
+    await row.getByTestId("fold-from-here").click();
+  }
+
+  async waitForCheckpointSummary(
+    expectedText: string = STUB_SUMMARIZE_REPLY,
+    timeoutMs = E2E_LLM_TIMEOUT_MS,
+  ): Promise<void> {
+    await expect(this.loading).toBeHidden({ timeout: timeoutMs });
+    const summary = this.entry("checkpoint-summary").last();
+    await expect(summary).toBeVisible({ timeout: timeoutMs });
+    await expect(summary).toContainText(expectedText, { timeout: timeoutMs });
+  }
+
+  async expectTranscriptContains(text: string): Promise<void> {
+    await expect(this.container).toContainText(text);
+  }
+
+  async expectTranscriptNotContains(text: string): Promise<void> {
+    await expect(this.container).not.toContainText(text);
+  }
+
+  prepareRow(title: string, index = 0): Locator {
+    return this.container
+      .locator(`[data-chat-entry-type="thought-prepare"][data-chat-prepare-title="${title}"]`)
+      .nth(index);
+  }
+
+  async expandThoughtStep(
+    prepareTitle: string,
+    step: "context" | "reasoning" | "action",
+    index = 0,
+  ): Promise<void> {
+    const row = this.prepareRow(prepareTitle, index);
+    await row.getByTestId(`thought-step-${step}`).click();
+  }
+
+  async expectThoughtPanel(
+    prepareTitle: string,
+    stage: "context" | "reasoning" | "action",
+    index = 0,
+  ): Promise<void> {
+    const panel = this.prepareRow(prepareTitle, index).getByTestId("thought-step-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute("data-thought-stage", stage);
+  }
+
+  async waitForBranchSelectors(minCount = 1, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.branchSelectors).toHaveCount(minCount, { timeout: timeoutMs });
+  }
+
+  toolRow(index = 0): Locator {
+    return this.container.getByTestId("tool-invocation-row").nth(index);
+  }
+
+  async waitForToolState(
+    state: "requested" | "running" | "done" | "error",
+    index = 0,
+    timeoutMs = E2E_LLM_TIMEOUT_MS,
+  ): Promise<void> {
+    await expect(this.toolRow(index)).toHaveAttribute("data-tool-state", state, { timeout: timeoutMs });
+  }
+
+  userMessageRow(index = 0): Locator {
+    return this.entry("user-message").nth(index);
+  }
+
+  async waitForPrepareTitle(title: string, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.prepareRow(title)).toBeVisible({ timeout: timeoutMs });
   }
 }

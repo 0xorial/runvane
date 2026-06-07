@@ -116,6 +116,7 @@
         </button>
         <button
           type="button"
+          data-testid="thought-context-apply"
           class="rounded border border-primary/50 px-2 py-1 text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
           onclick={() => void applyEdit()}
           disabled={!canApply}

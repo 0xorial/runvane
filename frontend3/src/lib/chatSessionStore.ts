@@ -157,6 +157,8 @@ export class ChatSessionStore {
         this.upsert(ev.entry);
         if (ev.entry.type === "checkpoint-summary") {
           this.setViewAnchor(ev.entry.id);
+        } else if (ev.entry.type === "thought-prepare" && ev.entry.title === "Summarize tail") {
+          this.setViewAnchor(ev.entry.id);
         }
         return;
       case SseType.CHAT_ENTRY_DELTA: {

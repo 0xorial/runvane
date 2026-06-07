@@ -97,7 +97,7 @@ export class RunToolService {
     });
     const permission = mostPermissivePermission(ruleResults);
 
-    if (permission === 'forbid' || (permission === 'ask_user' && input.approvalGranted !== true)) {
+    if (permission === 'forbid') {
       return this.recordBlocked({ input, permission, parsedParams, chain });
     }
     // Guardrail-flagged calls block with permission='ask_user' even when the
@@ -110,6 +110,9 @@ export class RunToolService {
         chain,
         guardrailReason: input.guardrailFlagReason,
       });
+    }
+    if (permission === 'ask_user' && input.approvalGranted !== true) {
+      return this.recordBlocked({ input, permission, parsedParams, chain });
     }
 
     return this.executeTool({

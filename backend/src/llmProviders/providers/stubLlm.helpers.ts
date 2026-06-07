@@ -2,6 +2,9 @@ import type { LlmRequest } from '../types.js';
 
 export const PROBE_TIME_USER_MESSAGE = 'what is the time?';
 export const STUB_PROBE_TIME_REPLY = 'The current time is 12:00 UTC.';
+export const STUB_SUMMARIZE_REPLY = 'e2e stub summary of folded turns.';
+export const STUB_ATTACHMENT_SUMMARY_REPLY = 'e2e stub attachment summary.';
+export const STUB_GUARDRAIL_FLAG_REASON = 'e2e stub guardrail flag';
 
 export async function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return;
@@ -81,6 +84,22 @@ export function stubIsProbeTimeConversation(request: LlmRequest): boolean {
   return stubUserText(request).includes(PROBE_TIME_USER_MESSAGE);
 }
 
+export function stubIsSummarizeRequest(blob: string): boolean {
+  return /Condense the following conversation turns/i.test(blob);
+}
+
+export function stubIsGuardrailRequest(blob: string): boolean {
+  return /Tool name:/i.test(blob) && /Respond with JSON only/i.test(blob);
+}
+
+export function stubIsSummarizeAttachmentRequest(blob: string): boolean {
+  return /You summarize a single attachment/i.test(blob);
+}
+
+export function stubGuardrailFlagReply(): string {
+  return JSON.stringify({ verdict: 'flag', reason: STUB_GUARDRAIL_FLAG_REASON });
+}
+
 export function stubProbeTimePlannerFirstRound(): string {
   return JSON.stringify({
     assistant_thinking: 'User asked for the time; call get_current_time.',
@@ -104,6 +123,9 @@ export function pickStubReply(request: LlmRequest): string {
   if (isSteerProbeMessage(blob)) return steerProbeReply();
   if (stubIsTitleGenerationRequest(blob)) return 'Time Inquiry';
   if (stubIsToolParamsRequest(blob)) return '{}';
+  if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
+  if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
+  if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;
 
   if (stubIsPlannerRequest(request)) {
     if (stubHasPlannerToolResult(request)) return stubProbeTimePlannerFinalize();

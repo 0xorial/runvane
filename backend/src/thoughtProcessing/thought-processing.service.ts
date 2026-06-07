@@ -19,6 +19,7 @@ import {
   type ThoughtContext,
   type ThoughtTypeProvider,
 } from './types.js';
+import { hydrateThoughtInput, serializeThoughtInput } from './inputSnapshot.js';
 import { DecisionStep } from './steps/decisionStep.js';
 import { PrepareStep, type PreparedReason } from './steps/prepareStep.js';
 import { ReasonStep } from './steps/reasonStep.js';
@@ -116,7 +117,7 @@ export class ThoughtProcessingService {
         // to this prepare's parent before re-running, so the snapshot reflects
         // the same chain state the provider originally saw.
         await this.chatEntries.mergeEntryPayload(conversationId, prepareEntry.id, {
-          inputJson: JSON.stringify(input),
+          inputJson: serializeThoughtInput(input, prepareEntry.id),
         });
         await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, prepareEntry.id);
         const prepared = await this.prepareStep.run(provider, input, ctx, scope);
@@ -184,7 +185,7 @@ export class ThoughtProcessingService {
     await this.chatEntries.setDefaultViewLeaf(args.conversationId, plannerEntryId);
 
     scope.spawn(async () => {
-      const input = JSON.parse(branch.inputJson!) as unknown;
+      const input = await hydrateThoughtInput(this.chatEntries, branch.inputJson!);
       const prepared: PreparedReason = { request, display };
       const completion = await this.reasonStep.run(provider, input, ctx, prepared, scope);
       await this.decisionStep.run(provider, input, ctx, completion, scope);

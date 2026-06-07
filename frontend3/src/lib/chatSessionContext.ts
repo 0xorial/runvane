@@ -10,10 +10,6 @@ export type ChatSessionContext = {
   setActiveLeaf: (entryId: string) => Promise<void>;
   switchToBranch: (branchEntryId: string) => Promise<void>;
   siblingsOf: (entryId: string) => LinkedChatEntry[];
-  getExpandedStage: (slotKey: string) => ThoughtStage | null;
-  getExpandedStageVersion: () => number;
-  setSlotExpandedStage: (slotKey: string, stage: ThoughtStage | null) => void;
-  resetExpandedStages: () => void;
 };
 
 const CHAT_SESSION_KEY = Symbol("chatSession");

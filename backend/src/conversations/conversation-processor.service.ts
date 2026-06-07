@@ -272,10 +272,11 @@ export class ConversationProcessorService {
     if (activeChain.length === 0) throw new Error('conversation has no entries to summarize');
 
     const range = resolveSummarizeRange(activeChain, args.firstEntryToSummarize);
+    const summarizeAgentId = range.rangeEntries.find((e) => e.type === 'user-message')?.agentId;
 
     const { scope, chain } = await this.beginRun(args.conversationId);
     try {
-      const llm = await this.thoughtProcessing.getLlmRef();
+      const llm = await this.resolveLlmRef({ agentId: summarizeAgentId });
       // Anchor the new branch at the parent of `firstEntryToSummarize` so the
       // prepare / stream / checkpoint-summary entries become a sibling of the
       // original tail. The original tail stays reachable via the branch

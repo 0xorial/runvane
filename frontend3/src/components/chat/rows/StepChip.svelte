@@ -7,16 +7,20 @@
     label,
     meta = "",
     metaSlot,
+    badge,
     active,
     align = "left",
+    testId,
     onclick,
   }: {
     icon: Snippet;
     label: string;
     meta?: string;
     metaSlot?: Snippet;
+    badge?: Snippet;
     active: boolean;
     align?: "left" | "right";
+    testId?: string;
     onclick: () => void;
   } = $props();
 
@@ -26,6 +30,7 @@
 <div
   role="button"
   tabindex="0"
+  data-testid={testId}
   onclick={onclick}
   onkeydown={(e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -55,5 +60,8 @@
       </span>
     {/if}
   </span>
+  {#if badge}
+    <span class="shrink-0">{@render badge()}</span>
+  {/if}
   <RowIcon name="chevron-down" class="h-3.5 w-3.5 shrink-0 opacity-60 transition-transform {active ? 'rotate-180' : ''}" />
 </div>

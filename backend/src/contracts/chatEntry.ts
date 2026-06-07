@@ -99,11 +99,8 @@ export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
   title: z.string().optional(),
   llm: LlmRefSchema.optional(),
   /**
-   * JSON-serialised provider input captured when the thought was started.
-   * Allows reprocess-context to rebuild the exact input without each provider
-   * implementing buildInputFromConversation. Absent on entries created before
-   * this field existed and on planner thoughts that self-initiate from
-   * conversation state.
+   * Server-only lean reprocess pointer (JSON). Rebuilt from the immutable
+   * entry DAG on reprocess — never returned on GET /messages or SSE.
    */
   inputJson: z.string().optional(),
 });

@@ -19,11 +19,21 @@
     "inline-flex h-8 min-h-0 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-semibold disabled:opacity-50";
   const pillPrimary = `${pillBase} shadow-sm bg-foreground text-background hover:bg-foreground/90 dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90`;
   const pillSteer = `${pillBase} border border-destructive/40 bg-transparent text-destructive shadow-none hover:bg-destructive/10`;
-  const keycapPrimary =
-    "inline-flex items-center rounded-sm bg-background/90 px-2 py-1 font-mono text-xs font-semibold leading-none tracking-tight text-foreground dark:bg-primary-foreground/90 dark:text-primary";
+  const shiftEnterKeycap =
+    "inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-background/90 px-1.5 py-0.5 font-mono font-semibold leading-none tracking-tight text-foreground dark:bg-primary-foreground/90 dark:text-primary";
+  const shiftEnterKeyGlyph = "text-base";
+  const shiftEnterPlusGlyph = "text-[10px] font-bold leading-none";
   const keycapSteer =
     "inline-flex items-center rounded-sm bg-destructive/15 px-2 py-1 font-mono text-xs font-semibold leading-none tracking-tight text-destructive ring-1 ring-inset ring-destructive/30";
 </script>
+
+{#snippet shiftEnterKbd()}
+  <kbd class={shiftEnterKeycap} aria-hidden="true">
+    <span class={shiftEnterKeyGlyph}>⇧</span>
+    <span class={shiftEnterPlusGlyph}>+</span>
+    <span class={shiftEnterKeyGlyph}>⏎</span>
+  </kbd>
+{/snippet}
 
 {#if agentRunning}
   <div class="flex shrink-0 items-center gap-1.5">
@@ -57,7 +67,7 @@
         </svg>
         Enqueue
       </span>
-      <kbd class={keycapPrimary}>⇧⏎</kbd>
+      {@render shiftEnterKbd()}
     </button>
   </div>
 {:else}
@@ -76,6 +86,6 @@
       </svg>
       Send
     </span>
-    <kbd class={keycapPrimary}>⇧⏎</kbd>
+    {@render shiftEnterKbd()}
   </button>
 {/if}

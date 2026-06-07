@@ -70,6 +70,7 @@
           class="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           title="Edit and re-run"
           aria-label="Edit and re-run"
+          data-testid="user-message-edit"
         >
           <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
@@ -106,6 +107,7 @@
           </button>
           <button
             type="button"
+            data-testid="user-message-reprocess"
             class="rounded border border-primary/50 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
             onclick={() => void applyEdit()}
             disabled={isSaving || editedText.trim().length === 0}

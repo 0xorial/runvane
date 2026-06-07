@@ -6,7 +6,7 @@
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
-  import { setChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
+  import { setChatSessionContext } from "@/lib/chatSessionContext";
   import { resolveTopAnchorEntryId } from "@/lib/chatTopAnchor";
   import { agentIdFromSearch, chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
   import { Pane, PaneGroup } from "paneforge";
@@ -31,8 +31,6 @@
 
   const session = createChatSessionState(() => conversationId);
 
-  let expandedStageBySlotKey = $state(new Map<string, ThoughtStage>());
-  let expandedStageVersion = $state(0);
   let selectedBranchAnchorEntryId = $state<string | null>(null);
   let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
   const selectedAgentId = $derived(agentIdFromSearch(search));
@@ -43,19 +41,6 @@
     setActiveLeaf: (entryId) => session.setActiveLeaf(entryId),
     switchToBranch: (branchEntryId) => session.switchToBranch(branchEntryId),
     siblingsOf: (entryId) => session.store.siblingsOf(entryId),
-    getExpandedStage: (slotKey) => expandedStageBySlotKey.get(slotKey) ?? null,
-    getExpandedStageVersion: () => expandedStageVersion,
-    setSlotExpandedStage: (slotKey, stage) => {
-      const next = new Map(expandedStageBySlotKey);
-      if (stage === null) next.delete(slotKey);
-      else next.set(slotKey, stage);
-      expandedStageBySlotKey = next;
-      expandedStageVersion += 1;
-    },
-    resetExpandedStages: () => {
-      expandedStageBySlotKey = new Map();
-      expandedStageVersion += 1;
-    },
   });
 
   const activePathEntries = $derived(session.activePathEntries.map((row$) => row$.get()));
@@ -90,10 +75,6 @@
   $effect(() => {
     void conversationId;
     if (selectedBranchAnchorEntryId !== null) selectedBranchAnchorEntryId = null;
-    if (expandedStageBySlotKey.size > 0) {
-      expandedStageBySlotKey = new Map();
-      expandedStageVersion += 1;
-    }
   });
 
   $effect(() => {

@@ -20,6 +20,7 @@
   } = $props();
 </script>
 
+<div data-testid="thought-step-panel" data-thought-stage={stage}>
 {#if stage === "context"}
   <ContextStep {prepareEntry} {stream} {conversationId} />
 {:else if stage === "reasoning"}
@@ -55,3 +56,4 @@
     {/if}
   </div>
 {/if}
+</div>

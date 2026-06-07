@@ -58,7 +58,7 @@
 
 <ChatThreadIndent>
   {#snippet children()}
-    <div class="overflow-hidden rounded-md border {borderClass}">
+    <div class="overflow-hidden rounded-md border {borderClass}" data-testid="tool-invocation-row" data-tool-state={entry.state}>
       <button
         type="button"
         class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-secondary"
@@ -99,6 +99,7 @@
             <div class="flex items-center gap-2 pt-1">
               <button
                 type="button"
+                data-testid="tool-approve-button"
                 onclick={(e) => {
                   e.stopPropagation();
                   void onApproveClick();
