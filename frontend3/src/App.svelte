@@ -1,5 +1,6 @@
 <script lang="ts">
   import ConversationSidebar from "@/components/sidebar/ConversationSidebar.svelte";
+  import ResizableSidePanel from "@/components/ui/ResizableSidePanel.svelte";
   import ChatPage from "@/pages/ChatPage.svelte";
   import SettingsPage from "@/pages/SettingsPage.svelte";
   import ToastHost from "@/components/ToastHost.svelte";
@@ -24,6 +25,12 @@
 
   let chatSidebarVisible = $state(true);
   let chatRightSidebarVisible = $state(true);
+
+  const sidebarDefaultSize = $derived.by(() => {
+    if (typeof window === "undefined") return 14;
+    const rawPercent = (300 / Math.max(1, window.innerWidth)) * 100;
+    return Math.max(1, Math.min(95, rawPercent));
+  });
 
   onMount(() => {
     retainChatSessionLive();
@@ -83,32 +90,38 @@
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
       {#if $isChatRoute}
-        <div
-          class="h-full shrink-0 overflow-hidden transition-opacity duration-200 {chatSidebarVisible
-            ? 'w-[min(300px,30vw)] opacity-100'
-            : 'pointer-events-none w-0 opacity-0'}"
+        <ResizableSidePanel
+          open={chatSidebarVisible}
+          onOpenChange={(open) => (chatSidebarVisible = open)}
+          defaultSize={sidebarDefaultSize}
+          minSize={10}
         >
-          <ConversationSidebar onNewChat={onNewChat} onSelect={onSelectConversation} />
-        </div>
+          {#snippet side()}
+            <ConversationSidebar onNewChat={onNewChat} onSelect={onSelectConversation} />
+          {/snippet}
+          {#snippet children()}
+            <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <ChatPage
+                conversationId={$chatConversationId}
+                search={$chatSearch}
+                sidebarVisible={chatSidebarVisible}
+                onToggleSidebar={() => (chatSidebarVisible = !chatSidebarVisible)}
+                rightSidebarVisible={chatRightSidebarVisible}
+                onToggleRightSidebar={() => (chatRightSidebarVisible = !chatRightSidebarVisible)}
+                settingsPressed={$isSettingsRoute}
+              />
+            </main>
+          {/snippet}
+        </ResizableSidePanel>
+      {:else}
+        <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {#if $isSettingsRoute}
+            <SettingsPage sectionRaw={$settingsSection} />
+          {:else}
+            <div class="p-8 text-sm text-muted-foreground">Unknown route {$pathname}</div>
+          {/if}
+        </main>
       {/if}
-
-      <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {#if $isChatRoute}
-          <ChatPage
-            conversationId={$chatConversationId}
-            search={$chatSearch}
-            sidebarVisible={chatSidebarVisible}
-            onToggleSidebar={() => (chatSidebarVisible = !chatSidebarVisible)}
-            rightSidebarVisible={chatRightSidebarVisible}
-            onToggleRightSidebar={() => (chatRightSidebarVisible = !chatRightSidebarVisible)}
-            settingsPressed={$isSettingsRoute}
-          />
-        {:else if $isSettingsRoute}
-          <SettingsPage sectionRaw={$settingsSection} />
-        {:else}
-          <div class="p-8 text-sm text-muted-foreground">Unknown route {$pathname}</div>
-        {/if}
-      </main>
     </div>
   </div>
 </QueryClientProvider>
