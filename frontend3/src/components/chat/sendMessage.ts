@@ -1,4 +1,5 @@
 import { postConversationMessage, type AttachmentMode, type PostMessageAttachment } from "@/api/client";
+import type { UserMessageOverrides } from "../../../../backend/src/contracts/user-message-overrides";
 
 export function defaultAttachmentMode(file: File): AttachmentMode {
   if (file.type.startsWith("image/")) return "direct";
@@ -23,7 +24,7 @@ export async function sendMessageToConversation(
   attachments: PostMessageAttachment[],
   parentId: string | null,
   clientRequestId: string,
-  opts?: { steer?: boolean; enqueue?: boolean },
+  opts?: { steer?: boolean; enqueue?: boolean; overrides?: UserMessageOverrides },
 ): Promise<SendMessageResult> {
   const { status } = await postConversationMessage(conversationId, {
     message,
@@ -35,6 +36,7 @@ export async function sendMessageToConversation(
     clientRequestId,
     ...(opts?.steer ? { steer: true } : {}),
     ...(opts?.enqueue ? { enqueue: true } : {}),
+    ...(opts?.overrides ? { overrides: opts.overrides } : {}),
   });
   return { ok: status >= 200 && status < 300 };
 }

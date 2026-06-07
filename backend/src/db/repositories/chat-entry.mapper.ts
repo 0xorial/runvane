@@ -13,6 +13,7 @@ import type {
 } from '../../contracts/chatEntry.js';
 import { ChatAttachmentSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
+import { UserMessageOverridesSchema } from '../../contracts/user-message-overrides.js';
 import { z } from 'zod';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import type { ChatEntryDbRow } from './chat-entries.types.js';
@@ -87,7 +88,18 @@ function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, c
   }
   const attachments = parseAttachments(payload.attachments, ctx);
   if (attachments) out.attachments = attachments;
+  const overrides = parseUserMessageOverrides(payload.overrides, ctx);
+  if (overrides) out.overrides = overrides;
   return out;
+}
+
+function parseUserMessageOverrides(value: unknown, ctx: string) {
+  if (value === undefined || value === null) return undefined;
+  const parsed = UserMessageOverridesSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`${ctx}.overrides: ${parsed.error.message}`);
+  }
+  return parsed.data;
 }
 
 function parseAttachments(value: unknown, ctx: string): ChatAttachment[] | null {

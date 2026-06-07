@@ -244,6 +244,7 @@ export class ConversationProcessorService {
         ...(source.modelPresetId != null ? { modelPresetId: source.modelPresetId } : {}),
         parentId: source.parentId,
         ...(source.attachments && source.attachments.length > 0 ? { attachments: source.attachments } : {}),
+        ...(source.overrides ? { overrides: source.overrides } : {}),
       });
       await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
       chain.setTip(sibling.id);
@@ -347,6 +348,7 @@ export class ConversationProcessorService {
           modelPresetId: body.modelPresetId,
           parentId,
           ...(attachments ? { attachments } : {}),
+          ...(body.overrides ? { overrides: body.overrides } : {}),
         });
         await this.chatEntries.setDefaultViewLeaf(conversationId, userEntry.id);
         chain.setTip(userEntry.id);

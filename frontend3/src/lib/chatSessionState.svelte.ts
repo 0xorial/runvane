@@ -5,6 +5,7 @@ import {
   getEmptyChatSessionStore,
   retainChatSessionLive,
 } from "@/lib/chatSessionRegistry";
+import { seedChatToolDraftFromUserMessage } from "@/lib/chatToolDraft.svelte";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ChatAttachment } from "@/protocol/chatEntry";
@@ -34,6 +35,12 @@ export type AppendOptimisticUserMessageInput = {
   modelPresetId?: number | null;
   attachments?: ChatAttachment[];
 };
+
+function seedToolDraftFromStore(activeStore: ChatSessionStore): void {
+  const path = activeStore.getActivePathRows().map((row$) => row$.get());
+  const lastUser = [...path].reverse().find((entry) => entry.type === "user-message");
+  seedChatToolDraftFromUserMessage(lastUser?.type === "user-message" ? lastUser : null);
+}
 
 function buildOptimisticUserEntry(
   input: AppendOptimisticUserMessageInput,
@@ -108,6 +115,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
 
     if (warmStore && cachedSession) {
       isSessionLoading = false;
+      seedToolDraftFromStore(nextStore);
       return teardown;
     }
 
@@ -127,6 +135,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
           }
           if (!nextStore.hasViewAnchor()) nextStore.setViewAnchor(session.anchorId);
         }
+        seedToolDraftFromStore(nextStore);
       } catch (err) {
         console.error("[chatSession] Failed to load conversation messages:", err);
       } finally {
@@ -172,6 +181,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
       const tipId = store.activePathTipId() ?? entryId;
       await setConversationDefaultViewLeaf(boundCid, tipId);
       store.setViewAnchor(tipId);
+      seedToolDraftFromStore(store);
     },
     async switchToBranch(branchEntryId: string): Promise<void> {
       const boundCid = getConversationId();
@@ -179,6 +189,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
       const tipId = store.chooseBranchLine(branchEntryId);
       await setConversationDefaultViewLeaf(boundCid, tipId);
       store.setViewAnchor(tipId);
+      seedToolDraftFromStore(store);
     },
     appendOptimisticUserMessage(input: AppendOptimisticUserMessageInput): OptimisticUserMessage | null {
       const boundCid = getConversationId();

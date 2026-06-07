@@ -5,6 +5,7 @@ import type {
   ToolInvocationEntry,
   UserMessageEntry,
 } from '../../contracts/chatEntry.js';
+import type { UserMessageOverrides } from '../../contracts/user-message-overrides.js';
 import type { LlmRef } from '../../contracts/llm.js';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { PrismaService } from '../prisma.service.js';
@@ -30,12 +31,14 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       modelPresetId?: number;
       parentId: string | null;
       attachments?: ChatAttachment[];
+      overrides?: UserMessageOverrides;
     },
   ): Promise<UserMessageEntry> {
     const payload: Record<string, unknown> = { text: input.text, agentId: input.agentId };
     if (input.llm) payload.llm = input.llm;
     if (input.modelPresetId !== undefined) payload.modelPresetId = input.modelPresetId;
     if (input.attachments && input.attachments.length > 0) payload.attachments = input.attachments;
+    if (input.overrides) payload.overrides = input.overrides;
     const row = await this.appendEntry(conversationId, {
       type: 'user-message',
       parentId: input.parentId,
@@ -53,6 +56,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     if (input.llm) result.llm = input.llm;
     if (input.modelPresetId !== undefined) result.modelPresetId = input.modelPresetId;
     if (input.attachments && input.attachments.length > 0) result.attachments = input.attachments;
+    if (input.overrides) result.overrides = input.overrides;
     return result;
   }
 

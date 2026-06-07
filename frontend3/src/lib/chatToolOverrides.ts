@@ -1,4 +1,5 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
+import type { UserMessageOverrides } from "../../../backend/src/contracts/user-message-overrides";
 
 export type ToolOverrideUiMode = "inherit" | "off" | "allow_all" | "custom";
 
@@ -30,4 +31,27 @@ export function compileChatToolOverrides(draft: ChatToolDraft): Record<string, A
 
 export function draftHasOverrides(draft: ChatToolDraft): boolean {
   return Object.values(draft).some((entry) => entry.mode !== "inherit");
+}
+
+export function compileUserMessageOverrides(draft: ChatToolDraft): UserMessageOverrides | undefined {
+  const tools = compileChatToolOverrides(draft);
+  if (!tools) return undefined;
+  return { version: 1, tools };
+}
+
+function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {
+  if (cfg.enabled === false) return { mode: "off" };
+  if (cfg.enabled === true && cfg.rules?.allowed === "always" && cfg.guardrail === false) {
+    return { mode: "allow_all" };
+  }
+  return { mode: "custom", custom: cfg };
+}
+
+export function draftFromStoredOverrides(tools: Record<string, AgentToolConfig> | undefined): ChatToolDraft {
+  if (!tools) return {};
+  const draft: ChatToolDraft = {};
+  for (const [toolName, cfg] of Object.entries(tools)) {
+    draft[toolName] = deriveDraftEntryFromStored(cfg);
+  }
+  return draft;
 }

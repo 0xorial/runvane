@@ -7,6 +7,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
+import type { AgentToolConfig } from '../../agents/agent.entity.js';
 import { RunToolService } from '../../tools/run-tool.service.js';
 import { DEFAULT_GUARDRAIL_PROMPT, type GuardrailConfig } from '../../contracts/guardrail.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
@@ -27,6 +28,7 @@ export type GuardrailProviderInput = {
   plannerFollowup: { mode: 'continue' | 'finalize' };
   /** The main agent LLM — used when calling runTool after guardrail approves. */
   mainLlm: LlmRef;
+  toolOverrides?: Record<string, AgentToolConfig>;
 };
 
 @Injectable()
@@ -126,6 +128,7 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
         plannerFollowup: input.plannerFollowup,
         decidingThoughtId: ctx.thoughtId,
         ...(verdict.verdict === 'flag' ? { guardrailFlagReason: verdict.reason } : {}),
+        ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,
       ctx.chain,

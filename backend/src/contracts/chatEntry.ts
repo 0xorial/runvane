@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LlmRefSchema } from './llm.js';
+import { UserMessageOverridesSchema } from './user-message-overrides.js';
 
 // ---- Primitives ----
 
@@ -87,6 +88,7 @@ export const UserMessageEntrySchema = ChatEntryBaseSchema.extend({
   llm: LlmRefSchema.optional(),
   modelPresetId: z.number().nullable().optional(),
   attachments: z.array(ChatAttachmentSchema).optional(),
+  overrides: UserMessageOverridesSchema.optional(),
 });
 export type UserMessageEntry = z.infer<typeof UserMessageEntrySchema>;
 

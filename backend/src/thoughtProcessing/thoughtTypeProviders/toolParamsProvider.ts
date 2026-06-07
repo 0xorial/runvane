@@ -6,6 +6,7 @@ import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-h
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { RunToolService } from '../../tools/run-tool.service.js';
+import type { AgentToolConfig } from '../../agents/agent.entity.js';
 import type { GuardrailConfig } from '../../contracts/guardrail.js';
 import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
@@ -20,6 +21,7 @@ export type ToolParamsInput = {
   toolRequest: string;
   plannerFollowup: { mode: 'continue' | 'finalize' };
   guardrailConfig?: GuardrailConfig;
+  toolOverrides?: Record<string, AgentToolConfig>;
 };
 
 @Injectable()
@@ -86,6 +88,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           guardrailConfig: input.guardrailConfig,
           plannerFollowup: input.plannerFollowup,
           mainLlm,
+          ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
         },
         scope,
         chain: ctx.chain,
@@ -102,6 +105,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         toolRequest: input.toolRequest,
         plannerFollowup: input.plannerFollowup,
         decidingThoughtId: ctx.thoughtId,
+        ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,
       ctx.chain,

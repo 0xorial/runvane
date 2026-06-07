@@ -12,6 +12,8 @@
   import MessageComposer from "./MessageComposer.svelte";
   import QueuedMessageChips from "./QueuedMessageChips.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
+  import { compileUserMessageOverrides } from "@/lib/chatToolOverrides";
+  import { getChatToolDraft } from "@/lib/chatToolDraft.svelte";
   import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
   let {
@@ -75,6 +77,12 @@
     const clientRequestId = crypto.randomUUID();
     const agentId = effectiveAgentId;
     const { llm, modelPresetId } = agentSelection;
+    const overrides = compileUserMessageOverrides(getChatToolDraft());
+    const sendOpts = {
+      ...(mode.steer ? { steer: true as const } : {}),
+      ...(mode.enqueue ? { enqueue: true as const } : {}),
+      ...(overrides ? { overrides } : {}),
+    };
 
     try {
       const uploadedAttachments: ChatAttachment[] = [];
@@ -96,7 +104,7 @@
           postAttachments,
           null,
           clientRequestId,
-          { enqueue: true },
+          sendOpts,
         );
         return;
       }
@@ -118,7 +126,7 @@
           postAttachments,
           null,
           clientRequestId,
-          { steer: mode.steer },
+          sendOpts,
         );
         replacePath(`/chat/${encodeURIComponent(cid)}${search}`);
         return;
@@ -146,7 +154,7 @@
           postAttachments,
           optimistic.parentId,
           optimistic.clientRequestId,
-          { steer: mode.steer },
+          sendOpts,
         );
       }
     } catch (err) {

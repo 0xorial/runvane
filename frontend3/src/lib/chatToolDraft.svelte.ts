@@ -1,8 +1,10 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
+import type { UserMessageEntry } from "@/protocol/chatEntry";
 import {
   type ChatToolDraft,
   type ChatToolDraftEntry,
   type ToolOverrideUiMode,
+  draftFromStoredOverrides,
   draftHasOverrides,
 } from "./chatToolOverrides";
 
@@ -63,4 +65,9 @@ export function resetChatToolDraft(): void {
 
 export function clearChatToolDraftOnConversationChange(): void {
   resetChatToolDraft();
+}
+
+export function seedChatToolDraftFromUserMessage(entry: UserMessageEntry | null): void {
+  draft = draftFromStoredOverrides(entry?.overrides?.tools);
+  selectedToolForEdit = null;
 }

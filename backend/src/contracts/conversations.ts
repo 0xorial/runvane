@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AttachmentModeSchema, ChatEntrySchema, UserMessageEntrySchema } from './chatEntry.js';
+import { UserMessageOverridesSchema } from './user-message-overrides.js';
 import { LlmRefSchema } from './llm.js';
 
 export const PostMessageAttachmentSchema = z.object({
@@ -82,6 +83,7 @@ export const PostConversationMessageRequestSchema = z.object({
    * it posts immediately. Mutually exclusive with `steer`.
    */
   enqueue: z.boolean().optional(),
+  overrides: UserMessageOverridesSchema.optional(),
 });
 export type PostConversationMessageRequest = z.infer<typeof PostConversationMessageRequestSchema>;
 

@@ -12,7 +12,9 @@ import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProv
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
+import type { AgentToolConfig } from '../agents/agent.entity.js';
 import type { GuardrailConfig } from '../contracts/guardrail.js';
+import { resolveToolConfig } from './resolve-tool-config.js';
 
 export type RunToolInput = {
   conversationId: string;
@@ -36,6 +38,7 @@ export type RunToolInput = {
    * new branch's lineage.
    */
   decidingThoughtId?: string;
+  toolOverrides?: Record<string, AgentToolConfig>;
 };
 
 export type RunToolResult = { kind: 'skipped' } | { kind: 'completed'; toolEntryId: string } | { kind: 'blocked'; toolEntryId: string };
@@ -76,9 +79,9 @@ export class RunToolService {
     // Per-tool config is owned by the agent — load it here rather than threading
     // it through ToolParamsInput/GuardrailProviderInput/RunToolInput.
     const agent = await this.agents.get(input.agentId);
-    const toolCfg = agent?.default_llm_configuration?.tools?.[input.toolName];
+    const toolCfg = resolveToolConfig(agent, input.toolOverrides, input.toolName);
 
-    const parsedRules = tool.parseRules(toolCfg?.rules ?? tool.getDefaultRules());
+    const parsedRules = tool.parseRules(toolCfg.rules ?? tool.getDefaultRules());
     const parsedParams = tool.parseParams(input.params);
     const chainTip = chain.getTip();
     if (!chainTip) throw new Error(`runTool: chain tip is unset (conversation=${input.conversationId})`);
@@ -90,7 +93,7 @@ export class RunToolService {
       agentId: input.agentId,
       entries,
       agentToolConfig: {
-        enabled: toolCfg?.enabled !== false,
+        enabled: toolCfg.enabled !== false,
         policy: 'allow',
         rules: parsedRules,
       },
@@ -154,9 +157,13 @@ export class RunToolService {
     const { tool_request, source: _source, ...rawParams } = entry.parameters;
     const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
 
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
+    const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
+    const toolOverrides = anchorUser?.type === 'user-message' ? anchorUser.overrides?.tools : undefined;
+
     const agent = await this.agents.get(args.agentId);
-    const toolCfg = agent?.default_llm_configuration?.tools?.[entry.toolId];
-    const parsedRules = tool.parseRules(toolCfg?.rules ?? tool.getDefaultRules());
+    const toolCfg = resolveToolConfig(agent, toolOverrides, entry.toolId);
+    const parsedRules = tool.parseRules(toolCfg.rules ?? tool.getDefaultRules());
     const parsedParams = tool.parseParams(rawParams);
 
     const input: RunToolInput = {
@@ -169,13 +176,13 @@ export class RunToolService {
       // decide whether to continue or finalize.
       plannerFollowup: { mode: 'continue' },
       ...(toolRequest ? { toolRequest } : {}),
+      ...(toolOverrides ? { toolOverrides } : {}),
     };
 
     // The planner continuation hangs off the approved tool entry.
     chain.setTip(args.toolEntryId);
 
     scope.spawn(async () => {
-      const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
       await this.executeTool({
         input,
         tool,

@@ -131,6 +131,7 @@ export type PostConversationMessageInput = {
   steer?: boolean;
   /** If a run is in flight, hold this message and post it once the run finishes. */
   enqueue?: boolean;
+  overrides?: import("../../backend/src/contracts/user-message-overrides").UserMessageOverrides;
 };
 
 export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
