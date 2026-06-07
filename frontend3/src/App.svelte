@@ -106,7 +106,14 @@
           minSize={10}
         >
           {#snippet side()}
-            <ConversationSidebar onNewChat={onNewChat} onSelect={onSelectConversation} />
+            <ConversationSidebar
+              onNewChat={onNewChat}
+              onSelect={onSelectConversation}
+              search={$chatSearch}
+              onOpenToolEditor={() => {
+                chatRightSidebarVisible = true;
+              }}
+            />
           {/snippet}
           {#snippet children()}
             <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

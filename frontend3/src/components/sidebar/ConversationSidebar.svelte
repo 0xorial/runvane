@@ -24,6 +24,7 @@
   import { SseType } from "@/protocol/sseTypes";
   import { notifyError } from "@/utils/toast";
   import { onMount } from "svelte";
+  import ChatToolsPanel from "./ChatToolsPanel.svelte";
   import MultiSelectPanel from "./MultiSelectPanel.svelte";
   import SidebarSectionsList from "./SidebarSectionsList.svelte";
   import TextInputDialog from "./TextInputDialog.svelte";
@@ -34,9 +35,13 @@
   let {
     onNewChat,
     onSelect,
+    search = "",
+    onOpenToolEditor,
   }: {
     onNewChat: () => void;
     onSelect: (id: string) => void;
+    search?: string;
+    onOpenToolEditor?: () => void;
   } = $props();
 
   let showDeletedOnly = $state(false);
@@ -288,7 +293,7 @@
     <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-    <div class="space-y-1.5 border-b border-sidebar-border px-2.5 py-2">
+    <div class="shrink-0 space-y-1.5 border-b border-sidebar-border px-2.5 py-2">
       <button
         type="button"
         data-testid="sidebar-new-chat"
@@ -328,7 +333,11 @@
         />
       {/if}
     </div>
-    <div id="conversation-sidebar-list" class="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 py-1.5">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div class="shrink-0 px-2.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Recent
+      </div>
+      <div id="conversation-sidebar-list" class="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 py-1.5">
       <SidebarSectionsList
         sections={sections}
         {collapsedGroups}
@@ -347,7 +356,9 @@
         onToggleGroup={(groupId) =>
           (collapsedGroups = { ...collapsedGroups, [groupId]: !(collapsedGroups[groupId] ?? false) })}
       />
+      </div>
     </div>
+    <ChatToolsPanel {search} {onOpenToolEditor} />
   </div>
 </aside>
 
