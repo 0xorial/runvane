@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { MessageSquare, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,7 +40,7 @@ type ConversationItemProps = {
   onPermanentlyDeleteConversation: (conversation: ConversationRow) => Promise<void>;
 };
 
-export function ConversationItem({
+function ConversationItemImpl({
   conversation,
   active,
   nested = false,
@@ -198,3 +198,10 @@ export function ConversationItem({
     </>
   );
 }
+
+/**
+ * Memoized so a sidebar re-render (selection change, a sibling conversation's
+ * token update) only re-renders the rows whose own props actually changed.
+ * Requires every handler/object prop from the parent to be reference-stable.
+ */
+export const ConversationItem = memo(ConversationItemImpl);

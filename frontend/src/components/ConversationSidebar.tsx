@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Plus } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -153,7 +153,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     }
   }
 
-  async function onRenameConversation(conversation: ConversationRow) {
+  const onRenameConversation = useCallback(async (conversation: ConversationRow) => {
     const current = String(conversation.title || "").trim();
     const next = window.prompt("Rename chat", current);
     if (next == null) return;
@@ -165,12 +165,12 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [showDeletedOnly]);
 
-  async function onMoveConversationToGroup(
+  const onMoveConversationToGroup = useCallback(async (
     conversation: ConversationRow,
     target: { groupId?: string | null; newGroupName?: string },
-  ) {
+  ) => {
     try {
       await renameConversation(conversation.id, {
         groupId: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
@@ -196,45 +196,45 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [showDeletedOnly]);
 
-  async function onSoftDeleteConversation(conversation: ConversationRow) {
+  // Functional updater reads the latest selection and returns the same array
+  // when nothing changes, so these handlers stay stable (deps: showDeletedOnly).
+  const deselect = useCallback((id: string) => {
+    setSelectedConversationIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev));
+  }, []);
+
+  const onSoftDeleteConversation = useCallback(async (conversation: ConversationRow) => {
     try {
       await softDeleteConversation(conversation.id);
       await refreshConversations(showDeletedOnly);
-      if (selectedConversationIds.includes(conversation.id)) {
-        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
-      }
+      deselect(conversation.id);
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [showDeletedOnly, deselect]);
 
-  async function onUndeleteConversation(conversation: ConversationRow) {
+  const onUndeleteConversation = useCallback(async (conversation: ConversationRow) => {
     try {
       await undeleteConversation(conversation.id);
       await refreshConversations(showDeletedOnly);
-      if (selectedConversationIds.includes(conversation.id)) {
-        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
-      }
+      deselect(conversation.id);
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [showDeletedOnly, deselect]);
 
-  async function onPermanentlyDeleteConversation(conversation: ConversationRow) {
+  const onPermanentlyDeleteConversation = useCallback(async (conversation: ConversationRow) => {
     const confirmed = window.confirm("Delete this conversation permanently? This action is irreversible.");
     if (!confirmed) return;
     try {
       await permanentlyDeleteConversation(conversation.id);
       await refreshConversations(showDeletedOnly);
-      if (selectedConversationIds.includes(conversation.id)) {
-        setSelectedConversationIds((prev) => prev.filter((id) => id !== conversation.id));
-      }
+      deselect(conversation.id);
     } catch (e: unknown) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
-  }
+  }, [showDeletedOnly, deselect]);
 
   async function onDeleteSelectedConversations() {
     const selectedIds = selectedConversationIds;
@@ -353,16 +353,19 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         return a.kind === "group" ? -1 : 1;
       });
 
-    return {
-      groups: groups.filter((group) => String(group.id || "").trim()),
-      orderedSections,
-    };
+    return { orderedSections };
   }, [conversations, groups]);
 
-  const knownGroups = grouped.groups;
+  // Derived from `groups` alone so its identity is stable across conversation
+  // patches (token updates during a run) — otherwise every memoized row would
+  // see a new `knownGroups` prop and re-render.
+  const knownGroups = useMemo(
+    () => groups.filter((group) => String(group.id || "").trim()),
+    [groups],
+  );
   const multiSelectMode = selectedConversationIds.length > 0;
 
-  function onToggleSelected(conversationId: string, checked: boolean) {
+  const onToggleSelected = useCallback((conversationId: string, checked: boolean) => {
     setSelectedConversationIds((prev) => {
       if (checked) {
         if (prev.includes(conversationId)) return prev;
@@ -370,15 +373,18 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       }
       return prev.filter((id) => id !== conversationId);
     });
-  }
+  }, []);
 
-  function renderConversationRow(c: ConversationRow, opts?: { nested?: boolean }) {
-    const active = activeConversationId === c.id;
-    return (
+  const toggleGroup = useCallback((groupId: string) => {
+    setCollapsedGroups((prev) => ({ ...prev, [groupId]: !(prev[groupId] ?? false) }));
+  }, []);
+
+  const renderConversationRow = useCallback(
+    (c: ConversationRow, opts?: { nested?: boolean }) => (
       <ConversationItem
         key={c.id}
         conversation={c}
-        active={active}
+        active={activeConversationId === c.id}
         nested={opts?.nested}
         knownGroups={knownGroups}
         multiSelectMode={multiSelectMode}
@@ -393,8 +399,23 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
         onUndeleteConversation={onUndeleteConversation}
         onPermanentlyDeleteConversation={onPermanentlyDeleteConversation}
       />
-    );
-  }
+    ),
+    [
+      activeConversationId,
+      knownGroups,
+      multiSelectMode,
+      showDeletedOnly,
+      pricingByModel,
+      selectedConversationIds,
+      onSelect,
+      onToggleSelected,
+      onRenameConversation,
+      onMoveConversationToGroup,
+      onSoftDeleteConversation,
+      onUndeleteConversation,
+      onPermanentlyDeleteConversation,
+    ],
+  );
 
   return (
     <aside className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
@@ -460,16 +481,12 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
             return (
               <ConversationGroupItem
                 key={groupId}
+                groupId={groupId}
                 groupName={groupName}
                 rows={rows}
                 latestTimestampIso={latestSectionTimestamp(rows).raw}
                 collapsed={collapsed}
-                onToggle={() =>
-                  setCollapsedGroups((prev) => ({
-                    ...prev,
-                    [groupId]: !(prev[groupId] ?? false),
-                  }))
-                }
+                onToggle={toggleGroup}
                 renderConversationRow={renderConversationRow}
               />
             );

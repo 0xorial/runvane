@@ -1,17 +1,21 @@
+import { memo } from "react";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import { formatExactChatTime, formatRelativeChatTime } from "../../utils/formatRelativeChatTime";
 import type { ConversationRow } from "./types";
 
 type ConversationGroupItemProps = {
+  groupId: string;
   groupName: string;
   rows: ConversationRow[];
   latestTimestampIso?: string;
   collapsed: boolean;
-  onToggle: () => void;
+  /** Receives the group id so the parent can pass one stable callback for all groups. */
+  onToggle: (groupId: string) => void;
   renderConversationRow: (conversation: ConversationRow, opts?: { nested?: boolean }) => JSX.Element;
 };
 
-export function ConversationGroupItem({
+function ConversationGroupItemImpl({
+  groupId,
   groupName,
   rows,
   latestTimestampIso,
@@ -27,7 +31,7 @@ export function ConversationGroupItem({
       <button
         type="button"
         className="flex w-full items-center justify-between rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
-        onClick={onToggle}
+        onClick={() => onToggle(groupId)}
       >
         <span className="min-w-0 flex flex-1 items-center gap-1.5 text-left">
           {collapsed ? (
@@ -57,3 +61,5 @@ export function ConversationGroupItem({
     </div>
   );
 }
+
+export const ConversationGroupItem = memo(ConversationGroupItemImpl);
