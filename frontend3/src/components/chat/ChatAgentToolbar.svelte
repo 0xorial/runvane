@@ -133,12 +133,17 @@
     <a href="/settings/agents" class="text-primary underline">Configure agents</a>
   </div>
 {:else}
-  <div class="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-xs">
+  <div class="relative z-10 flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pr-1 text-xs scrollbar-thin">
     {#if showAgent}
       <label class="flex shrink-0 items-center gap-1 text-muted-foreground">
-        Agent
+        <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+            <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
+          </svg>
+          <span class="sr-only">Agent</span>
+        </span>
         <select
-          class="max-w-[10rem] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground"
+          class="min-h-[24px] max-w-[11rem] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45"
           value={selectedAgentId}
           onchange={(e) => onAgentChange(e.currentTarget.value)}
         >
@@ -150,9 +155,14 @@
       <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
     {/if}
     <label class="flex shrink-0 items-center gap-1 text-muted-foreground">
-      Model
+      <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+          <rect width="16" height="16" x="4" y="4" rx="2" /><rect width="6" height="6" x="9" y="9" rx="1" /><path d="M15 2v2" /><path d="M15 20v2" /><path d="M2 15h2" /><path d="M2 9h2" /><path d="M20 15h2" /><path d="M20 9h2" /><path d="M9 2v2" /><path d="M9 20v2" />
+        </svg>
+        <span class="sr-only">Model</span>
+      </span>
       <select
-        class="max-w-[12rem] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground"
+        class="min-h-[24px] max-w-[12rem] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45"
         value={followAgentDefault ? "__default__" : `${selectedProviderId}::${selectedModel}`}
         onchange={(e) => {
           const v = e.currentTarget.value;
@@ -180,9 +190,14 @@
     </label>
     <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
     <label class="flex shrink-0 items-center gap-1 text-muted-foreground">
-      Preset
+      <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+          <path d="M10.5 6h9.75" /><path d="M10.5 12h9.75" /><path d="M10.5 18h9.75" /><path d="M3.75 6h.007" /><path d="M3.75 12h.007" /><path d="M3.75 18h.007" />
+        </svg>
+        <span class="sr-only">Preset</span>
+      </span>
       <select
-        class="max-w-[9rem] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground"
+        class="min-h-[24px] max-w-[10.5rem] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45"
         value={selectedPresetId != null ? String(selectedPresetId) : ""}
         onchange={(e) => onPresetChange(e.currentTarget.value)}
       >

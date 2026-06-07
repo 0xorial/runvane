@@ -43,7 +43,7 @@
       <span class="truncate font-medium">{label}</span>
     {/if}
     {#if hasMeta}
-      <span class="min-w-0 truncate opacity-60">
+      <span class="min-w-0 truncate font-mono opacity-60">
         {#if label}· {/if}{meta}
       </span>
     {/if}

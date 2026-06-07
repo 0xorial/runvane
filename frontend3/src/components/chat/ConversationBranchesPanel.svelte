@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ChatSessionStore } from "@/lib/chatSessionStore";
+  import { childEntries, type ChatEntryLookup } from "@/lib/linkedChatEntry";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import { notifyError } from "@/utils/toast";
@@ -7,13 +7,13 @@
   import BranchNode from "./branches/BranchNode.svelte";
 
   let {
-    sessionStore,
+    conversationId,
     allEntries,
     activePathEntries,
     switchToBranch,
     onAnchorEntrySelected,
   }: {
-    sessionStore: ChatSessionStore;
+    conversationId: string | null;
     allEntries: ObservableItem<LinkedChatEntry>[];
     activePathEntries: ObservableItem<LinkedChatEntry>[];
     switchToBranch: (entryId: string) => Promise<void>;
@@ -22,15 +22,23 @@
 
   let switchingToEntryId = $state<string | null>(null);
 
-  const activePathIds = $derived(new Set(activePathEntries.map((row$) => row$.id)));
+  const lookup = $derived.by((): ChatEntryLookup => {
+    const rows = allEntries.map((row$) => row$.get());
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return {
+      getById: (id) => byId.get(id),
+      getRows: () => rows,
+    };
+  });
+
   const rowById = $derived(new Map(allEntries.map((row$) => [row$.id, row$])));
+  const activePathIds = $derived(new Set(activePathEntries.map((row$) => row$.id)));
   const pathTipId = $derived(
     activePathEntries.length > 0 ? activePathEntries[activePathEntries.length - 1].id : null,
   );
 
   function childRowsOf(parentId: string | null): ObservableItem<LinkedChatEntry>[] {
-    return sessionStore
-      .childEntries(parentId)
+    return childEntries(lookup, parentId)
       .map((entry) => rowById.get(entry.id))
       .filter((row$): row$ is ObservableItem<LinkedChatEntry> => row$ != null);
   }
@@ -38,7 +46,7 @@
   const rootNodes = $derived(childRowsOf(null));
 
   async function handleSelectEntry(entryId: string): Promise<void> {
-    if (switchingToEntryId) return;
+    if (!conversationId || switchingToEntryId) return;
     switchingToEntryId = entryId;
     try {
       await switchToBranch(entryId);
@@ -53,7 +61,9 @@
 
 <div class="flex h-full min-h-0 flex-col border-l border-border bg-sidebar">
   <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
-    {#if rootNodes.length === 0}
+    {#if !conversationId}
+      <p class="p-3 text-xs text-muted-foreground">No conversation selected.</p>
+    {:else if rootNodes.length === 0}
       <p class="p-3 text-xs text-muted-foreground">No messages yet.</p>
     {:else}
       <div class="space-y-3 p-3">
@@ -66,8 +76,8 @@
             <BranchNode
               entry$={row$}
               branchDepth={0}
+              {lookup}
               {childRowsOf}
-              {sessionStore}
               {activePathIds}
               {pathTipId}
               {switchingToEntryId}

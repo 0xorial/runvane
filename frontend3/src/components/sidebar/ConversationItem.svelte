@@ -92,19 +92,21 @@
     }}
   >
     <div class="flex items-center gap-2">
-      <span class="shrink-0 opacity-60" aria-hidden="true">💬</span>
+      <svg class="h-3 w-3 shrink-0 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
       <span class="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
         {conversation.title || "Untitled"}
       </span>
     </div>
     {#if stamp}
-      <span class="ml-5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
+      <span class="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
     {/if}
     <LlmMetaBadge
       {usage}
       showTokenBreakdown
       {estimatedCostUsd}
-      class="ml-5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
+      class="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
     />
   </button>
   {#if !multiSelectMode}
@@ -118,7 +120,9 @@
           menuOpen = !menuOpen;
         }}
       >
-        ⋮
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
+        </svg>
       </button>
       {#if menuOpen}
         <div

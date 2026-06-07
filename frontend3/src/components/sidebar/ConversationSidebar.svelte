@@ -264,6 +264,9 @@
 
 <aside class="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
   <div class="flex shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5 py-2">
+    <svg class="h-4 w-4 shrink-0 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
+    </svg>
     <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -271,10 +274,13 @@
       <button
         type="button"
         data-testid="sidebar-new-chat"
-        class="flex w-full items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+        class="flex w-full items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
         onclick={onNewChat}
       >
-        + New Chat
+        <svg class="h-3.5 w-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M5 12h14" /><path d="M12 5v14" />
+        </svg>
+        New Chat
       </button>
       <button
         type="button"

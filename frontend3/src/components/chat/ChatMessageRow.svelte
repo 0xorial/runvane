@@ -5,6 +5,7 @@
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import AssistantMessageRow from "./rows/AssistantMessageRow.svelte";
   import ThoughtTripletRow from "./rows/ThoughtTripletRow.svelte";
+  import ToolRunRow from "./rows/ToolRunRow.svelte";
   import UserMessageRow from "./rows/UserMessageRow.svelte";
 
   let {
@@ -30,7 +31,7 @@
 
 {#if entry}
   {#if entry.type === "user-message"}
-    <UserMessageRow {entry} />
+    <UserMessageRow {entry} {conversationId} />
   {:else if entry.type === "thought-prepare"}
     {@const refs = thoughtTripletsById.get(entry.thoughtId)}
     <ThoughtTripletRow
@@ -41,13 +42,9 @@
   {:else if isThoughtStreamEntry(entry) || entry.type === "thought-action"}
     <!-- rendered inside prepare-anchored triplet -->
   {:else if entry.type === "assistant-message"}
-    <AssistantMessageRow {entry} />
+    <AssistantMessageRow {entry} {conversationId} />
   {:else if entry.type === "tool-invocation"}
-    <div class="animate-slide-in group py-1.5">
-      <div class="mx-auto max-w-3xl font-mono text-xs text-muted-foreground">
-        {entry.toolId}({JSON.stringify(entry.parameters ?? {})})
-      </div>
-    </div>
+    <ToolRunRow {entry} />
   {:else if entry.type === "checkpoint-summary"}
     <div class="animate-slide-in group py-1.5">
       <div class="mx-auto max-w-3xl text-xs italic text-muted-foreground">{entry.summaryText}</div>

@@ -12,6 +12,7 @@
   import ThemeToggle from "@/components/ThemeToggle.svelte";
   import LlmMetaBadge from "./LlmMetaBadge.svelte";
   import EditableConversationTitle from "./header/EditableConversationTitle.svelte";
+  import PanelIconButton from "./header/PanelIconButton.svelte";
   import TaskStatusButton from "./header/TaskStatusButton.svelte";
 
   let {
@@ -107,15 +108,21 @@
   }
 </script>
 
-<div class="relative z-10 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-card/40 px-3">
-  <button
-    type="button"
-    class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-    aria-label={sidebarVisible ? "Hide chat sidebar" : "Show chat sidebar"}
+<div class="relative z-10 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-card/40 px-3 backdrop-blur-sm">
+  <PanelIconButton
+    title={sidebarVisible ? "Hide chats" : "Show chats"}
     onclick={onToggleSidebar}
   >
-    {sidebarVisible ? "◧" : "◨"}
-  </button>
+    {#snippet children()}
+      <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        {#if sidebarVisible}
+          <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" /><path d="m16 15-3-3 3-3" />
+        {:else}
+          <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18" /><path d="m14 9 3 3-3 3" />
+        {/if}
+      </svg>
+    {/snippet}
+  </PanelIconButton>
   <div class="min-w-0 flex-1">
     <div class="flex min-w-0 items-center gap-2">
       <EditableConversationTitle {title} disabled={!conversationId} onCommit={onCommit} />
@@ -128,29 +135,36 @@
     </div>
   </div>
   <div class="flex items-center gap-0.5">
-    <button
-      type="button"
-      class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-      aria-label={rightSidebarVisible ? "Hide activity sidebar" : "Show activity sidebar"}
+    <PanelIconButton
+      title={rightSidebarVisible ? "Hide activity" : "Show activity"}
       onclick={onToggleRightSidebar}
     >
-      {rightSidebarVisible ? "▥" : "▤"}
-    </button>
+      {#snippet children()}
+        <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          {#if rightSidebarVisible}
+            <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" /><path d="m8 9 3 3-3 3" />
+          {:else}
+            <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M15 3v18" /><path d="m10 9-3 3 3 3" />
+          {/if}
+        </svg>
+      {/snippet}
+    </PanelIconButton>
     <TaskStatusButton {conversationId} />
     <ThemeToggle />
-    <button
-      type="button"
-      data-testid="open-settings"
-      class="inline-flex h-7 w-7 items-center justify-center rounded-md {settingsPressed || settingsClickPressed
-        ? 'bg-muted text-foreground'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-      aria-label="Open settings"
+    <PanelIconButton
+      title="Settings"
+      testId="open-settings"
+      pressed={settingsPressed || settingsClickPressed}
       onclick={() => {
         settingsClickPressed = true;
         onOpenSettings();
       }}
     >
-      ⚙
-    </button>
+      {#snippet children()}
+        <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" />
+        </svg>
+      {/snippet}
+    </PanelIconButton>
   </div>
 </div>

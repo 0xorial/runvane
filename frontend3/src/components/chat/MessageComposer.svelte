@@ -59,7 +59,7 @@
       <div class="mb-1.5">{@render attachmentsSlot()}</div>
     {/if}
     <div
-      class="flex flex-col gap-0 rounded-2xl border border-border/80 bg-card/70 p-1.5 shadow-sm focus-within:border-primary/35 dark:bg-card/55"
+      class="flex flex-col gap-0 rounded-2xl border border-border/80 bg-card/70 p-1.5 shadow-sm transition-[box-shadow,border-color] focus-within:border-primary/35 focus-within:shadow-[0_0_0_1px_hsl(var(--primary)/0.22)] dark:bg-card/55 dark:focus-within:border-primary/40"
     >
       <textarea
         data-testid="chat-user-input"
@@ -74,11 +74,16 @@
         <div class="flex min-w-0 flex-1 items-center gap-1.5 pb-0.5">
           <button
             type="button"
-            class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground hover:bg-secondary/45"
+            class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
             aria-label="Attach files"
             disabled
           >
-            📎 Attach
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path
+                d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"
+              />
+            </svg>
+            <span class="text-xs">Attach</span>
           </button>
           <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
           <div class="min-w-0 flex-1 overflow-hidden">

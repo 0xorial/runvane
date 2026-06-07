@@ -4,6 +4,7 @@
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
+  import { setChatSessionContext } from "@/lib/chatSessionContext";
   import { chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
 
   let {
@@ -25,6 +26,14 @@
   } = $props();
 
   const session = createChatSessionState(() => conversationId);
+
+  setChatSessionContext({
+    getConversationId: () => conversationId,
+    getActivePathEntries: () => session.activePathEntries,
+    setActiveLeaf: (entryId) => session.setActiveLeaf(entryId),
+    switchToBranch: (branchEntryId) => session.switchToBranch(branchEntryId),
+    siblingsOf: (entryId) => session.store.siblingsOf(entryId),
+  });
 
   function openSettings(): void {
     navigate(settingsLinkFromSearch($chatSearch));
@@ -58,7 +67,7 @@
     {#if rightSidebarVisible}
       <div class="w-[min(280px,28vw)] shrink-0">
         <ConversationBranchesPanel
-          sessionStore={session.store}
+          {conversationId}
           allEntries={session.allEntries}
           activePathEntries={session.activePathEntries}
           switchToBranch={session.switchToBranch}
