@@ -21,8 +21,9 @@ if (!existsSync(backendMain)) {
   if (build.status !== 0) process.exit(build.status ?? 1);
 }
 
+const freshDb = process.env.E2E_FRESH_DB !== "0";
 await stopE2eServers();
-await ensureE2eServers({ freshDb: true });
+await ensureE2eServers({ freshDb });
 
 const env = {
   ...process.env,

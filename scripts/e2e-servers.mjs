@@ -90,6 +90,11 @@ async function waitFor(fn, label, timeoutMs = 30_000) {
   throw new Error(`e2e-servers: timeout waiting for ${label}`);
 }
 
+function resolveDatabaseUrl() {
+  const override = process.env.E2E_DATABASE_URL?.trim();
+  return override || e2eDatabaseUrl;
+}
+
 export async function ensureE2eServers({ freshDb = false } = {}) {
   if (!freshDb && (await healthOk()) && (await frontendOk())) return;
 
@@ -98,7 +103,12 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
     throw new Error("e2e-servers: run `cd backend && npm run build` first");
   }
 
-  prepareE2eDatabase({ fresh: freshDb });
+  const databaseUrl = resolveDatabaseUrl();
+  if (databaseUrl === e2eDatabaseUrl) {
+    prepareE2eDatabase({ fresh: freshDb });
+  } else if (freshDb) {
+    throw new Error("e2e-servers: E2E_FRESH_DB=1 cannot wipe a custom E2E_DATABASE_URL");
+  }
 
   killPort(backendPort);
   killPort(frontendPort);
@@ -108,7 +118,7 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
     backend: spawnDetached("node", ["dist/main.js"], path.join(repoRoot, "backend"), {
       LLM_TEST_STUB: "1",
       NODE_ENV: "test",
-      DATABASE_URL: e2eDatabaseUrl,
+      DATABASE_URL: databaseUrl,
       PORT: String(backendPort),
       FRONTEND_ORIGIN: frontendOrigin,
       FRONTEND3_ORIGIN: frontendOrigin,
