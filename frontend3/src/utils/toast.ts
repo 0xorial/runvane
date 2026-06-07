@@ -40,6 +40,11 @@ export function dismissToast(id: number): void {
   emitStore();
 }
 
+export function dismissAllToasts(): void {
+  state.items = [];
+  emitStore();
+}
+
 export function notifyToast({
   message,
   type = "error",

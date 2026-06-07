@@ -6,6 +6,7 @@
   import AssistantMessageRow from "./rows/AssistantMessageRow.svelte";
   import ThoughtTripletRow from "./rows/ThoughtTripletRow.svelte";
   import ToolRunRow from "./rows/ToolRunRow.svelte";
+  import CheckpointSummaryRow from "./rows/CheckpointSummaryRow.svelte";
   import UserMessageRow from "./rows/UserMessageRow.svelte";
 
   let {
@@ -36,6 +37,7 @@
     {@const refs = thoughtTripletsById.get(entry.thoughtId)}
     <ThoughtTripletRow
       prepareEntry={entry}
+      {conversationId}
       streamEntry$={refs?.streamEntry$}
       actionEntry={refs?.actionEntry ?? null}
     />
@@ -46,8 +48,6 @@
   {:else if entry.type === "tool-invocation"}
     <ToolRunRow {entry} />
   {:else if entry.type === "checkpoint-summary"}
-    <div class="animate-slide-in group py-1.5">
-      <div class="mx-auto max-w-3xl text-xs italic text-muted-foreground">{entry.summaryText}</div>
-    </div>
+    <CheckpointSummaryRow {entry} />
   {/if}
 {/if}

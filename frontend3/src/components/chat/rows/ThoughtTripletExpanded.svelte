@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { ThoughtActionEntry, ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+  import ContextStep from "./thoughtTriplet/ContextStep.svelte";
+  import ReasoningStep from "./thoughtTriplet/ReasoningStep.svelte";
   import { displayStatus } from "./thoughtTriplet/meta";
   import ReadOnlySection from "./ReadOnlySection.svelte";
 
@@ -8,33 +10,20 @@
     prepareEntry,
     stream,
     actionEntry,
+    conversationId,
   }: {
     stage: "context" | "reasoning" | "action";
     prepareEntry: ThoughtPrepareEntry;
     stream: ThoughtStreamEntry;
     actionEntry: ThoughtActionEntry | null;
+    conversationId: string;
   } = $props();
-
-  const prompt = $derived((prepareEntry.requestText ?? stream.llmRequest ?? "").trim());
-  const response = $derived(String(stream.llmResponse || "").trim());
-  const thinking = $derived(String(stream.thinkingText || "").trim());
 </script>
 
 {#if stage === "context"}
-  <div class="mt-1.5 ml-1 space-y-2 text-xs">
-    <ReadOnlySection label="Request" value={prompt} />
-  </div>
+  <ContextStep {prepareEntry} {stream} {conversationId} />
 {:else if stage === "reasoning"}
-  <div class="mt-1.5 ml-1 space-y-2 text-xs">
-    <div class="text-[10px] text-muted-foreground">
-      {displayStatus(stream.status ?? "running")}
-      {#if stream.thoughtMs != null}
-        · {Math.round(stream.thoughtMs)}ms
-      {/if}
-    </div>
-    <ReadOnlySection label="Thinking" value={thinking} />
-    <ReadOnlySection label="Response" value={response} />
-  </div>
+  <ReasoningStep {stream} {prepareEntry} {conversationId} />
 {:else}
   {@const summary = String(actionEntry?.summary || "").trim()}
   {@const action = String(actionEntry?.action || "").trim()}

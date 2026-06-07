@@ -6,6 +6,7 @@
     icon,
     label,
     meta = "",
+    metaSlot,
     active,
     align = "left",
     onclick,
@@ -13,12 +14,13 @@
     icon: Snippet;
     label: string;
     meta?: string;
+    metaSlot?: Snippet;
     active: boolean;
     align?: "left" | "right";
     onclick: () => void;
   } = $props();
 
-  const hasMeta = $derived(meta.trim().length > 0);
+  const hasMeta = $derived(meta.trim().length > 0 || Boolean(metaSlot));
 </script>
 
 <div
@@ -43,8 +45,13 @@
       <span class="truncate font-medium">{label}</span>
     {/if}
     {#if hasMeta}
-      <span class="min-w-0 truncate font-mono opacity-60">
-        {#if label}· {/if}{meta}
+      <span class="min-w-0 truncate font-mono opacity-60 inline-flex items-center gap-1 flex-wrap">
+        {#if label && (hasMeta)}<span>·</span>{/if}
+        {#if metaSlot}
+          {@render metaSlot()}
+        {:else}
+          {meta}
+        {/if}
       </span>
     {/if}
   </span>

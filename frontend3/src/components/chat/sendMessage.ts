@@ -1,4 +1,10 @@
-import { postConversationMessage, type PostMessageAttachment } from "@/api/client";
+import { postConversationMessage, type AttachmentMode, type PostMessageAttachment } from "@/api/client";
+
+export function defaultAttachmentMode(file: File): AttachmentMode {
+  if (file.type.startsWith("image/")) return "direct";
+  if (file.type.startsWith("text/")) return "direct";
+  return "summary";
+}
 import type { LlmRef } from "../../../../backend/src/contracts/llm";
 
 export type SendMessageResult = { ok: boolean };

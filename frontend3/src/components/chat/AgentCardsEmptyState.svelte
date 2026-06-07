@@ -1,0 +1,102 @@
+<script lang="ts">
+  import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
+  import AgentIcon from "@/components/ui/AgentIcon.svelte";
+  import { createAgentsQuery } from "@/hooks/queries/referenceData";
+  import { getAgentColor } from "@/pages/settings/agentColors";
+  import { getAgentLlm } from "@/pages/settings/agentLlm";
+  import { sortAgents } from "@/pages/settings/helpers";
+  import { replacePath, pathname as pathnameStore } from "@/lib/router";
+
+  let { selectedAgentId }: { selectedAgentId: string } = $props();
+
+  const agentsQuery = createAgentsQuery();
+  const agents = $derived(sortAgents(agentsQuery.data ?? []));
+
+  function enabledToolIds(agent: AgentListItemResponse): string[] {
+    const tools = agent.default_llm_configuration?.tools;
+    if (!tools) return [];
+    return Object.entries(tools)
+      .filter(([, cfg]) => cfg?.enabled !== false)
+      .map(([id]) => id)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  function selectAgent(agentId: string): void {
+    const path = $pathnameStore;
+    const q = path.indexOf("?");
+    const pathOnly = q >= 0 ? path.slice(0, q) : path;
+    const search = q >= 0 ? path.slice(q + 1) : "";
+    const params = new URLSearchParams(search);
+    params.set("agent", agentId);
+    const next = params.toString();
+    replacePath(next ? `${pathOnly}?${next}` : pathOnly);
+  }
+</script>
+
+{#if agents.length > 0}
+  <div class="flex h-full w-full items-center justify-center px-4 py-8">
+    <div class="grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {#each agents as agent (agent.id)}
+        {@const llm = getAgentLlm(agent)}
+        {@const model = llm.model.trim()}
+        {@const selected = selectedAgentId === agent.id}
+        {@const color = getAgentColor(agent.color)}
+        <div
+          role="button"
+          tabindex="0"
+          onclick={() => selectAgent(agent.id)}
+          onkeydown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selectAgent(agent.id);
+            }
+          }}
+          class="group relative flex min-h-[88px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-card/40 p-3 text-left transition-colors hover:border-primary/60 hover:bg-card {selected
+            ? 'border-primary/70 bg-primary/5'
+            : ''}"
+        >
+          <span class="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {color.wrap}">
+            <AgentIcon iconId={agent.icon} class="h-4.5 w-4.5" strokeWidth={1.85} />
+            {#if agent.is_default}
+              <span
+                class="absolute -bottom-1 -right-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-card bg-primary text-primary-foreground"
+                title="Default agent"
+              >
+                <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </span>
+            {/if}
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate pr-6 text-sm font-medium text-foreground">
+              {agent.name.trim() || "Untitled agent"}
+            </span>
+            {#if model}
+              <span class="mt-0.5 block break-all font-mono text-[11px] leading-snug text-muted-foreground">{model}</span>
+            {/if}
+            <span class="mt-1 block break-words text-[11px] leading-snug text-muted-foreground">
+              {#if enabledToolIds(agent).length === 0}
+                <span class="italic">no tools access</span>
+              {:else}
+                {enabledToolIds(agent).join(", ")}
+              {/if}
+            </span>
+          </span>
+          <a
+            href="/settings/agents?agent={encodeURIComponent(agent.id)}"
+            title="Open agent settings"
+            onclick={(e) => e.stopPropagation()}
+            class="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-secondary/60 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span class="sr-only">Open agent settings</span>
+          </a>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/if}
