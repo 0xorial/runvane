@@ -1,9 +1,9 @@
 import { useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
+import type { MessageSendMode } from "./MessageComposer";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createConversation, uploadFile } from "../../api/client";
 import type { ChatAttachment } from "../../protocol/chatEntry";
 import type { LlmRef } from "../../../../backend/src/contracts/llm";
-import type { AsyncButtonHandle } from "../ui/AsyncButton";
 import { ChatAgentToolbar, type ChatAgentSelection } from "./ChatAgentToolbar";
 import { AttachmentChips, type SelectedAttachment } from "./AttachmentChips";
 import { MessageComposer } from "./MessageComposer";
@@ -29,7 +29,7 @@ type ChatComposerProps = {
     attachments: ChatAttachment[];
   }) => { rowId: string; clientRequestId: string; parentId: string | null } | null;
   onSent: (optimisticRowId: string) => void;
-  steerOnSend?: boolean;
+  agentRunning?: boolean;
 };
 
 export function ChatComposer({
@@ -45,9 +45,8 @@ export function ChatComposer({
   canSend,
   appendOptimisticUserMessage,
   onSent,
-  steerOnSend = false,
+  agentRunning = false,
 }: ChatComposerProps) {
-  const sendButtonRef = useRef<AsyncButtonHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -55,7 +54,7 @@ export function ChatComposer({
   return (
     <MessageComposer
       textareaRef={composerTextareaRef}
-      sendButtonRef={sendButtonRef}
+      agentRunning={agentRunning}
       value={input}
       onValueChange={setInput}
       onPaste={(e) => {
@@ -94,7 +93,7 @@ export function ChatComposer({
           />
         ) : undefined
       }
-      onSendAsync={() => {
+      onSendAsync={({ steer }: MessageSendMode) => {
         return (async () => {
           const text = input.trim();
           if (!text && selectedFiles.length === 0) return { ok: false };
@@ -124,6 +123,7 @@ export function ChatComposer({
               uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
               null,
               crypto.randomUUID(),
+              steer,
             );
             const q = searchParams.toString();
             navigate(
@@ -150,7 +150,7 @@ export function ChatComposer({
             uploadedAttachments.map((x) => ({ id: x.id, mode: x.mode })),
             optimistic.parentId,
             optimistic.clientRequestId,
-            steerOnSend,
+            steer,
           );
         })();
       }}

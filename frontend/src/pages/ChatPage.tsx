@@ -71,7 +71,7 @@ export function ChatPage({
     appendOptimisticUserMessage,
   } = useChatSession(conversationId);
   const { tasks } = useTasks();
-  const steerOnSend = useMemo(
+  const agentRunning = useMemo(
     () =>
       Boolean(
         conversationId &&
@@ -237,7 +237,7 @@ export function ChatPage({
         canSend={canSend}
         appendOptimisticUserMessage={appendOptimisticUserMessage}
         onSent={handleSent}
-        steerOnSend={steerOnSend}
+        agentRunning={agentRunning}
       />
     </div>
   );

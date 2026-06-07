@@ -1,24 +1,30 @@
 import {
   type ClipboardEvent,
   type KeyboardEvent,
-  type MouseEvent,
   type MutableRefObject,
   type ReactNode,
+  useRef,
 } from "react";
-import { Paperclip, SendHorizontal } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { AsyncButton, type AsyncButtonHandle, type AsyncResult } from "@/components/ui/AsyncButton";
+import type { AsyncButtonHandle, AsyncResult } from "@/components/ui/AsyncButton";
+import { isModifierEnterKey, isShiftEnterKey } from "@/lib/submitShortcut";
+import { ComposerSendActions } from "./ComposerSendActions";
+
+export type MessageSendMode = {
+  steer: boolean;
+};
 
 /** Props for the chat footer where the user types and sends the next message. */
 export type MessageComposerProps = {
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>;
-  sendButtonRef: MutableRefObject<AsyncButtonHandle | null>;
   value: string;
   onValueChange: (v: string) => void;
   onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
-  onSendAsync: (e: MouseEvent<HTMLButtonElement>) => Promise<AsyncResult>;
+  onSendAsync: (mode: MessageSendMode) => Promise<AsyncResult>;
   canSend: boolean;
+  agentRunning?: boolean;
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onPickFiles: () => void;
@@ -33,12 +39,12 @@ export type MessageComposerProps = {
  */
 export function MessageComposer({
   textareaRef,
-  sendButtonRef,
   value,
   onValueChange,
   onPaste,
   onSendAsync,
   canSend,
+  agentRunning = false,
   fileInputRef,
   onFileInputChange,
   onPickFiles,
@@ -46,9 +52,18 @@ export function MessageComposer({
   selectionSlot,
   placeholder = "Send a message…",
 }: MessageComposerProps) {
+  const sendButtonRef = useRef<AsyncButtonHandle>(null);
+  const steerButtonRef = useRef<AsyncButtonHandle>(null);
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (agentRunning) {
+      if (isModifierEnterKey(e)) {
+        e.preventDefault();
+        steerButtonRef.current?.trigger();
+      }
+      return;
+    }
+    if (isShiftEnterKey(e)) {
       e.preventDefault();
       sendButtonRef.current?.trigger();
     }
@@ -83,8 +98,8 @@ export function MessageComposer({
             )}
           />
 
-          <div className="mt-1 flex items-center justify-between gap-2 border-t border-border/60 px-0.5 pt-1.5">
-            <div className="flex min-w-0 items-center gap-1.5">
+          <div className="mt-1 flex items-end justify-between gap-2 border-t border-border/60 px-0.5 pt-1.5">
+            <div className="flex min-w-0 items-center gap-1.5 pb-0.5">
               <Button
                 type="button"
                 variant="ghost"
@@ -104,21 +119,13 @@ export function MessageComposer({
               ) : null}
             </div>
 
-            <AsyncButton
-              ref={sendButtonRef}
-              data-testid="chat-send-button"
-              iconOnly
-              disabled={!canSend}
-              spinnerSize={12}
-              className={cn(
-                "!h-7 !w-7 bg-foreground text-background hover:bg-foreground/90",
-                "dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90",
-              )}
-              onClickAsync={onSendAsync}
-              ariaLabel="Send message"
-            >
-              <SendHorizontal className="h-3.5 w-3.5" strokeWidth={2} />
-            </AsyncButton>
+            <ComposerSendActions
+              canSend={canSend}
+              agentRunning={agentRunning}
+              onSendAsync={onSendAsync}
+              sendButtonRef={sendButtonRef}
+              steerButtonRef={steerButtonRef}
+            />
           </div>
         </div>
       </div>
