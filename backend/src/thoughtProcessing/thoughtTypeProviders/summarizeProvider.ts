@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { ChatEntry } from '../../contracts/chatEntry.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
+import { ConversationsRepo } from '../../db/repositories/conversations.repo.js';
 import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmMessage, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
-import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
+import { publishChatEntryUpsert, publishConversationUpdated, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
 export type SummarizeInput = {
@@ -39,6 +40,7 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
+    private readonly conversations: ConversationsRepo,
     private readonly hub: SseHubService,
   ) {}
 
@@ -75,6 +77,7 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
     // mirrors what they see live. The original tail remains on its own branch.
     await this.chatEntries.setDefaultViewLeaf(ctx.conversationId, created.id);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
+    await publishConversationUpdated(this.hub, this.conversations, ctx.conversationId);
   };
 }
 

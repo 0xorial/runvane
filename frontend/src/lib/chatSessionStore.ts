@@ -155,6 +155,9 @@ export class ChatSessionStore {
       }
       case SseType.CHAT_ENTRY_UPSERT:
         this.upsert(ev.entry);
+        if (ev.entry.type === 'checkpoint-summary') {
+          this.setViewAnchor(ev.entry.id);
+        }
         return;
       case SseType.CHAT_ENTRY_DELTA: {
         const row$ = this.rows.getById(ev.chatEntryId);
