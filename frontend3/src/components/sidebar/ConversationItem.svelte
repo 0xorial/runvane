@@ -156,6 +156,7 @@
               {#if moveSubOpen}
                 <div
                   role="menu"
+                  tabindex="-1"
                   class="absolute left-full top-0 z-40 ml-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
                   onmousedown={(e) => e.stopPropagation()}
                 >

@@ -86,41 +86,17 @@
 
   $effect(() => {
     void conversationId;
-    topAnchorEntryId = null;
-    selectedBranchAnchorEntryId = null;
-    expandedStageBySlotKey = new Map();
-    expandedStageVersion += 1;
+    if (topAnchorEntryId !== null) topAnchorEntryId = null;
+    if (selectedBranchAnchorEntryId !== null) selectedBranchAnchorEntryId = null;
+    if (expandedStageBySlotKey.size > 0) {
+      expandedStageBySlotKey = new Map();
+      expandedStageVersion += 1;
+    }
   });
 
   $effect(() => {
     const id = requestAnimationFrame(() => composerTextareaRef?.focus());
     return () => cancelAnimationFrame(id);
-  });
-
-  $effect(() => {
-    const entries = session.activePathEntries;
-    void entries.length;
-    if (!conversationId || entries.length === 0) {
-      topAnchorEntryId = null;
-      selectedBranchAnchorEntryId = null;
-      return;
-    }
-    if (selectedBranchAnchorEntryId) {
-      const exists = entries.some((row$) => row$.id === selectedBranchAnchorEntryId);
-      if (exists) {
-        topAnchorEntryId = selectedBranchAnchorEntryId;
-        return;
-      }
-      selectedBranchAnchorEntryId = null;
-    }
-    for (let i = entries.length - 1; i >= 0; i -= 1) {
-      const row = entries[i].get();
-      if (row.type === "user-message") {
-        topAnchorEntryId = row.id;
-        return;
-      }
-    }
-    topAnchorEntryId = null;
   });
 
 </script>

@@ -9,12 +9,16 @@ import type { UserMessageEntry } from "@/protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ChatAttachment } from "@/protocol/chatEntry";
 import type { ChatSessionStore, PendingMessage } from "@/lib/chatSessionStore";
-import { fetchConversationSession, type ConversationSession } from "@/hooks/queries/conversations";
+import { loadConversationSession, type ConversationSession } from "@/hooks/queries/conversations";
 import { queryClient } from "@/lib/queryClient";
 import { queryKeys } from "@/hooks/queries/keys";
 import { mapApiMessagesToChatEntries } from "@/utils/chatEntries";
 import type { ObservableItem } from "@/utils/observableCollection";
 import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
+
+const EMPTY_PATH_ROWS: ObservableItem<LinkedChatEntry>[] = [];
+const EMPTY_ALL_ROWS: ObservableItem<LinkedChatEntry>[] = [];
+const EMPTY_PENDING: PendingMessage[] = [];
 
 export type OptimisticUserMessage = {
   rowId: string;
@@ -112,7 +116,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
 
     void (async () => {
       try {
-        const session = await fetchConversationSession(boundCid);
+        const session = await loadConversationSession(boundCid);
         if (cancelled) return;
         const entries = mapApiMessagesToChatEntries(session.entries);
         if (nextStore.getAllRows().length === 0) {
@@ -132,6 +136,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
 
     return () => {
       cancelled = true;
+      isSessionLoading = false;
       teardown();
     };
   });
@@ -146,21 +151,21 @@ export function createChatSessionState(getConversationId: () => string | null) {
     get activePathEntries(): ObservableItem<LinkedChatEntry>[] {
       void rowsTick;
       void pathTick;
-      return store?.getActivePathRows() ?? [];
+      return store?.getActivePathRows() ?? EMPTY_PATH_ROWS;
     },
     get pendingMessages(): PendingMessage[] {
       void rowsTick;
-      return store?.getPendingMessages() ?? [];
+      return store?.getPendingMessages() ?? EMPTY_PENDING;
     },
     get allEntries(): ObservableItem<LinkedChatEntry>[] {
       void rowsTick;
-      return store?.getAllRows() ?? [];
+      return store?.getAllRows() ?? EMPTY_ALL_ROWS;
     },
     async setActiveLeaf(entryId: string): Promise<void> {
       const boundCid = getConversationId();
       if (!boundCid || !store) return;
       if (!store.getById(entryId)) {
-        const session = await fetchConversationSession(boundCid);
+        const session = await loadConversationSession(boundCid);
         store.replace(mapApiMessagesToChatEntries(session.entries), session.leafId, session.anchorId);
       }
       store.setChosenPathFromLeaf(entryId);

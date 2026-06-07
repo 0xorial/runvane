@@ -120,6 +120,7 @@
       {#if moveOpen}
         <div
           role="menu"
+          tabindex="-1"
           class="absolute right-0 top-full z-20 mt-1 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
         >
           <button
@@ -147,6 +148,7 @@
             {#if moveSubOpen}
               <div
                 role="menu"
+                tabindex="-1"
                 class="absolute right-full top-0 z-30 mr-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
               >
                 {#each knownGroups as group (group.id)}
