@@ -68,9 +68,17 @@
     >
       ?
     </button>
-    <span class="ml-auto truncate text-[10px] text-muted-foreground/80">
-      {hasOverrides ? "Overrides pending" : "Using agent defaults"}
-    </span>
+    {#if hasOverrides}
+      <button
+        type="button"
+        data-testid="chat-tools-reset"
+        class="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+        title="Reset all tools to agent defaults"
+        onclick={() => resetChatToolDraft()}
+      >
+        Reset
+      </button>
+    {/if}
   </div>
   <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
     {#if !agent}
@@ -108,18 +116,5 @@
         {/key}
       </ul>
     {/if}
-  </div>
-  <div class="shrink-0 border-t border-sidebar-border px-2.5 py-1.5">
-    <button
-      type="button"
-      data-testid="chat-tools-reset"
-      class="w-full rounded-md px-2 py-1 text-[11px] transition-colors {hasOverrides
-        ? 'text-foreground hover:bg-secondary/60'
-        : 'cursor-default text-muted-foreground/50'}"
-      disabled={!hasOverrides}
-      onclick={() => resetChatToolDraft()}
-    >
-      Reset to agent defaults
-    </button>
   </div>
 </section>
