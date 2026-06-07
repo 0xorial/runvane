@@ -36,12 +36,10 @@
     onNewChat,
     onSelect,
     search = "",
-    onOpenToolEditor,
   }: {
     onNewChat: () => void;
     onSelect: (id: string) => void;
     search?: string;
-    onOpenToolEditor?: () => void;
   } = $props();
 
   let showDeletedOnly = $state(false);
@@ -358,7 +356,7 @@
       />
       </div>
     </div>
-    <ChatToolsPanel {search} {onOpenToolEditor} />
+    <ChatToolsPanel {search} />
   </div>
 </aside>
 

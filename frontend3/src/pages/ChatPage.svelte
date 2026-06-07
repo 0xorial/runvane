@@ -2,9 +2,7 @@
   import ChatTranscript from "@/components/chat/ChatTranscript.svelte";
   import ChatComposer from "@/components/chat/ChatComposer.svelte";
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
-  import ChatToolOverrideEditor from "@/components/chat/ChatToolOverrideEditor.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
-  import { getSelectedToolForEdit } from "@/lib/chatToolDraft.svelte";
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
@@ -36,8 +34,6 @@
   let selectedBranchAnchorEntryId = $state<string | null>(null);
   let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
   const selectedAgentId = $derived(agentIdFromSearch(search));
-  const toolEditorOpen = $derived(getSelectedToolForEdit() != null);
-
   setChatSessionContext({
     getConversationId: () => conversationId,
     getActivePathEntries: () => session.activePathEntries,
@@ -122,19 +118,15 @@
       <ResizablePaneHandle withHandle />
       <Pane defaultSize={26} minSize={16} maxSize={45} class="min-h-0 min-w-0 overflow-hidden">
         <aside class="h-full min-h-0 overflow-y-auto border-l border-border bg-sidebar">
-          {#if toolEditorOpen}
-            <ChatToolOverrideEditor {search} />
-          {:else}
-            <ConversationBranchesPanel
-              {conversationId}
-              allEntries={session.allEntries}
-              activePathEntries={session.activePathEntries}
-              switchToBranch={session.switchToBranch}
-              onAnchorEntrySelected={(entryId) => {
-                selectedBranchAnchorEntryId = resolveVisibleAnchorEntryId(entryId);
-              }}
-            />
-          {/if}
+          <ConversationBranchesPanel
+            {conversationId}
+            allEntries={session.allEntries}
+            activePathEntries={session.activePathEntries}
+            switchToBranch={session.switchToBranch}
+            onAnchorEntrySelected={(entryId) => {
+              selectedBranchAnchorEntryId = resolveVisibleAnchorEntryId(entryId);
+            }}
+          />
         </aside>
       </Pane>
     </PaneGroup>

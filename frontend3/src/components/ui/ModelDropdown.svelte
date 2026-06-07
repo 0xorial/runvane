@@ -1,6 +1,20 @@
 <script lang="ts">
+  import { portal } from "@/lib/portal";
   import type { DropdownItem, ModelGroup } from "@/pages/settings/helpers";
   import type { Snippet } from "svelte";
+
+  const POPUP_GAP = 6;
+  const POPUP_MAX_HEIGHT = 300;
+
+  type PopupPlacement = "below" | "above";
+
+  type PopupLayout = {
+    left: number;
+    top: number;
+    minWidth: number;
+    maxHeight: number;
+    placement: PopupPlacement;
+  };
 
   function normalizeToken(value: unknown): string {
     return String(value || "")
@@ -18,6 +32,17 @@
 
   function itemClassName(item: DropdownItem): string | undefined {
     return typeof item === "string" ? undefined : item.className;
+  }
+
+  function measurePopupLayout(anchor: HTMLElement): PopupLayout {
+    const rect = anchor.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - POPUP_GAP;
+    const spaceAbove = rect.top - POPUP_GAP;
+    const placement: PopupPlacement = spaceBelow >= 180 || spaceBelow >= spaceAbove ? "below" : "above";
+    const maxHeight = Math.min(POPUP_MAX_HEIGHT, Math.max(120, placement === "below" ? spaceBelow : spaceAbove));
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - 220));
+    const top = placement === "below" ? rect.bottom + POPUP_GAP : rect.top - POPUP_GAP;
+    return { left, top, minWidth: rect.width, maxHeight, placement };
   }
 
   let {
@@ -43,7 +68,14 @@
   let open = $state(false);
   let query = $state("");
   let searchInput = $state<HTMLInputElement | null>(null);
-  let root = $state<HTMLDivElement | null>(null);
+  let anchor = $state<HTMLButtonElement | null>(null);
+  let panel = $state<HTMLDivElement | null>(null);
+  let popupLayout = $state<PopupLayout | null>(null);
+
+  function syncPopupLayout(): void {
+    if (!anchor) return;
+    popupLayout = measurePopupLayout(anchor);
+  }
 
   $effect(() => {
     if (disabled) open = false;
@@ -52,17 +84,31 @@
   $effect(() => {
     if (!open) {
       query = "";
+      popupLayout = null;
       return;
     }
+    syncPopupLayout();
     const id = requestAnimationFrame(() => searchInput?.focus());
+
     function onDocMouseDown(event: MouseEvent): void {
       const target = event.target;
-      if (!(target instanceof Node) || !root?.contains(target)) open = false;
+      if (!(target instanceof Node)) return;
+      if (anchor?.contains(target) || panel?.contains(target)) return;
+      open = false;
     }
+
+    function onViewportChange(): void {
+      syncPopupLayout();
+    }
+
     document.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
     return () => {
       cancelAnimationFrame(id);
       document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
     };
   });
 
@@ -92,14 +138,18 @@
   });
 </script>
 
-<div class="relative" bind:this={root}>
+<div class="relative">
   <button
+    bind:this={anchor}
     type="button"
     class="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground {disabled
       ? 'cursor-not-allowed opacity-55'
       : ''} {buttonClass}"
     {disabled}
-    onclick={() => (open = !open)}
+    onclick={() => {
+      open = !open;
+      if (open) syncPopupLayout();
+    }}
   >
     <span class="min-w-0 flex-1 truncate whitespace-nowrap {!selectedLabel ? 'text-muted-foreground' : ''}">
       {selectedLabel || placeholder}
@@ -110,8 +160,21 @@
       </svg>
     </span>
   </button>
-  {#if open}
-    <div class="absolute left-0 top-full z-[1400] mt-1.5 w-fit max-w-[90vw] overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
+</div>
+
+{#if open && popupLayout}
+  <div
+    use:portal
+    bind:this={panel}
+    class="fixed z-[1500] w-fit max-w-[min(90vw,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover shadow-xl {popupLayout.placement ===
+      'above'
+        ? '-translate-y-full'
+        : ''}"
+      style:left="{popupLayout.left}px"
+      style:top="{popupLayout.top}px"
+      style:min-width="{popupLayout.minWidth}px"
+      role="listbox"
+    >
       <div class="border-b border-border p-2.5">
         <input
           bind:this={searchInput}
@@ -120,7 +183,7 @@
           bind:value={query}
         />
       </div>
-      <div class="max-h-[300px] overflow-auto px-2 pb-2 pt-1.5">
+      <div class="overflow-auto px-2 pb-2 pt-1.5" style:max-height="{popupLayout.maxHeight}px">
         {#if filteredGroups.length === 0}
           <div class="px-1.5 py-2 text-[13px] text-muted-foreground">No results</div>
         {/if}
@@ -152,6 +215,5 @@
           {@render footer()}
         </div>
       {/if}
-    </div>
-  {/if}
-</div>
+  </div>
+{/if}

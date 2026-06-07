@@ -1,5 +1,6 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
+import { get, writable } from "svelte/store";
 import {
   type ChatToolDraft,
   type ChatToolDraftEntry,
@@ -8,67 +9,71 @@ import {
   draftHasOverrides,
 } from "./chatToolOverrides";
 
-let draft = $state<ChatToolDraft>({});
-let selectedToolForEdit = $state<string | null>(null);
-let draftRevision = $state(0);
+const draftStore = writable<ChatToolDraft>({});
+const selectedToolForEditStore = writable<string | null>(null);
+export const chatToolDraftRevision = writable(0);
 
 function touchDraft(): void {
-  draftRevision += 1;
+  chatToolDraftRevision.update((n) => n + 1);
 }
 
-/** Subscribe in $derived so UI updates when draft mutates. */
 export function getChatToolDraftRevision(): number {
-  return draftRevision;
+  return get(chatToolDraftRevision);
 }
 
 export function getChatToolDraft(): ChatToolDraft {
-  return draft;
+  return get(draftStore);
 }
 
 export function getSelectedToolForEdit(): string | null {
-  return selectedToolForEdit;
+  return get(selectedToolForEditStore);
 }
 
 export function chatToolDraftHasOverrides(): boolean {
-  return draftHasOverrides(draft);
+  return draftHasOverrides(get(draftStore));
 }
 
 export function getToolDraftEntry(toolName: string): ChatToolDraftEntry {
-  return draft[toolName] ?? { mode: "inherit" };
+  return get(draftStore)[toolName] ?? { mode: "inherit" };
 }
 
 export function setToolDraftMode(toolName: string, mode: ToolOverrideUiMode): void {
+  const draft = get(draftStore);
   const prev = draft[toolName];
   if (mode === "inherit") {
     const next = { ...draft };
     delete next[toolName];
-    draft = next;
-    if (selectedToolForEdit === toolName) selectedToolForEdit = null;
+    draftStore.set(next);
+    selectedToolForEditStore.update((selected) => (selected === toolName ? null : selected));
     touchDraft();
     return;
   }
-  draft = {
+  draftStore.set({
     ...draft,
     [toolName]: {
       mode,
       ...(mode === "custom" ? { custom: prev?.custom } : {}),
     },
-  };
-  if (mode === "custom") selectedToolForEdit = toolName;
-  else if (selectedToolForEdit === toolName) selectedToolForEdit = null;
+  });
+  if (mode === "custom") selectedToolForEditStore.set(toolName);
+  else selectedToolForEditStore.update((selected) => (selected === toolName ? null : selected));
   touchDraft();
 }
 
 export function setToolDraftCustom(toolName: string, custom: AgentToolConfig): void {
-  draft = {
+  draftStore.update((draft) => ({
     ...draft,
     [toolName]: { mode: "custom", custom },
-  };
+  }));
+  selectedToolForEditStore.set(toolName);
   touchDraft();
 }
 
 export function setSelectedToolForEdit(toolName: string | null): void {
-  selectedToolForEdit = toolName;
+  const current = get(selectedToolForEditStore);
+  if (current === toolName) return;
+  selectedToolForEditStore.set(toolName);
+  touchDraft();
 }
 
 function draftsEqual(a: ChatToolDraft, b: ChatToolDraft): boolean {
@@ -79,19 +84,21 @@ function draftsEqual(a: ChatToolDraft, b: ChatToolDraft): boolean {
 }
 
 export function resetChatToolDraft(): void {
+  const draft = get(draftStore);
   const hadOverrides = draftHasOverrides(draft);
-  const hadSelection = selectedToolForEdit !== null;
+  const hadSelection = get(selectedToolForEditStore) !== null;
   if (!hadOverrides && !hadSelection) return;
-  draft = {};
-  selectedToolForEdit = null;
+  draftStore.set({});
+  selectedToolForEditStore.set(null);
   touchDraft();
 }
 
 export function seedChatToolDraftFromUserMessage(entry: UserMessageEntry | null): void {
   const next = draftFromStoredOverrides(entry?.overrides?.tools);
-  const changed = !draftsEqual(draft, next) || selectedToolForEdit !== null;
+  const draft = get(draftStore);
+  const changed = !draftsEqual(draft, next) || get(selectedToolForEditStore) !== null;
   if (!changed) return;
-  draft = next;
-  selectedToolForEdit = null;
+  draftStore.set(next);
+  selectedToolForEditStore.set(null);
   touchDraft();
 }

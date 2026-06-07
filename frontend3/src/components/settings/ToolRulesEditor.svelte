@@ -11,6 +11,7 @@
     guardrailLlmConfigured,
     globalGuardrailPrompt = "",
     readOnly = false,
+    rulesEditorHeight = 180,
     onPatch,
   }: {
     toolName: string;
@@ -19,6 +20,7 @@
     guardrailLlmConfigured: boolean;
     globalGuardrailPrompt?: string;
     readOnly?: boolean;
+    rulesEditorHeight?: number;
     onPatch: (patch: {
       guardrail?: boolean;
       guardrail_system_prompt?: string;
@@ -57,11 +59,11 @@
       schema={rulesSchema}
       value={rulesDraft}
       onchange={onRulesChange}
-      height={180}
+      height={rulesEditorHeight}
       {readOnly}
     />
   {:else}
-    <CodeEditor value={rulesDraft} onchange={onRulesChange} language="json" height={180} {readOnly} />
+    <CodeEditor value={rulesDraft} onchange={onRulesChange} language="json" height={rulesEditorHeight} {readOnly} />
     {#if rulesError}
       <div class="text-xs text-destructive" role="alert">{rulesError}</div>
     {/if}

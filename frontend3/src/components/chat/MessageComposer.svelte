@@ -118,7 +118,7 @@
             <span class="text-xs">Attach</span>
           </button>
           <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
-          <div class="min-w-0 flex-1 overflow-hidden">
+          <div class="min-w-0 flex-1">
             <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} />
           </div>
         </div>

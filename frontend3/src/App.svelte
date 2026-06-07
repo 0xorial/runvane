@@ -110,9 +110,6 @@
               onNewChat={onNewChat}
               onSelect={onSelectConversation}
               search={$chatSearch}
-              onOpenToolEditor={() => {
-                chatRightSidebarVisible = true;
-              }}
             />
           {/snippet}
           {#snippet children()}

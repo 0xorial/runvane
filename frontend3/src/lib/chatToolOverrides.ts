@@ -1,7 +1,7 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
 import type { UserMessageOverrides } from "../../../backend/src/contracts/user-message-overrides";
 
-export type ToolOverrideUiMode = "inherit" | "off" | "allow_all" | "custom";
+export type ToolOverrideUiMode = "inherit" | "off" | "ask" | "allow" | "custom";
 
 export type ExplicitToolOverrideMode = Exclude<ToolOverrideUiMode, "inherit">;
 
@@ -20,7 +20,11 @@ export function compileChatToolOverrides(draft: ChatToolDraft): Record<string, A
       tools[toolName] = { enabled: false };
       continue;
     }
-    if (entry.mode === "allow_all") {
+    if (entry.mode === "ask") {
+      tools[toolName] = { enabled: true, rules: { allowed: "ask" }, guardrail: false };
+      continue;
+    }
+    if (entry.mode === "allow") {
       tools[toolName] = { enabled: true, rules: { allowed: "always" }, guardrail: false };
       continue;
     }
@@ -44,7 +48,10 @@ export function compileUserMessageOverrides(draft: ChatToolDraft): UserMessageOv
 function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {
   if (cfg.enabled === false) return { mode: "off" };
   if (cfg.enabled === true && cfg.rules?.allowed === "always" && cfg.guardrail === false) {
-    return { mode: "allow_all" };
+    return { mode: "allow" };
+  }
+  if (cfg.enabled === true && cfg.rules?.allowed === "ask" && cfg.guardrail === false) {
+    return { mode: "ask" };
   }
   return { mode: "custom", custom: cfg };
 }
@@ -62,13 +69,15 @@ export function effectiveAgentToolMode(
   const rules = Object.keys(cfg.config).length > 0 ? cfg.config : catalogDefaultRules;
   const allowed = rules.allowed;
   if (allowed === "never") return "off";
-  if (allowed === "always" && !cfg.guardrail) return "allow_all";
+  if (allowed === "always" && !cfg.guardrail) return "allow";
+  if (allowed === "ask" && !cfg.guardrail) return "ask";
   return "custom";
 }
 
 export function explicitModeLabel(mode: ExplicitToolOverrideMode): string {
   if (mode === "off") return "Off";
-  if (mode === "allow_all") return "Allow all";
+  if (mode === "ask") return "Ask";
+  if (mode === "allow") return "Allow";
   return "Custom";
 }
 
