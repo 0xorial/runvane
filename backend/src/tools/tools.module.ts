@@ -3,6 +3,7 @@ import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
 import { BashTool } from './builtins/bash/tool.js';
 import { CurlTool } from './builtins/curl/tool.js';
 import { MetaTool } from './builtins/meta/tool.js';
+import { ChatTool } from './builtins/chat/tool.js';
 import { RagSearchTool } from './builtins/rag-search/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
@@ -27,6 +28,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     FilesystemIndexTool,
     RagSearchTool,
     MetaTool,
+    ChatTool,
     DelegateLlmTool,
     AskAttachmentTool,
     SerialConnectionManager,
@@ -42,6 +44,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         FilesystemIndexTool,
         RagSearchTool,
         MetaTool,
+        ChatTool,
         DelegateLlmTool,
         AskAttachmentTool,
         SerialTerminalTool,

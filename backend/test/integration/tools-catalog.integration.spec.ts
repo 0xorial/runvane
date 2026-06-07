@@ -22,6 +22,7 @@ describeLive('tools catalog (integration)', () => {
     const names = tools.map((tool) => tool.name);
     expect(names).toContain('rag_search');
     expect(names).toContain('meta');
+    expect(names).toContain('chat');
     expect(names).toContain('filesystem_index');
     expect(names).toContain('filesystem');
     expect(names).toContain('get_current_time');
