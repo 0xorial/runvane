@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { e2eDatabaseUrl, prepareE2eDatabase } from "./e2e-db.mjs";
@@ -27,10 +27,35 @@ async function healthOk() {
   }
 }
 
+function frontendDirName() {
+  return process.env.E2E_FRONTEND_DIR ?? "frontend";
+}
+
+function frontendEntryPath() {
+  return frontendDirName() === "frontend3" ? "/src/App.svelte" : "/src/App.tsx";
+}
+
+function killPort(port) {
+  try {
+    const out = execSync(`lsof -ti:${port}`, { encoding: "utf8" }).trim();
+    if (!out) return;
+    for (const pid of out.split("\n")) {
+      const n = Number(pid);
+      if (n > 0) process.kill(n);
+    }
+  } catch {
+    /* nothing listening */
+  }
+}
+
 async function frontendOk() {
   try {
-    const res = await fetch(frontendOrigin);
-    return res.ok;
+    const index = await fetch(frontendOrigin);
+    if (!index.ok) return false;
+    const entry = await fetch(`${frontendOrigin}${frontendEntryPath()}`);
+    if (!entry.ok) return false;
+    const body = await entry.text();
+    return body.length > 64 && !body.includes("<title>Error</title>");
   } catch {
     return false;
   }
@@ -75,6 +100,10 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
 
   prepareE2eDatabase({ fresh: freshDb });
 
+  killPort(backendPort);
+  killPort(frontendPort);
+
+  const frontendDir = path.join(repoRoot, frontendDirName());
   const pids = {
     backend: spawnDetached("node", ["dist/main.js"], path.join(repoRoot, "backend"), {
       LLM_TEST_STUB: "1",
@@ -87,29 +116,32 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
     frontend: spawnDetached(
       "npx",
       ["vite", "--host", "127.0.0.1", "--strictPort", "--port", String(frontendPort)],
-      path.join(repoRoot, process.env.E2E_FRONTEND_DIR ?? "frontend"),
+      frontendDir,
       { VITE_API_BASE_URL: backendOrigin },
     ),
   };
-  writePids(pids);
+  writePids({ ...pids, frontendDir: frontendDirName() });
 
   await waitFor(healthOk, "stub backend /health");
-  await waitFor(frontendOk, "frontend");
+  await waitFor(frontendOk, `${frontendDirName()} vite (${frontendEntryPath()})`);
 }
 
 export async function stopE2eServers() {
   const pids = readPids();
-  if (!pids) return;
-  for (const pid of [pids.backend, pids.frontend]) {
-    if (pid) {
-      try {
-        process.kill(pid);
-      } catch {
-        /* already stopped */
+  if (pids) {
+    for (const pid of [pids.backend, pids.frontend]) {
+      if (pid) {
+        try {
+          process.kill(pid);
+        } catch {
+          /* already stopped */
+        }
       }
     }
+    unlinkSync(pidFile);
   }
-  unlinkSync(pidFile);
+  killPort(backendPort);
+  killPort(frontendPort);
 }
 
 const isCli = fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? "");
