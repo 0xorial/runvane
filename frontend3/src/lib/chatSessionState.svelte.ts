@@ -1,9 +1,13 @@
 import { setConversationDefaultViewLeaf } from "@/api/client";
 import {
+  getChatSessionPending,
   getChatSessionStore,
   getEmptyChatSessionStore,
   retainChatSessionLive,
 } from "@/lib/chatSessionRegistry";
+import type { UserMessageEntry } from "@/protocol/chatEntry";
+import type { LlmRef } from "../../../backend/src/contracts/llm";
+import type { ChatAttachment } from "@/protocol/chatEntry";
 import type { ChatSessionStore } from "@/lib/chatSessionStore";
 import { fetchConversationSession, type ConversationSession } from "@/hooks/queries/conversations";
 import { queryClient } from "@/lib/queryClient";
@@ -11,6 +15,40 @@ import { queryKeys } from "@/hooks/queries/keys";
 import { mapApiMessagesToChatEntries } from "@/utils/chatEntries";
 import type { ObservableItem } from "@/utils/observableCollection";
 import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
+
+export type OptimisticUserMessage = {
+  rowId: string;
+  clientRequestId: string;
+  parentId: string | null;
+};
+
+type AppendOptimisticUserMessageInput = {
+  conversationId: string;
+  text: string;
+  agentId: string;
+  llm?: LlmRef;
+  modelPresetId?: number | null;
+  attachments?: ChatAttachment[];
+};
+
+function buildOptimisticUserEntry(
+  input: AppendOptimisticUserMessageInput,
+  rowId: string,
+  parentId: string | null,
+): UserMessageEntry {
+  return {
+    type: "user-message",
+    id: rowId,
+    conversationIndex: -1,
+    createdAt: new Date().toISOString(),
+    parentId,
+    text: input.text,
+    agentId: input.agentId,
+    ...(input.llm ? { llm: input.llm } : {}),
+    ...(input.modelPresetId != null ? { modelPresetId: input.modelPresetId } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+  };
+}
 
 export function createChatSessionState(getConversationId: () => string | null) {
   let isSessionLoading = $state(false);
@@ -122,6 +160,25 @@ export function createChatSessionState(getConversationId: () => string | null) {
       const tipId = store.activePathTipId() ?? entryId;
       await setConversationDefaultViewLeaf(boundCid, tipId);
       store.setViewAnchor(tipId);
+    },
+    appendOptimisticUserMessage(input: AppendOptimisticUserMessageInput): OptimisticUserMessage | null {
+      const boundCid = getConversationId();
+      const cid = String(input.conversationId || "").trim();
+      if (!boundCid || cid !== boundCid || !store) return null;
+      const text = String(input.text || "").trim();
+      if (!text) return null;
+      const agentId = String(input.agentId || "").trim();
+      if (!agentId) throw new Error("appendOptimisticUserMessage requires agentId");
+
+      const path = store.getActivePathRows().map((row$) => row$.get());
+      const parentId = path.length > 0 ? path[path.length - 1].id : null;
+      const clientRequestId = crypto.randomUUID();
+      const rowId = `optimistic-user-${clientRequestId}`;
+      const pending = getChatSessionPending(boundCid);
+      pending.set(clientRequestId, rowId);
+      const row = buildOptimisticUserEntry({ ...input, text, agentId }, rowId, parentId);
+      store.appendEntry(row);
+      return { rowId, clientRequestId, parentId };
     },
   };
 }

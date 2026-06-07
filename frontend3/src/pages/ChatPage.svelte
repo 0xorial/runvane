@@ -15,7 +15,6 @@
 
   const session = createChatSessionState(() => conversationId);
   const agentId = $derived(agentIdFromSearch(search));
-
   function openSettings(): void {
     navigate(`/settings${search}`);
   }
@@ -28,5 +27,10 @@
     entries={session.activePathEntries}
     isSessionLoading={session.isSessionLoading}
   />
-  <ChatComposer {conversationId} {agentId} />
+  <ChatComposer
+    {conversationId}
+    {agentId}
+    {search}
+    appendOptimisticUserMessage={session.appendOptimisticUserMessage}
+  />
 </div>
