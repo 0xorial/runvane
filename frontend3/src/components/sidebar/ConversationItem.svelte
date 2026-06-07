@@ -91,22 +91,17 @@
       else onSelect(conversation.id);
     }}
   >
-    <div class="flex items-center gap-2">
-      <svg class="h-3 w-3 shrink-0 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-      <span class="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
-        {conversation.title || "Untitled"}
-      </span>
-    </div>
+    <span class="block truncate font-medium text-foreground/90 group-hover/row:text-foreground">
+      {conversation.title || "Untitled"}
+    </span>
     {#if stamp}
-      <span class="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
+      <span class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
     {/if}
     <LlmMetaBadge
       {usage}
       showTokenBreakdown
       {estimatedCostUsd}
-      class="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
+      class="mt-0.5 bg-transparent px-0 py-0 text-[10px]"
     />
   </button>
   {#if !multiSelectMode}
