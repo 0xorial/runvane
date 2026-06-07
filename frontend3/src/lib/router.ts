@@ -20,6 +20,13 @@ if (typeof window !== "undefined") {
   });
 }
 
+export const pathOnly = derived(pathname, ($path) => $path.split("?")[0] ?? "/");
+
+export const chatSearch = derived(pathname, ($path) => {
+  const q = $path.indexOf("?");
+  return q >= 0 ? $path.slice(q) : "";
+});
+
 export const chatConversationId = derived(pathname, ($path) => {
   const pathOnly = $path.split("?")[0] ?? "";
   const match = pathOnly.match(/^\/chat\/([^/]+)/);
@@ -27,11 +34,20 @@ export const chatConversationId = derived(pathname, ($path) => {
   return match[1];
 });
 
+export const settingsSection = derived(pathOnly, ($path) => {
+  const match = $path.match(/^\/settings\/([^/]+)/);
+  return match?.[1];
+});
+
+export const isChatRoute = derived(pathOnly, ($path) => $path.startsWith("/chat"));
+export const isSettingsRoute = derived(pathOnly, ($path) => $path.startsWith("/settings"));
+
 export function agentIdFromSearch(search: string): string {
   return new URLSearchParams(search).get("agent")?.trim() ?? "";
 }
 
-export const chatSearch = derived(pathname, ($path) => {
-  const q = $path.indexOf("?");
-  return q >= 0 ? $path.slice(q) : "";
-});
+export function settingsLinkFromSearch(search: string): string {
+  const agent = new URLSearchParams(search).get("agent")?.trim();
+  if (agent) return `/settings/agents?agent=${encodeURIComponent(agent)}`;
+  return "/settings/model-providers";
+}

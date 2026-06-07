@@ -1,69 +1,115 @@
 <script lang="ts">
   import { cancelPendingMessage, createConversation } from "@/api/client";
-  import QueuedMessageChips from "./QueuedMessageChips.svelte";
-  import type { PendingMessage } from "@/lib/chatSessionStore";
+  import type { LlmRef } from "../../../../backend/src/contracts/llm";
   import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
   import type { OptimisticUserMessage } from "@/lib/chatSessionState.svelte";
-  import { replacePath } from "@/lib/router";
-  import { sendMessageToConversation } from "./sendMessage";
+  import { conversationHasRunningTask, ensureTasksStream } from "@/lib/tasksStore.svelte";
+  import { agentIdFromSearch, replacePath } from "@/lib/router";
+  import { onMount } from "svelte";
+  import type { ChatAgentSelection } from "./ChatAgentToolbar.svelte";
+  import MessageComposer from "./MessageComposer.svelte";
+  import QueuedMessageChips from "./QueuedMessageChips.svelte";
+  import type { PendingMessage } from "@/lib/chatSessionStore";
+  import { sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
   let {
     conversationId,
-    agentId,
     search,
     pendingMessages = [],
     appendOptimisticUserMessage,
   }: {
     conversationId: string | null;
-    agentId: string;
     search: string;
     pendingMessages?: PendingMessage[];
     appendOptimisticUserMessage: (input: {
       conversationId: string;
       text: string;
       agentId: string;
+      llm?: LlmRef;
+      modelPresetId?: number | null;
     }) => OptimisticUserMessage | null;
   } = $props();
 
   let input = $state("");
   let sending = $state(false);
+  let agentSelection = $state<ChatAgentSelection>({ agentId: "", llm: null, modelPresetId: null });
 
-  const canSend = $derived(input.trim().length > 0 && Boolean(agentId));
+  onMount(() => ensureTasksStream());
 
-  async function send(): Promise<void> {
+  const urlAgentId = $derived(agentIdFromSearch(search));
+  const effectiveAgentId = $derived(agentSelection.agentId.trim() || urlAgentId);
+  const canSend = $derived(input.trim().length > 0 && Boolean(effectiveAgentId));
+  const agentRunning = $derived(conversationHasRunningTask(conversationId));
+
+  async function onSend(mode: MessageSendMode): Promise<void> {
     if (!canSend || sending) return;
     sending = true;
     const text = input.trim();
-    input = "";
     const clientRequestId = crypto.randomUUID();
+    const agentId = effectiveAgentId;
+    const { llm, modelPresetId } = agentSelection;
 
     try {
+      if (mode.enqueue && conversationId) {
+        input = "";
+        await sendMessageToConversation(
+          conversationId,
+          text,
+          agentId,
+          llm,
+          modelPresetId,
+          [],
+          null,
+          clientRequestId,
+          { enqueue: true },
+        );
+        return;
+      }
+
       if (!conversationId) {
         const created = await createConversation();
         const cid = String(created.id || "").trim();
         if (!cid) throw new Error("createConversation returned no id");
-
         retainChatSessionLive();
         getChatSessionStore(cid);
-
-        await sendMessageToConversation(cid, text, agentId, null, null, [], null, clientRequestId);
+        input = "";
+        await sendMessageToConversation(
+          cid,
+          text,
+          agentId,
+          llm,
+          modelPresetId,
+          [],
+          null,
+          clientRequestId,
+          { steer: mode.steer },
+        );
         replacePath(`/chat/${encodeURIComponent(cid)}${search}`);
         return;
       }
 
-      const optimistic = appendOptimisticUserMessage({ conversationId, text, agentId });
-      if (!optimistic) throw new Error("appendOptimisticUserMessage failed");
-
-      await sendMessageToConversation(
-        conversationId,
-        text,
-        agentId,
-        null,
-        null,
-        [],
-        optimistic.parentId,
-        optimistic.clientRequestId,
-      );
+      if (!mode.enqueue) {
+        const optimistic = appendOptimisticUserMessage({
+          conversationId,
+          text,
+          agentId,
+          llm: llm ?? undefined,
+          modelPresetId,
+        });
+        if (!optimistic) throw new Error("appendOptimisticUserMessage failed");
+        input = "";
+        await sendMessageToConversation(
+          conversationId,
+          text,
+          agentId,
+          llm,
+          modelPresetId,
+          [],
+          optimistic.parentId,
+          optimistic.clientRequestId,
+          { steer: mode.steer },
+        );
+      }
     } catch (err) {
       console.error("[ChatComposer] send failed", err);
       input = text;
@@ -72,47 +118,23 @@
       sending = false;
     }
   }
-
-  function onKeydown(event: KeyboardEvent): void {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void send();
-    }
-  }
 </script>
 
-<div class="border-t border-border bg-card/50 p-3">
-  {#if conversationId}
-    <QueuedMessageChips
-      messages={pendingMessages}
-      onCancel={(clientRequestId) => void cancelPendingMessage(conversationId, clientRequestId)}
-    />
-  {/if}
-  <textarea
-    data-testid="chat-user-input"
-    class="mb-2 min-h-[4rem] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
-    placeholder="Send a message…"
-    bind:value={input}
-    onkeydown={onKeydown}
-    disabled={!agentId}
-  ></textarea>
-  <div class="flex justify-end gap-2">
-    <button
-      type="button"
-      class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground"
-      aria-label="Attach files"
-      disabled
-    >
-      Attach files
-    </button>
-    <button
-      type="button"
-      data-testid="chat-send-button"
-      class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
-      disabled={!canSend || sending}
-      onclick={() => void send()}
-    >
-      Send
-    </button>
-  </div>
-</div>
+<MessageComposer
+  value={input}
+  onValueChange={(v) => (input = v)}
+  {canSend}
+  {agentRunning}
+  {sending}
+  onSend={onSend}
+  onAgentSelectionChange={(sel) => (agentSelection = sel)}
+>
+  {#snippet queuedSlot()}
+    {#if conversationId && pendingMessages.length > 0}
+      <QueuedMessageChips
+        messages={pendingMessages}
+        onCancel={(clientRequestId) => void cancelPendingMessage(conversationId, clientRequestId)}
+      />
+    {/if}
+  {/snippet}
+</MessageComposer>

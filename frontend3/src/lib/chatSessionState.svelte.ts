@@ -22,7 +22,7 @@ export type OptimisticUserMessage = {
   parentId: string | null;
 };
 
-type AppendOptimisticUserMessageInput = {
+export type AppendOptimisticUserMessageInput = {
   conversationId: string;
   text: string;
   agentId: string;
@@ -125,7 +125,6 @@ export function createChatSessionState(getConversationId: () => string | null) {
         }
       } catch (err) {
         console.error("[chatSession] Failed to load conversation messages:", err);
-        throw err;
       } finally {
         if (!cancelled) isSessionLoading = false;
       }
@@ -153,6 +152,10 @@ export function createChatSessionState(getConversationId: () => string | null) {
       void rowsTick;
       return store?.getPendingMessages() ?? [];
     },
+    get allEntries(): ObservableItem<LinkedChatEntry>[] {
+      void rowsTick;
+      return store?.getAllRows() ?? [];
+    },
     async setActiveLeaf(entryId: string): Promise<void> {
       const boundCid = getConversationId();
       if (!boundCid || !store) return;
@@ -162,6 +165,13 @@ export function createChatSessionState(getConversationId: () => string | null) {
       }
       store.setChosenPathFromLeaf(entryId);
       const tipId = store.activePathTipId() ?? entryId;
+      await setConversationDefaultViewLeaf(boundCid, tipId);
+      store.setViewAnchor(tipId);
+    },
+    async switchToBranch(branchEntryId: string): Promise<void> {
+      const boundCid = getConversationId();
+      if (!boundCid || !store) return;
+      const tipId = store.chooseBranchLine(branchEntryId);
       await setConversationDefaultViewLeaf(boundCid, tipId);
       store.setViewAnchor(tipId);
     },

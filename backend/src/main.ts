@@ -17,12 +17,18 @@ async function bootstrap() {
   if (!port) {
     throw new Error('PORT is required (set via dev-ports/with-ports.mjs or .env.ports)');
   }
-  const frontendPort = new URL(frontendOrigin).port;
-  if (!frontendPort) {
-    throw new Error(`FRONTEND_ORIGIN must include a port: ${frontendOrigin}`);
+  const corsOrigins = new Set<string>();
+  for (const raw of [frontendOrigin, process.env.FRONTEND3_ORIGIN]) {
+    if (!raw) continue;
+    const parsed = new URL(raw);
+    if (!parsed.port) {
+      throw new Error(`frontend origin must include a port: ${raw}`);
+    }
+    corsOrigins.add(`http://localhost:${parsed.port}`);
+    corsOrigins.add(`http://127.0.0.1:${parsed.port}`);
   }
   app.enableCors({
-    origin: [`http://localhost:${frontendPort}`, `http://127.0.0.1:${frontendPort}`],
+    origin: [...corsOrigins],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });

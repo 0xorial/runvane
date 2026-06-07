@@ -54,6 +54,19 @@ export function patchConversationsList(
   });
 }
 
+export function upsertConversationInList(deletedOnly: boolean, conversation: ConversationRow): void {
+  patchConversationsList(deletedOnly, (prev) => {
+    if (!prev) return prev;
+    const index = prev.conversations.findIndex((item) => item.id === conversation.id);
+    if (index < 0) {
+      return { ...prev, conversations: [conversation, ...prev.conversations] };
+    }
+    const next = prev.conversations.slice();
+    next[index] = { ...next[index], ...conversation };
+    return { ...prev, conversations: next };
+  });
+}
+
 export function mergeSseConversation(
   previous: ConversationRow | undefined,
   incoming: ConversationSseRow,

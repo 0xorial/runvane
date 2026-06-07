@@ -82,6 +82,7 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
       DATABASE_URL: e2eDatabaseUrl,
       PORT: String(backendPort),
       FRONTEND_ORIGIN: frontendOrigin,
+      FRONTEND3_ORIGIN: frontendOrigin,
     }),
     frontend: spawnDetached(
       "npx",

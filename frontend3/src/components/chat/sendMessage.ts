@@ -3,6 +3,11 @@ import type { LlmRef } from "../../../../backend/src/contracts/llm";
 
 export type SendMessageResult = { ok: boolean };
 
+export type MessageSendMode = {
+  steer?: boolean;
+  enqueue?: boolean;
+};
+
 export async function sendMessageToConversation(
   conversationId: string,
   message: string,

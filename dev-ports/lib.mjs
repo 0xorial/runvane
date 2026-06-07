@@ -108,6 +108,7 @@ export function resolveDevPorts(projectRoot, projectName) {
       FRONTEND_PORT: String(frontend),
       FRONTEND3_PORT: String(ports.frontend3),
       FRONTEND_ORIGIN: `http://localhost:${frontend}`,
+      FRONTEND3_ORIGIN: `http://localhost:${ports.frontend3}`,
       VITE_API_BASE_URL: `http://localhost:${backend}`,
     },
   };

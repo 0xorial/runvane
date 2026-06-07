@@ -3,47 +3,89 @@
   import {
     createConversation,
     getConversations,
+    permanentlyDeleteConversation,
     postConversationMessage,
+    renameConversation,
+    softDeleteConversation,
+    undeleteConversation,
   } from "@/api/client";
-  import { mergeSseConversation, patchConversationsList } from "@/hooks/queries/conversations";
+  import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
+  import {
+    mergeSseConversation,
+    patchConversationsList,
+    refreshConversations,
+    upsertConversationInList,
+  } from "@/hooks/queries/conversations";
+  import { createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
   import { queryKeys } from "@/hooks/queries/keys";
   import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
   import { navigate, replacePath } from "@/lib/router";
   import { subscribeGlobalLive } from "@/protocol/runLiveClient";
   import { SseType } from "@/protocol/sseTypes";
+  import { notifyError } from "@/utils/toast";
   import { onMount } from "svelte";
+  import MultiSelectPanel from "./MultiSelectPanel.svelte";
+  import SidebarSectionsList from "./SidebarSectionsList.svelte";
   import { groupConversations } from "./sidebarSections";
 
   const PROBE_MESSAGE = "what is the time?";
 
   let {
-    activeConversationId,
-    search,
+    onNewChat,
     onSelect,
   }: {
-    activeConversationId: string | null;
-    search: string;
+    onNewChat: () => void;
     onSelect: (id: string) => void;
   } = $props();
 
+  let showDeletedOnly = $state(false);
   let probeBusy = $state(false);
   let collapsedGroups = $state<Record<string, boolean>>({});
+  let selectedConversationIds = $state<string[]>([]);
 
   const conversationsQuery = createQuery(() => ({
-    queryKey: queryKeys.conversationList(false),
-    queryFn: () => getConversations({ deletedOnly: false }),
+    queryKey: queryKeys.conversationList(showDeletedOnly),
+    queryFn: () => getConversations({ deletedOnly: showDeletedOnly }),
   }));
 
+  const pricingQuery = createModelCapabilitiesQuery();
+  const pricingByModel = $derived(pricingFromCapabilities(pricingQuery.data));
   const conversations = $derived(conversationsQuery.data?.conversations ?? []);
   const groups = $derived(conversationsQuery.data?.groups ?? []);
+  const knownGroups = $derived(groups.filter((g: ConversationGroupRow) => String(g.id || "").trim()));
   const sections = $derived(groupConversations(conversations, groups));
+  const multiSelectMode = $derived(selectedConversationIds.length > 0);
+
+  $effect(() => {
+    void showDeletedOnly;
+    if (selectedConversationIds.length > 0) selectedConversationIds = [];
+  });
+
+  $effect(() => {
+    const valid = selectedConversationIds.filter((id) =>
+      conversations.some((row: ConversationRow) => row.id === id),
+    );
+    if (
+      valid.length !== selectedConversationIds.length ||
+      valid.some((id, index) => id !== selectedConversationIds[index])
+    ) {
+      selectedConversationIds = valid;
+    }
+  });
+
+  function timestampMs(value: string | undefined): number | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? ms : null;
+  }
 
   onMount(() => {
     return subscribeGlobalLive({
       onSseEvent: (ev) => {
         if (ev.type === SseType.CONVERSATION_CREATED) {
-          if (ev.conversation.isDeleted) return;
-          patchConversationsList(false, (prev) => {
+          if (showDeletedOnly || ev.conversation.isDeleted) return;
+          patchConversationsList(showDeletedOnly, (prev) => {
             if (!prev) return prev;
             if (prev.conversations.some((item) => item.id === ev.conversation.id)) return prev;
             return {
@@ -54,10 +96,11 @@
           return;
         }
         if (ev.type === SseType.CONVERSATION_UPDATED) {
-          patchConversationsList(false, (prev) => {
+          const shouldShow = showDeletedOnly ? ev.conversation.isDeleted : !ev.conversation.isDeleted;
+          patchConversationsList(showDeletedOnly, (prev) => {
             if (!prev) return prev;
             const index = prev.conversations.findIndex((item) => item.id === ev.conversation.id);
-            if (ev.conversation.isDeleted) {
+            if (!shouldShow) {
               if (index === -1) return prev;
               const next = prev.conversations.slice();
               next.splice(index, 1);
@@ -70,6 +113,9 @@
               };
             }
             const next = prev.conversations.slice();
+            const currentMs = timestampMs(next[index].updatedAt);
+            const incomingMs = timestampMs(ev.conversation.updatedAt);
+            if (currentMs != null && incomingMs != null && incomingMs < currentMs) return prev;
             next[index] = mergeSseConversation(next[index], ev.conversation);
             return { ...prev, conversations: next };
           });
@@ -78,110 +124,205 @@
     });
   });
 
-  function newChat(): void {
-    navigate(`/chat/new${search}`);
-  }
-
-  function toggleGroup(groupId: string): void {
-    collapsedGroups = { ...collapsedGroups, [groupId]: !(collapsedGroups[groupId] ?? false) };
-  }
-
   async function runProbeTime(): Promise<void> {
     if (probeBusy) return;
     probeBusy = true;
     try {
-      const agentId = new URLSearchParams(search).get("agent")?.trim() || "";
-      if (!agentId) throw new Error("Select an agent first (?agent= in URL)");
-
+      const agentId = new URLSearchParams(window.location.search).get("agent")?.trim() || "";
+      if (!agentId) {
+        notifyError("Select an agent first");
+        return;
+      }
       const created = await createConversation({ title: "New chat" });
       const id = String(created.id || "").trim();
       if (!id) throw new Error("No conversation id from server");
-
       retainChatSessionLive();
       getChatSessionStore(id);
-
       await postConversationMessage(id, { message: PROBE_MESSAGE, agentId });
-
-      replacePath(`/chat/${encodeURIComponent(id)}${search}`);
+      replacePath(`/chat/${encodeURIComponent(id)}${window.location.search}`);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e));
     } finally {
       probeBusy = false;
     }
   }
 
+  async function onRenameConversation(conversation: ConversationRow): Promise<void> {
+    const current = String(conversation.title || "").trim();
+    const next = window.prompt("Rename chat", current);
+    if (next == null) return;
+    const title = next.trim();
+    if (!title || title === current) return;
+    try {
+      const updated = await renameConversation(conversation.id, { title });
+      upsertConversationInList(showDeletedOnly, updated);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onMoveConversationToGroup(
+    conversation: ConversationRow,
+    target: { groupId?: string | null; newGroupName?: string },
+  ): Promise<void> {
+    try {
+      await renameConversation(conversation.id, {
+        groupId: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
+        newGroupName: Object.prototype.hasOwnProperty.call(target, "newGroupName")
+          ? String(target.newGroupName ?? "")
+          : undefined,
+      });
+      const data = await refreshConversations(showDeletedOnly);
+      const groupId = target.groupId;
+      if (typeof groupId === "string" && groupId.trim()) {
+        collapsedGroups = { ...collapsedGroups, [groupId]: false };
+      } else if (target.newGroupName) {
+        const nextGroup = data.groups.find(
+          (g) => g.name.localeCompare(target.newGroupName || "", undefined, { sensitivity: "base" }) === 0,
+        );
+        if (nextGroup?.id) collapsedGroups = { ...collapsedGroups, [nextGroup.id]: false };
+      }
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function deselect(id: string): void {
+    if (selectedConversationIds.includes(id)) {
+      selectedConversationIds = selectedConversationIds.filter((x) => x !== id);
+    }
+  }
+
+  async function onSoftDeleteConversation(conversation: ConversationRow): Promise<void> {
+    try {
+      await softDeleteConversation(conversation.id);
+      await refreshConversations(showDeletedOnly);
+      deselect(conversation.id);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onUndeleteConversation(conversation: ConversationRow): Promise<void> {
+    try {
+      await undeleteConversation(conversation.id);
+      await refreshConversations(showDeletedOnly);
+      deselect(conversation.id);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onPermanentlyDeleteConversation(conversation: ConversationRow): Promise<void> {
+    if (!window.confirm("Delete this conversation permanently? This action is irreversible.")) return;
+    try {
+      await permanentlyDeleteConversation(conversation.id);
+      await refreshConversations(showDeletedOnly);
+      deselect(conversation.id);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onDeleteSelectedConversations(): Promise<void> {
+    if (selectedConversationIds.length === 0) return;
+    const confirmed = window.confirm(
+      showDeletedOnly
+        ? "Delete selected conversations permanently? This action is irreversible."
+        : `Delete ${selectedConversationIds.length} selected conversation(s)?`,
+    );
+    if (!confirmed) return;
+    const deletionFn = showDeletedOnly ? permanentlyDeleteConversation : softDeleteConversation;
+    const ids = [...selectedConversationIds];
+    const results = await Promise.allSettled(ids.map((id) => deletionFn(id)));
+    const failedIds: string[] = [];
+    let firstReason = "";
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") return;
+      failedIds.push(ids[index]);
+      if (!firstReason) firstReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    });
+    await refreshConversations(showDeletedOnly);
+    if (failedIds.length > 0) {
+      selectedConversationIds = failedIds;
+      notifyError(`Deleted ${ids.length - failedIds.length}/${ids.length}. ${firstReason}`);
+      return;
+    }
+    selectedConversationIds = [];
+  }
+
+  function onToggleSelected(conversationId: string, checked: boolean): void {
+    if (checked) {
+      if (!selectedConversationIds.includes(conversationId)) {
+        selectedConversationIds = [...selectedConversationIds, conversationId];
+      }
+    } else {
+      selectedConversationIds = selectedConversationIds.filter((id) => id !== conversationId);
+    }
+  }
 </script>
 
-<aside class="flex h-full min-h-0 w-full flex-col border-r border-border bg-sidebar">
-  <div class="shrink-0 space-y-1.5 border-b border-border px-2.5 py-2">
-    <button
-      type="button"
-      data-testid="sidebar-new-chat"
-      class="w-full rounded-md bg-primary/10 px-2.5 py-1.5 text-left text-xs font-medium text-primary"
-      onclick={newChat}
-    >
-      New Chat
-    </button>
-    <button
-      type="button"
-      data-testid="sidebar-probe-time"
-      class="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground disabled:opacity-50"
-      disabled={probeBusy}
-      onclick={() => void runProbeTime()}
-    >
-      Probe: time (tmp)
-    </button>
+<aside class="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar">
+  <div class="flex shrink-0 items-center gap-1.5 border-b border-sidebar-border px-2.5 py-2">
+    <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
-
-  <div
-    id="conversation-sidebar-list"
-    class="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 py-1.5"
-  >
-    {#each sections as section (section.kind === "conversation" ? section.row.id : section.groupId)}
-      {#if section.kind === "conversation"}
-        <div
-          data-conversation-row
-          data-conversation-id={section.row.id}
-          data-active={activeConversationId === section.row.id ? "true" : "false"}
-          class="rounded-md data-[active=true]:bg-secondary"
-        >
-          <button
-            type="button"
-            data-testid={`sidebar-conversation-${section.row.id}`}
-            class="w-full truncate px-2 py-1.5 text-left text-xs text-foreground"
-            onclick={() => onSelect(section.row.id)}
-          >
-            {section.row.title || "Untitled"}
-          </button>
-        </div>
-      {:else}
-        {@const collapsed = collapsedGroups[section.groupId] ?? false}
-        <button
-          type="button"
-          class="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-secondary/40"
-          onclick={() => toggleGroup(section.groupId)}
-        >
-          <span class="truncate">{section.groupName}</span>
-          <span class="ml-2 shrink-0">{collapsed ? "▸" : "▾"} {section.rows.length}</span>
-        </button>
-        {#if !collapsed}
-          {#each section.rows as row (row.id)}
-            <div
-              data-conversation-row
-              data-conversation-id={row.id}
-              data-active={activeConversationId === row.id ? "true" : "false"}
-              class="ml-3 rounded-md data-[active=true]:bg-secondary"
-            >
-              <button
-                type="button"
-                data-testid={`sidebar-conversation-${row.id}`}
-                class="w-full truncate px-2 py-1.5 text-left text-xs text-foreground"
-                onclick={() => onSelect(row.id)}
-              >
-                {row.title || "Untitled"}
-              </button>
-            </div>
-          {/each}
-        {/if}
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div class="space-y-1.5 border-b border-sidebar-border px-2.5 py-2">
+      <button
+        type="button"
+        data-testid="sidebar-new-chat"
+        class="flex w-full items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+        onclick={onNewChat}
+      >
+        + New Chat
+      </button>
+      <button
+        type="button"
+        data-testid="sidebar-probe-time"
+        class="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+        disabled={probeBusy}
+        onclick={() => void runProbeTime()}
+      >
+        Probe: time (tmp)
+      </button>
+      <button
+        type="button"
+        class="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground hover:text-foreground"
+        onclick={() => (showDeletedOnly = !showDeletedOnly)}
+      >
+        {showDeletedOnly ? "Show active" : "Show deleted"}
+      </button>
+      {#if multiSelectMode}
+        <MultiSelectPanel
+          {selectedConversationIds}
+          {knownGroups}
+          deletedMode={showDeletedOnly}
+          reloadConversations={() => refreshConversations(showDeletedOnly)}
+          onSelectionChange={(ids) => (selectedConversationIds = ids)}
+          onExpandGroup={(groupId) => (collapsedGroups = { ...collapsedGroups, [groupId]: false })}
+          onDeleteSelected={onDeleteSelectedConversations}
+        />
       {/if}
-    {/each}
+    </div>
+    <div id="conversation-sidebar-list" class="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 py-1.5">
+      <SidebarSectionsList
+        sections={sections}
+        {collapsedGroups}
+        {knownGroups}
+        {multiSelectMode}
+        deletedMode={showDeletedOnly}
+        {pricingByModel}
+        {selectedConversationIds}
+        {onSelect}
+        onToggleSelected={onToggleSelected}
+        {onRenameConversation}
+        {onMoveConversationToGroup}
+        {onSoftDeleteConversation}
+        {onUndeleteConversation}
+        {onPermanentlyDeleteConversation}
+        onToggleGroup={(groupId) =>
+          (collapsedGroups = { ...collapsedGroups, [groupId]: !(collapsedGroups[groupId] ?? false) })}
+      />
+    </div>
   </div>
 </aside>
