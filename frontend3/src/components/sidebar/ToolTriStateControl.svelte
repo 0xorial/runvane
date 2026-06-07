@@ -11,13 +11,13 @@
     onChange: (mode: ToolOverrideUiMode) => void;
   } = $props();
 
-  const options: { id: ExplicitToolOverrideMode; label: string; activeClass: string; inheritedClass: string }[] = [
-    { id: "off", label: "Off", activeClass: "bg-muted text-foreground", inheritedClass: "bg-muted/60 text-muted-foreground ring-1 ring-border" },
-    { id: "allow_all", label: "All", activeClass: "bg-orange-500/20 text-orange-700 dark:text-orange-300", inheritedClass: "bg-orange-500/10 text-orange-600/80 dark:text-orange-300/70 ring-1 ring-orange-500/30" },
-    { id: "custom", label: "Custom", activeClass: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300", inheritedClass: "bg-emerald-500/10 text-emerald-600/80 dark:text-emerald-300/70 ring-1 ring-emerald-500/30" },
+  const options: { id: ExplicitToolOverrideMode; label: string; activeClass: string }[] = [
+    { id: "off", label: "Off", activeClass: "bg-muted font-semibold text-foreground" },
+    { id: "allow_all", label: "All", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
+    { id: "custom", label: "Custom", activeClass: "bg-emerald-500/25 font-semibold text-emerald-800 dark:text-emerald-200" },
   ];
 
-  const highlighted = $derived(mode === "inherit" ? effectiveMode : mode);
+  const selected = $derived((mode === "inherit" ? effectiveMode : mode) as ExplicitToolOverrideMode);
   const inherited = $derived(mode === "inherit");
 </script>
 
@@ -26,17 +26,15 @@
   role="group"
   aria-label="Tool override mode"
 >
-  {#each options as opt (opt.id)}
-    {@const active = highlighted === opt.id}
+  {#each options as opt, i (opt.id)}
+    {@const active = selected === opt.id}
     <button
       type="button"
-      class="px-1.5 py-0.5 transition-colors hover:bg-secondary/80 {active
-        ? inherited
-          ? opt.inheritedClass
-          : opt.activeClass
-        : 'text-muted-foreground'}"
+      class="px-1.5 py-0.5 transition-colors {i > 0 ? 'border-l border-border' : ''} {active
+        ? opt.activeClass
+        : 'text-muted-foreground hover:bg-secondary/80'}"
       aria-pressed={active}
-      title={inherited && active ? "From agent settings (click another option to override)" : undefined}
+      title={inherited && active ? "Current agent setting (pick another option to override for the next message)" : undefined}
       onclick={() => {
         if (inherited && opt.id === effectiveMode) return;
         if (!inherited && mode === opt.id) onChange("inherit");

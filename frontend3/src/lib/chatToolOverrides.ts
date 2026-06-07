@@ -50,13 +50,19 @@ function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {
 }
 
 /** Maps agent tool settings to the tri-state segment that best represents them. */
-export function effectiveAgentToolMode(cfg: {
-  enabled: boolean;
-  guardrail: boolean;
-  config: Record<string, unknown>;
-}): ExplicitToolOverrideMode {
+export function effectiveAgentToolMode(
+  cfg: {
+    enabled: boolean;
+    guardrail: boolean;
+    config: Record<string, unknown>;
+  },
+  catalogDefaultRules: Record<string, unknown> = {},
+): ExplicitToolOverrideMode {
   if (!cfg.enabled) return "off";
-  if (cfg.config.allowed === "always" && !cfg.guardrail) return "allow_all";
+  const rules = Object.keys(cfg.config).length > 0 ? cfg.config : catalogDefaultRules;
+  const allowed = rules.allowed;
+  if (allowed === "never") return "off";
+  if (allowed === "always" && !cfg.guardrail) return "allow_all";
   return "custom";
 }
 

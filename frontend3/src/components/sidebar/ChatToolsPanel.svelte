@@ -12,7 +12,7 @@
     chatToolDraftHasOverrides,
   } from "@/lib/chatToolDraft.svelte";
   import { effectiveAgentToolMode, explicitModeLabel } from "@/lib/chatToolOverrides";
-  import { getToolConfigFromAgent } from "@/pages/settings/agentTools";
+  import { getToolConfigFromAgent, getToolDefaultConfig } from "@/pages/settings/agentTools";
   import ToolTriStateControl from "./ToolTriStateControl.svelte";
 
   const CHAT_TOOLS_HINT =
@@ -85,7 +85,7 @@
           {#if name}
             {@const agentCfg = getToolConfigFromAgent(agent, name)}
             {@const entry = getToolDraftEntry(name)}
-            {@const effectiveMode = effectiveAgentToolMode(agentCfg)}
+            {@const effectiveMode = effectiveAgentToolMode(agentCfg, getToolDefaultConfig(toolCatalog, name))}
             <li class="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
               <div class="min-w-0 flex-1">
                 <div class="truncate font-mono text-[11px] text-foreground" title={name}>{name}</div>
