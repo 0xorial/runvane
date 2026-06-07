@@ -1,4 +1,7 @@
 <script lang="ts">
+  import CodeEditor from "@/components/ui/CodeEditor.svelte";
+  import Icon from "@/components/ui/Icon.svelte";
+  import ZodJsonEditor from "@/components/ui/ZodJsonEditor.svelte";
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
   import { DEFAULT_GUARDRAIL_PROMPT } from "../../../../backend/src/contracts/guardrail";
   import { readGuardrailConfig } from "./agentGuardrail";
@@ -9,6 +12,7 @@
     type ToolConfig,
   } from "./agentTools";
   import { sortAgents } from "./helpers";
+  import { buildToolRulesZodSchemas } from "./toolRulesSchemas";
 
   let {
     currentAgent,
@@ -32,6 +36,7 @@
   const guardrailLlmConfigured = $derived(
     guardrailLlm.provider_id.length > 0 && guardrailLlm.model_name.length > 0,
   );
+  const toolRulesZodSchemas = $derived(buildToolRulesZodSchemas(toolCatalog));
 
   function getToolConfig(toolName: string): ToolConfig {
     return getToolConfigFromAgent(currentAgent, toolName);
@@ -102,7 +107,11 @@
                   onclick={() => toggleExpanded(name)}
                   aria-expanded={expanded}
                 >
-                  <span class="text-muted-foreground">{expanded ? "▾" : "▸"}</span>
+                  {#if expanded}
+                    <Icon name="chevron-down" class="h-3.5 w-3.5 text-muted-foreground" />
+                  {:else}
+                    <Icon name="chevron-right" class="h-3.5 w-3.5 text-muted-foreground" />
+                  {/if}
                   <code>{name}</code>
                 </button>
               {:else}
@@ -155,14 +164,25 @@
                   <div class="mb-2 text-xs font-semibold text-foreground">
                     <code>{name}</code> config (JSON)
                   </div>
-                  <textarea
-                    class="min-h-[120px] w-full resize-y rounded-lg border border-input bg-background p-2 font-mono text-xs leading-snug"
-                    value={getToolConfigDraft(name)}
-                    readonly={!canEdit}
-                    oninput={(e) => onToolConfigDraftChange(name, e.currentTarget.value)}
-                  ></textarea>
-                  {#if toolConfigErrors[name]}
-                    <div class="mt-2 text-xs text-destructive" role="alert">{toolConfigErrors[name]}</div>
+                  {#if toolRulesZodSchemas.get(name)}
+                    <ZodJsonEditor
+                      schema={toolRulesZodSchemas.get(name)!}
+                      value={getToolConfigDraft(name)}
+                      onchange={(v) => onToolConfigDraftChange(name, v)}
+                      height={200}
+                      readOnly={!canEdit}
+                    />
+                  {:else}
+                    <CodeEditor
+                      value={getToolConfigDraft(name)}
+                      onchange={(v) => onToolConfigDraftChange(name, v)}
+                      language="json"
+                      height={200}
+                      readOnly={!canEdit}
+                    />
+                    {#if toolConfigErrors[name]}
+                      <div class="mt-2 text-xs text-destructive" role="alert">{toolConfigErrors[name]}</div>
+                    {/if}
                   {/if}
                   {#if cfg.guardrail && guardrailLlmConfigured}
                     <div class="mt-3">

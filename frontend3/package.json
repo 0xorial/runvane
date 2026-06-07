@@ -13,11 +13,19 @@
     "test:e2e:servers:stop": "node ../scripts/e2e-servers.mjs stop"
   },
   "dependencies": {
-    "@tanstack/svelte-query": "^6.0.13"
+    "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/svelte-query": "^6.0.13",
+    "dompurify": "^3.4.8",
+    "marked": "^18.0.5",
+    "monaco-editor": "^0.55.1",
+    "paneforge": "^1.0.2",
+    "zod": "^4.4.3",
+    "zodex": "^4.0.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tsconfig/svelte": "^5.0.8",
+    "@types/dompurify": "^3.0.5",
     "@types/node": "^24.12.3",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
