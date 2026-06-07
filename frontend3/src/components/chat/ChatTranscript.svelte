@@ -35,12 +35,10 @@
       {#each visibleEntries as entry$ (entry$.id)}
         <ObservableEntry {entry$} {conversationId} {thoughtTripletsById} />
       {/each}
-    {:else if conversationId && isSessionLoading}
+    {:else if conversationId && isSessionLoading && visibleEntries.length === 0}
       <div data-testid="chat-loading" class="flex min-h-[12rem] flex-1 items-center justify-center p-8">
-        <Spinner size={24} />
+        <Spinner size={16} />
       </div>
-    {:else if !conversationId}
-      <AgentCardsEmptyState {selectedAgentId} />
     {:else}
       <AgentCardsEmptyState {selectedAgentId} />
     {/if}

@@ -20,7 +20,8 @@
       | "square"
       | "arrow-right"
       | "check-circle"
-      | "x-circle";
+      | "x-circle"
+      | "folder-input";
     class?: string;
     strokeWidth?: number;
   } = $props();
@@ -63,5 +64,7 @@
     <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
   {:else if name === "x-circle"}
     <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />
+  {:else if name === "folder-input"}
+    <path d="M2 9a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1" /><path d="M20 13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9" /><path d="m9 13 3 3 3-3" />
   {/if}
 </svg>

@@ -24,19 +24,72 @@
   } = $props();
 
   let moveOpen = $state(false);
+  let moveSubOpen = $state(false);
   let newGroupDialogOpen = $state(false);
   let newGroupName = $state("");
+  let root = $state<HTMLDivElement | null>(null);
 
-  async function moveToGroup(groupId: string | null): Promise<void> {
+  $effect(() => {
+    if (!moveOpen) {
+      moveSubOpen = false;
+      return;
+    }
+    function onDocMouseDown(event: MouseEvent): void {
+      const target = event.target;
+      if (!(target instanceof Node) || !root?.contains(target)) moveOpen = false;
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  });
+
+  async function moveSelected(target: { groupId?: string | null; newGroupName?: string }): Promise<void> {
     moveOpen = false;
+    moveSubOpen = false;
+    if (selectedConversationIds.length === 0) return;
+
+    const requestBody = {
+      groupId: Object.prototype.hasOwnProperty.call(target, "groupId") ? (target.groupId ?? null) : undefined,
+      newGroupName: Object.prototype.hasOwnProperty.call(target, "newGroupName")
+        ? String(target.newGroupName ?? "")
+        : undefined,
+    };
+
     try {
-      await Promise.all(
-        selectedConversationIds.map((id) => renameConversation(id, { groupId })),
+      const results = await Promise.allSettled(
+        selectedConversationIds.map((id) => renameConversation(id, requestBody)),
       );
+      const failedIds: string[] = [];
+      let firstReason = "";
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") return;
+        failedIds.push(selectedConversationIds[index]);
+        if (!firstReason) {
+          firstReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        }
+      });
+
       const data = await reloadConversations();
-      if (groupId) onExpandGroup(groupId);
+      if (failedIds.length > 0) {
+        onSelectionChange(failedIds);
+        notifyError(
+          `Moved ${selectedConversationIds.length - failedIds.length}/${selectedConversationIds.length}. ${firstReason}`,
+        );
+        return;
+      }
+
       onSelectionChange([]);
-      void data;
+      const targetGroupId = target.groupId;
+      if (typeof targetGroupId === "string" && targetGroupId.trim()) {
+        onExpandGroup(targetGroupId);
+        return;
+      }
+      if (target.newGroupName) {
+        const nextGroup = data.groups.find(
+          (group) =>
+            group.name.localeCompare(target.newGroupName || "", undefined, { sensitivity: "base" }) === 0,
+        );
+        if (nextGroup?.id) onExpandGroup(nextGroup.id);
+      }
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
@@ -45,66 +98,89 @@
   async function createGroupAndMove(): Promise<void> {
     const name = newGroupName.trim();
     if (!name) return;
-    moveOpen = false;
     newGroupDialogOpen = false;
-    try {
-      const firstId = selectedConversationIds[0];
-      if (!firstId) return;
-      await renameConversation(firstId, { newGroupName: name });
-      const data = await reloadConversations();
-      const group = data.groups.find((g) => g.name.localeCompare(name, undefined, { sensitivity: "base" }) === 0);
-      if (group?.id) {
-        const rest = selectedConversationIds.slice(1);
-        await Promise.all(rest.map((id) => renameConversation(id, { groupId: group.id })));
-        await reloadConversations();
-        onExpandGroup(group.id);
-      }
-      onSelectionChange([]);
-      newGroupName = "";
-    } catch (e) {
-      notifyError(e instanceof Error ? e.message : String(e));
-    }
+    newGroupName = "";
+    await moveSelected({ newGroupName: name });
   }
 </script>
 
 <div class="flex items-center justify-between border-t border-sidebar-border pt-1 text-xs text-muted-foreground">
   <span>{selectedConversationIds.length} selected</span>
-  <div class="relative flex items-center gap-0.5">
+  <div class="relative flex items-center gap-0.5" bind:this={root}>
     {#if !deletedMode}
-      <button type="button" class="rounded px-1.5 py-0.5 hover:bg-secondary/80" onclick={() => (moveOpen = !moveOpen)}>
-        Move
+      <button
+        type="button"
+        aria-label="Move selected conversations"
+        title="Move selected conversations"
+        class="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+        onclick={() => (moveOpen = !moveOpen)}
+      >
+        <Icon name="folder-input" class="h-3.5 w-3.5" />
       </button>
       {#if moveOpen}
-        <div class="absolute right-0 top-full z-20 mt-1 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md">
-          <button type="button" class="block w-full px-3 py-1 text-left text-xs hover:bg-muted" onclick={() => void moveToGroup(null)}>
-            No group
-          </button>
-          {#each knownGroups as group (group.id)}
-            <button
-              type="button"
-              class="block w-full px-3 py-1 text-left text-xs hover:bg-muted"
-              onclick={() => void moveToGroup(group.id)}
-            >
-              {group.name}
-            </button>
-          {/each}
+        <div
+          role="menu"
+          class="absolute right-0 top-full z-20 mt-1 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
+        >
           <button
             type="button"
-            class="block w-full px-3 py-1 text-left text-xs hover:bg-muted"
-            onclick={() => {
-              moveOpen = false;
-              newGroupDialogOpen = true;
-            }}
+            role="menuitem"
+            class="block w-full px-3 py-1.5 text-left text-xs hover:bg-muted"
+            onclick={() => void moveSelected({ groupId: null })}
           >
-            New group…
+            No group
           </button>
+          <div
+            role="group"
+            class="relative"
+            onmouseenter={() => (moveSubOpen = true)}
+            onmouseleave={() => (moveSubOpen = false)}
+          >
+            <button
+              type="button"
+              class="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-muted"
+              onclick={() => (moveSubOpen = !moveSubOpen)}
+            >
+              Move to group
+              <span class="text-muted-foreground">›</span>
+            </button>
+            {#if moveSubOpen}
+              <div
+                role="menu"
+                class="absolute right-full top-0 z-30 mr-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
+              >
+                {#each knownGroups as group (group.id)}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="block w-full px-3 py-1.5 text-left text-xs hover:bg-muted"
+                    onclick={() => void moveSelected({ groupId: group.id })}
+                  >
+                    {group.name}
+                  </button>
+                {/each}
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="block w-full px-3 py-1.5 text-left text-xs hover:bg-muted"
+                  onclick={() => {
+                    moveOpen = false;
+                    moveSubOpen = false;
+                    newGroupDialogOpen = true;
+                  }}
+                >
+                  New group…
+                </button>
+              </div>
+            {/if}
+          </div>
         </div>
       {/if}
     {/if}
     <button
       type="button"
       aria-label="Delete selected conversations"
-      class="inline-flex h-6 w-6 items-center justify-center rounded text-destructive/70"
+      class="inline-flex h-6 w-6 items-center justify-center rounded text-destructive/70 hover:bg-destructive/10"
       onclick={() => void onDeleteSelected()}
     >
       <Icon name="trash" class="h-3.5 w-3.5" />
