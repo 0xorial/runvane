@@ -42,6 +42,7 @@
   } = $props();
 
   let menuOpen = $state(false);
+  let moveSubOpen = $state(false);
   let moveDialogOpen = $state(false);
   let newGroupName = $state("");
 
@@ -113,6 +114,7 @@
         onclick={(e) => {
           e.stopPropagation();
           menuOpen = !menuOpen;
+          if (!menuOpen) moveSubOpen = false;
         }}
       >
         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -134,23 +136,64 @@
               Delete permanently
             </button>
           {:else}
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onRenameConversation(conversation); }}>
+            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; moveSubOpen = false; onRenameConversation(conversation); }}>
               Rename
             </button>
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onMoveConversationToGroup(conversation, { groupId: null }); }}>
-              Move: No group
-            </button>
-            {#each knownGroups as group (group.id)}
+            <div
+              role="group"
+              class="relative"
+              onmouseenter={() => (moveSubOpen = true)}
+              onmouseleave={() => (moveSubOpen = false)}
+            >
               <button
-                class="block w-full px-3 py-1.5 text-left hover:bg-muted"
-                onclick={() => { menuOpen = false; void onMoveConversationToGroup(conversation, { groupId: group.id }); }}
+                type="button"
+                class="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-muted"
+                onclick={() => (moveSubOpen = !moveSubOpen)}
               >
-                Move: {group.name}
+                Move to group
+                <span class="text-muted-foreground">›</span>
               </button>
-            {/each}
-            <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; moveDialogOpen = true; }}>
-              New group…
-            </button>
+              {#if moveSubOpen}
+                <div
+                  role="menu"
+                  class="absolute left-full top-0 z-40 ml-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
+                  onmousedown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+                    onclick={() => {
+                      menuOpen = false;
+                      moveSubOpen = false;
+                      void onMoveConversationToGroup(conversation, { groupId: null });
+                    }}
+                  >
+                    No group
+                  </button>
+                  {#each knownGroups as group (group.id)}
+                    <button
+                      class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+                      onclick={() => {
+                        menuOpen = false;
+                        moveSubOpen = false;
+                        void onMoveConversationToGroup(conversation, { groupId: group.id });
+                      }}
+                    >
+                      {group.name}
+                    </button>
+                  {/each}
+                  <button
+                    class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+                    onclick={() => {
+                      menuOpen = false;
+                      moveSubOpen = false;
+                      moveDialogOpen = true;
+                    }}
+                  >
+                    New group…
+                  </button>
+                </div>
+              {/if}
+            </div>
             <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onSoftDeleteConversation(conversation); }}>
               Delete
             </button>

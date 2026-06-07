@@ -10,6 +10,7 @@
 
   let open = $state(false);
   let tick = $state(0);
+  let root = $state<HTMLDivElement | null>(null);
 
   onMount(() => {
     ensureTasksStream();
@@ -19,18 +20,25 @@
     return () => clearInterval(id);
   });
 
+  $effect(() => {
+    if (!open) return;
+    function onDocMouseDown(event: MouseEvent): void {
+      const target = event.target;
+      if (!(target instanceof Node) || !root?.contains(target)) open = false;
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  });
+
   const tasks = $derived.by(() => {
     void tick;
     return getTasksSnapshot();
   });
 
-  const local = $derived(
-    conversationId ? tasks.filter((t) => t.conversationId === conversationId) : [],
-  );
-  const others = $derived(
-    conversationId ? tasks.filter((t) => t.conversationId !== conversationId) : tasks,
-  );
+  const local = $derived(conversationId ? tasks.filter((t) => t.conversationId === conversationId) : []);
+  const others = $derived(conversationId ? tasks.filter((t) => t.conversationId !== conversationId) : tasks);
   const total = $derived(tasks.length);
+  const localCount = $derived(local.length);
   const active = $derived(total > 0);
 
   function elapsed(startedAt: string): string {
@@ -48,34 +56,39 @@
   }
 </script>
 
-<div class="relative">
+<div class="relative" bind:this={root}>
   <button
     type="button"
-    class="inline-flex h-7 min-w-[28px] items-center justify-center gap-1 rounded-md px-1.5 text-xs {active
+    class="relative inline-flex h-7 min-w-[28px] shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs transition-colors {active
       ? 'bg-primary/15 text-primary hover:bg-primary/25'
       : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-    aria-label={active ? `${total} tasks running` : "No tasks running"}
+    aria-label={active ? `${total} task${total === 1 ? '' : 's'} running` : "No tasks running"}
+    title={active ? `${total} running` : "No tasks"}
     onclick={() => (open = !open)}
   >
     {#if active}
       <Icon name="loader" class="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
     {:else}
-      <Icon name="activity" class="h-3.5 w-3.5" />
+      <Icon name="activity" class="h-3.5 w-3.5" strokeWidth={2} />
     {/if}
     {#if active}<span class="tabular-nums">{total}</span>{/if}
   </button>
   {#if open}
-    <div class="absolute right-0 top-full z-[1400] mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl">
+    <div class="absolute right-0 top-full z-[1400] mt-1.5 w-80 rounded-lg border border-border bg-popover p-0 shadow-xl">
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
-        <span class="text-xs font-medium">Tasks ({total})</span>
-        {#if local.length > 0 && conversationId}
+        <span class="text-xs font-medium text-foreground">
+          Tasks <span class="ml-1 text-muted-foreground">({total})</span>
+        </span>
+        {#if localCount > 0 && conversationId}
           <button
             type="button"
-            class="text-[11px] text-muted-foreground hover:text-foreground"
+            class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Cancel all tasks on this conversation"
             onclick={() => {
               for (const t of local) safeCancel(t.id);
             }}
           >
+            <Icon name="square" class="h-3 w-3" />
             Cancel this conversation
           </button>
         {/if}
