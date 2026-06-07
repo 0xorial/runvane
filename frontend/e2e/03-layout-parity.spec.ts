@@ -19,5 +19,5 @@ test("settings navigation from chat title panel", async ({ app, request }) => {
   await app.chat.gotoNew(agentId);
   await app.page.getByTestId("open-settings").click();
   await expect(app.page).toHaveURL(/\/settings\//);
-  await expect(app.page.getByRole("heading", { name: "Agents" })).toBeVisible();
+  await expect(app.page.getByRole("button", { name: "Add agent" })).toBeVisible();
 });

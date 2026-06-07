@@ -272,11 +272,9 @@
   });
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-  <div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 gap-4 overflow-hidden">
-    <div class="w-56 shrink-0 overflow-y-auto">
-      <SettingsSidebar {activeSection} settingsSearch={$chatSearch} onNavigate={goSection} />
-    </div>
+<section class="min-h-0 w-full flex-1 overflow-auto">
+  <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-[280px_minmax(0,1fr)]">
+    <SettingsSidebar {activeSection} settingsSearch={$chatSearch} onNavigate={goSection} />
     <SettingsSectionView
       section={activeSection}
       {settings}
@@ -316,4 +314,4 @@
       onDeletePreset={deleteLoadedPreset}
     />
   </div>
-</div>
+</section>

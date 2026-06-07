@@ -7,6 +7,7 @@
   import ModelPresetsEditor from "./ModelPresetsEditor.svelte";
   import ModelPricingEditor from "./ModelPricingEditor.svelte";
   import ProviderCard from "./ProviderCard.svelte";
+  import SettingsHeader from "./SettingsHeader.svelte";
   import { buildModelGroups, filterProviders, type SettingsSection } from "./helpers";
   import { ghostBtn, settingsPlaceholderBox } from "./settingsClasses";
   import AsyncButton from "@/components/ui/AsyncButton.svelte";
@@ -87,22 +88,27 @@
 
   const modelGroups = $derived(settings ? buildModelGroups(settings.providers) : []);
   const providerCards = $derived(settings ? filterProviders(settings.providers, providerSearch) : []);
+  const showSectionHeader = $derived(
+    section !== "model-providers" &&
+      section !== "model-presets" &&
+      section !== "model-pricing" &&
+      section !== "agents",
+  );
 </script>
 
-<div class="min-w-0 flex-1 overflow-y-auto rounded-lg border border-border bg-card p-4">
+<main class="flex min-w-0 flex-col gap-3.5">
+  {#if showSectionHeader}
+    <SettingsHeader
+      activeSection={section}
+      {providerSearch}
+      onProviderSearchChange={section === "model-providers" ? onProviderSearchChange : undefined}
+    />
+  {/if}
+
   {#if section === "model-providers"}
-    <h1 class="mb-3 text-lg font-semibold">Model Providers</h1>
     {#if settingsLoading || !settings}
       <p class="text-sm text-muted-foreground">Loading…</p>
     {:else}
-      <div class="mb-3">
-        <input
-          class="w-full max-w-md rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-          placeholder="Filter providers…"
-          value={providerSearch}
-          oninput={(e) => onProviderSearchChange(e.currentTarget.value)}
-        />
-      </div>
       <div class="flex flex-col gap-3">
         <GlobalModelSettingsCard {settings} {modelGroups} onSettingsChange={onSettingsChange} />
         {#each providerCards as provider (provider.id)}
@@ -118,12 +124,11 @@
           />
         {/each}
       </div>
-      <div class="mt-4">
-        <AsyncButton class={ghostBtn} onclick={onSaveProviders}>Save providers</AsyncButton>
+      <div class="flex items-center gap-2.5">
+        <AsyncButton class="{ghostBtn} border-slate-300" onclick={onSaveProviders}>Save</AsyncButton>
       </div>
     {/if}
   {:else if section === "model-presets"}
-    <h1 class="mb-3 text-lg font-semibold">Model Presets</h1>
     <ModelPresetsEditor
       {presets}
       {presetEditId}
@@ -137,10 +142,8 @@
       deletePreset={onDeletePreset}
     />
   {:else if section === "model-pricing"}
-    <h1 class="mb-3 text-lg font-semibold">Model Pricing</h1>
     <ModelPricingEditor />
   {:else if section === "agents"}
-    <h1 class="mb-3 text-lg font-semibold">Agents</h1>
     <AgentsEditor
       {agents}
       {presets}
@@ -159,12 +162,11 @@
       {modelGroups}
     />
   {:else if section === "tools"}
-    <h1 class="mb-3 text-lg font-semibold">Tools</h1>
     <div class={settingsPlaceholderBox}>
-      Per-agent tool enablement and approval policy: open <strong>Agents</strong> → pick an agent → configure tools below.
+      Per-agent tool enablement and approval policy: open <strong>Agents</strong> → pick an agent →
+      <strong>Tools &amp; permissions</strong>.
     </div>
   {:else}
-    <h1 class="mb-3 text-lg font-semibold">Skills</h1>
-    <div class={settingsPlaceholderBox}>Skills configuration coming soon.</div>
+    <div class={settingsPlaceholderBox}>Skills UI placeholder.</div>
   {/if}
-</div>
+</main>

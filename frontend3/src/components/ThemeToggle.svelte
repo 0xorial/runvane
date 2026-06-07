@@ -11,7 +11,7 @@
 
 <button
   type="button"
-  class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
   title={dark ? "Switch to light mode" : "Switch to dark mode"}
   aria-label="Toggle theme"
   onclick={() => (dark = !dark)}

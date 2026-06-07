@@ -19,6 +19,7 @@
   } from "@/lib/router";
   import { fetchConversationSession } from "@/hooks/queries/conversations";
   import { retainChatSessionLive } from "@/lib/chatSessionRegistry";
+  import { navBtnBase, navBtnDefault, navBtnOutline } from "@/lib/buttonClasses";
   import { onMount } from "svelte";
 
   let chatSidebarVisible = $state(true);
@@ -54,20 +55,22 @@
   <div class="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
     <ToastHost />
     {#if !$isChatRoute}
-      <header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/50 px-3 py-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-semibold tracking-tight">Runvane</span>
-          <nav class="flex flex-wrap gap-2 text-xs">
+      <header
+        class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/50 px-3 py-2 backdrop-blur-sm"
+      >
+        <div class="flex flex-wrap items-center gap-2 md:gap-3">
+          <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
+          <nav class="flex flex-wrap gap-2">
             <button
               type="button"
-              class="rounded-md border px-2 py-1 {$isChatRoute ? 'bg-primary text-primary-foreground' : 'border-border'}"
+              class="{navBtnBase} {$isChatRoute ? navBtnDefault : navBtnOutline}"
               onclick={() => navigate(`/chat/new${$chatSearch}`)}
             >
               Chat
             </button>
             <button
               type="button"
-              class="rounded-md border px-2 py-1 {$isSettingsRoute ? 'bg-primary text-primary-foreground' : 'border-border'}"
+              class="{navBtnBase} {$isSettingsRoute ? navBtnDefault : navBtnOutline}"
               onclick={() => navigate(settingsLinkFromSearch($chatSearch))}
             >
               Settings

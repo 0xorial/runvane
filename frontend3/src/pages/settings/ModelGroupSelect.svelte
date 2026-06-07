@@ -42,7 +42,7 @@
 </script>
 
 <select
-  class="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+  class="flex min-h-[28px] w-full cursor-pointer appearance-none rounded-md border border-input bg-muted/40 px-2.5 py-1 text-sm text-foreground"
   {disabled}
   value={selectedKey}
   onchange={(e) => onSelect(e.currentTarget.value)}

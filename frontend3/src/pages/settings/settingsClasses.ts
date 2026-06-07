@@ -1,4 +1,9 @@
 /** Shared Tailwind fragments for settings editors */
+export const settingsNavBtn =
+  "mb-1.5 w-full cursor-pointer rounded-[10px] border border-transparent px-2.5 py-2.5 text-left text-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.07]";
+
+export const settingsNavBtnActive = "border-primary/40 bg-primary/10 hover:bg-primary/10";
+
 export const ghostBtn =
   "rounded-[9px] border border-border bg-secondary px-3 py-1.5 text-sm font-semibold text-secondary-foreground shadow-sm hover:bg-secondary/80";
 
