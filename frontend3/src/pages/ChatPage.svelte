@@ -7,6 +7,7 @@
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
   import { setChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
+  import { resolveTopAnchorEntryId } from "@/lib/chatTopAnchor";
   import { agentIdFromSearch, chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
   import { Pane, PaneGroup } from "paneforge";
 
@@ -32,7 +33,6 @@
 
   let expandedStageBySlotKey = $state(new Map<string, ThoughtStage>());
   let expandedStageVersion = $state(0);
-  let topAnchorEntryId = $state<string | null>(null);
   let selectedBranchAnchorEntryId = $state<string | null>(null);
   let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
   const selectedAgentId = $derived(agentIdFromSearch(search));
@@ -75,9 +75,12 @@
     return tripletStreamIdByThoughtId.get(selected.thoughtId) ?? entryId;
   }
 
-  function handleSent(optimisticRowId: string): void {
+  const topAnchorEntryId = $derived(
+    resolveTopAnchorEntryId(conversationId, session.activePathEntries, selectedBranchAnchorEntryId),
+  );
+
+  function handleSent(_optimisticRowId: string): void {
     selectedBranchAnchorEntryId = null;
-    topAnchorEntryId = optimisticRowId;
   }
 
   function openSettings(): void {
@@ -86,7 +89,6 @@
 
   $effect(() => {
     void conversationId;
-    if (topAnchorEntryId !== null) topAnchorEntryId = null;
     if (selectedBranchAnchorEntryId !== null) selectedBranchAnchorEntryId = null;
     if (expandedStageBySlotKey.size > 0) {
       expandedStageBySlotKey = new Map();
@@ -139,9 +141,7 @@
             activePathEntries={session.activePathEntries}
             switchToBranch={session.switchToBranch}
             onAnchorEntrySelected={(entryId) => {
-              const visibleAnchorId = resolveVisibleAnchorEntryId(entryId);
-              selectedBranchAnchorEntryId = visibleAnchorId;
-              topAnchorEntryId = visibleAnchorId;
+              selectedBranchAnchorEntryId = resolveVisibleAnchorEntryId(entryId);
             }}
           />
         </aside>

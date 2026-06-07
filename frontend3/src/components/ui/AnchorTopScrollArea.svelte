@@ -104,6 +104,20 @@
     scheduleAlign(topAnchorEntryId);
     return cancelAlignRaf;
   });
+
+  $effect(() => {
+    const content = contentEl;
+    const entryId = topAnchorEntryId;
+    if (!content || !entryId) return;
+
+    const observer = new ResizeObserver(() => {
+      if (topAnchorEntryId !== entryId) return;
+      lastAnchorId = null;
+      scheduleAlign(entryId);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  });
 </script>
 
 <div bind:this={scrollEl} class={className} data-testid={testId}>
