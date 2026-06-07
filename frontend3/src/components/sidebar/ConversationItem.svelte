@@ -121,8 +121,10 @@
       </button>
       {#if menuOpen}
         <div
+          role="menu"
+          tabindex="-1"
           class="absolute right-0 top-full z-30 min-w-[10rem] rounded-md border border-border bg-popover py-1 text-xs shadow-md"
-          onclick={(e) => e.stopPropagation()}
+          onmousedown={(e) => e.stopPropagation()}
         >
           {#if deletedMode || conversation.isDeleted}
             <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { menuOpen = false; void onUndeleteConversation(conversation); }}>

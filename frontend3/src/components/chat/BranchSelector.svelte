@@ -28,17 +28,18 @@
 </script>
 
 {#if hasBranches}
-  <div
+  <span
     data-testid="branch-selector"
     class="inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground"
-    onclick={(e) => e.stopPropagation()}
-    onkeydown={(e) => e.stopPropagation()}
     role="group"
   >
     <button
       type="button"
       disabled={switching}
-      onclick={() => void switchByOffset(-1)}
+      onclick={(e) => {
+        e.stopPropagation();
+        void switchByOffset(-1);
+      }}
       class="transition-colors hover:text-foreground disabled:opacity-50"
       aria-label="Previous branch"
     >
@@ -50,7 +51,10 @@
     <button
       type="button"
       disabled={switching}
-      onclick={() => void switchByOffset(1)}
+      onclick={(e) => {
+        e.stopPropagation();
+        void switchByOffset(1);
+      }}
       class="transition-colors hover:text-foreground disabled:opacity-50"
       aria-label="Next branch"
     >
@@ -58,5 +62,5 @@
         <path d="m9 18 6-6-6-6" />
       </svg>
     </button>
-  </div>
+  </span>
 {/if}

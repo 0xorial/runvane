@@ -5,7 +5,8 @@
 
   let { entry }: { entry: ToolInvocationEntry } = $props();
 
-  let expanded = $state(entry.state === "requested");
+  let toggled = $state<boolean | null>(null);
+  const expanded = $derived(toggled ?? entry.state === "requested");
 
   const toolName = $derived(entry.toolId || "tool");
   const paramsText = $derived(JSON.stringify(entry.parameters ?? {}, null, 2));
@@ -31,7 +32,7 @@
         type="button"
         class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-secondary"
         aria-expanded={expanded}
-        onclick={() => (expanded = !expanded)}
+        onclick={() => (toggled = !expanded)}
       >
         <RowIcon name="chevron" class="h-3 w-3 shrink-0 text-muted-foreground {expanded ? 'rotate-90' : ''}" />
         <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />

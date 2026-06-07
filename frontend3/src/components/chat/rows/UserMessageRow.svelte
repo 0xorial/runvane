@@ -13,7 +13,7 @@
 
   const session = getChatSessionContext();
   let isEditing = $state(false);
-  let editedText = $state(entry.text);
+  let editedText = $state("");
   let isSaving = $state(false);
 
   const relativeTime = $derived(formatRelativeChatTime(entry.createdAt));
