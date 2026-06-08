@@ -21,7 +21,9 @@
       | "arrow-right"
       | "check-circle"
       | "x-circle"
-      | "folder-input";
+      | "folder-input"
+      | "folder"
+      | "message-square";
     class?: string;
     strokeWidth?: number;
   } = $props();
@@ -66,5 +68,9 @@
     <circle cx="12" cy="12" r="10" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />
   {:else if name === "folder-input"}
     <path d="M2 9a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1" /><path d="M20 13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9" /><path d="m9 13 3 3 3-3" />
+  {:else if name === "folder"}
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  {:else if name === "message-square"}
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
   {/if}
 </svg>

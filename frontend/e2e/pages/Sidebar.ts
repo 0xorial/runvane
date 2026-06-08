@@ -1,9 +1,5 @@
 import { expect, Locator, Page } from "@playwright/test";
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 export class Sidebar {
   constructor(private readonly page: Page) {}
 
@@ -114,9 +110,7 @@ export class Sidebar {
   }
 
   groupHeader(groupName: string): Locator {
-    return this.page.getByRole("button", {
-      name: new RegExp(`^${escapeRegex(groupName)}\\s+\\d+$`),
-    });
+    return this.page.locator(`[data-sidebar-group-name="${groupName}"]`);
   }
 
   async expectConversationInGroup(conversationId: string, groupName: string): Promise<void> {

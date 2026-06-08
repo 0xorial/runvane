@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Icon from "@/components/ui/Icon.svelte";
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
   import type { ModelPricing } from "@/lib/costEstimation";
   import type { SidebarSection } from "./sidebarSections";
+  import ConversationGroupItem from "./ConversationGroupItem.svelte";
   import ConversationItem from "./ConversationItem.svelte";
 
   let {
@@ -59,22 +59,14 @@
     />
   {:else}
     {@const collapsed = collapsedGroups[section.groupId] ?? false}
-    <button
-      type="button"
-      class="flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-secondary/40"
-      onclick={() => toggleGroup(section.groupId)}
+    <ConversationGroupItem
+      groupId={section.groupId}
+      groupName={section.groupName}
+      rowCount={section.rows.length}
+      latestTimestampIso={section.latestTimestampIso}
+      {collapsed}
+      onToggle={toggleGroup}
     >
-      <span class="truncate">{section.groupName}</span>
-      <span class="ml-2 inline-flex shrink-0 items-center gap-1">
-        {#if collapsed}
-          <Icon name="chevron-right" class="h-3.5 w-3.5" />
-        {:else}
-          <Icon name="chevron-down" class="h-3.5 w-3.5" />
-        {/if}
-        {section.rows.length}
-      </span>
-    </button>
-    {#if !collapsed}
       {#each section.rows as row (row.id)}
         <ConversationItem
           conversation={row}
@@ -92,6 +84,6 @@
           {permanentlyDeleteConversation}
         />
       {/each}
-    {/if}
+    </ConversationGroupItem>
   {/if}
 {/each}

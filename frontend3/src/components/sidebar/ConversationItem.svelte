@@ -2,6 +2,7 @@
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
   import { TokenUsageMapper } from "../../../../backend/src/contracts/token-usage";
   import LlmMetaBadge from "@/components/chat/LlmMetaBadge.svelte";
+  import Icon from "@/components/ui/Icon.svelte";
   import { toggleConversationSelected } from "@/lib/conversationMultiSelect.svelte";
   import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
@@ -69,7 +70,7 @@
   data-conversation-row
   data-conversation-id={conversation.id}
   data-active="false"
-  class="group/row flex w-full shrink-0 items-stretch rounded-md text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground {nested
+  class="group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground {nested
     ? 'ml-3'
     : ''}"
 >
@@ -95,17 +96,20 @@
       else selectConversation(conversation.id);
     }}
   >
-    <span class="block truncate font-medium text-foreground/90 group-hover/row:text-foreground">
-      {conversation.title || "Untitled"}
-    </span>
+    <div class="flex items-center gap-2">
+      <Icon name="message-square" class="h-3 w-3 shrink-0" />
+      <span class="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
+        {conversation.title || "Untitled"}
+      </span>
+    </div>
     {#if stamp}
-      <span class="mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
+      <span class="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
     {/if}
     <LlmMetaBadge
       {usage}
       showTokenBreakdown
       {estimatedCostUsd}
-      class="mt-0.5 bg-transparent px-0 py-0 text-[10px]"
+      class="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
     />
   </button>
   {#if !multiSelectMode}
