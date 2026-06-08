@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
+import { parseAutoImport } from './auto.parser.js';
+import { parseClaudeExport } from './claude.parser.js';
 import { parseGeminiExport } from './gemini.parser.js';
+import { parseGrokExport } from './grok.parser.js';
 import { parseOpenAiExport } from './openai.parser.js';
 import type { ImportResult, NormalizedImportConversation } from './types.js';
 
@@ -18,6 +21,20 @@ export class ChatHistoryImportService {
 
   importGemini(raw: unknown, agentId: string): Promise<ImportResult> {
     return this.importParsed(parseGeminiExport(raw), agentId);
+  }
+
+  importClaude(raw: unknown, agentId: string): Promise<ImportResult> {
+    return this.importParsed(parseClaudeExport(raw), agentId);
+  }
+
+  importGrok(raw: unknown, agentId: string): Promise<ImportResult> {
+    return this.importParsed(parseGrokExport(raw), agentId);
+  }
+
+  async importAuto(raw: unknown, agentId: string): Promise<ImportResult & { format: string }> {
+    const detected = parseAutoImport(raw);
+    const result = await this.importParsed(detected.conversations, agentId);
+    return { ...result, format: detected.format };
   }
 
   private async importParsed(rows: NormalizedImportConversation[], agentId: string): Promise<ImportResult> {

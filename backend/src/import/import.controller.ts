@@ -21,6 +21,24 @@ export class ImportController {
     return this.imports.importGemini(body, agentId);
   }
 
+  @Post('claude')
+  async importClaude(@Body() body: unknown) {
+    const agentId = await this.defaultAgentId();
+    return this.imports.importClaude(body, agentId);
+  }
+
+  @Post('grok')
+  async importGrok(@Body() body: unknown) {
+    const agentId = await this.defaultAgentId();
+    return this.imports.importGrok(body, agentId);
+  }
+
+  @Post('auto')
+  async importAuto(@Body() body: unknown) {
+    const agentId = await this.defaultAgentId();
+    return this.imports.importAuto(body, agentId);
+  }
+
   private async defaultAgentId(): Promise<string> {
     const rows = await this.agents.list();
     const agent = rows.find((row) => row.is_default) ?? rows[0];
