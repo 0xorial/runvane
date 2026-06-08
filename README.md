@@ -14,7 +14,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 ## Stack
 
 [![Backend: Node.js + Hono](https://img.shields.io/badge/backend-Node.js%20%2B%20Hono-3c873a)](#)
-[![Frontend: React + Vite](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61dafb)](#)
+[![Frontend: Svelte + Vite](https://img.shields.io/badge/frontend-Svelte%20%2B%20Vite-ff3e00)](#)
 [![Database: SQLite](https://img.shields.io/badge/database-SQLite-07405e)](#)
 [![Deploy: Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ed)](#)
 
@@ -60,17 +60,10 @@ npm run dev
 ```
 
 ```bash
-# Frontend (React)
+# Frontend (Svelte)
 cd frontend
 npm install
 npm run dev
-```
-
-```bash
-# Frontend3 (Svelte, WIP — see docs/frontend3-parity-plan.md)
-cd frontend3
-npm install
-npm run dev    # http://localhost:52205
 npm run test:e2e
 ```
 

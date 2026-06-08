@@ -18,7 +18,7 @@ async function bootstrap() {
     throw new Error('PORT is required (set via dev-ports/with-ports.mjs or .env.ports)');
   }
   const corsOrigins = new Set<string>();
-  for (const raw of [frontendOrigin, process.env.FRONTEND3_ORIGIN]) {
+  for (const raw of [frontendOrigin]) {
     if (!raw) continue;
     const parsed = new URL(raw);
     if (!parsed.port) {

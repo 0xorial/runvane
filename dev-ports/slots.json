@@ -3,6 +3,5 @@
   "frontend": 1,
   "backendDebug": 2,
   "frontendPreview": 3,
-  "prismaStudio": 4,
-  "frontend3": 5
+  "prismaStudio": 4
 }

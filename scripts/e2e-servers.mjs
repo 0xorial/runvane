@@ -32,7 +32,7 @@ function frontendDirName() {
 }
 
 function frontendEntryPath() {
-  return frontendDirName() === "frontend3" ? "/src/App.svelte" : "/src/App.tsx";
+  return "/src/App.svelte";
 }
 
 function killPort(port) {
@@ -121,7 +121,6 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
       DATABASE_URL: databaseUrl,
       PORT: String(backendPort),
       FRONTEND_ORIGIN: frontendOrigin,
-      FRONTEND3_ORIGIN: frontendOrigin,
     }),
     frontend: spawnDetached(
       "npx",

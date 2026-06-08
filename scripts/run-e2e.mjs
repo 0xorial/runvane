@@ -37,11 +37,8 @@ const env = {
   E2E_BASE_URL: frontendOrigin,
 };
 
-const playwrightCwd = path.join(repoRoot, "frontend");
+const playwrightCwd = path.join(repoRoot, process.env.E2E_FRONTEND_DIR ?? "frontend");
 const playwrightArgs = ["playwright", "test", ...process.argv.slice(2)];
-if (process.env.E2E_FRONTEND_DIR === "frontend3") {
-  playwrightArgs.push("-c", path.join(repoRoot, "frontend/playwright.frontend3.config.mjs"));
-}
 
 const child = spawn("npx", playwrightArgs, {
   cwd: playwrightCwd,

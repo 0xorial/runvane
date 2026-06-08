@@ -7,10 +7,7 @@ import { resolveFromDir } from "../dev-ports/lib.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const devPorts = resolveFromDir(__dirname);
 
-const frontendPort =
-  Number(process.env.FRONTEND3_PORT) ||
-  Number(process.env.FRONTEND_PORT) ||
-  devPorts.ports.frontend3;
+const frontendPort = Number(process.env.FRONTEND_PORT) || devPorts.ports.frontend;
 const apiBaseUrl = process.env.VITE_API_BASE_URL || devPorts.env.VITE_API_BASE_URL;
 
 export default defineConfig({
@@ -27,7 +24,7 @@ export default defineConfig({
   },
   preview: {
     host: "0.0.0.0",
-    port: Number(process.env.FRONTEND3_PREVIEW_PORT) || devPorts.ports.frontend3 + 1,
+    port: Number(process.env.FRONTEND_PREVIEW_PORT) || devPorts.ports.frontendPreview,
   },
   define: {
     "import.meta.env.VITE_API_BASE_URL": JSON.stringify(apiBaseUrl),

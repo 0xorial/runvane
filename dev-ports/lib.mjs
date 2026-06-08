@@ -72,7 +72,6 @@ export function formatEnvPorts(resolved) {
     `DEV_PORT_BASE=${env.DEV_PORT_BASE}`,
     `BACKEND_PORT=${env.BACKEND_PORT}`,
     `FRONTEND_PORT=${env.FRONTEND_PORT}`,
-    `FRONTEND3_PORT=${env.FRONTEND3_PORT}`,
     `FRONTEND_ORIGIN=${env.FRONTEND_ORIGIN}`,
     `VITE_API_BASE_URL=${env.VITE_API_BASE_URL}`,
     "",
@@ -106,9 +105,7 @@ export function resolveDevPorts(projectRoot, projectName) {
       PORT: String(backend),
       BACKEND_PORT: String(backend),
       FRONTEND_PORT: String(frontend),
-      FRONTEND3_PORT: String(ports.frontend3),
       FRONTEND_ORIGIN: `http://localhost:${frontend}`,
-      FRONTEND3_ORIGIN: `http://localhost:${ports.frontend3}`,
       VITE_API_BASE_URL: `http://localhost:${backend}`,
     },
   };
