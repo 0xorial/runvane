@@ -12,15 +12,16 @@ export type ModelPresetRow = {
 type ModelPresetDbRow = {
   id: number;
   name: string;
-  parameters_json: string | Record<string, unknown>;
+  parameters_json: unknown;
   created_at: string;
   updated_at: string;
 };
 
-function parseObjectJson(raw: string | Record<string, unknown>): Record<string, unknown> {
-  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) return raw;
-  const parsed = JSON.parse(raw) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+function parseObjectJson(raw: unknown): Record<string, unknown> {
+  const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('model_presets: invalid parameters_json');
+  }
   return parsed as Record<string, unknown>;
 }
 
