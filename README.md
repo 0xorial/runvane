@@ -16,7 +16,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 [![Backend: NestJS + Express](https://img.shields.io/badge/backend-NestJS%20%2B%20Express-E0234E)](#)
 [![Frontend: Svelte + Vite](https://img.shields.io/badge/frontend-Svelte%20%2B%20Vite-ff3e00)](#)
 [![Database: SQLite](https://img.shields.io/badge/database-SQLite-07405e)](#)
-[![Deploy: Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ed)](#)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## Current Features
 
@@ -45,27 +45,22 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Development/usage
 
-Dev ports are allocated per project in [`dev-ports/registry.json`](dev-ports/registry.json) (100 ports per base). Change the base there, then:
+Requires Node.js 20+. From the repo root:
 
 ```bash
-node dev-ports/sync-env.mjs   # writes .env.ports for docker compose
-node dev-ports/list.mjs       # show resolved ports
+npm run setup   # installs deps, creates backend/.env, runs DB migrations
+npm run dev     # starts backend + frontend together (applies migrations first)
+npm run ports   # show resolved dev ports
 ```
 
-```bash
-# Backend
-cd backend
-npm install
-npm run dev
-```
+Then open the frontend URL printed by `npm run dev`, go to **Settings**, and add
+an LLM provider — an API key (OpenAI / OpenRouter), or point it at a local
+[LM Studio](https://lmstudio.ai) server to run fully free and offline.
 
-```bash
-# Frontend (Svelte)
-cd frontend
-npm install
-npm run dev
-npm run test:e2e
-```
+Dev ports are allocated per project in [`dev-ports/registry.json`](dev-ports/registry.json)
+(100 ports per base); change the base there if they collide.
+
+Run the end-to-end tests with `cd frontend && npm run test:e2e`.
 
 ## Roadmap
 

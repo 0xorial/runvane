@@ -1,0 +1,12 @@
+{
+  "name": "runvane",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Local-first, vendor-neutral AI chat client with agentic tools and context engineering.",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "ports": "node dev-ports/list.mjs"
+  }
+}
