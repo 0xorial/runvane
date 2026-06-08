@@ -9,7 +9,12 @@
     softDeleteConversation,
     undeleteConversation,
   } from "@/api/client";
-  import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
+  import type {
+    ConversationGroupRow,
+    ConversationRow,
+    GetConversationsResponse,
+  } from "../../../../backend/src/contracts/conversations";
+  import { queryClient } from "@/lib/queryClient";
   import {
     mergeSseConversation,
     patchConversationsList,
@@ -71,6 +76,7 @@
     void $conversationSelectionRevision;
     return getSelectedConversationIds();
   });
+  const selectedConversationIdSet = $derived(new Set(selectedConversationIds));
   const multiSelectMode = $derived(selectedConversationIds.length > 0);
 
   $effect(() => {
@@ -133,6 +139,15 @@
             next[index] = mergeSseConversation(next[index], ev.conversation);
             return { ...prev, conversations: next };
           });
+          const groupId = String(ev.conversation.groupId || "").trim();
+          if (groupId) {
+            const cached = queryClient.getQueryData<GetConversationsResponse>(
+              queryKeys.conversationList(showDeletedOnly),
+            );
+            if (cached && !cached.groups.some((group) => group.id === groupId)) {
+              void refreshConversations(showDeletedOnly);
+            }
+          }
         }
       },
     });
@@ -201,6 +216,7 @@
           : undefined,
       });
       const data = await refreshConversations(showDeletedOnly);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.conversationList(showDeletedOnly) });
       const groupId = target.groupId;
       if (typeof groupId === "string" && groupId.trim()) {
         collapsedGroups = { ...collapsedGroups, [groupId]: false };
@@ -338,6 +354,7 @@
         {collapsedGroups}
         {knownGroups}
         {multiSelectMode}
+        {selectedConversationIdSet}
         deletedMode={showDeletedOnly}
         {pricingByModel}
         selectConversation={onSelect}

@@ -10,6 +10,7 @@
     collapsedGroups,
     knownGroups,
     multiSelectMode,
+    selectedConversationIdSet,
     deletedMode,
     pricingByModel,
     selectConversation,
@@ -24,6 +25,7 @@
     collapsedGroups: Record<string, boolean>;
     knownGroups: ConversationGroupRow[];
     multiSelectMode: boolean;
+    selectedConversationIdSet: Set<string>;
     deletedMode: boolean;
     pricingByModel: Map<string, ModelPricing>;
     selectConversation: (id: string) => void;
@@ -43,6 +45,7 @@
   {#if section.kind === "conversation"}
     <ConversationItem
       conversation={section.row}
+      selected={selectedConversationIdSet.has(section.row.id)}
       {knownGroups}
       {multiSelectMode}
       {deletedMode}
@@ -75,6 +78,7 @@
       {#each section.rows as row (row.id)}
         <ConversationItem
           conversation={row}
+          selected={selectedConversationIdSet.has(row.id)}
           nested
           {knownGroups}
           {multiSelectMode}

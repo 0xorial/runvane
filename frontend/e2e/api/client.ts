@@ -29,6 +29,54 @@ export async function defaultAgentId(request: APIRequestContext): Promise<string
   return agent.id;
 }
 
+type ConversationRow = { id: string; groupId: string | null; title: string | null };
+
+export async function createConversation(
+  request: APIRequestContext,
+  title: string,
+): Promise<string> {
+  const res = await request.post(`${apiBaseUrl()}/api/conversations`, { data: { title } });
+  expect(res.ok()).toBeTruthy();
+  const created = (await res.json()) as { id?: string };
+  if (!created.id) throw new Error("e2e: POST /api/conversations missing id");
+  return created.id;
+}
+
+export async function getConversation(
+  request: APIRequestContext,
+  conversationId: string,
+): Promise<ConversationRow> {
+  const res = await request.get(
+    `${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}`,
+  );
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as ConversationRow;
+}
+
+export async function listConversations(
+  request: APIRequestContext,
+): Promise<{ conversations: ConversationRow[]; groups: { id: string; name: string }[] }> {
+  const res = await request.get(`${apiBaseUrl()}/api/conversations`);
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as {
+    conversations: ConversationRow[];
+    groups: { id: string; name: string }[];
+  };
+}
+
+export async function moveConversationToGroup(
+  request: APIRequestContext,
+  conversationId: string,
+  target: { groupId?: string | null; newGroupName?: string },
+): Promise<ConversationRow> {
+  const res = await request.put(
+    `${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}`,
+    { data: target },
+  );
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as ConversationRow;
+}
+
 export async function createProbeConversation(
   request: APIRequestContext,
   agentId: string,

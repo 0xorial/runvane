@@ -2,11 +2,7 @@
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
   import { TokenUsageMapper } from "../../../../backend/src/contracts/token-usage";
   import LlmMetaBadge from "@/components/chat/LlmMetaBadge.svelte";
-  import {
-    conversationSelectionRevision,
-    getSelectedConversationIds,
-    toggleConversationSelected,
-  } from "@/lib/conversationMultiSelect.svelte";
+  import { toggleConversationSelected } from "@/lib/conversationMultiSelect.svelte";
   import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import ConversationRowMenu from "./ConversationRowMenu.svelte";
@@ -16,6 +12,7 @@
     conversation,
     nested = false,
     knownGroups,
+    selected,
     multiSelectMode,
     deletedMode,
     pricingByModel,
@@ -29,6 +26,7 @@
     conversation: ConversationRow;
     nested?: boolean;
     knownGroups: ConversationGroupRow[];
+    selected: boolean;
     multiSelectMode: boolean;
     deletedMode: boolean;
     pricingByModel: Map<string, ModelPricing>;
@@ -47,11 +45,6 @@
   let menuAnchor = $state<HTMLButtonElement | null>(null);
   let moveDialogOpen = $state(false);
   let newGroupName = $state("");
-
-  const selected = $derived.by(() => {
-    void $conversationSelectionRevision;
-    return getSelectedConversationIds().includes(conversation.id);
-  });
 
   const timestampIso = $derived(
     conversation.lastMessageAt || conversation.createdAt || conversation.updatedAt,
@@ -87,10 +80,9 @@
       class="h-4 w-4 {multiSelectMode ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}"
       checked={selected}
       aria-label={`Select conversation ${conversation.title || conversation.id}`}
-      onclick={(event) => {
+      onchange={(event) => {
         event.stopPropagation();
-        event.preventDefault();
-        toggleConversationSelected(conversation.id, !selected);
+        toggleConversationSelected(conversation.id, event.currentTarget.checked);
       }}
     />
   </div>
