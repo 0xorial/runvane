@@ -70,3 +70,7 @@ npm run test:e2e
 ## Roadmap
 
 - additional import formats and bulk migration helpers
+
+## License
+
+[MIT](LICENSE) © Timur Seitosmanov
