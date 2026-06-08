@@ -11,6 +11,7 @@ import { ActionStep } from "./thoughtTriplet/ActionStep";
 import { ContextStep } from "./thoughtTriplet/ContextStep";
 import { ReasoningStep } from "./thoughtTriplet/ReasoningStep";
 import { actionMetaLabel, displayStatus } from "./thoughtTriplet/meta";
+import { TryModelBranchButton } from "./thoughtTriplet/TryModelBranchButton";
 import { Connector, StepChip, TinyProgressCircle } from "./thoughtTriplet/StepChip";
 import { TokenTooltip } from "@/components/ui/TokenTooltip";
 import { formatTokenCount } from "@/utils/formatTokenCount";
@@ -79,7 +80,12 @@ function ThoughtTripletRowWithStream({
           <StepChip
             icon={<FileText className="h-3 w-3" />}
             label={contextTitle}
-            badge={<BranchSelector entryId={prepareEntry.id} />}
+            badge={
+              <span className="inline-flex items-center gap-0.5">
+                <TryModelBranchButton prepareEntry={prepareEntry} stream={stream} conversationId={conversationId} />
+                <BranchSelector entryId={prepareEntry.id} />
+              </span>
+            }
             active={expanded === "context"}
             onClick={() => toggle("context")}
           />

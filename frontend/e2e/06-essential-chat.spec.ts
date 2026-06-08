@@ -104,6 +104,30 @@ test("branch on user message reprocess", async ({ app, request }) => {
   await app.chat.transcript.waitForBranchSelectors(1);
 });
 
+test("try model branch from prepare step chip", async ({ app, request }) => {
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+  await app.sidebar.runProbeTime();
+  await app.chat.transcript.waitForProbeComplete();
+  await app.chat.transcript.expectNoBranchSelectors();
+
+  const row = app.chat.transcript.prepareRow("Decision planning", 0);
+  const tryModel = row.getByTestId("thought-prepare-try-model");
+  await expect(tryModel).toBeVisible();
+  await tryModel.hover();
+  await expect(app.page.getByRole("tooltip", { name: "Try with different model" })).toBeVisible();
+
+  await tryModel.click();
+  const modelOption = app.page.getByRole("button", { name: "stub-model" });
+  await expect(modelOption).toBeVisible();
+  const reprocessDone = app.page.waitForResponse(
+    (res) => res.url().includes("/reprocess-context") && res.status() === 202,
+  );
+  await modelOption.click();
+  await reprocessDone;
+  await expect(row.getByTestId("branch-selector")).toBeVisible({ timeout: E2E_LLM_TIMEOUT_MS });
+});
+
 test("branch on context reprocess", async ({ app, request }) => {
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);

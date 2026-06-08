@@ -33,6 +33,8 @@ type ModelDropdownProps = {
   footer?: ReactNode;
   disabled?: boolean;
   buttonClassName?: string;
+  initialOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function ModelDropdown({
@@ -44,14 +46,20 @@ export function ModelDropdown({
   footer,
   disabled = false,
   buttonClassName,
+  initialOpen = false,
+  onOpenChange,
 }: ModelDropdownProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (disabled) setOpen(false);
   }, [disabled]);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;

@@ -12,6 +12,7 @@
   import StepChip from "./StepChip.svelte";
   import ThoughtTripletExpanded from "./ThoughtTripletExpanded.svelte";
   import { actionMetaLabel, displayStatus, findAncestorUserMessage, isAgentDefaultLlm } from "./thoughtTriplet/meta";
+  import TryModelBranchButton from "./thoughtTriplet/TryModelBranchButton.svelte";
 
   let {
     prepareEntry,
@@ -106,7 +107,12 @@
         <div class="flex items-stretch gap-2 py-0.5 text-[11px] text-muted-foreground">
           <StepChip testId="thought-step-context" label={contextTitle} active={expanded === "context"} onclick={() => toggle("context")}>
             {#snippet icon()}<RowIcon name="file" />{/snippet}
-            {#snippet badge()}<BranchSelector entryId={prep.id} />{/snippet}
+            {#snippet badge()}
+              <span class="inline-flex items-center gap-0.5">
+                <TryModelBranchButton prepareEntry={prep} {stream} {conversationId} />
+                <BranchSelector entryId={prep.id} />
+              </span>
+            {/snippet}
           </StepChip>
           <Icon name="arrow-right" class="h-3 w-3 self-center opacity-60" />
           <StepChip testId="thought-step-reasoning" label="" active={expanded === "reasoning"} onclick={() => toggle("reasoning")}>

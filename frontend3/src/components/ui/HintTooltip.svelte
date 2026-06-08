@@ -5,24 +5,33 @@
     content,
     children,
     side = "top",
+    showDelayMs = 200,
   }: {
     content: string;
     children: Snippet;
     side?: "top" | "bottom";
+    /** Hover delay before showing; keep at or below 500ms. */
+    showDelayMs?: number;
   } = $props();
 
   let open = $state(false);
   let anchor = $state<HTMLSpanElement | null>(null);
   let pos = $state({ x: 0, y: 0 });
+  let showTimer: ReturnType<typeof setTimeout> | undefined;
 
   function show(): void {
-    const rect = anchor?.getBoundingClientRect();
-    if (!rect) return;
-    pos = { x: rect.left, y: side === "top" ? rect.top : rect.bottom };
-    open = true;
+    clearTimeout(showTimer);
+    showTimer = setTimeout(() => {
+      const rect = anchor?.getBoundingClientRect();
+      if (!rect) return;
+      pos = { x: rect.left, y: side === "top" ? rect.top : rect.bottom };
+      open = true;
+    }, showDelayMs);
   }
 
   function hide(): void {
+    clearTimeout(showTimer);
+    showTimer = undefined;
     open = false;
   }
 </script>

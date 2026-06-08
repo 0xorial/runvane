@@ -54,6 +54,8 @@
     footer,
     disabled = false,
     buttonClass = "",
+    initialOpen = false,
+    onOpenChange,
   }: {
     value: string;
     onChange: (value: string, groupId?: string) => void;
@@ -63,9 +65,11 @@
     footer?: Snippet;
     disabled?: boolean;
     buttonClass?: string;
+    initialOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
   } = $props();
 
-  let open = $state(false);
+  let open = $state(initialOpen);
   let query = $state("");
   let searchInput = $state<HTMLInputElement | null>(null);
   let anchor = $state<HTMLButtonElement | null>(null);
@@ -79,6 +83,10 @@
 
   $effect(() => {
     if (disabled) open = false;
+  });
+
+  $effect(() => {
+    onOpenChange?.(open);
   });
 
   $effect(() => {

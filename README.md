@@ -34,7 +34,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Planned features
 
-- decision planning with multiple LLMs
+- multi-model compare at scale (reason step already supports branch-with-different-model)
 - token/time/price quotes for chats/messages
 - import UI and bulk migration helpers; LLM-assisted import for arbitrary exports
 - terminal connectors — single connector tool, mirror terminal in the UI (local, SSH, serial/UTM)

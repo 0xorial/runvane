@@ -10,7 +10,6 @@
   import { notifyError } from "@/utils/toast";
   import { displayStatus } from "./meta";
   import ReadOnlySection from "../ReadOnlySection.svelte";
-
   let {
     stream,
     prepareEntry,
