@@ -1,5 +1,35 @@
-import type { ThoughtActionEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+import type { AgentListItemResponse } from "../../../../../../backend/src/contracts/agents";
+import type { ChatEntry, ThoughtActionEntry, ThoughtStreamEntry, UserMessageEntry } from "@/protocol/chatEntry";
+import { getAgentLlm } from "@/pages/settings/agentLlm";
 import { formatTokenCount } from "@/utils/formatTokenCount";
+
+export function findAncestorUserMessage(
+  startParentId: string | null | undefined,
+  entriesById: ReadonlyMap<string, ChatEntry>,
+): UserMessageEntry | null {
+  let id = startParentId ?? null;
+  while (id) {
+    const entry = entriesById.get(id);
+    if (!entry) return null;
+    if (entry.type === "user-message") return entry;
+    id = entry.parentId;
+  }
+  return null;
+}
+
+export function isAgentDefaultLlm(
+  llm: { providerId?: string; model?: string } | null | undefined,
+  agent: AgentListItemResponse | null | undefined,
+): boolean {
+  if (!agent) return false;
+  const defaultLlm = getAgentLlm(agent);
+  const provider = String(defaultLlm.provider_id ?? "").trim();
+  const model = String(defaultLlm.model ?? "").trim();
+  if (!provider || !model) return false;
+  const streamProvider = String(llm?.providerId ?? "").trim();
+  const streamModel = String(llm?.model ?? "").trim();
+  return streamProvider === provider && streamModel === model;
+}
 
 export function displayStatus(status: string): string {
   return status === "completed" ? "" : status;

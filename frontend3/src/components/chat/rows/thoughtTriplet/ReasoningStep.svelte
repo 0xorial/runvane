@@ -40,6 +40,9 @@
   const completionTokens = $derived(stream.completionTokens ?? 0);
   const duration = $derived(stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "running");
   const statusLabel = $derived(displayStatus(stream.status ?? "running"));
+  const providerId = $derived(String(stream.llm?.providerId ?? "").trim());
+  const model = $derived(String(stream.llm?.model ?? "").trim());
+  const modelLabel = $derived(providerId && model ? `${providerId}/${model}` : "unknown");
   const canEdit = $derived(response.length > 0);
   const canApply = $derived(editedResponse.trim().length > 0 && !isSaving);
   const hasChanges = $derived(editedResponse.trim() !== response.trim());
@@ -95,6 +98,7 @@
 <div class="mt-1.5 ml-1 space-y-2 text-xs">
   <div class="flex items-start justify-between gap-2">
     <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+      <span>model: {modelLabel}</span>
       {#if statusLabel}<span>status: {statusLabel}</span>{/if}
       <span>prompt: {formatTokenCount(promptTokens)}</span>
       <span>cached: {formatTokenCount(cachedPromptTokens)}</span>

@@ -3,15 +3,15 @@
   import type { ObservableItem } from "@/utils/observableCollection";
   import Icon from "@/components/ui/Icon.svelte";
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
-  import { createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
-  import type { ThoughtStage } from "@/lib/chatSessionContext";
+  import { createAgentsQuery, createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
+  import { getChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import BranchSelector from "../BranchSelector.svelte";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
   import StepChip from "./StepChip.svelte";
   import ThoughtTripletExpanded from "./ThoughtTripletExpanded.svelte";
-  import { actionMetaLabel, displayStatus } from "./thoughtTriplet/meta";
+  import { actionMetaLabel, displayStatus, findAncestorUserMessage, isAgentDefaultLlm } from "./thoughtTriplet/meta";
 
   let {
     prepareEntry,
@@ -26,8 +26,26 @@
   } = $props();
 
   const capabilitiesQuery = createModelCapabilitiesQuery();
+  const agentsQuery = createAgentsQuery();
+  const session = getChatSessionContext();
   let expanded = $state<ThoughtStage | null>(null);
   const pricingByModel = $derived(pricingFromCapabilities(capabilitiesQuery.data));
+
+  const activeEntriesById = $derived.by(() => {
+    const map = new Map<string, ChatEntry>();
+    for (const row$ of session.getActivePathEntries()) {
+      const entry = row$.get();
+      map.set(entry.id, entry);
+    }
+    return map;
+  });
+
+  const thoughtAgent = $derived.by(() => {
+    if (prepareEntry.type !== "thought-prepare") return null;
+    const userMsg = findAncestorUserMessage(prepareEntry.parentId, activeEntriesById);
+    if (!userMsg) return null;
+    return (agentsQuery.data ?? []).find((agent) => agent.id === userMsg.agentId) ?? null;
+  });
 
   let streamRaw = $state<ChatEntry | null>(null);
 
@@ -67,7 +85,8 @@
     const totalTokens = promptTokens + cachedTokens + completionTokens;
     const durationLabel = streamEntry.thoughtMs != null ? `${Math.round(streamEntry.thoughtMs)}ms` : "";
     const pricing = pricingByModel.get(model);
-    return { provider, model, status, promptTokens, cachedTokens, completionTokens, totalTokens, durationLabel, pricing };
+    const showModel = !isAgentDefaultLlm(streamEntry.llm, thoughtAgent);
+    return { provider, model, status, promptTokens, cachedTokens, completionTokens, totalTokens, durationLabel, pricing, showModel };
   }
 </script>
 
@@ -113,7 +132,7 @@
                 </TokenTooltip>
               {/if}
               {#if reasonMeta.durationLabel}<span>{reasonMeta.durationLabel}</span>{/if}
-              <span>{reasonMeta.provider}/{reasonMeta.model}</span>
+              {#if reasonMeta.showModel || expanded === "reasoning"}<span>{reasonMeta.provider}/{reasonMeta.model}</span>{/if}
               {#if reasonMeta.status}<span>{reasonMeta.status}</span>{/if}
             {/snippet}
           </StepChip>

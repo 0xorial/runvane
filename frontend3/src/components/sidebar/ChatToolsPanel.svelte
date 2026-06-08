@@ -48,13 +48,17 @@
     return catalog
       .map((raw) => String(raw.name ?? "").trim())
       .filter(Boolean)
-      .map((name) => ({
-        name,
-        effectiveMode: effectiveAgentToolMode(
-          getToolConfigFromAgent(currentAgent, name),
-          getToolDefaultConfig(catalog, name),
-        ),
-      }));
+      .map((name) => {
+        const catalogRow = catalog.find((raw) => String(raw.name ?? "").trim() === name);
+        return {
+          name,
+          description: String(catalogRow?.description ?? "").trim(),
+          effectiveMode: effectiveAgentToolMode(
+            getToolConfigFromAgent(currentAgent, name),
+            getToolDefaultConfig(catalog, name),
+          ),
+        };
+      });
   });
 
   const filteredToolRows = $derived.by(() => {
@@ -151,7 +155,20 @@
       <ul class="space-y-1.5">
         {#each filteredToolRows as row (row.name)}
           <li class="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
-            <div class="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" title={row.name}>{row.name}</div>
+            <div class="flex min-w-0 flex-1 items-center gap-1">
+              <div class="min-w-0 truncate font-mono text-[11px] text-foreground" title={row.name}>{row.name}</div>
+              {#if row.description}
+                <HintTooltip content={row.description} side="top">
+                  <button
+                    type="button"
+                    class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold leading-none text-muted-foreground ring-1 ring-border hover:bg-secondary/60 hover:text-foreground"
+                    aria-label={row.description}
+                  >
+                    ?
+                  </button>
+                </HintTooltip>
+              {/if}
+            </div>
             <ToolTriStateControl
               toolName={row.name}
               effectiveMode={row.effectiveMode}

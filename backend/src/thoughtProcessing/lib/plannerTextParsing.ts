@@ -1,3 +1,9 @@
+import {
+  gemmaArgsToToolRequest,
+  parseGemma4ToolCalls,
+  stripGemmaToolCallBlocks,
+} from './gemma4ToolCallParsing.js';
+
 export function extractAssistantOutputFromJsonLike(text: string): string {
   const source = String(text ?? '');
   if (!source) return '';
@@ -98,36 +104,76 @@ export type ParsedPlannerOutput = {
   followup: 'continue' | 'finalize';
 };
 
+function toolRequestsFromJson(obj: Record<string, unknown>): ParsedPlannerOutput['toolRequests'] {
+  if (!Array.isArray(obj.tool_requests)) return [];
+  return obj.tool_requests
+    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => {
+      const row = item as { tool_name?: unknown; tool_request?: unknown };
+      return {
+        toolName: typeof row.tool_name === 'string' ? row.tool_name.trim() : '',
+        toolRequest: typeof row.tool_request === 'string' ? row.tool_request : '',
+      };
+    })
+    .filter((x) => x.toolName.length > 0);
+}
+
+function plannerOutputFromJson(obj: Record<string, unknown>, reply: string): ParsedPlannerOutput {
+  const assistantOutput =
+    typeof obj.assistant_output === 'string' ? obj.assistant_output : extractAssistantOutputFromJsonLike(reply);
+  return {
+    assistantOutput,
+    toolRequests: toolRequestsFromJson(obj),
+    followup: obj.followup === 'continue' ? 'continue' : 'finalize',
+  };
+}
+
+function plannerOutputFromGemma(reply: string): ParsedPlannerOutput | null {
+  const calls = parseGemma4ToolCalls(reply);
+  if (calls.length === 0) return null;
+  const toolRequests = calls
+    .map((call) => ({
+      toolName: call.toolName,
+      toolRequest: gemmaArgsToToolRequest(call.args),
+    }))
+    .filter((row) => row.toolName.length > 0);
+  if (toolRequests.length === 0) return null;
+  return {
+    assistantOutput: stripGemmaToolCallBlocks(reply),
+    toolRequests,
+    followup: 'continue',
+  };
+}
+
 export function parsePlannerOutput(
   reply: string,
   onJsonParseFailed?: (reply: string) => void,
 ): ParsedPlannerOutput {
-  const obj = parseJsonObjectLoose(reply);
-  if (!obj) {
-    onJsonParseFailed?.(reply);
+  const raw = String(reply ?? '');
+  const fromGemma = plannerOutputFromGemma(raw);
+  const obj = parseJsonObjectLoose(raw);
+  const fromJson = obj ? plannerOutputFromJson(obj, raw) : null;
+
+  if (fromJson && fromJson.toolRequests.length > 0) return fromJson;
+
+  if (fromGemma) {
+    const assistantOutput =
+      fromJson?.assistantOutput ||
+      extractAssistantOutputFromJsonLike(raw) ||
+      fromGemma.assistantOutput;
     return {
-      assistantOutput: extractAssistantOutputFromJsonLike(reply) || stripFences(reply),
-      toolRequests: [],
-      followup: 'finalize',
+      assistantOutput,
+      toolRequests: fromGemma.toolRequests,
+      followup: fromGemma.followup,
     };
   }
-  const assistantOutput =
-    typeof obj.assistant_output === 'string' ? obj.assistant_output : extractAssistantOutputFromJsonLike(reply);
-  const toolRequests = Array.isArray(obj.tool_requests)
-    ? obj.tool_requests
-        .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
-        .map((item) => {
-          const row = item as { tool_name?: unknown; tool_request?: unknown };
-          return {
-            toolName: typeof row.tool_name === 'string' ? row.tool_name.trim() : '',
-            toolRequest: typeof row.tool_request === 'string' ? row.tool_request : '',
-          };
-        })
-        .filter((x) => x.toolName.length > 0)
-    : [];
+
+  if (fromJson) return fromJson;
+
+  onJsonParseFailed?.(raw);
   return {
-    assistantOutput,
-    toolRequests,
-    followup: obj.followup === 'continue' ? 'continue' : 'finalize',
+    assistantOutput: extractAssistantOutputFromJsonLike(raw) || stripFences(raw),
+    toolRequests: [],
+    followup: 'finalize',
   };
 }
