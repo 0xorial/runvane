@@ -13,7 +13,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Stack
 
-[![Backend: Node.js + Hono](https://img.shields.io/badge/backend-Node.js%20%2B%20Hono-3c873a)](#)
+[![Backend: NestJS + Express](https://img.shields.io/badge/backend-NestJS%20%2B%20Express-E0234E)](#)
 [![Frontend: Svelte + Vite](https://img.shields.io/badge/frontend-Svelte%20%2B%20Vite-ff3e00)](#)
 [![Database: SQLite](https://img.shields.io/badge/database-SQLite-07405e)](#)
 [![Deploy: Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ed)](#)
