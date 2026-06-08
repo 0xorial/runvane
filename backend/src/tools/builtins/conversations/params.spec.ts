@@ -1,12 +1,12 @@
-import { parseChatToolParams } from './params.js';
+import { parseConversationsToolParams } from './params.js';
 
-describe('parseChatToolParams', () => {
+describe('parseConversationsToolParams', () => {
   it('accepts list_conversations', () => {
-    expect(parseChatToolParams({ operation: 'list_conversations' }).operation).toBe('list_conversations');
+    expect(parseConversationsToolParams({ operation: 'list_conversations' }).operation).toBe('list_conversations');
   });
 
   it('accepts list_messages with all flag', () => {
-    const params = parseChatToolParams({
+    const params = parseConversationsToolParams({
       operation: 'list_messages',
       conversation_id: 'abc',
       all: true,

@@ -1,17 +1,17 @@
 import { retainSharedTestApp } from '../support/shared-app';
-import { ChatTool } from '../../src/tools/builtins/chat/tool.js';
+import { ConversationsTool } from '../../src/tools/builtins/conversations/tool.js';
 
 const runLive = process.env.RUN_INTEGRATION_TESTS === '1';
 const describeLive = runLive ? describe : describe.skip;
 
-describeLive('chat tool (integration)', () => {
+describeLive('conversations tool (integration)', () => {
   let baseUrl: string;
-  let chatTool: ChatTool;
+  let conversationsTool: ConversationsTool;
 
   beforeAll(async () => {
     const testApp = await retainSharedTestApp();
     baseUrl = testApp.baseUrl;
-    chatTool = testApp.app.get(ChatTool);
+    conversationsTool = testApp.app.get(ConversationsTool);
   }, 30_000);
 
   it('reads messages from the active conversation and lists all conversations when allowed', async () => {
@@ -20,14 +20,14 @@ describeLive('chat tool (integration)', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify([
         {
-          title: 'Chat tool conv A',
+          title: 'Conversations tool conv A',
           messages: [
             { role: 'user', content: 'alpha user' },
             { role: 'assistant', content: 'alpha assistant' },
           ],
         },
         {
-          title: 'Chat tool conv B',
+          title: 'Conversations tool conv B',
           messages: [{ role: 'user', content: 'beta user' }],
         },
       ]),
@@ -45,13 +45,13 @@ describeLive('chat tool (integration)', () => {
       signal: AbortSignal.timeout(10_000),
     };
 
-    const messages = await chatTool.runTool({ operation: 'list_messages', all: true }, context);
+    const messages = await conversationsTool.runTool({ operation: 'list_messages', all: true }, context);
     const messageRows = (messages as { messages: Array<{ type: string; text?: string }> }).messages;
     expect(messageRows.some((row) => row.type === 'user-message' && row.text === 'alpha user')).toBe(true);
     expect(messageRows.some((row) => row.type === 'assistant-message' && row.text === 'alpha assistant')).toBe(true);
 
     await expect(
-      chatTool.runTool({ operation: 'list_messages', conversation_id: convB }, context),
+      conversationsTool.runTool({ operation: 'list_messages', conversation_id: convB }, context),
     ).rejects.toThrow(/allow_other_conversations=false/);
 
     const crossChatRules = {
@@ -59,19 +59,35 @@ describeLive('chat tool (integration)', () => {
       allow_other_conversations: true,
       max_messages: 500,
     };
-    const otherMessages = await chatTool.runTool(
+    const otherMessages = await conversationsTool.runTool(
       { operation: 'list_messages', conversation_id: convB, all: true },
       { ...context, toolRules: crossChatRules },
     );
     const otherRows = (otherMessages as { messages: Array<{ type: string; text?: string }> }).messages;
     expect(otherRows.some((row) => row.type === 'user-message' && row.text === 'beta user')).toBe(true);
 
-    const listed = await chatTool.runTool({ operation: 'list_conversations' }, { ...context, toolRules: crossChatRules });
+    const listed = await conversationsTool.runTool(
+      { operation: 'list_conversations' },
+      { ...context, toolRules: crossChatRules },
+    );
     const ids = (listed as { conversations: Array<{ id: string }> }).conversations.map((row) => row.id);
     expect(ids).toContain(convA);
     expect(ids).toContain(convB);
 
-    const meta = await chatTool.runTool({ operation: 'get_conversation', conversation_id: convA }, context);
-    expect((meta as { conversation: { id: string; title: string } }).conversation.title).toBe('Chat tool conv A');
+    const row = await conversationsTool.runTool({ operation: 'get_conversation', conversation_id: convA }, context);
+    expect((row as { conversation: { id: string; title: string } }).conversation.title).toBe('Conversations tool conv A');
+  });
+
+  it('rejects list_conversations without cross-chat permission', async () => {
+    const context = {
+      conversationId: 'conv-test',
+      agentId: null,
+      entries: [],
+      signal: AbortSignal.timeout(10_000),
+    };
+    await expect(conversationsTool.runTool({ operation: 'list_conversations' }, context)).rejects.toThrow(
+      /allow_other_conversations=true/,
+    );
   });
 });
+

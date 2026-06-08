@@ -133,4 +133,4 @@ Today `RunToolService` loads only agent config (`agent?.default_llm_configuratio
 ## Related work
 
 - **Enqueue** (in progress): `enqueue` on POST is orthogonal; overrides ride on the same POST body as `steer` / `enqueue`.
-- **Chat tool** (`meta` / `chat` builtins): runtime introspection; separate from this policy UI.
+- **Api / conversations tools** (`api` / `conversations` builtins): backend and chat introspection; separate from this policy UI.

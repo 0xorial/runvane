@@ -7,5 +7,6 @@ import { ModelPresetsService } from './model-presets.service.js';
   imports: [DatabaseModule],
   controllers: [ModelPresetsController],
   providers: [ModelPresetsService],
+  exports: [ModelPresetsService],
 })
 export class ModelPresetsModule {}

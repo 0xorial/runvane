@@ -2,7 +2,7 @@ import type { ChatEntry } from '../../../contracts/chatEntry.js';
 import type { ConversationEntity } from '../../../conversations/conversation.entity.js';
 import { toConversationRow } from '../../../conversations/conversations.api.js';
 import type { ConversationRow } from '../../../contracts/conversations.js';
-import type { ChatToolRules } from './rules.js';
+import type { ConversationsToolRules } from './rules.js';
 
 export function resolveTargetConversationId(
   conversationId: string | undefined,
@@ -14,12 +14,12 @@ export function resolveTargetConversationId(
 export function assertConversationAccess(
   targetConversationId: string,
   activeConversationId: string,
-  rules: ChatToolRules,
+  rules: ConversationsToolRules,
 ): void {
   if (targetConversationId === activeConversationId) return;
   if (!rules.allow_other_conversations) {
     throw new Error(
-      `chat: access to conversation ${targetConversationId} is forbidden (allow_other_conversations=false)`,
+      `conversations: access to conversation ${targetConversationId} is forbidden (allow_other_conversations=false)`,
     );
   }
 }

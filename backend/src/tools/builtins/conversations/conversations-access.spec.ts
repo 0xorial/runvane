@@ -1,14 +1,18 @@
 import type { ChatEntry } from '../../../contracts/chatEntry.js';
-import { assertConversationAccess, capChatEntries, resolveTargetConversationId } from './chat-access.js';
-import type { ChatToolRules } from './rules.js';
+import {
+  assertConversationAccess,
+  capChatEntries,
+  resolveTargetConversationId,
+} from './conversations-access.js';
+import type { ConversationsToolRules } from './rules.js';
 
-const baseRules: ChatToolRules = {
+const baseRules: ConversationsToolRules = {
   allowed: 'always',
   allow_other_conversations: false,
   max_messages: 500,
 };
 
-describe('chat access helpers', () => {
+describe('conversations access helpers', () => {
   it('defaults target conversation to active chat', () => {
     expect(resolveTargetConversationId(undefined, 'active-id')).toBe('active-id');
     expect(resolveTargetConversationId('other-id', 'active-id')).toBe('other-id');

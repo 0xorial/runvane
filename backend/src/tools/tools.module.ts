@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { AgentsModule } from '../agents/agents.module.js';
+import { ModelPresetsModule } from '../model-presets/model-presets.module.js';
 import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
+import { ApiTool } from './builtins/api/tool.js';
 import { BashTool } from './builtins/bash/tool.js';
+import { ConversationsTool } from './builtins/conversations/tool.js';
 import { CurlTool } from './builtins/curl/tool.js';
-import { MetaTool } from './builtins/meta/tool.js';
-import { ChatTool } from './builtins/chat/tool.js';
 import { RagSearchTool } from './builtins/rag-search/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
@@ -18,7 +20,7 @@ import { DatabaseModule } from '../db/database.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
 
 @Module({
-  imports: [LlmProvidersModule, DatabaseModule, UploadsModule],
+  imports: [LlmProvidersModule, DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule],
   providers: [
     GetCurrentTimeTool,
     CurlTool,
@@ -27,8 +29,8 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     FilesystemIndexStore,
     FilesystemIndexTool,
     RagSearchTool,
-    MetaTool,
-    ChatTool,
+    ApiTool,
+    ConversationsTool,
     DelegateLlmTool,
     AskAttachmentTool,
     SerialConnectionManager,
@@ -43,8 +45,8 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         FilesystemTool,
         FilesystemIndexTool,
         RagSearchTool,
-        MetaTool,
-        ChatTool,
+        ApiTool,
+        ConversationsTool,
         DelegateLlmTool,
         AskAttachmentTool,
         SerialTerminalTool,

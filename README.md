@@ -27,13 +27,17 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - configurable model/tool behavior
 - message steering (abort in-flight runs and redirect)
 - RAG search tool (`rag_search`)
-- meta tool (tool discovery and conversation summary)
+- api tool (backend introspection: tools, agents, presets, tasks)
+- conversations tool (read chat history and conversation metadata)
 - filesystem tools (`filesystem`, `filesystem_index`)
 - import chat history from OpenAI and Gemini
 
 ## Planned features
 
-_(none — see roadmap for upcoming work)_
+- decision planning with multiple LLMs
+- token/time/price quotes for chats/messages
+- import from other apps: openAi, claude, gemini, grok + arbitrary import, basede on LLM+meta/conversation ?-
+- terminal connectors - probably single connector tool, mirror terminal in the UI, targets: local terminal, over-ssh terminal, serial terminal to UTM VM
 
 ## Shared Definitions
 
