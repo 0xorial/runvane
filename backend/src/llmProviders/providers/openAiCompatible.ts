@@ -5,9 +5,9 @@ import type {
   LlmProviderSettingSpec,
   ProviderSettingsDict,
 } from '../provider.js';
-import { StreamInterruptedError } from '../provider.js';
+import { StreamInterruptedError, isAbortError } from '../provider.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from '../types.js';
-import { OpenAiStreamAccumulator, buildOpenAiBody, ingestOpenAiChunk } from './openAiShared.js';
+import { OpenAiStreamAccumulator, buildOpenAiBody, ingestOpenAiChunk, parseChatCompletionsUsage } from './openAiShared.js';
 
 async function sleep(ms: number) {
   return new Promise<void>((resolve) => {
@@ -24,46 +24,6 @@ function normalizeBaseUrl(settings: ProviderSettingsDict): string {
 
 function apiKey(settings: ProviderSettingsDict): string {
   return String(settings.api_key ?? '').trim();
-}
-
-function usageFromOpenAiPayload(usage: unknown): LlmUsage | undefined {
-  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
-  const rec = usage as Record<string, unknown>;
-  const pt = rec.prompt_tokens;
-  const ct = rec.completion_tokens;
-  const promptDetails =
-    rec.prompt_tokens_details &&
-    typeof rec.prompt_tokens_details === 'object' &&
-    !Array.isArray(rec.prompt_tokens_details)
-      ? (rec.prompt_tokens_details as Record<string, unknown>)
-      : null;
-  const inputDetails =
-    rec.input_tokens_details && typeof rec.input_tokens_details === 'object' && !Array.isArray(rec.input_tokens_details)
-      ? (rec.input_tokens_details as Record<string, unknown>)
-      : null;
-  const cachedRaw = promptDetails?.cached_tokens ?? inputDetails?.cached_tokens;
-  const cachedPromptTokens =
-    typeof cachedRaw === 'number' && Number.isFinite(cachedRaw) ? Math.max(0, Math.trunc(cachedRaw)) : undefined;
-  if (typeof pt === 'number' && Number.isFinite(pt) && typeof ct === 'number' && Number.isFinite(ct)) {
-    return {
-      promptTokens: pt,
-      completionTokens: ct,
-      ...(cachedPromptTokens !== undefined
-        ? { cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(pt))) }
-        : {}),
-    };
-  }
-  const total = rec.total_tokens;
-  if (typeof total === 'number' && Number.isFinite(total) && typeof pt === 'number' && Number.isFinite(pt)) {
-    return {
-      promptTokens: pt,
-      completionTokens: Math.max(0, total - pt),
-      ...(cachedPromptTokens !== undefined
-        ? { cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(pt))) }
-        : {}),
-    };
-  }
-  return undefined;
 }
 
 const DEFAULT_SPEC: LlmProviderSettingSpec[] = [
@@ -197,56 +157,70 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
     const acc = new OpenAiStreamAccumulator(onEvent);
 
-    // Some providers ignore `stream:true` and return a single JSON body.
-    if (!res.body) {
-      const data = (await res.json()) as Parameters<typeof ingestOpenAiChunk>[0];
-      try {
-        ingestOpenAiChunk(data, acc, usageFromOpenAiPayload);
-      } catch (e) {
-        throw new StreamInterruptedError({
-          message: 'stream interrupted during callback',
-          partialText: acc.partialText(),
-          cause: e,
-        });
+    try {
+      // Some providers ignore `stream:true` and return a single JSON body.
+      if (!res.body) {
+        const data = (await res.json()) as Parameters<typeof ingestOpenAiChunk>[0];
+        try {
+          ingestOpenAiChunk(data, acc, parseChatCompletionsUsage);
+        } catch (e) {
+          throw new StreamInterruptedError({
+            message: 'stream interrupted during callback',
+            partialText: acc.partialText(),
+            usage: acc.usageValue(),
+            cause: e,
+          });
+        }
+        if (!acc.hasContent()) throw new Error('llm returned empty response');
+        return acc.finalize();
       }
-      if (!acc.hasContent()) throw new Error('llm returned empty response');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const handleDataLine = (line: string) => {
+        if (!line.startsWith('data:')) return;
+        const payload = line.startsWith('data: ') ? line.slice(6) : line.slice(5);
+        if (!payload || payload === '[DONE]') return;
+        const parsed = JSON.parse(payload) as Parameters<typeof ingestOpenAiChunk>[0];
+        try {
+          ingestOpenAiChunk(parsed, acc, parseChatCompletionsUsage);
+        } catch (e) {
+          throw new StreamInterruptedError({
+            message: 'stream interrupted during callback',
+            partialText: acc.partialText(),
+            usage: acc.usageValue(),
+            cause: e,
+          });
+        }
+      };
+
+      for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+        await sleep(1000);
+        buffer += decoder.decode(chunk, { stream: true });
+        while (true) {
+          const nl = buffer.indexOf('\n');
+          if (nl < 0) break;
+          const line = buffer.slice(0, nl).replace(/\r$/, '');
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          handleDataLine(line);
+        }
+      }
+      if (buffer) handleDataLine(buffer.replace(/\r$/, ''));
+      if (!acc.hasContent()) throw new Error('llm returned empty streamed response');
       return acc.finalize();
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    const handleDataLine = (line: string) => {
-      if (!line.startsWith('data:')) return;
-      const payload = line.startsWith('data: ') ? line.slice(6) : line.slice(5);
-      if (!payload || payload === '[DONE]') return;
-      const parsed = JSON.parse(payload) as Parameters<typeof ingestOpenAiChunk>[0];
-      try {
-        ingestOpenAiChunk(parsed, acc, usageFromOpenAiPayload);
-      } catch (e) {
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted) {
         throw new StreamInterruptedError({
-          message: 'stream interrupted during callback',
+          message: 'stream aborted',
           partialText: acc.partialText(),
-          cause: e,
+          usage: acc.usageValue(),
+          cause: error,
         });
       }
-    };
-
-    for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
-      await sleep(1000);
-      buffer += decoder.decode(chunk, { stream: true });
-      while (true) {
-        const nl = buffer.indexOf('\n');
-        if (nl < 0) break;
-        const line = buffer.slice(0, nl).replace(/\r$/, '');
-        buffer = buffer.slice(nl + 1);
-        if (!line) continue;
-        handleDataLine(line);
-      }
+      throw error;
     }
-    if (buffer) handleDataLine(buffer.replace(/\r$/, ''));
-    if (!acc.hasContent()) throw new Error('llm returned empty streamed response');
-    return acc.finalize();
   }
 }
 

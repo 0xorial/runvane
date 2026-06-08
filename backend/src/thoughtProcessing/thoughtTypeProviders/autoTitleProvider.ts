@@ -65,7 +65,7 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
     if (titleApplied) await this.conversations.updateTitle(input.conversationId, nextTitle);
 
     await this.completeThoughtAction(ctx, nextTitle);
-    if (titleApplied) await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
+    if (titleApplied) await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, input.conversationId);
   };
 
   private async completeThoughtAction(ctx: ThoughtContext, summary: string): Promise<void> {

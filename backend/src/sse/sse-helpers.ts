@@ -14,7 +14,10 @@ export function incrementalDelta(prev: string, next: string): string {
   return next;
 }
 
-export function toConversationSseRow(entity: ConversationEntity): ConversationSseRow {
+export function toConversationSseRow(
+  entity: ConversationEntity,
+  tokenUsageByModel: ConversationSseRow['tokenUsageByModel'] = [],
+): ConversationSseRow {
   return {
     id: entity.id,
     title: entity.title,
@@ -27,20 +30,22 @@ export function toConversationSseRow(entity: ConversationEntity): ConversationSs
     cachedPromptTokensTotal: entity.cachedPromptTokensTotal,
     completionTokensTotal: entity.completionTokensTotal,
     defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
-    tokenUsageByModel: [],
+    tokenUsageByModel,
   };
 }
 
 export async function publishConversationUpdated(
   hub: SseHubService,
   conversations: ConversationsRepo,
+  chatEntries: ChatEntriesRepo,
   conversationId: string,
 ): Promise<SseEvent> {
   const entity = await conversations.get(conversationId, { includeDeleted: true });
   if (!entity) throw new Error(`conversation not found: ${conversationId}`);
+  const tokenUsageByModel = await chatEntries.tokenUsageByModel(conversationId);
   return hub.publish(conversationId, {
     type: SseType.CONVERSATION_UPDATED,
-    conversation: toConversationSseRow(entity),
+    conversation: toConversationSseRow(entity, tokenUsageByModel),
   });
 }
 

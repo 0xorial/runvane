@@ -8,7 +8,10 @@ import type {
 // Re-export so consumers that currently import from this module don't break.
 export type { ConversationRow, ConversationGroupRow, GetConversationsResponse };
 
-export function toConversationRow(entity: ConversationEntity): ConversationRow {
+export function toConversationRow(
+  entity: ConversationEntity,
+  tokenUsageByModel: ConversationRow['tokenUsageByModel'] = [],
+): ConversationRow {
   return {
     id: entity.id,
     title: entity.title,
@@ -22,7 +25,7 @@ export function toConversationRow(entity: ConversationEntity): ConversationRow {
     completionTokensTotal: entity.completionTokensTotal,
     defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
     defaultViewLeafEntryId: null,
-    tokenUsageByModel: [],
+    tokenUsageByModel,
   };
 }
 

@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { aggregateTokenUsageByModel } from '../../conversations/token-usage-by-model.js';
+import type { ConversationRow } from '../../contracts/conversations.js';
 import type {
   AssistantMessageEntry,
   ChatAttachment,
@@ -264,5 +266,26 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       conversationId,
       input.id,
     );
+  }
+
+  async tokenUsageByModel(conversationId: string): Promise<ConversationRow['tokenUsageByModel']> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT payload_json
+       FROM chat_entries
+       WHERE conversation_id = ? AND type LIKE '%llm_stream%'`,
+      conversationId,
+    )) as Array<{ payload_json: string }>;
+    const streamPayloads: Array<{ modelName: string; payload: Record<string, unknown> }> = [];
+    for (const row of rows) {
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      const llm = payload.llm;
+      const modelName =
+        llm && typeof llm === 'object' && !Array.isArray(llm)
+          ? String((llm as { model?: unknown }).model ?? '').trim()
+          : '';
+      if (!modelName) continue;
+      streamPayloads.push({ modelName, payload });
+    }
+    return aggregateTokenUsageByModel(streamPayloads);
   }
 }

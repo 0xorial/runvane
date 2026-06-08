@@ -48,7 +48,7 @@
         <ModelGroupSelect
           value={String(settings.llm_configuration?.title_model_name || "")}
           groups={modelGroups}
-          placeholder="Same as agent model"
+          placeholder="Same as reasoning model"
           onchange={(nextValue, providerId) => {
             const next = structuredClone(settings);
             next.llm_configuration.title_model_name = nextValue || undefined;
@@ -69,7 +69,7 @@
               onSettingsChange(next);
             }}
           >
-            Reset to agent model
+            Reset to reasoning model
           </button>
         {/if}
       </div>

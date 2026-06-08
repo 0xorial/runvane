@@ -1,6 +1,7 @@
 import type { AgentListItemResponse } from "../../../../../../backend/src/contracts/agents";
 import type { ChatEntry, ThoughtActionEntry, ThoughtStreamEntry, UserMessageEntry } from "@/protocol/chatEntry";
 import { getAgentLlm } from "@/pages/settings/agentLlm";
+import { streamTotalTokens } from "@/lib/providerCost";
 import { formatTokenCount } from "@/utils/formatTokenCount";
 
 export function findAncestorUserMessage(
@@ -39,10 +40,7 @@ export function reasonMetaLabel(stream: ThoughtStreamEntry): string {
   const provider = String(stream.llm?.providerId || "").trim() || "unknown-provider";
   const model = String(stream.llm?.model || "").trim() || "unknown-model";
   const status = displayStatus(stream.status ?? "running");
-  const promptTokens = stream.promptTokens ?? 0;
-  const cachedPromptTokens = stream.cachedPromptTokens ?? 0;
-  const completionTokens = stream.completionTokens ?? 0;
-  const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
+  const totalTokens = streamTotalTokens(stream);
   const tokenLabel = totalTokens > 0 ? formatTokenCount(totalTokens) : "";
   const durationLabel = stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "";
   return [tokenLabel, durationLabel, `${provider}/${model}`, status].filter(Boolean).join(" · ");

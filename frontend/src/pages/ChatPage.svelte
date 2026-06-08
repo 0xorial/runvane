@@ -7,6 +7,7 @@
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
   import { setChatSessionContext } from "@/lib/chatSessionContext";
+  import { resolveLastPlannerLlmOnPath } from "@/lib/resolveLastPlannerLlm";
   import { resolveTopAnchorEntryId } from "@/lib/chatTopAnchor";
   import { agentIdFromSearch, chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
   import { Pane, PaneGroup } from "paneforge";
@@ -62,6 +63,7 @@
   const topAnchorEntryId = $derived(
     resolveTopAnchorEntryId(conversationId, session.activePathEntries, selectedBranchAnchorEntryId),
   );
+  const pathPlannerLlm = $derived(resolveLastPlannerLlmOnPath(activePathEntries));
 
   function handleSent(_optimisticRowId: string): void {
     selectedBranchAnchorEntryId = null;
@@ -108,6 +110,7 @@
         />
         <ChatComposer
           {conversationId}
+          {pathPlannerLlm}
           {search}
           pendingMessages={session.pendingMessages}
           appendOptimisticUserMessage={session.appendOptimisticUserMessage}
@@ -141,6 +144,7 @@
       />
       <ChatComposer
         {conversationId}
+        {pathPlannerLlm}
         {search}
         pendingMessages={session.pendingMessages}
         appendOptimisticUserMessage={session.appendOptimisticUserMessage}

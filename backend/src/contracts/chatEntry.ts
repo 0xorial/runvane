@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ProviderCostBreakdownSchema } from './provider-cost.js';
 import { LlmRefSchema } from './llm.js';
 import { UserMessageOverridesSchema } from './user-message-overrides.js';
 
@@ -121,6 +122,8 @@ const ThoughtStreamEntryBaseSchema = ChatEntryBaseSchema.extend({
   promptTokens: z.number().optional(),
   cachedPromptTokens: z.number().optional(),
   completionTokens: z.number().optional(),
+  provider_cost: z.number().optional(),
+  provider_cost_breakdown: ProviderCostBreakdownSchema.optional(),
 });
 
 export const PlannerLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({

@@ -22,6 +22,7 @@ import {
   GetConversationsResponseSchema,
   PostConversationMessageAcceptedResponseSchema,
 } from '../contracts/conversations.js';
+import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-helpers.js';
@@ -44,6 +45,7 @@ export class ConversationsController {
     private readonly conversations: ConversationsService,
     private readonly conversationProcessor: ConversationProcessorService,
     private readonly conversationsRepo: ConversationsRepo,
+    private readonly chatEntries: ChatEntriesRepo,
     private readonly hub: SseHubService,
   ) {}
 
@@ -123,7 +125,7 @@ export class ConversationsController {
       updated = groupUpdated;
     }
 
-    await publishConversationUpdated(this.hub, this.conversationsRepo, conversationId);
+    await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);
     return updated;
   }
 
@@ -132,7 +134,7 @@ export class ConversationsController {
   async softDelete(@Param('conversationId') conversationId: string) {
     const deleted = await this.conversations.softDelete(conversationId);
     if (!deleted) throw new NotFoundException('conversation not found or already deleted');
-    await publishConversationUpdated(this.hub, this.conversationsRepo, conversationId);
+    await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);
     return deleted;
   }
 
@@ -141,7 +143,7 @@ export class ConversationsController {
   async undelete(@Param('conversationId') conversationId: string) {
     const restored = await this.conversations.undelete(conversationId);
     if (!restored) throw new NotFoundException('conversation not found or not deleted');
-    await publishConversationUpdated(this.hub, this.conversationsRepo, conversationId);
+    await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);
     return restored;
   }
 

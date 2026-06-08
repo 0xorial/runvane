@@ -5,9 +5,19 @@ import type {
   LlmProviderSettingSpec,
   ProviderSettingsDict,
 } from '../provider.js';
-import { StreamInterruptedError } from '../provider.js';
-import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from '../types.js';
-import { OpenAiStreamAccumulator, buildOpenAiBody, ingestOpenAiChunk } from './openAiShared.js';
+import { StreamInterruptedError, isAbortError } from '../provider.js';
+import type { LlmUsage } from '../types.js';
+import {
+  fetchOpenRouterGenerationUsage,
+  mergeLlmUsage,
+} from './openRouterGeneration.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../types.js';
+import {
+  OpenAiStreamAccumulator,
+  buildOpenRouterBody,
+  ingestOpenAiChunk,
+  parseChatCompletionsUsage,
+} from './openAiShared.js';
 
 const SETTINGS_SPEC: LlmProviderSettingSpec[] = [
   { key: 'api_key', label: 'API key', type: 'secret', required: true },
@@ -34,42 +44,6 @@ function buildHeaders(settings: ProviderSettingsDict): Record<string, string> {
   if (referer) headers['HTTP-Referer'] = referer;
   if (title) headers['X-Title'] = title;
   return headers;
-}
-
-function usageFromOpenRouterPayload(usage: unknown): LlmUsage | undefined {
-  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
-  const rec = usage as Record<string, unknown>;
-  const pt = rec.prompt_tokens;
-  const ct = rec.completion_tokens;
-  const details =
-    rec.prompt_tokens_details &&
-    typeof rec.prompt_tokens_details === 'object' &&
-    !Array.isArray(rec.prompt_tokens_details)
-      ? (rec.prompt_tokens_details as Record<string, unknown>)
-      : null;
-  const cachedRaw = details?.cached_tokens;
-  const cachedPromptTokens =
-    typeof cachedRaw === 'number' && Number.isFinite(cachedRaw) ? Math.max(0, Math.trunc(cachedRaw)) : undefined;
-  if (typeof pt === 'number' && Number.isFinite(pt) && typeof ct === 'number' && Number.isFinite(ct)) {
-    return {
-      promptTokens: pt,
-      completionTokens: ct,
-      ...(cachedPromptTokens !== undefined
-        ? { cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(pt))) }
-        : {}),
-    };
-  }
-  const total = rec.total_tokens;
-  if (typeof total === 'number' && Number.isFinite(total) && typeof pt === 'number' && Number.isFinite(pt)) {
-    return {
-      promptTokens: pt,
-      completionTokens: Math.max(0, total - pt),
-      ...(cachedPromptTokens !== undefined
-        ? { cachedPromptTokens: Math.min(cachedPromptTokens, Math.max(0, Math.trunc(pt))) }
-        : {}),
-    };
-  }
-  return undefined;
 }
 
 function parseModelIdentifier(rawModel: unknown): string {
@@ -217,6 +191,32 @@ export class OpenRouterProvider implements LlmProvider {
     return this.listModelCapabilitiesFromPayload(payload);
   }
 
+  private async resolveAbortedUsage(
+    settings: ProviderSettingsDict,
+    acc: OpenAiStreamAccumulator,
+  ): Promise<LlmUsage | undefined> {
+    const generationId = acc.generationIdValue();
+    const partial = acc.usageValue();
+    if (!generationId) return partial;
+    try {
+      const fromApi = await fetchOpenRouterGenerationUsage(
+        settings,
+        generationId,
+        this.defaultBaseUrl,
+        buildHeaders,
+        normalizeBaseUrl,
+      );
+      return mergeLlmUsage(fromApi, partial);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        { generationId, detail: msg },
+        '[llm-provider] openrouter generation usage fetch failed on abort',
+      );
+      return partial;
+    }
+  }
+
   async streamCompletion(
     settingsIn: ProviderSettingsDict,
     model: string,
@@ -238,7 +238,7 @@ export class OpenRouterProvider implements LlmProvider {
     const res = await fetch(requestUrl, {
       method: 'POST',
       headers: buildHeaders(settings),
-      body: JSON.stringify(buildOpenAiBody(model, request)),
+      body: JSON.stringify(buildOpenRouterBody(model, request)),
       ...(signal ? { signal } : {}),
     });
     if (!res.ok) {
@@ -248,53 +248,68 @@ export class OpenRouterProvider implements LlmProvider {
 
     const acc = new OpenAiStreamAccumulator(onEvent);
 
-    if (!res.body) {
-      const data = (await res.json()) as Parameters<typeof ingestOpenAiChunk>[0];
-      try {
-        ingestOpenAiChunk(data, acc, usageFromOpenRouterPayload);
-      } catch (e) {
-        throw new StreamInterruptedError({
-          message: 'stream interrupted during callback',
-          partialText: acc.partialText(),
-          cause: e,
-        });
+    try {
+      if (!res.body) {
+        const data = (await res.json()) as Parameters<typeof ingestOpenAiChunk>[0];
+        try {
+          ingestOpenAiChunk(data, acc, parseChatCompletionsUsage);
+        } catch (e) {
+          throw new StreamInterruptedError({
+            message: 'stream interrupted during callback',
+            partialText: acc.partialText(),
+            usage: acc.usageValue(),
+            cause: e,
+          });
+        }
+        if (!acc.hasContent()) throw new Error('llm returned empty response');
+        return acc.finalize();
       }
-      if (!acc.hasContent()) throw new Error('llm returned empty response');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const handleDataLine = (line: string): void => {
+        if (!line.startsWith('data:')) return;
+        const payload = line.startsWith('data: ') ? line.slice(6) : line.slice(5);
+        if (!payload || payload === '[DONE]') return;
+        const parsed = JSON.parse(payload) as Parameters<typeof ingestOpenAiChunk>[0];
+        try {
+          ingestOpenAiChunk(parsed, acc, parseChatCompletionsUsage);
+        } catch (e) {
+          throw new StreamInterruptedError({
+            message: 'stream interrupted during callback',
+            partialText: acc.partialText(),
+            usage: acc.usageValue(),
+            cause: e,
+          });
+        }
+      };
+
+      for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+        buffer += decoder.decode(chunk, { stream: true });
+        while (true) {
+          const nl = buffer.indexOf('\n');
+          if (nl < 0) break;
+          const line = buffer.slice(0, nl).replace(/\r$/, '');
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          handleDataLine(line);
+        }
+      }
+      if (buffer) handleDataLine(buffer.replace(/\r$/, ''));
+      if (!acc.hasContent()) throw new Error('llm returned empty streamed response');
       return acc.finalize();
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    const handleDataLine = (line: string): void => {
-      if (!line.startsWith('data:')) return;
-      const payload = line.startsWith('data: ') ? line.slice(6) : line.slice(5);
-      if (!payload || payload === '[DONE]') return;
-      const parsed = JSON.parse(payload) as Parameters<typeof ingestOpenAiChunk>[0];
-      try {
-        ingestOpenAiChunk(parsed, acc, usageFromOpenRouterPayload);
-      } catch (e) {
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted) {
+        const usage = await this.resolveAbortedUsage(settings, acc);
         throw new StreamInterruptedError({
-          message: 'stream interrupted during callback',
+          message: 'stream aborted',
           partialText: acc.partialText(),
-          cause: e,
+          usage,
+          cause: error,
         });
       }
-    };
-
-    for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
-      buffer += decoder.decode(chunk, { stream: true });
-      while (true) {
-        const nl = buffer.indexOf('\n');
-        if (nl < 0) break;
-        const line = buffer.slice(0, nl).replace(/\r$/, '');
-        buffer = buffer.slice(nl + 1);
-        if (!line) continue;
-        handleDataLine(line);
-      }
+      throw error;
     }
-    if (buffer) handleDataLine(buffer.replace(/\r$/, ''));
-    if (!acc.hasContent()) throw new Error('llm returned empty streamed response');
-    return acc.finalize();
   }
 }

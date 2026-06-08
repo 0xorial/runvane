@@ -3,10 +3,13 @@
   import { isModifierEnterKey, isShiftEnterKey } from "@/lib/submitShortcut";
   import ChatAgentToolbar from "./ChatAgentToolbar.svelte";
   import ComposerSendActions from "./ComposerSendActions.svelte";
+  import type { LlmRef } from "../../../../backend/src/contracts/llm";
   import type { ChatAgentSelection } from "./ChatAgentToolbar.svelte";
   import type { MessageSendMode } from "./sendMessage";
 
   let {
+    conversationId = null,
+    pathPlannerLlm = null,
     value,
     onValueChange,
     canSend,
@@ -20,6 +23,8 @@
     attachmentsSlot,
     textareaRef = $bindable(null),
   }: {
+    conversationId?: string | null;
+    pathPlannerLlm?: LlmRef | null;
     value: string;
     onValueChange: (v: string) => void;
     canSend: boolean;
@@ -119,7 +124,11 @@
           </button>
           <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
           <div class="min-w-0 flex-1">
-            <ChatAgentToolbar onSelectionChange={onAgentSelectionChange} />
+            <ChatAgentToolbar
+              {conversationId}
+              {pathPlannerLlm}
+              onSelectionChange={onAgentSelectionChange}
+            />
           </div>
         </div>
         <ComposerSendActions {canSend} {agentRunning} {sending} {onSend} />

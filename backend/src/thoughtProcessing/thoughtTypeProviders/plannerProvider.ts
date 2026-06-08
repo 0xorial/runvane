@@ -140,7 +140,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (action === 'final_answer' && assistantEntryId) {
       await this.chatEntries.setDefaultViewLeaf(input.conversationId, assistantEntryId);
     }
-    await publishConversationUpdated(this.hub, this.conversations, input.conversationId);
+    await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, input.conversationId);
 
     if (requestedToolCalls.length === 0) return;
     const agent = await this.agents.get(input.agentId);

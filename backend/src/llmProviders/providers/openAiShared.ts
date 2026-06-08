@@ -167,12 +167,25 @@ export class OpenAiStreamAccumulator {
   private readonly toolCalls = new Map<number, { id: string; name: string; argsRaw: string }>();
   private finishReason: LlmFinishReason = 'stop';
   private usage: LlmUsage | undefined;
+  private generationId: string | undefined;
 
   constructor(private readonly emit: (event: LlmStreamEvent) => void) {}
 
+  ingestGenerationId(id: string): void {
+    if (id) this.generationId = id;
+  }
+
+  generationIdValue(): string | undefined {
+    return this.generationId;
+  }
+
+  usageValue(): LlmUsage | undefined {
+    return this.usage;
+  }
+
   ingestUsage(usage: LlmUsage): void {
-    this.usage = usage;
-    this.emit({ type: 'usage', usage });
+    this.usage = this.usage ? mergeLlmUsage(this.usage, usage) : usage;
+    this.emit({ type: 'usage', usage: this.usage });
   }
 
   ingestTextDelta(delta: string): void {
@@ -234,6 +247,119 @@ export class OpenAiStreamAccumulator {
   }
 }
 
+function finiteTokenCount(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : undefined;
+}
+
+function detailsObject(raw: unknown): Record<string, unknown> | null {
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+}
+
+/** Parse OpenAI Chat Completions `usage` (incl. OpenRouter + Anthropic-native fields). */
+export function parseChatCompletionsUsage(usage: unknown): LlmUsage | undefined {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
+  const rec = usage as Record<string, unknown>;
+  const pt = finiteTokenCount(rec.prompt_tokens) ?? finiteTokenCount(rec.input_tokens);
+  const ct = finiteTokenCount(rec.completion_tokens) ?? finiteTokenCount(rec.output_tokens);
+  const promptDetails = detailsObject(rec.prompt_tokens_details);
+  const inputDetails = detailsObject(rec.input_tokens_details);
+  const cachedPromptTokens =
+    finiteTokenCount(promptDetails?.cached_tokens) ??
+    finiteTokenCount(inputDetails?.cached_tokens) ??
+    finiteTokenCount(rec.cache_read_input_tokens);
+  const costUsd =
+    typeof rec.cost === 'number' && Number.isFinite(rec.cost) ? rec.cost : undefined;
+  if (pt !== undefined && ct !== undefined) {
+    return {
+      promptTokens: pt,
+      completionTokens: ct,
+      ...(cachedPromptTokens !== undefined ? { cachedPromptTokens: Math.min(cachedPromptTokens, pt) } : {}),
+      ...(costUsd !== undefined ? { costUsd } : {}),
+    };
+  }
+  const total = finiteTokenCount(rec.total_tokens);
+  if (total !== undefined && pt !== undefined) {
+    return {
+      promptTokens: pt,
+      completionTokens: Math.max(0, total - pt),
+      ...(cachedPromptTokens !== undefined ? { cachedPromptTokens: Math.min(cachedPromptTokens, pt) } : {}),
+      ...(costUsd !== undefined ? { costUsd } : {}),
+    };
+  }
+  return undefined;
+}
+
+export function isAnthropicOpenRouterModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return normalized.startsWith('anthropic/') || normalized.startsWith('~anthropic/');
+}
+
+function cachedTextBlock(text: string): Array<Record<string, unknown>> {
+  return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
+}
+
+function markCacheBreakpoint(messages: OpenAiMessage[], idx: number): void {
+  const msg = messages[idx];
+  if (!msg) return;
+  if (typeof msg.content === 'string' && msg.content.length > 0) {
+    messages[idx] = { ...msg, content: cachedTextBlock(msg.content) };
+    return;
+  }
+  if (!Array.isArray(msg.content) || msg.content.length === 0) return;
+  const parts = msg.content.map((part) => ({ ...part }));
+  const lastPart = parts[parts.length - 1];
+  if (lastPart?.type !== 'text' || typeof lastPart.text !== 'string') return;
+  parts[parts.length - 1] = { ...lastPart, cache_control: { type: 'ephemeral' } };
+  messages[idx] = { ...msg, content: parts };
+}
+
+/**
+ * Anthropic via OpenRouter needs explicit `cache_control` on content blocks
+ * (top-level alone is not enough on all routes). Breakpoint the stable system
+ * prompt and the turn immediately before the latest user message.
+ */
+export function withAnthropicCacheBreakpoints(messages: OpenAiMessage[]): OpenAiMessage[] {
+  if (messages.length === 0) return messages;
+  const out = messages.map((m) => ({ ...m }));
+  const sysIdx = out.findIndex((m) => m.role === 'system');
+  if (sysIdx >= 0) markCacheBreakpoint(out, sysIdx);
+  const last = out[out.length - 1];
+  if (out.length >= 2 && last.role === 'user') {
+    markCacheBreakpoint(out, out.length - 2);
+  }
+  return out;
+}
+
+function mergeLlmUsage(prev: LlmUsage, next: LlmUsage): LlmUsage {
+  const cachedPromptTokens =
+    next.cachedPromptTokens !== undefined
+      ? next.cachedPromptTokens
+      : prev.cachedPromptTokens;
+  return {
+    promptTokens: next.promptTokens || prev.promptTokens,
+    completionTokens: next.completionTokens || prev.completionTokens,
+    ...(cachedPromptTokens !== undefined ? { cachedPromptTokens } : {}),
+    reasoningTokens: next.reasoningTokens ?? prev.reasoningTokens,
+    costUsd: next.costUsd ?? prev.costUsd,
+  };
+}
+
+/** OpenRouter body: Anthropic prompt caching + first-party routing. */
+export function buildOpenRouterBody(model: string, request: LlmRequest): Record<string, unknown> {
+  const body = buildOpenAiBody(model, request);
+  if (!isAnthropicOpenRouterModel(model)) return body;
+  if (body.cache_control == null) {
+    body.cache_control = { type: 'ephemeral' };
+  }
+  if (Array.isArray(body.messages)) {
+    body.messages = withAnthropicCacheBreakpoints(body.messages as OpenAiMessage[]);
+  }
+  if (body.provider == null) {
+    body.provider = { only: ['anthropic'] };
+  }
+  return body;
+}
+
 function parseArgsLoose(raw: string): unknown {
   const trimmed = raw.trim();
   if (!trimmed) return {};
@@ -263,6 +389,7 @@ export function mapFinishReason(raw: unknown): LlmFinishReason {
 /** Parse one OpenAI SSE chunk into accumulator events. */
 export function ingestOpenAiChunk(
   chunk: {
+    id?: unknown;
     choices?: Array<{
       delta?: {
         content?: unknown;
@@ -282,6 +409,7 @@ export function ingestOpenAiChunk(
   acc: OpenAiStreamAccumulator,
   parseUsage: (raw: unknown) => LlmUsage | undefined,
 ): void {
+  if (typeof chunk.id === 'string' && chunk.id.trim()) acc.ingestGenerationId(chunk.id.trim());
   const usage = parseUsage(chunk.usage);
   if (usage) acc.ingestUsage(usage);
   const choice = chunk.choices?.[0];

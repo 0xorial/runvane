@@ -71,13 +71,13 @@ export class ThoughtProcessingService {
     };
   }
 
-  async getTitleLlmRef(agentLlm: LlmRef): Promise<LlmRef> {
+  async getTitleLlmRef(): Promise<LlmRef> {
     const llmDoc = await this.llmProviderSettings.getDocument();
     const cfg = llmDoc.llm_configuration;
     if (cfg.title_provider_id && cfg.title_model_name) {
       return { providerId: cfg.title_provider_id, model: cfg.title_model_name };
     }
-    return agentLlm;
+    return this.getLlmRef();
   }
 
   /**

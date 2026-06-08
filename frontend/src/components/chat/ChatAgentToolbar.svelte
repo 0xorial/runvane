@@ -24,9 +24,13 @@
     "min-h-[24px] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45 focus-visible:ring-1 focus-visible:ring-border";
 
   let {
+    conversationId = null,
+    pathPlannerLlm = null,
     onSelectionChange,
     showAgent = true,
   }: {
+    conversationId?: string | null;
+    pathPlannerLlm?: LlmRef | null;
     onSelectionChange: (selection: ChatAgentSelection) => void;
     showAgent?: boolean;
   } = $props();
@@ -61,6 +65,17 @@
   let selectedLlm = $state<{ provider_id: string; model: string } | null>(null);
   let followAgentDefault = $state(true);
   let selectedPresetId = $state<number | null>(null);
+  let lastPlannerSyncKey = $state("");
+
+  function plannerSyncKey(
+    cid: string | null,
+    llm: LlmRef | null,
+    agentDefault: { provider_id: string; model: string } | null,
+  ): string {
+    const agentPart = agentDefault ? `${agentDefault.provider_id}\0${agentDefault.model}` : "";
+    if (!llm) return `${cid ?? ""}\0\0${agentPart}`;
+    return `${cid ?? ""}\0${llm.providerId}\0${llm.model}\0${agentPart}`;
+  }
 
   const agentGroups = $derived<ModelGroup[]>([
     {
@@ -190,6 +205,32 @@
       return;
     }
     selectedLlm = firstAvailableLlm;
+  });
+
+  $effect(() => {
+    const syncKey = plannerSyncKey(conversationId, pathPlannerLlm, normalizedAgentDefault);
+    if (syncKey === lastPlannerSyncKey) return;
+    lastPlannerSyncKey = syncKey;
+
+    if (!pathPlannerLlm) {
+      followAgentDefault = true;
+      selectedLlm = null;
+      return;
+    }
+
+    const provider_id = pathPlannerLlm.providerId.trim();
+    const model = pathPlannerLlm.model.trim();
+    if (!provider_id || !model) return;
+
+    const agentDefault = normalizedAgentDefault;
+    if (agentDefault?.provider_id === provider_id && agentDefault.model === model) {
+      followAgentDefault = true;
+      selectedLlm = null;
+      return;
+    }
+
+    followAgentDefault = false;
+    selectedLlm = { provider_id, model };
   });
 
   $effect(() => {

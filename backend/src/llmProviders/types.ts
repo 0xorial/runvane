@@ -83,6 +83,8 @@ export type LlmUsage = {
   completionTokens: number;
   cachedPromptTokens?: number;
   reasoningTokens?: number;
+  /** Provider-reported USD cost (e.g. OpenRouter `usage.cost` / generation API). */
+  costUsd?: number;
 };
 
 export type LlmOutputPart =

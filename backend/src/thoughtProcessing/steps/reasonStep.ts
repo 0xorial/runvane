@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
+import { StreamInterruptedError } from '../../llmProviders/provider.js';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
 import { expandAttachmentRefs } from '../../llmProviders/expandAttachments.js';
 import { getCompletionText, getCompletionThinking } from '../../llmProviders/types.js';
@@ -12,6 +13,7 @@ import { TaskRegistryService } from '../../tasks/task-registry.service.js';
 import { UploadsService } from '../../uploads/uploads.service.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import type { PreparedReason } from './prepareStep.js';
+import { DecisionStep } from './decisionStep.js';
 
 @Injectable()
 export class ReasonStep {
@@ -24,6 +26,7 @@ export class ReasonStep {
     private readonly chatEntries: ChatEntriesRepo,
     private readonly uploads: UploadsService,
     private readonly taskRegistry: TaskRegistryService,
+    private readonly decisionStep: DecisionStep,
   ) {}
 
   async run<TInput>(
@@ -57,7 +60,10 @@ export class ReasonStep {
           taskSignal.throwIfAborted();
           return await this.streamLlm(provider, input, ctx, prepared, streamEntryId, taskSignal);
         } catch (error) {
-          if (taskSignal.aborted) throw error;
+          if (taskSignal.aborted) {
+            await this.persistAbortedUsage(ctx, error);
+            throw error;
+          }
           const detail = error instanceof Error ? error.message : String(error);
           await this.setStreamStatus(ctx, streamEntryId, 'failed', detail);
           throw error;
@@ -121,7 +127,7 @@ export class ReasonStep {
     const providerSettings = await this.llmProviderSettings.getProviderSettings(ctx.llm.providerId);
     if (!providerSettings) throw new Error(`llm provider settings not found: ${ctx.llm.providerId}`);
 
-    const wireRequest = await expandAttachmentRefs(prepared.request, async (id) => {
+    const expandedRequest = await expandAttachmentRefs(prepared.request, async (id) => {
       const content = await this.uploads.readContentById(id);
       if (!content) return null;
       return {
@@ -130,6 +136,16 @@ export class ReasonStep {
         bytes: content.data,
       };
     });
+    const wireRequest =
+      ctx.llm.providerId === 'openrouter'
+        ? {
+            ...expandedRequest,
+            requestParams: {
+              ...expandedRequest.requestParams,
+              session_id: ctx.conversationId,
+            },
+          }
+        : expandedRequest;
 
     this.logger.log(
       `llm → ${ctx.llm.providerId}/${ctx.llm.model} turns=${wireRequest.messages.length} tools=${wireRequest.tools?.length ?? 0}`,
@@ -153,8 +169,13 @@ export class ReasonStep {
     const elapsedMs = Date.now() - startedAt;
     const usage = completion.usage;
     const usageStr = usage
-      ? `prompt=${usage.promptTokens} cached=${usage.cachedPromptTokens ?? 0} completion=${usage.completionTokens}`
+      ? `prompt=${usage.promptTokens} cached=${usage.cachedPromptTokens ?? 0} completion=${usage.completionTokens}${usage.costUsd != null ? ` provider_cost=$${usage.costUsd}` : ''}`
       : 'usage=unknown';
+    if (usage && (usage.cachedPromptTokens ?? 0) === 0 && usage.promptTokens < 4096 && ctx.llm.model.toLowerCase().includes('opus')) {
+      this.logger.debug(
+        `llm cache: ${ctx.llm.model} prompt=${usage.promptTokens} tok — Opus models need ≥4096 input tok before Anthropic caching applies`,
+      );
+    }
     this.logger.log(
       `llm ← ${ctx.llm.providerId}/${ctx.llm.model} ${elapsedMs}ms finish=${completion.finishReason} ${usageStr}`,
     );
@@ -169,6 +190,15 @@ export class ReasonStep {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
     return completion;
+  }
+
+  private async persistAbortedUsage(ctx: ThoughtContext, error: unknown): Promise<void> {
+    if (!(error instanceof StreamInterruptedError) || !error.usage) return;
+    await this.decisionStep.recordUsage(ctx, {
+      parts: [],
+      finishReason: 'stop',
+      usage: error.usage,
+    });
   }
 
   private async setStreamStatus(

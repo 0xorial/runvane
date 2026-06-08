@@ -90,7 +90,8 @@ export class ConversationsService {
    * actions; resolution gives us the live tip of that branch.
    */
   private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
-    const row = toConversationRow(entity);
+    const tokenUsageByModel = await this.chatEntries.tokenUsageByModel(entity.id);
+    const row = toConversationRow(entity, tokenUsageByModel);
     row.defaultViewLeafAnchorId = entity.defaultViewLeafEntryId;
     row.defaultViewLeafEntryId = await this.chatEntries.resolveDefaultViewLeaf(entity.id);
     return row;

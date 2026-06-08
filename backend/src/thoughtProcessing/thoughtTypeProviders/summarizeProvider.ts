@@ -77,7 +77,7 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
     // mirrors what they see live. The original tail remains on its own branch.
     await this.chatEntries.setDefaultViewLeaf(ctx.conversationId, created.id);
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
-    await publishConversationUpdated(this.hub, this.conversations, ctx.conversationId);
+    await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, ctx.conversationId);
   };
 }
 

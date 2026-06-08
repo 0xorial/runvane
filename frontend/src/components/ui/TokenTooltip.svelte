@@ -10,12 +10,14 @@
     cachedTokens,
     completionTokens,
     pricing,
+    providerCost,
   }: {
     children: Snippet;
     promptTokens: number;
     cachedTokens: number;
     completionTokens: number;
     pricing?: ModelPricing;
+    providerCost?: number | null;
   } = $props();
 
   let open = $state(false);
@@ -23,6 +25,7 @@
   let pos = $state({ x: 0, y: 0 });
 
   const cost = $derived.by(() => {
+    if (providerCost != null && Number.isFinite(providerCost)) return providerCost;
     if (!pricing) return null;
     return (
       (promptTokens / 1_000_000) * pricing.inCostPer1m +

@@ -21,6 +21,13 @@ export type ConnectivityResult = z.infer<typeof ConnectivityResultSchema>;
 /** Re-exported for convenience; usage shape lives in types.ts. */
 export type { LlmUsage as StreamTextCompletionUsage } from './types.js';
 
+export function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException || error instanceof Error) &&
+    error.name === 'AbortError'
+  );
+}
+
 export class StreamInterruptedError extends Error {
   readonly partialText: string;
   readonly usage?: LlmUsage;

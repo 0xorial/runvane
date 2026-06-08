@@ -18,6 +18,7 @@
 
   let {
     conversationId,
+    pathPlannerLlm = null,
     search,
     pendingMessages = [],
     appendOptimisticUserMessage,
@@ -25,6 +26,7 @@
     textareaRef = $bindable(null),
   }: {
     conversationId: string | null;
+    pathPlannerLlm?: LlmRef | null;
     search: string;
     pendingMessages?: PendingMessage[];
     appendOptimisticUserMessage: (input: {
@@ -169,6 +171,8 @@
 
 <MessageComposer
   bind:textareaRef
+  {conversationId}
+  {pathPlannerLlm}
   value={input}
   onValueChange={(v) => (input = v)}
   {canSend}

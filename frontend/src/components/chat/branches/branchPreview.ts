@@ -1,3 +1,4 @@
+import { streamTotalTokens } from "@/lib/providerCost";
 import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
 
 export function displayStatus(status: string): string {
@@ -35,16 +36,7 @@ export function entryPreview(entry: ChatEntry): string {
   }
   if (!isThoughtStreamEntry(entry)) return String((entry as ChatEntry).type);
   const status = displayStatus(String(entry.status || "running").trim());
-  const promptTokens = typeof entry.promptTokens === "number" && Number.isFinite(entry.promptTokens) ? entry.promptTokens : 0;
-  const cachedPromptTokens =
-    typeof entry.cachedPromptTokens === "number" && Number.isFinite(entry.cachedPromptTokens)
-      ? entry.cachedPromptTokens
-      : 0;
-  const completionTokens =
-    typeof entry.completionTokens === "number" && Number.isFinite(entry.completionTokens)
-      ? entry.completionTokens
-      : 0;
-  const totalTokens = promptTokens + cachedPromptTokens + completionTokens;
+  const totalTokens = streamTotalTokens(entry);
   const tokenLabel = totalTokens > 0 ? `${totalTokens} tok` : "";
   const model = String(entry.llm?.model || "").trim();
   const meta = [model, tokenLabel].filter((x) => x.length > 0).join(" ");

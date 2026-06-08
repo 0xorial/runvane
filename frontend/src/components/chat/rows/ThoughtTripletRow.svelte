@@ -5,6 +5,7 @@
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import { createAgentsQuery, createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
   import { getChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
+  import { resolveStreamTokenBreakdown, streamTotalTokens } from "@/lib/providerCost";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import BranchSelector from "../BranchSelector.svelte";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
@@ -80,14 +81,28 @@
     const provider = String(streamEntry.llm?.providerId || "").trim() || "unknown-provider";
     const model = String(streamEntry.llm?.model || "").trim() || "unknown-model";
     const status = displayStatus(streamEntry.status ?? "running");
-    const promptTokens = streamEntry.promptTokens ?? 0;
-    const cachedTokens = streamEntry.cachedPromptTokens ?? 0;
-    const completionTokens = streamEntry.completionTokens ?? 0;
-    const totalTokens = promptTokens + cachedTokens + completionTokens;
+    const tokens = resolveStreamTokenBreakdown(streamEntry);
+    const totalTokens = streamTotalTokens(streamEntry);
     const durationLabel = streamEntry.thoughtMs != null ? `${Math.round(streamEntry.thoughtMs)}ms` : "";
     const pricing = pricingByModel.get(model);
     const showModel = !isAgentDefaultLlm(streamEntry.llm, thoughtAgent);
-    return { provider, model, status, promptTokens, cachedTokens, completionTokens, totalTokens, durationLabel, pricing, showModel };
+    const providerCost =
+      typeof streamEntry.provider_cost === "number" && Number.isFinite(streamEntry.provider_cost)
+        ? streamEntry.provider_cost
+        : null;
+    return {
+      provider,
+      model,
+      status,
+      promptTokens: tokens.input,
+      cachedTokens: tokens.cached,
+      completionTokens: tokens.output,
+      totalTokens,
+      durationLabel,
+      pricing,
+      showModel,
+      providerCost,
+    };
   }
 </script>
 
@@ -133,6 +148,7 @@
                   cachedTokens={reasonMeta.cachedTokens}
                   completionTokens={reasonMeta.completionTokens}
                   pricing={reasonMeta.pricing}
+                  providerCost={reasonMeta.providerCost}
                 >
                   {#snippet children()}{formatTokenCount(reasonMeta.totalTokens)}{/snippet}
                 </TokenTooltip>

@@ -12,6 +12,7 @@ import type {
   ToolParamsLlmStreamEntry,
 } from '../../contracts/chatEntry.js';
 import { ChatAttachmentSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
+import { ProviderCostBreakdownSchema } from '../../contracts/provider-cost.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { UserMessageOverridesSchema } from '../../contracts/user-message-overrides.js';
 import { z } from 'zod';
@@ -179,6 +180,10 @@ function mapStream(
   if (payload.promptTokens !== undefined) stream.promptTokens = requireFiniteNumber(payload, 'promptTokens', ctx);
   if (payload.completionTokens !== undefined) stream.completionTokens = requireFiniteNumber(payload, 'completionTokens', ctx);
   if (payload.cachedPromptTokens !== undefined) stream.cachedPromptTokens = requireFiniteNumber(payload, 'cachedPromptTokens', ctx);
+  if (payload.provider_cost !== undefined) stream.provider_cost = requireFiniteNumber(payload, 'provider_cost', ctx);
+  if (payload.provider_cost_breakdown !== undefined) {
+    stream.provider_cost_breakdown = ProviderCostBreakdownSchema.parse(payload.provider_cost_breakdown);
+  }
   switch (type) {
     case 'planner_llm_stream':
       return stream;

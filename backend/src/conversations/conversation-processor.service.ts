@@ -196,7 +196,7 @@ export class ConversationProcessorService {
     const { scope, chain } = await this.beginRun(args.conversationId);
     try {
       const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
-      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, args.conversationId);
       return result;
     } finally {
       scope.rootDone();
@@ -212,7 +212,7 @@ export class ConversationProcessorService {
     try {
       const llm = await this.thoughtProcessing.getLlmRef();
       const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
-      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, args.conversationId);
       return result;
     } finally {
       scope.rootDone();
@@ -252,7 +252,7 @@ export class ConversationProcessorService {
       if (!siblingPayload || siblingPayload.type !== 'user-message') {
         throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
       }
-      await publishConversationUpdated(this.hub, this.conversations, args.conversationId);
+      await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, args.conversationId);
       this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
 
       this.thoughtProcessing.startThought({
@@ -332,7 +332,7 @@ export class ConversationProcessorService {
           explicitModel: body.llm?.model,
           agentId: body.agentId,
         });
-        const titleLlm = await this.thoughtProcessing.getTitleLlmRef(llm);
+        const titleLlm = await this.thoughtProcessing.getTitleLlmRef();
         const existingMessages = await this.chatEntries.listMessages(conversationId);
         if (existingMessages.length > 0 && !body.parentId) {
           throw new Error('parentId is required when conversation already has messages');
@@ -356,7 +356,7 @@ export class ConversationProcessorService {
         if (!userPayload || userPayload.type !== 'user-message') {
           throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
         }
-        await publishConversationUpdated(this.hub, this.conversations, conversationId);
+        await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, conversationId);
         this.hub.publish(conversationId, {
           type: SseType.USER_MESSAGE,
           entry: userPayload,

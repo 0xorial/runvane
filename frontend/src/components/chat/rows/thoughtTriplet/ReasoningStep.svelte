@@ -8,6 +8,7 @@
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import ShiftEnterHint from "@/components/ui/ShiftEnterHint.svelte";
   import { notifyError } from "@/utils/toast";
+  import { resolveStreamTokenBreakdown } from "@/lib/providerCost";
   import { displayStatus } from "./meta";
   import ReadOnlySection from "../ReadOnlySection.svelte";
   let {
@@ -34,9 +35,10 @@
     if (!isEditing) editedResponse = response;
   });
 
-  const promptTokens = $derived(stream.promptTokens ?? 0);
-  const cachedPromptTokens = $derived(stream.cachedPromptTokens ?? 0);
-  const completionTokens = $derived(stream.completionTokens ?? 0);
+  const tokenBreakdown = $derived(resolveStreamTokenBreakdown(stream));
+  const promptTokens = $derived(tokenBreakdown.input);
+  const cachedPromptTokens = $derived(tokenBreakdown.cached);
+  const completionTokens = $derived(tokenBreakdown.output);
   const duration = $derived(stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "running");
   const statusLabel = $derived(displayStatus(stream.status ?? "running"));
   const providerId = $derived(String(stream.llm?.providerId ?? "").trim());
