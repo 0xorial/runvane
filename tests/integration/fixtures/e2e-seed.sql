@@ -42,7 +42,7 @@ VALUES (
   'e2e00000-0000-4000-8000-000000000001',
   'agent 1',
   '',
-  '{"provider_id":"stub","model_name":"stub","tools":{"get_current_time":{"enabled":true}}}',
+  '{"provider_id":"stub","model_name":"stub","tools":{"get_current_time":{"enabled":true},"ask_attachment":{"enabled":true,"rules":{"allowed":"always"}}}}',
   NULL,
   'stub',
   'stub',

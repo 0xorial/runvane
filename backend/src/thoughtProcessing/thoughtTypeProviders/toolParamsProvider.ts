@@ -20,6 +20,7 @@ export type ToolParamsInput = {
   toolParamsSchema: unknown;
   toolRequest: string;
   plannerFollowup: { mode: 'continue' | 'finalize' };
+  paramsContextNote?: string;
   guardrailConfig?: GuardrailConfig;
   toolOverrides?: Record<string, AgentToolConfig>;
 };
@@ -44,6 +45,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       toolAiDescription: input.toolAiDescription,
       toolParamsSchema: input.toolParamsSchema,
       toolRequest: input.toolRequest,
+      ...(input.paramsContextNote ? { paramsContextNote: input.paramsContextNote } : {}),
     }),
   });
 

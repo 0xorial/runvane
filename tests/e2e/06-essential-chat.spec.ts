@@ -81,6 +81,22 @@ test("attachment summary mode runs summarize-attachment thought", async ({ app, 
   await expect(app.chat.transcript.prepareRow("Summarize attachment")).toContainText(STUB_ATTACHMENT_SUMMARY_REPLY);
 });
 
+test("attachment summary follow-up queries full file via ask_attachment", async ({ app, request }) => {
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+  await app.chat.userInput.attachFiles(attachmentFixture);
+  await app.chat.userInput.setAttachmentMode("Summary");
+  await app.chat.userInput.typeMessage(ATTACHMENT_MSG);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply(E2E_LLM_TIMEOUT_MS);
+
+  await app.chat.userInput.typeMessage("What exact palette and mood does the full file suggest?");
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForToolState("done", 0, E2E_LLM_TIMEOUT_MS);
+  await expect(app.chat.transcript.toolRow(0)).toContainText("ask_attachment");
+  await app.chat.transcript.expectTranscriptContains("Cool violet");
+});
+
 test("branch on user message reprocess", async ({ app, request }) => {
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);

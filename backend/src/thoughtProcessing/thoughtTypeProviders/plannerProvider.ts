@@ -18,6 +18,7 @@ import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProvide
 import { resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
+import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
 import { buildPlannerMessages } from '../lib/plannerPrompt.js';
 import {
   extractAssistantOutputFromJsonLike,
@@ -171,6 +172,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const tool = this.tools.get(args.requested.toolName);
     if (!tool) throw new Error(`planner tool request references missing tool: ${args.requested.toolName}`);
     const mergedToolCfg = resolveToolConfig(args.agent, args.input.toolOverrides, args.requested.toolName);
+    const paramsContextNote =
+      args.requested.toolName === 'ask_attachment'
+        ? buildAskAttachmentParamsContext(args.input.entries)
+        : undefined;
     const toolParamsInput: ToolParamsInput = {
       conversationId: args.input.conversationId,
       agentId: args.input.agentId,
@@ -179,6 +184,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       toolParamsSchema: tool.getParamsSchema(),
       toolRequest: args.requested.toolRequest,
       plannerFollowup: { mode: args.followup },
+      ...(paramsContextNote ? { paramsContextNote } : {}),
       ...(args.input.toolOverrides ? { toolOverrides: args.input.toolOverrides } : {}),
     };
     const rawGuardrail = args.agent.default_llm_configuration?.guardrail;

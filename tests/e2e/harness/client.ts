@@ -4,6 +4,8 @@ export const PROBE_MESSAGE = "what is the time?";
 export const STUB_SUMMARIZE_REPLY = "e2e stub summary of folded turns.";
 export const STUB_GUARDRAIL_FLAG_REASON = "e2e stub guardrail flag";
 export const STUB_ATTACHMENT_SUMMARY_REPLY = "e2e stub attachment summary.";
+export const STUB_ASK_ATTACHMENT_REPLY =
+  "Dominant palette: deep violet on pure black. Mood: precise, technical, premium — suited to developer tooling.";
 export const FOLD_MSG_ONE = "e2e fold message one";
 export const FOLD_MSG_TWO = "e2e fold message two";
 export const USER_MSG_HELLO = "hello e2e user message";

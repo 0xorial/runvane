@@ -40,7 +40,7 @@ async function applyDemoDbPatch(demoModels) {
   const now = new Date().toISOString();
   for (const stmt of [
     `INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES ('llm_configuration', '{"provider_id":"stub","model_name":"gpt-4o","model_settings":{}}', '${now}');`,
-    `UPDATE agents SET model_provider_id='stub', model_name='gpt-4o', default_llm_configuration_json='{"provider_id":"stub","model_name":"gpt-4o","tools":{"get_current_time":{"enabled":true}}}' WHERE is_default=1;`,
+    `UPDATE agents SET model_provider_id='stub', model_name='gpt-4o', default_llm_configuration_json='{"provider_id":"stub","model_name":"gpt-4o","tools":{"get_current_time":{"enabled":true},"ask_attachment":{"enabled":true,"rules":{"allowed":"always"}}}}' WHERE is_default=1;`,
     `UPDATE llm_providers SET models_json='${demoModelsJson}', models_verified=1 WHERE id='stub';`,
     `UPDATE llm_providers SET models_verified=0 WHERE id!='stub';`,
   ]) {

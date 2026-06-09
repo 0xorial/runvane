@@ -1,3 +1,4 @@
+import type { ChatEntry } from '../../contracts/chatEntry.js';
 import { textMessage, type LlmMessage } from '../../llmProviders/types.js';
 
 export type BuildToolParamsMessagesInput = {
@@ -5,7 +6,20 @@ export type BuildToolParamsMessagesInput = {
   toolAiDescription: string;
   toolParamsSchema: unknown;
   toolRequest: string;
+  paramsContextNote?: string;
 };
+
+export function buildAskAttachmentParamsContext(entries: ChatEntry[]): string | undefined {
+  const lines: string[] = [];
+  for (const entry of entries) {
+    if (entry.type !== 'user-message') continue;
+    for (const attachment of entry.attachments ?? []) {
+      lines.push(`${attachment.id} (${attachment.name}, ${attachment.mode})`);
+    }
+  }
+  if (lines.length === 0) return undefined;
+  return `Attachments in this conversation — set attachment_id to one of:\n${lines.map((line) => `- ${line}`).join('\n')}`;
+}
 
 export function buildToolParamsMessages(input: BuildToolParamsMessagesInput): LlmMessage[] {
   const system =
@@ -15,7 +29,10 @@ export function buildToolParamsMessages(input: BuildToolParamsMessagesInput): Ll
     `If the schema has no fields, reply with {}.\n` +
     `Description: ${input.toolAiDescription}\n` +
     `Schema: ${JSON.stringify(input.toolParamsSchema)}`;
-  return [textMessage('system', system), textMessage('user', input.toolRequest)];
+  const userText = input.paramsContextNote
+    ? `${input.paramsContextNote}\n\nPlanner request: ${input.toolRequest}`
+    : input.toolRequest;
+  return [textMessage('system', system), textMessage('user', userText)];
 }
 
 /**

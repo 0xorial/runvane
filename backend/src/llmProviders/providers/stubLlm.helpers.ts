@@ -4,6 +4,8 @@ export const PROBE_TIME_USER_MESSAGE = 'what is the time?';
 export const STUB_PROBE_TIME_REPLY = 'The current time is 12:00 UTC.';
 export const STUB_SUMMARIZE_REPLY = 'e2e stub summary of folded turns.';
 export const STUB_ATTACHMENT_SUMMARY_REPLY = 'e2e stub attachment summary.';
+export const STUB_ASK_ATTACHMENT_REPLY =
+  'Dominant palette: deep violet on pure black. Mood: precise, technical, premium — suited to developer tooling.';
 export const STUB_GUARDRAIL_FLAG_REASON = 'e2e stub guardrail flag';
 
 export async function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -96,6 +98,101 @@ export function stubIsSummarizeAttachmentRequest(blob: string): boolean {
   return /You summarize a single attachment/i.test(blob);
 }
 
+export function stubIsAskAttachmentSubagentRequest(blob: string): boolean {
+  return /You are a focused retrieval subagent/i.test(blob);
+}
+
+export function stubIsAskAttachmentToolParamsRequest(blob: string): boolean {
+  return /Produce JSON args for tool "ask_attachment"/i.test(blob);
+}
+
+export function stubAskAttachmentParamsReply(blob: string): string {
+  const idMatch = blob.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  const attachmentId = idMatch?.[0];
+  if (!attachmentId) {
+    throw new Error('stub ask_attachment params: no attachment_id found in tool-params prompt');
+  }
+  const plannerRequest = blob.split('Planner request:')[1]?.trim();
+  const question =
+    plannerRequest && plannerRequest.length > 0
+      ? plannerRequest
+      : 'What detail does the attachment add beyond the summary?';
+  return JSON.stringify({ attachment_id: attachmentId, question });
+}
+
+export function stubPlannerUserTurnCount(request: LlmRequest): number {
+  return request.messages.filter((message) => message.role === 'user').length;
+}
+
+export function stubPlannerHasAttachmentSummary(request: LlmRequest): boolean {
+  return stubRequestText(request).includes('<attachment_summary');
+}
+
+export function stubPlannerListsAskAttachment(request: LlmRequest): boolean {
+  return /Tools:.*ask_attachment/.test(stubRequestText(request));
+}
+
+export function stubHasAskAttachmentToolResult(request: LlmRequest): boolean {
+  return request.messages.some((message) =>
+    message.parts.some(
+      (part) => part.kind === 'tool_result' && String(part.payload).includes('"answer"'),
+    ),
+  );
+}
+
+export function stubIsFirstAttachmentPlanner(request: LlmRequest): boolean {
+  return (
+    stubIsPlannerRequest(request) &&
+    stubPlannerHasAttachmentSummary(request) &&
+    stubPlannerUserTurnCount(request) === 1 &&
+    !stubHasPlannerToolResult(request)
+  );
+}
+
+export function stubIsAttachmentFollowUpPlanner(request: LlmRequest): boolean {
+  return (
+    stubIsPlannerRequest(request) &&
+    stubPlannerHasAttachmentSummary(request) &&
+    stubPlannerListsAskAttachment(request) &&
+    stubPlannerUserTurnCount(request) >= 2 &&
+    !stubHasPlannerToolResult(request)
+  );
+}
+
+export function stubFirstAttachmentPlannerFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Summarize-attachment already distilled the file; answer from the summary block.',
+    assistant_output:
+      'The attachment notes describe fixture text used to exercise inline and summary attachment modes.',
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+export function stubAttachmentFollowUpPlannerFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Summary lacks full visual detail; query the attachment via subagent.',
+    assistant_output: 'Let me inspect the full file for precise palette and mood.',
+    tool_requests: [
+      {
+        tool_name: 'ask_attachment',
+        tool_request: 'What exact palette and mood does the full attachment convey?',
+      },
+    ],
+    followup: 'continue',
+  });
+}
+
+export function stubAskAttachmentPlannerFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Subagent returned palette and mood from the raw file.',
+    assistant_output:
+      'Cool violet on black — modern, technical, premium dark-UI mood, well suited to a developer tool.',
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 export function stubGuardrailFlagReply(): string {
   return JSON.stringify({ verdict: 'flag', reason: STUB_GUARDRAIL_FLAG_REASON });
 }
@@ -122,12 +219,19 @@ export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
   if (stubIsTitleGenerationRequest(blob)) return 'Time Inquiry';
-  if (stubIsToolParamsRequest(blob)) return '{}';
+  if (stubIsToolParamsRequest(blob)) {
+    if (stubIsAskAttachmentToolParamsRequest(blob)) return stubAskAttachmentParamsReply(blob);
+    return '{}';
+  }
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;
+  if (stubIsAskAttachmentSubagentRequest(blob)) return STUB_ASK_ATTACHMENT_REPLY;
 
   if (stubIsPlannerRequest(request)) {
+    if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
+    if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
+    if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
     if (stubHasPlannerToolResult(request)) return stubProbeTimePlannerFinalize();
     if (stubIsProbeTimeConversation(request)) return stubProbeTimePlannerFirstRound();
     return stubProbeTimePlannerFinalize();
