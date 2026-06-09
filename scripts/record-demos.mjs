@@ -162,7 +162,8 @@ function findVideos(dir) {
 }
 const name = (webm) => {
   const dir = path.basename(path.dirname(webm));
-  const fromSuffix = dir.match(/\.demo\.ts-(.+)-chromium$/);
+  const fromSuffix =
+    dir.match(/\.demo\.ts-(.+)-chromium$/) ?? dir.match(/-demo\.ts-(.+)-chromium$/);
   if (fromSuffix) return fromSuffix[1];
   const base = dir.replace(/-chromium$/, "");
   const dup = base.match(/^([a-z0-9-]+)-\1\.demo\.ts-/);

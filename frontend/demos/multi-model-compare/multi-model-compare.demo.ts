@@ -1,13 +1,16 @@
 import { defaultAgentId } from "../../e2e/api/client";
-import { stubLlmConfigure, stubLlmReset } from "../../e2e/api/stub-llm";
+import { stubLlmConfigure, stubLlmReset, type StubModelScript } from "../../e2e/api/stub-llm";
 import { E2E_LLM_TIMEOUT_MS } from "../../e2e/timeouts";
 import { beat, expect, test } from "../_shared/demo-test";
-import { demoClick, demoKeyOn, demoTypeInto, installDemoOverlay } from "../_shared/overlay";
+import { demoClick, demoKeyOnly, demoTypeOnly, installDemoOverlay } from "../_shared/overlay";
 import { plannerReply } from "../_shared/planner";
+import { streamMsPerToken } from "../_shared/stub-timing";
 
 const MODEL = "gpt-4o";
 const MINI = "gpt-4o-mini";
-const STREAM_MS = 20;
+const QUICK_TYPE_MS = 6;
+const TITLE_MS = 200;
+const PLANNER_MS = 700;
 
 const PROMPT = "What's the most underrated skill for a software engineer?";
 const TITLE = "Underrated engineering skills";
@@ -16,32 +19,36 @@ const GPT4O_MARKDOWN = `**Reading code you didn't write.** Most engineers optimi
 
 const MINI_MARKDOWN = `**Writing clearly.** The bottleneck on most teams isn't typing speed — it's communication. A crisp PR description or a two-line message that prevents an hour-long meeting is pure leverage. Clear writing also forces clear thinking, so it makes the *code* better too.`;
 
+const GPT4O_PLANNER = plannerReply(GPT4O_MARKDOWN, "Pick the single most leveraged skill.");
+const MINI_PLANNER = plannerReply(MINI_MARKDOWN, "Pick the single most leveraged skill.");
+
+const STUB_SCRIPT: StubModelScript[] = [
+  { responses: [{ text: TITLE, streamMs: streamMsPerToken(TITLE, TITLE_MS) }] },
+  {
+    model: MODEL,
+    responses: [{ text: GPT4O_PLANNER, streamMs: streamMsPerToken(GPT4O_PLANNER, PLANNER_MS) }],
+  },
+  {
+    model: MINI,
+    responses: [{ text: MINI_PLANNER, streamMs: streamMsPerToken(MINI_PLANNER, PLANNER_MS) }],
+  },
+];
+
 test("multi-model-compare", async ({ app, request }) => {
   await stubLlmReset(request);
-  await stubLlmConfigure(request, [
-    { responses: [{ text: TITLE }] },
-    {
-      model: MODEL,
-      responses: [
-        { text: plannerReply(GPT4O_MARKDOWN, "Pick the single most leveraged skill."), streamMs: STREAM_MS },
-      ],
-    },
-    {
-      model: MINI,
-      responses: [
-        { text: plannerReply(MINI_MARKDOWN, "Pick the single most leveraged skill."), streamMs: STREAM_MS },
-      ],
-    },
-  ]);
+  await stubLlmConfigure(request, STUB_SCRIPT);
 
   await installDemoOverlay(app.page);
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
 
-  await demoTypeInto(app.chat.userInput.textarea, PROMPT, 10);
-  await demoKeyOn(app.page, app.chat.userInput.textarea, "Shift+Enter");
+  const composer = app.chat.userInput.textarea;
+  await demoClick(app.page, composer);
+  await demoTypeOnly(composer, PROMPT, QUICK_TYPE_MS);
+  await demoKeyOnly(app.page, "Shift+Enter");
+
   await app.chat.transcript.waitForAssistantReply(E2E_LLM_TIMEOUT_MS);
-  await beat(300);
+  await beat(900);
 
   const row = app.chat.transcript.prepareRow("Decision planning", 0);
   await demoClick(app.page, row.getByTestId("thought-prepare-try-model"));
@@ -54,14 +61,15 @@ test("multi-model-compare", async ({ app, request }) => {
   await reprocessDone;
   await app.chat.transcript.waitForAssistantReply(E2E_LLM_TIMEOUT_MS);
   await expect(row.getByTestId("branch-selector")).toBeVisible({ timeout: E2E_LLM_TIMEOUT_MS });
+  await beat(600);
 
   const sel = row.getByTestId("branch-selector");
   const prev = sel.getByRole("button", { name: /previous/i });
   if (await prev.count()) {
     await demoClick(app.page, prev);
-    await beat(300);
+    await beat(700);
     const next = sel.getByRole("button", { name: /next/i });
     if (await next.count()) await demoClick(app.page, next);
   }
-  await beat(300);
+  await beat(1500);
 });
