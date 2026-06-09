@@ -29,7 +29,6 @@ const env = {
   ...process.env,
   RUN_E2E_TESTS: "1",
   E2E_SERVERS_READY: "1",
-  LLM_TEST_STUB: "1",
   PORT: String(new URL(backendOrigin).port),
   FRONTEND_ORIGIN: frontendOrigin,
   VITE_API_BASE_URL: backendOrigin,

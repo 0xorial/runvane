@@ -1,13 +1,11 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { execSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { e2eDatabaseUrl, prepareE2eDatabase } from "./e2e-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, "..");
-const pidFile = path.join(repoRoot, ".e2e-servers.json");
 
 export const E2E_DEV_BASE = 523;
 export const backendPort = E2E_DEV_BASE * 100;
@@ -15,6 +13,9 @@ const frontendPortOffset = Number(process.env.E2E_FRONTEND_PORT_OFFSET ?? "1");
 export const frontendPort = backendPort + frontendPortOffset;
 export const backendOrigin = `http://127.0.0.1:${backendPort}`;
 export const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
+
+/** @type {{ backend: { close(): Promise<void> } | null; frontend: import('vite').ViteDevServer | null }} */
+const running = { backend: null, frontend: null };
 
 async function healthOk() {
   try {
@@ -35,19 +36,6 @@ function frontendEntryPath() {
   return "/src/App.svelte";
 }
 
-function killPort(port) {
-  try {
-    const out = execSync(`lsof -ti:${port}`, { encoding: "utf8" }).trim();
-    if (!out) return;
-    for (const pid of out.split("\n")) {
-      const n = Number(pid);
-      if (n > 0) process.kill(n);
-    }
-  } catch {
-    /* nothing listening */
-  }
-}
-
 async function frontendOk() {
   try {
     const index = await fetch(frontendOrigin);
@@ -61,24 +49,17 @@ async function frontendOk() {
   }
 }
 
-function readPids() {
-  if (!existsSync(pidFile)) return null;
-  return JSON.parse(readFileSync(pidFile, "utf8"));
+async function loadBackendBootstrap() {
+  const bootstrapPath = path.join(repoRoot, "backend/dist/bootstrap.js");
+  if (!existsSync(bootstrapPath)) {
+    throw new Error("e2e-servers: run `cd backend && npm run build` first");
+  }
+  return import(pathToFileURL(bootstrapPath).href);
 }
 
-function writePids(pids) {
-  writeFileSync(pidFile, `${JSON.stringify(pids, null, 2)}\n`);
-}
-
-function spawnDetached(command, args, cwd, env) {
-  const child = spawn(command, args, {
-    cwd,
-    env: { ...process.env, ...env },
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
-  return child.pid;
+async function loadFrontendDevServer() {
+  const modPath = path.join(repoRoot, frontendDirName(), "e2e-dev-server.mjs");
+  return import(pathToFileURL(modPath).href);
 }
 
 async function waitFor(fn, label, timeoutMs = 30_000) {
@@ -95,8 +76,15 @@ function resolveDatabaseUrl() {
   return override || e2eDatabaseUrl;
 }
 
-export async function ensureE2eServers({ freshDb = false } = {}) {
-  if (!freshDb && (await healthOk()) && (await frontendOk())) return;
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.freshDb]
+ * @param {import('../backend/dist/runtime/runtime.config.js').LlmRuntime} [opts.llm]
+ */
+export async function ensureE2eServers({ freshDb = false, llm = { mode: "stub" } } = {}) {
+  if (!freshDb && running.backend && running.frontend && (await healthOk()) && (await frontendOk())) {
+    return;
+  }
 
   const backendMain = path.join(repoRoot, "backend/dist/main.js");
   if (!existsSync(backendMain)) {
@@ -110,47 +98,39 @@ export async function ensureE2eServers({ freshDb = false } = {}) {
     throw new Error("e2e-servers: E2E_FRESH_DB=1 cannot wipe a custom E2E_DATABASE_URL");
   }
 
-  killPort(backendPort);
-  killPort(frontendPort);
+  await stopE2eServers();
 
+  const { createRunvaneApp } = await loadBackendBootstrap();
+  running.backend = await createRunvaneApp({
+    llm,
+    nodeEnv: "test",
+    port: backendPort,
+    frontendOrigin,
+    databaseUrl,
+  });
+
+  const { createE2eFrontend } = await loadFrontendDevServer();
   const frontendDir = path.join(repoRoot, frontendDirName());
-  const pids = {
-    backend: spawnDetached("node", ["dist/main.js"], path.join(repoRoot, "backend"), {
-      LLM_TEST_STUB: "1",
-      NODE_ENV: "test",
-      DATABASE_URL: databaseUrl,
-      PORT: String(backendPort),
-      FRONTEND_ORIGIN: frontendOrigin,
-    }),
-    frontend: spawnDetached(
-      "npx",
-      ["vite", "--host", "127.0.0.1", "--strictPort", "--port", String(frontendPort)],
-      frontendDir,
-      { VITE_API_BASE_URL: backendOrigin },
-    ),
-  };
-  writePids({ ...pids, frontendDir: frontendDirName() });
+  running.frontend = await createE2eFrontend({
+    root: frontendDir,
+    port: frontendPort,
+    apiBaseUrl: backendOrigin,
+  });
 
   await waitFor(healthOk, "stub backend /health");
   await waitFor(frontendOk, `${frontendDirName()} vite (${frontendEntryPath()})`);
 }
 
 export async function stopE2eServers() {
-  const pids = readPids();
-  if (pids) {
-    for (const pid of [pids.backend, pids.frontend]) {
-      if (pid) {
-        try {
-          process.kill(pid);
-        } catch {
-          /* already stopped */
-        }
-      }
-    }
-    unlinkSync(pidFile);
+  if (running.backend) {
+    await running.backend.close();
+    running.backend = null;
   }
-  killPort(backendPort);
-  killPort(frontendPort);
+  if (running.frontend) {
+    const { closeE2eFrontend } = await loadFrontendDevServer();
+    await closeE2eFrontend(running.frontend);
+    running.frontend = null;
+  }
 }
 
 const isCli = fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? "");
@@ -159,12 +139,20 @@ if (isCli) {
   if (cmd === "start") {
     await ensureE2eServers();
     console.log(`e2e servers: ${backendOrigin} + ${frontendOrigin}`);
+    const shutdown = async () => {
+      await stopE2eServers();
+      process.exit(0);
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    await new Promise(() => {});
   } else if (cmd === "stop") {
     await stopE2eServers();
     console.log("e2e servers stopped");
   } else if (cmd === "status") {
+    const owned = running.backend != null && running.frontend != null;
     console.log(
-      `backend=${(await healthOk()) ? "stub ok" : "down"} frontend=${(await frontendOk()) ? "ok" : "down"}`,
+      `owned=${owned} backend=${(await healthOk()) ? "stub ok" : "down"} frontend=${(await frontendOk()) ? "ok" : "down"}`,
     );
   } else {
     console.error("usage: e2e-servers.mjs start|stop|status");

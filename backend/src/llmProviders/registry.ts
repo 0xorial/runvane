@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { LlmProvider } from './provider.js';
 import { GrokProvider, OpenAiProvider } from './providers/openAiCompatible.js';
 import { OpenRouterProvider } from './providers/openRouter.js';
 import { LmStudioNativeProvider } from './providers/lmStudioNative.js';
 import { StubLlmProvider } from './providers/stubLlm.js';
+import type { RunvaneRuntimeConfig } from '../runtime/runtime.config.js';
+import { RUNVANE_RUNTIME } from '../runtime/runtime.tokens.js';
 
 @Injectable()
 export class LlmProviderRegistry {
@@ -15,9 +17,16 @@ export class LlmProviderRegistry {
     openRouterProvider: OpenRouterProvider,
     grokProvider: GrokProvider,
     lmStudioNativeProvider: LmStudioNativeProvider,
+    @Inject(RUNVANE_RUNTIME) runtime: RunvaneRuntimeConfig,
   ) {
-    this.stubOnly = process.env.LLM_TEST_STUB === '1' ? new StubLlmProvider() : null;
-    if (this.stubOnly) return;
+    if (runtime.llm.mode === 'stub') {
+      this.stubOnly = new StubLlmProvider({
+        demo: runtime.llm.demo ?? false,
+        demoDelayMs: runtime.llm.demoDelayMs ?? 45,
+      });
+      return;
+    }
+    this.stubOnly = null;
     this.register(openAiProvider);
     this.register(openRouterProvider);
     this.register(grokProvider);

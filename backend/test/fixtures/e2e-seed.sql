@@ -1,3 +1,29 @@
+INSERT INTO llm_providers (
+  id,
+  label,
+  settings_json,
+  models_json,
+  models_verified,
+  created_at,
+  updated_at
+)
+VALUES (
+  'stub',
+  'Test stub',
+  '{"base_url":""}',
+  '["stub-model"]',
+  1,
+  datetime('now'),
+  datetime('now')
+);
+
+INSERT INTO settings (key, value_json, updated_at)
+VALUES (
+  'llm_configuration',
+  '{"provider_id":"stub","model_name":"stub","model_settings":{}}',
+  datetime('now')
+);
+
 INSERT INTO agents (
   id,
   name,

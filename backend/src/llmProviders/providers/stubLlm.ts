@@ -10,13 +10,23 @@ import {
 } from './stubLlm.helpers.js';
 import { DEMO_MODELS, demoPlannerReply, demoTitle } from './stubLlm.demo.js';
 
-const DEMO = process.env.LLM_DEMO === '1';
-const DEMO_DELAY_MS = Number(process.env.LLM_DEMO_DELAY_MS ?? 45);
+export type StubLlmOptions = {
+  demo?: boolean;
+  demoDelayMs?: number;
+};
 
-/** Instant deterministic LLM when LLM_TEST_STUB=1 (default for integration tests / dev:stub). */
+/** Instant deterministic LLM when runtime.llm.mode === 'stub'. */
 export class StubLlmProvider implements LlmProvider {
   readonly id = 'stub';
   readonly label = 'Test stub';
+
+  private readonly demo: boolean;
+  private readonly demoDelayMs: number;
+
+  constructor(opts: StubLlmOptions = {}) {
+    this.demo = opts.demo ?? false;
+    this.demoDelayMs = opts.demoDelayMs ?? 45;
+  }
 
   getSettingsSpec() {
     return [];
@@ -27,7 +37,7 @@ export class StubLlmProvider implements LlmProvider {
   }
 
   async listModels(_settings: ProviderSettingsDict) {
-    return DEMO ? [...DEMO_MODELS] : ['stub-model'];
+    return this.demo ? [...DEMO_MODELS] : ['stub-model'];
   }
 
   async streamCompletion(
@@ -38,7 +48,7 @@ export class StubLlmProvider implements LlmProvider {
     signal?: AbortSignal,
   ): Promise<LlmCompletion> {
     signal?.throwIfAborted();
-    if (DEMO) return this.streamDemo(model, request, onEvent, signal);
+    if (this.demo) return this.streamDemo(model, request, onEvent, signal);
 
     const blob = stubRequestText(request);
     const delayMs = parseStubDelayMs(blob);
@@ -54,11 +64,6 @@ export class StubLlmProvider implements LlmProvider {
     };
   }
 
-  /**
-   * Demo mode: returns rich, prompt-aware content and streams the planner
-   * answer word-by-word (abortable, so steering works) — same event shape a
-   * real provider emits, so the UI types the answer out live.
-   */
   private async streamDemo(
     model: string,
     request: LlmRequest,
@@ -67,7 +72,6 @@ export class StubLlmProvider implements LlmProvider {
   ): Promise<LlmCompletion> {
     const blob = stubRequestText(request);
 
-    // Title + tool-params resolve instantly — only the answer streams.
     if (stubIsTitleGenerationRequest(blob)) return this.instant(demoTitle(request), onEvent);
     if (stubIsToolParamsRequest(blob)) return this.instant('{}', onEvent);
 
@@ -76,7 +80,7 @@ export class StubLlmProvider implements LlmProvider {
     let acc = '';
     for (const token of tokens) {
       signal?.throwIfAborted();
-      await abortableDelay(DEMO_DELAY_MS, signal);
+      await abortableDelay(this.demoDelayMs, signal);
       onEvent({ type: 'text_delta', delta: token });
       acc += token;
     }

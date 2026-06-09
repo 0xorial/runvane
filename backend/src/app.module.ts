@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { DynamicModule, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { ResponseValidationInterceptor } from './validation/response-validation.interceptor.js';
@@ -11,6 +11,8 @@ import { DatabaseModule } from './db/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { LlmProvidersModule } from './llmProviders/llmProviders.module.js';
 import { ModelPresetsModule } from './model-presets/model-presets.module.js';
+import type { RunvaneRuntimeConfig } from './runtime/runtime.config.js';
+import { RuntimeModule } from './runtime/runtime.module.js';
 import { SettingsModule } from './settings/settings.module.js';
 import { SseModule } from './sse/sse.module.js';
 import { SystemModule } from './system/system.module.js';
@@ -19,42 +21,48 @@ import { TerminalModule } from './terminal/terminal.module.js';
 import { ToolsModule } from './tools/tools.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 
-@Module({
-  imports: [
-    LoggerModule.forRoot({
-      pinoHttp: {
-        transport:
-          process.env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
-        ...(process.env.NODE_ENV === 'test' ? { level: 'silent' as const } : {}),
-        serializers: {
-          req(req) {
-            return { id: req.id, method: req.method, url: req.url };
+@Module({})
+export class AppModule {
+  static register(runtime: RunvaneRuntimeConfig): DynamicModule {
+    return {
+      module: AppModule,
+      imports: [
+        RuntimeModule.forRoot(runtime),
+        LoggerModule.forRoot({
+          pinoHttp: {
+            transport:
+              runtime.nodeEnv === 'development' ? { target: 'pino-pretty' } : undefined,
+            ...(runtime.nodeEnv === 'test' ? { level: 'silent' as const } : {}),
+            serializers: {
+              req(req) {
+                return { id: req.id, method: req.method, url: req.url };
+              },
+              res(res) {
+                return { statusCode: res.statusCode };
+              },
+            },
           },
-          res(res) {
-            return { statusCode: res.statusCode };
-          },
-        },
-      },
-    }),
-    DatabaseModule,
-    HealthModule,
-    ConversationsModule,
-    AgentsModule,
-    ImportModule,
-    SettingsModule,
-    ModelPresetsModule,
-    LlmProvidersModule,
-    SseModule,
-    SystemModule,
-    TasksModule,
-    TerminalModule,
-    ToolsModule,
-    UploadsModule,
-  ],
-  controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_INTERCEPTOR, useClass: ResponseValidationInterceptor },
-  ],
-})
-export class AppModule {}
+        }),
+        DatabaseModule,
+        HealthModule,
+        ConversationsModule,
+        AgentsModule,
+        ImportModule,
+        SettingsModule,
+        ModelPresetsModule,
+        LlmProvidersModule,
+        SseModule,
+        SystemModule,
+        TasksModule,
+        TerminalModule,
+        ToolsModule,
+        UploadsModule,
+      ],
+      controllers: [AppController],
+      providers: [
+        AppService,
+        { provide: APP_INTERCEPTOR, useClass: ResponseValidationInterceptor },
+      ],
+    };
+  }
+}

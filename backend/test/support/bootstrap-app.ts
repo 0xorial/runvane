@@ -2,26 +2,31 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { ZodValidationPipe } from 'nestjs-zod';
-import { AppModule } from '../../src/app.module';
-import { HttpExceptionLoggingFilter } from '../../src/http/http-exception-logging.filter';
+import { AppModule } from '../../src/app.module.js';
+import { HttpExceptionLoggingFilter } from '../../src/http/http-exception-logging.filter.js';
+import type { LlmRuntime } from '../../src/runtime/runtime.config.js';
 
 export type TestApp = {
   app: INestApplication;
   baseUrl: string;
 };
 
-function configureIntegrationLlm(): void {
-  const live = process.env.INTEGRATION_LIVE_LLM === '1';
-  process.env.LLM_TEST_STUB = live ? '0' : '1';
+function integrationLlm(): LlmRuntime {
+  return process.env.INTEGRATION_LIVE_LLM === '1' ? { mode: 'live' } : { mode: 'stub' };
 }
 
 export async function createTestApp(): Promise<TestApp> {
-  configureIntegrationLlm();
   process.env.NODE_ENV ??= 'test';
   process.env.FRONTEND_ORIGIN ??= 'http://localhost:52201';
+  process.env.DATABASE_URL ??= 'file:./backend.sqlite';
 
   const moduleFixture: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
+    imports: [
+      AppModule.register({
+        llm: integrationLlm(),
+        nodeEnv: 'test',
+      }),
+    ],
   }).compile();
 
   const app = moduleFixture.createNestApplication();

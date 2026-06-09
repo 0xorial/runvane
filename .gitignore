@@ -12,6 +12,7 @@ dist/
 
 backend/data/
 
+.env
 .env.user
 .env.ports
 backend/prisma/backend.sqlite
@@ -21,5 +22,4 @@ test-metrics/ledger.json
 test-metrics/last-run.json
 frontend/test-results/
 frontend/playwright-report/
-.e2e-servers.json
 .e2e/
