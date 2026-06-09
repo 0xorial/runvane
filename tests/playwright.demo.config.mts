@@ -20,7 +20,7 @@ export default defineConfig({
   testDir: demosDir,
   testMatch: "**/*.demo.ts",
   outputDir: path.join(demosDir, "demo-output"),
-  timeout: 18_000,
+  timeout: 24_000,
   workers: 1,
   reporter: [["list"]],
   use: {

@@ -163,6 +163,8 @@ function findVideos(dir) {
 }
 const name = (webm) => {
   const dir = path.basename(path.dirname(webm));
+  const hashed = dir.match(/^([a-z0-9-]+)--[a-f0-9]+-s-/);
+  if (hashed) return hashed[1];
   const fromSuffix =
     dir.match(/\.demo\.ts-(.+)-chromium$/) ?? dir.match(/-demo\.ts-(.+)-chromium$/);
   if (fromSuffix) return fromSuffix[1];
