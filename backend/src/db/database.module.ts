@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { LlmProvidersModule } from '../llmProviders/llmProviders.module.js';
 import { AgentsRepo } from './repositories/agents.repo.js';
 import { ChatEntriesRepo } from './repositories/chat-entries.repo.js';
 import { ConversationsRepo } from './repositories/conversations.repo.js';
@@ -10,7 +9,6 @@ import { UploadsRepo } from './repositories/uploads.repo.js';
 import { PrismaService } from './prisma.service.js';
 
 @Module({
-  imports: [LlmProvidersModule],
   providers: [
     PrismaService,
     ChatEntriesRepo,

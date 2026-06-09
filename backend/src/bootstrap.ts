@@ -5,6 +5,9 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module.js';
 import { HttpExceptionLoggingFilter } from './http/http-exception-logging.filter.js';
+import type { StubLlmControl } from './llmProviders/providers/stubLlm.control.js';
+import { STUB_DEMO_MODELS } from './llmProviders/providers/stubLlm.models.js';
+import { StubLlmProvider } from './llmProviders/providers/stubLlm.js';
 import type { RunvaneRuntimeConfig } from './runtime/runtime.config.js';
 
 export type RunvaneBootConfig = RunvaneRuntimeConfig & {
@@ -16,6 +19,8 @@ export type RunvaneBootConfig = RunvaneRuntimeConfig & {
 export type RunvaneAppHandle = {
   app: INestApplication;
   origin: string;
+  /** Present when `llm.mode === 'stub'` — configure via `setNextResponse` / `reset`. */
+  stubLlm: StubLlmControl | null;
   close(): Promise<void>;
 };
 
@@ -36,19 +41,28 @@ export function runtimeConfigFromEnv(): RunvaneBootConfig {
   if (!port) {
     throw new Error('PORT is required (set via dev-ports/with-ports.mjs or .env.ports)');
   }
-  const stub = process.env.LLM_TEST_STUB === '1';
   const nodeEnv: RunvaneRuntimeConfig['nodeEnv'] =
     process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
       ? process.env.NODE_ENV
       : 'production';
+  const llm: RunvaneRuntimeConfig['llm'] = (() => {
+    if (process.env.LLM_TEST_STUB === '1' || process.env.LLM_DEMO === '1') {
+      const demo = process.env.LLM_DEMO === '1';
+      const streamDelayMs = process.env.LLM_DEMO_DELAY_MS
+        ? Number(process.env.LLM_DEMO_DELAY_MS)
+        : demo
+          ? 20
+          : undefined;
+      return {
+        mode: 'stub',
+        streamDelayMs,
+        models: demo ? STUB_DEMO_MODELS : undefined,
+      };
+    }
+    return { mode: 'live' };
+  })();
   return {
-    llm: stub
-      ? {
-          mode: 'stub',
-          demo: process.env.LLM_DEMO === '1',
-          demoDelayMs: Number(process.env.LLM_DEMO_DELAY_MS ?? 45),
-        }
-      : { mode: 'live' },
+    llm,
     nodeEnv,
     port: Number(port),
     frontendOrigin,
@@ -75,9 +89,11 @@ export async function createRunvaneApp(config: RunvaneBootConfig): Promise<Runva
   await app.listen(config.port);
 
   const origin = `http://127.0.0.1:${config.port}`;
+  const stubLlm = config.llm.mode === 'stub' ? app.get(StubLlmProvider) : null;
   return {
     app,
     origin,
+    stubLlm,
     async close() {
       await app.close();
     },

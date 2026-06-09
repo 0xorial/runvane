@@ -17,9 +17,9 @@ const VIDEO = { width: 1280, height: 800 };
 // against the stub-LLM e2e harness, then converted to GIFs with ffmpeg.
 export default defineConfig({
   testDir: path.join(__dirname, "demos"),
-  testMatch: "**/runvane.demo.ts",
+  testMatch: "**/*.demo.ts",
   outputDir: path.join(__dirname, "demo-output"),
-  timeout: 15_000,
+  timeout: 18_000,
   workers: 1,
   reporter: [["list"]],
   use: {

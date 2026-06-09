@@ -1,25 +1,34 @@
 #!/usr/bin/env node
-// Record demo GIFs/MP4s against a SIMULATED LLM — stub mode with demo: true,
-// which returns rich, prompt-aware content and streams it slowly (word by
-// word), so it looks like a real model typing. Deterministic, free, no API.
-const demoDelayMs = Number(process.env.LLM_DEMO_DELAY_MS ?? "20");
-
+// Record demo GIFs/MP4s — stub LLM (multi-model list + streamDelayMs); demos queue replies via /test/stub-llm.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const demoFilter = process.argv[2]?.trim() || "";
+const demoDelayMs = Number(
+  process.env.LLM_DEMO_DELAY_MS ?? (demoFilter === "steering" ? "35" : "20"),
+);
+const demoPtsFactor = Number(process.env.DEMO_PTS_FACTOR ?? "2");
+
+const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const backendDir = path.join(repoRoot, "backend");
 import { backendOrigin, ensureE2eServers, frontendOrigin, stopE2eServers } from "./e2e-servers.mjs";
 import { e2eDatabaseUrl, prepareE2eDatabase } from "./e2e-db.mjs";
 
-const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const frontendDir = path.join(repoRoot, "frontend");
-const backendDir = path.join(repoRoot, "backend");
 const outputDir = path.join(frontendDir, "demo-output");
 const gifDir = path.join(repoRoot, "docs", "demo");
 const demoDbPath = e2eDatabaseUrl.replace(/^file:/, "");
+async function loadStubDemoModels() {
+  const mod = await import(
+    pathToFileURL(path.join(backendDir, "dist/llmProviders/providers/stubLlm.models.js")).href
+  );
+  return mod.STUB_DEMO_MODELS;
+}
 
-function applyDemoDbPatch() {
-  const demoModelsJson = '["gpt-4o","gpt-4o-mini","claude-sonnet-4.6"]';
+async function applyDemoDbPatch(demoModels) {
+  const demoModelsJson = JSON.stringify([...demoModels]);
   const now = new Date().toISOString();
   for (const stmt of [
     `INSERT OR REPLACE INTO settings (key, value_json, updated_at) VALUES ('llm_configuration', '{"provider_id":"stub","model_name":"gpt-4o","model_settings":{}}', '${now}');`,
@@ -40,29 +49,43 @@ function sh(cmd, args, opts = {}) {
 console.log("Building backend…");
 sh("npm", ["run", "build"], { cwd: backendDir });
 
-if (existsSync(outputDir)) rmSync(outputDir, { recursive: true, force: true });
+mkdirSync(outputDir, { recursive: true });
 mkdirSync(gifDir, { recursive: true });
+if (demoFilter) {
+  for (const e of readdirSync(outputDir, { withFileTypes: true })) {
+    if (e.isDirectory() && e.name.includes(demoFilter)) {
+      rmSync(path.join(outputDir, e.name), { recursive: true, force: true });
+    }
+  }
+} else if (existsSync(outputDir)) {
+  rmSync(outputDir, { recursive: true, force: true });
+  mkdirSync(outputDir, { recursive: true });
+}
 
 console.log("Preparing demo database…");
 await stopE2eServers();
 prepareE2eDatabase({ fresh: true });
-applyDemoDbPatch();
+const stubDemoModels = await loadStubDemoModels();
+await applyDemoDbPatch(stubDemoModels);
 
 console.log("Starting simulated-LLM servers…");
 await ensureE2eServers({
   freshDb: false,
-  llm: { mode: "stub", demo: true, demoDelayMs },
+  llm: { mode: "stub", streamDelayMs: demoDelayMs, models: [...stubDemoModels] },
 });
 
 let code = 0;
 await new Promise((resolve) => {
-  const child = spawn("npx", ["playwright", "test", "--config=playwright.demo.config.ts"], {
+  const playwrightArgs = ["playwright", "test", "--config=playwright.demo.config.ts"];
+  if (demoFilter) playwrightArgs.push("--grep", demoFilter);
+  const child = spawn("npx", playwrightArgs, {
     cwd: frontendDir,
     env: {
       ...process.env,
       E2E_BASE_URL: frontendOrigin,
       E2E_API_BASE_URL: backendOrigin,
       E2E_LLM_TIMEOUT_MS: "5000",
+      LLM_DEMO_DELAY_MS: String(demoDelayMs),
     },
     stdio: "inherit",
   });
@@ -81,18 +104,25 @@ function findVideos(dir) {
   }
   return out;
 }
-const name = (webm) =>
-  path.basename(path.dirname(webm)).replace(/-chromium$/, "").replace(/^.*?\.demo\.ts-/, "");
+const name = (webm) => {
+  const base = path.basename(path.dirname(webm)).replace(/-chromium$/, "");
+  const dup = base.match(/^([a-z0-9-]+)-\1\.demo\.ts-/);
+  if (dup) return dup[1];
+  const plain = base.match(/^([a-z0-9-]+)\.demo\.ts-/);
+  return plain ? plain[1] : base.replace(/\.demo\.ts.*$/, "");
+};
 
-const videos = findVideos(outputDir);
+let videos = findVideos(outputDir);
+if (demoFilter) videos = videos.filter((webm) => name(webm).includes(demoFilter));
 for (const webm of videos) {
   const n = name(webm);
   console.log(`Converting ${n}…`);
+  const pts = `setpts=${demoPtsFactor}*PTS`;
   sh("ffmpeg", ["-y", "-i", webm, "-vf",
-    "fps=12,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+    `${pts},fps=12,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`,
     path.join(gifDir, `${n}.gif`)]);
   sh("ffmpeg", ["-y", "-i", webm, "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-    "-vf", "scale=1280:-2", path.join(gifDir, `${n}.mp4`)]);
+    "-vf", `${pts},scale=1280:-2`, path.join(gifDir, `${n}.mp4`)]);
 }
 
 console.log(`\n✓ Recorded ${videos.length} demo(s) to ${path.relative(repoRoot, gifDir)}/`);

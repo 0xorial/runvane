@@ -4,11 +4,14 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from '../../src/app.module.js';
 import { HttpExceptionLoggingFilter } from '../../src/http/http-exception-logging.filter.js';
+import type { StubLlmControl } from '../../src/llmProviders/providers/stubLlm.control.js';
+import { StubLlmProvider } from '../../src/llmProviders/providers/stubLlm.js';
 import type { LlmRuntime } from '../../src/runtime/runtime.config.js';
 
 export type TestApp = {
   app: INestApplication;
   baseUrl: string;
+  stubLlm: StubLlmControl | null;
 };
 
 function integrationLlm(): LlmRuntime {
@@ -42,5 +45,7 @@ export async function createTestApp(): Promise<TestApp> {
   }
 
   app.enableShutdownHooks();
-  return { app, baseUrl: `http://127.0.0.1:${address.port}` };
+  const llm = integrationLlm();
+  const stubLlm = llm.mode === 'stub' ? app.get(StubLlmProvider) : null;
+  return { app, baseUrl: `http://127.0.0.1:${address.port}`, stubLlm };
 }

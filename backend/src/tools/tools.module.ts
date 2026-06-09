@@ -15,12 +15,11 @@ import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
 import { SerialConnectionManager } from './builtins/serial/connection.js';
 import { TOOL_TOKEN, ToolRegistry } from './tool-registry.js';
-import { LlmProvidersModule } from '../llmProviders/llmProviders.module.js';
 import { DatabaseModule } from '../db/database.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
 
 @Module({
-  imports: [LlmProvidersModule, DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule],
+  imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule],
   providers: [
     GetCurrentTimeTool,
     CurlTool,

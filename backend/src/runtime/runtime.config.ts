@@ -1,6 +1,6 @@
 export type LlmRuntime =
   | { mode: 'live' }
-  | { mode: 'stub'; demo?: boolean; demoDelayMs?: number };
+  | { mode: 'stub'; streamDelayMs?: number; models?: readonly string[] };
 
 export type RunvaneRuntimeConfig = {
   llm: LlmRuntime;

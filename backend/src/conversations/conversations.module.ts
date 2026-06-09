@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../db/database.module.js';
-import { LlmProvidersModule } from '../llmProviders/llmProviders.module.js';
 import { DecisionStep } from '../thoughtProcessing/steps/decisionStep.js';
 import { PrepareStep } from '../thoughtProcessing/steps/prepareStep.js';
 import { ReasonStep } from '../thoughtProcessing/steps/reasonStep.js';
@@ -19,7 +18,7 @@ import { ConversationsController } from './conversations.controller.js';
 import { ConversationsService } from './conversations.service.js';
 
 @Module({
-  imports: [DatabaseModule, LlmProvidersModule, ToolsModule, UploadsModule],
+  imports: [DatabaseModule, ToolsModule, UploadsModule],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,

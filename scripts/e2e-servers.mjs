@@ -14,15 +14,20 @@ export const frontendPort = backendPort + frontendPortOffset;
 export const backendOrigin = `http://127.0.0.1:${backendPort}`;
 export const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 
-/** @type {{ backend: { close(): Promise<void> } | null; frontend: import('vite').ViteDevServer | null }} */
-const running = { backend: null, frontend: null };
+/** @type {{ backend: import('../backend/dist/bootstrap.js').RunvaneAppHandle | null; frontend: import('vite').ViteDevServer | null; llmMode: string | null }} */
+const running = { backend: null, frontend: null, llmMode: null };
+
+/** In-process stub LLM control when harness runs with `llm.mode === 'stub'`. */
+export function getStubLlm() {
+  return running.backend?.stubLlm ?? null;
+}
 
 async function healthOk() {
   try {
     const res = await fetch(`${backendOrigin}/health`);
     if (!res.ok) return false;
     const body = await res.json();
-    return body.llmMode === "stub";
+    return body.llmMode === running.llmMode;
   } catch {
     return false;
   }
@@ -100,6 +105,7 @@ export async function ensureE2eServers({ freshDb = false, llm = { mode: "stub" }
 
   await stopE2eServers();
 
+  running.llmMode = llm.mode;
   const { createRunvaneApp } = await loadBackendBootstrap();
   running.backend = await createRunvaneApp({
     llm,
@@ -117,7 +123,7 @@ export async function ensureE2eServers({ freshDb = false, llm = { mode: "stub" }
     apiBaseUrl: backendOrigin,
   });
 
-  await waitFor(healthOk, "stub backend /health");
+  await waitFor(healthOk, `${llm.mode} backend /health`);
   await waitFor(frontendOk, `${frontendDirName()} vite (${frontendEntryPath()})`);
 }
 
@@ -152,7 +158,7 @@ if (isCli) {
   } else if (cmd === "status") {
     const owned = running.backend != null && running.frontend != null;
     console.log(
-      `owned=${owned} backend=${(await healthOk()) ? "stub ok" : "down"} frontend=${(await frontendOk()) ? "ok" : "down"}`,
+      `owned=${owned} backend=${(await healthOk()) ? `${running.llmMode ?? "?"} ok` : "down"} frontend=${(await frontendOk()) ? "ok" : "down"}`,
     );
   } else {
     console.error("usage: e2e-servers.mjs start|stop|status");

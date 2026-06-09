@@ -22,4 +22,8 @@ test-metrics/ledger.json
 test-metrics/last-run.json
 frontend/test-results/
 frontend/playwright-report/
+frontend/demo-output/
 .e2e/
+
+*.mp4
+*.webm
