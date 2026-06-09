@@ -10,12 +10,7 @@
     "preview": "node ../dev-ports/with-ports.mjs --cwd . -- vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "typecheck": "npm run check",
-    "ports:sync": "node ../dev-ports/sync-env.mjs --cwd ..",
-    "test:e2e": "node ../scripts/run-e2e.mjs",
-    "test:e2e:servers:stop": "node ../scripts/e2e-servers.mjs stop",
-    "test:e2e:live": "RUN_E2E_TESTS=1 E2E_LIVE_LLM=1 playwright test",
-    "test:metrics": "node ../test-metrics/cli.mjs report",
-    "test:metrics:fragile": "node ../test-metrics/cli.mjs fragile"
+    "ports:sync": "node ../dev-ports/sync-env.mjs --cwd .."
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -28,7 +23,6 @@
     "zodex": "^4.0.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.53.2",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tsconfig/svelte": "^5.0.8",
     "@types/dompurify": "^3.0.5",

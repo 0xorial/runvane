@@ -60,7 +60,7 @@ an LLM provider — an API key (OpenAI / OpenRouter), or point it at a local
 Dev ports are allocated per project in [`dev-ports/registry.json`](dev-ports/registry.json)
 (100 ports per base); change the base there if they collide.
 
-Run the end-to-end tests with `cd frontend && npm run test:e2e`.
+Run the end-to-end tests with `npm run test:e2e` (or `cd tests && npm run test:e2e`).
 
 ## Roadmap
 

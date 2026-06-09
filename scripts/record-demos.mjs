@@ -23,8 +23,9 @@ const backendDir = path.join(repoRoot, "backend");
 import { backendOrigin, ensureE2eServers, frontendOrigin, stopE2eServers } from "./e2e-servers.mjs";
 import { e2eDatabaseUrl, prepareE2eDatabase } from "./e2e-db.mjs";
 
-const frontendDir = path.join(repoRoot, "frontend");
-const outputDir = path.join(frontendDir, "demo-output");
+const testsDir = path.join(repoRoot, "tests");
+const demosDir = path.join(repoRoot, "demos");
+const outputDir = path.join(demosDir, "demo-output");
 const demoDir = path.join(repoRoot, "docs", "demo");
 const demoDbPath = e2eDatabaseUrl.replace(/^file:/, "");
 async function loadStubDemoModels() {
@@ -132,10 +133,10 @@ await ensureE2eServers({
 
 let code = 0;
 await new Promise((resolve) => {
-  const playwrightArgs = ["playwright", "test", "--config=playwright.demo.config.ts"];
+  const playwrightArgs = ["playwright", "test", "--config=playwright.demo.config.mts"];
   if (demoFilter) playwrightArgs.push("--grep", demoFilter);
   const child = spawn("npx", playwrightArgs, {
-    cwd: frontendDir,
+    cwd: testsDir,
     env: {
       ...process.env,
       E2E_BASE_URL: frontendOrigin,

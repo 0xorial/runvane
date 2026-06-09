@@ -63,7 +63,7 @@ async function loadBackendBootstrap() {
 }
 
 async function loadFrontendDevServer() {
-  const modPath = path.join(repoRoot, frontendDirName(), "e2e-dev-server.mjs");
+  const modPath = path.join(repoRoot, "tests", "e2e-dev-server.mjs");
   return import(pathToFileURL(modPath).href);
 }
 

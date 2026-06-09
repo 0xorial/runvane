@@ -12,7 +12,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, "..");
-const frontendDir = path.join(repoRoot, process.env.E2E_FRONTEND_DIR ?? "frontend");
+const testsDir = path.join(repoRoot, "tests");
 const backendDir = path.join(repoRoot, "backend");
 const backendMain = path.join(backendDir, "dist/main.js");
 
@@ -36,11 +36,10 @@ const env = {
   E2E_BASE_URL: frontendOrigin,
 };
 
-const playwrightCwd = path.join(repoRoot, process.env.E2E_FRONTEND_DIR ?? "frontend");
 const playwrightArgs = ["playwright", "test", ...process.argv.slice(2)];
 
 const child = spawn("npx", playwrightArgs, {
-  cwd: playwrightCwd,
+  cwd: testsDir,
   env,
   stdio: "inherit",
 });

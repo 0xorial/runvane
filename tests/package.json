@@ -1,0 +1,20 @@
+{
+  "name": "runvane-tests",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "scripts": {
+    "test:e2e": "node ../scripts/run-e2e.mjs",
+    "test:e2e:servers:stop": "node ../scripts/e2e-servers.mjs stop",
+    "test:e2e:live": "RUN_E2E_TESTS=1 E2E_LIVE_LLM=1 playwright test",
+    "test:integration": "node ../scripts/run-integration.mjs",
+    "test:integration:live": "INTEGRATION_LIVE_LLM=1 node ../scripts/run-integration.mjs",
+    "test:backend-e2e": "node ../backend/node_modules/jest/bin/jest.js --config jest.backend-e2e.json --forceExit",
+    "test:metrics": "node metrics/cli.mjs report",
+    "test:metrics:fragile": "node metrics/cli.mjs fragile"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.2",
+    "@types/node": "^24.12.3"
+  }
+}

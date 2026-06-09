@@ -8,6 +8,11 @@
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
     "ports": "node dev-ports/list.mjs",
-    "demos": "node scripts/record-demos.mjs"
+    "demos": "node scripts/record-demos.mjs",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e:servers:stop": "node scripts/e2e-servers.mjs stop",
+    "test:integration": "node scripts/run-integration.mjs",
+    "test:metrics": "node tests/metrics/cli.mjs report",
+    "test:metrics:fragile": "node tests/metrics/cli.mjs fragile"
   }
 }

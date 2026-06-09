@@ -9,7 +9,7 @@ const repoRoot = path.join(__dirname, "..");
 const backendDir = path.join(repoRoot, "backend");
 const e2eDir = path.join(repoRoot, ".e2e");
 const e2eDbPath = path.join(e2eDir, "e2e.sqlite");
-const seedSqlPath = path.join(backendDir, "test/fixtures/e2e-seed.sql");
+const seedSqlPath = path.join(repoRoot, "tests/integration/fixtures/e2e-seed.sql");
 
 export const e2eDatabaseUrl = `file:${e2eDbPath}`;
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const backendDir = path.join(repoRoot, "backend");
 const frontendDir = path.join(repoRoot, "frontend");
+const testsDir = path.join(repoRoot, "tests");
 
 function run(cmd, args, cwd) {
   console.log(`\n\x1b[36m> ${cmd} ${args.join(" ")}\x1b[0m  (${path.relative(repoRoot, cwd) || "."})`);
@@ -33,6 +34,8 @@ run("node", ["dev-ports/sync-env.mjs"], repoRoot);
 // 3. Install dependencies.
 run("npm", ["install"], backendDir);
 run("npm", ["install"], frontendDir);
+run("npm", ["install"], testsDir);
+run("npx", ["playwright", "install", "chromium"], testsDir);
 
 // 4. Database: generate client + apply migrations.
 run("npx", ["prisma", "generate"], backendDir);
@@ -42,6 +45,7 @@ console.log(`
 \x1b[32m✓ Setup complete.\x1b[0m
 
   Start the app:    \x1b[36mnpm run dev\x1b[0m
+  E2E tests:        \x1b[36mnpm run test:e2e\x1b[0m
   Show dev ports:   \x1b[36mnpm run ports\x1b[0m
 
 Then open the frontend URL, go to Settings, and add an LLM provider

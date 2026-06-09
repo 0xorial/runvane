@@ -18,11 +18,11 @@ backend/data/
 backend/prisma/backend.sqlite
 backend/backend.sqlite
 
-test-metrics/ledger.json
-test-metrics/last-run.json
-frontend/test-results/
-frontend/playwright-report/
-frontend/demo-output/
+tests/metrics/ledger.json
+tests/metrics/last-run.json
+tests/test-results/
+tests/playwright-report/
+demos/demo-output/
 .e2e/
 
 *.mp4
