@@ -31,6 +31,23 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - conversations tool (read chat history and conversation metadata)
 - filesystem tools (`filesystem`, `filesystem_index`)
 - import chat history from OpenAI, Gemini, Claude, and Grok (`POST /api/import/auto` auto-detects format)
+- attachment summary mode with `ask_attachment` subagent for follow-up questions on full file content
+
+## Demos
+
+Animated UI recordings in [`docs/demo/`](docs/demo/). Re-record with `npm run demos` (needs `ffmpeg` and `img2webp`, e.g. `brew install ffmpeg webp`).
+
+| Feature | Recording |
+| --- | --- |
+| Agentic tool call | ![Agentic tool call](docs/demo/agentic-tool-call.webp) |
+| Multi-model compare | ![Multi-model compare](docs/demo/multi-model-compare.webp) |
+| Steering in-flight runs | ![Steering](docs/demo/steering.webp) |
+| Transparent runtime (activity) | ![Transparent runtime](docs/demo/transparent-runtime.webp) |
+| Thought step drill-down | ![Transparent thought steps](docs/demo/transparent-thought-steps.webp) |
+| Fold + checkpoint summary | ![Summarize fold](docs/demo/summarize-fold.webp) |
+| Guardrail approval | ![Guardrail approval](docs/demo/guardrail-approval.webp) |
+| Branch on edit / reprocess | ![Branch reprocess](docs/demo/branch-reprocess.webp) |
+| Attachment summary + subagent | ![Attachment summary](docs/demo/attachment-summary.webp) |
 
 ## Planned features
 
@@ -60,7 +77,7 @@ an LLM provider — an API key (OpenAI / OpenRouter), or point it at a local
 Dev ports are allocated per project in [`dev-ports/registry.json`](dev-ports/registry.json)
 (100 ports per base); change the base there if they collide.
 
-Run the end-to-end tests with `npm run test:e2e` (or `cd tests && npm run test:e2e`).
+Tests: `npm run test:e2e`, `npm run test:integration`, and `cd backend && npm test` for unit specs.
 
 ## Roadmap
 
