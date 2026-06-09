@@ -9,6 +9,13 @@ export function stubStreamMs(text: string, tokenDelayMs: number): number {
   return tokenCount(text) * tokenDelayMs;
 }
 
+/** Per-token `streamMs` so the stub stream lasts ~`durationMs` total. */
+export function streamMsPerToken(text: string, durationMs: number): number {
+  const n = tokenCount(text);
+  if (n <= 0) return durationMs;
+  return Math.max(1, Math.ceil(durationMs / n));
+}
+
 export function perCharDelayMs(
   text: string,
   budgetMs: number,

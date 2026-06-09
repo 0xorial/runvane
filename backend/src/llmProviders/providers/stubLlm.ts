@@ -82,8 +82,8 @@ export class StubLlmProvider implements LlmProvider, StubLlmControl {
     const instant = stubIsTitleGenerationRequest(blob) || stubIsToolParamsRequest(blob);
     const queued = instant ? this.queue.takeInstant() : this.queue.takeCompletion(model);
     const text = queued?.text ?? pickStubReply(request);
-    const streamMs = queued?.streamMs ?? this.defaultStreamMs;
-    if (instant || streamMs === undefined) {
+    const streamMs = queued?.streamMs ?? (instant ? undefined : this.defaultStreamMs);
+    if (streamMs === undefined) {
       return instantStubText(text, onEvent);
     }
     return streamStubText(text, streamMs, onEvent, signal);

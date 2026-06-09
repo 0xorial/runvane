@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Record demo GIFs/MP4s — stub LLM (multi-model list + streamDelayMs); demos queue replies via /test/stub-llm.
+// Record demo WebP — stub LLM (multi-model list + streamDelayMs); demos queue replies via /test/stub-llm.
+// WebP needs `img2webp` (macOS: `brew install webp`).
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -10,6 +12,11 @@ const demoDelayMs = Number(
   process.env.LLM_DEMO_DELAY_MS ?? (demoFilter === "steering" ? "35" : "20"),
 );
 const demoPtsFactor = Number(process.env.DEMO_PTS_FACTOR ?? "2");
+const demoWebpFps = Number(process.env.DEMO_WEBP_FPS ?? "10");
+const demoWebpScale = Number(process.env.DEMO_WEBP_SCALE ?? "1280");
+const demoWebpQuality = Number(process.env.DEMO_WEBP_QUALITY ?? "50");
+/** img2webp -m: 0=fast … 6=slowest. 6 was ~25× slower for negligible size win. */
+const demoWebpMethod = Number(process.env.DEMO_WEBP_METHOD ?? "4");
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const backendDir = path.join(repoRoot, "backend");
@@ -18,7 +25,7 @@ import { e2eDatabaseUrl, prepareE2eDatabase } from "./e2e-db.mjs";
 
 const frontendDir = path.join(repoRoot, "frontend");
 const outputDir = path.join(frontendDir, "demo-output");
-const gifDir = path.join(repoRoot, "docs", "demo");
+const demoDir = path.join(repoRoot, "docs", "demo");
 const demoDbPath = e2eDatabaseUrl.replace(/^file:/, "");
 async function loadStubDemoModels() {
   const mod = await import(
@@ -45,12 +52,61 @@ function sh(cmd, args, opts = {}) {
   if (res.status !== 0) throw new Error(`${cmd} ${args.join(" ")} -> exit ${res.status}`);
 }
 
+function findImg2Webp() {
+  for (const cmd of [
+    process.env.IMG2WEBP,
+    "img2webp",
+    "/opt/homebrew/bin/img2webp",
+    "/usr/local/bin/img2webp",
+  ].filter(Boolean)) {
+    const res = spawnSync(cmd, ["-version"], { stdio: "ignore" });
+    if (res.status === 0) return cmd;
+  }
+  return null;
+}
+
+const img2webpBin = findImg2Webp();
+if (!img2webpBin) {
+  console.warn("img2webp not found — WebP output skipped (install: brew install webp)");
+}
+
+/** VP8/WebM → animated WebP via PNG frame burst (ffmpeg lacks libwebp here). */
+function webmToWebp(webm, outWebp, ptsFactor) {
+  if (!img2webpBin) return;
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), "runvane-demo-webp-"));
+  try {
+    const vf = `setpts=${ptsFactor}*PTS,fps=${demoWebpFps},scale=${demoWebpScale}:-1:flags=lanczos`;
+    sh("ffmpeg", ["-y", "-i", webm, "-vf", vf, path.join(tmpDir, "frame_%04d.png")]);
+    const frames = readdirSync(tmpDir)
+      .filter((f) => f.endsWith(".png"))
+      .sort()
+      .map((f) => path.join(tmpDir, f));
+    if (!frames.length) throw new Error(`webp: no frames extracted from ${webm}`);
+    sh(img2webpBin, [
+      "-loop",
+      "0",
+      "-lossy",
+      "-d",
+      String(Math.round(1000 / demoWebpFps)),
+      "-m",
+      String(demoWebpMethod),
+      "-q",
+      String(demoWebpQuality),
+      "-o",
+      outWebp,
+      ...frames,
+    ]);
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 // Build backend so the stub demo changes are live.
 console.log("Building backend…");
 sh("npm", ["run", "build"], { cwd: backendDir });
 
 mkdirSync(outputDir, { recursive: true });
-mkdirSync(gifDir, { recursive: true });
+mkdirSync(demoDir, { recursive: true });
 if (demoFilter) {
   for (const e of readdirSync(outputDir, { withFileTypes: true })) {
     if (e.isDirectory() && e.name.includes(demoFilter)) {
@@ -105,7 +161,10 @@ function findVideos(dir) {
   return out;
 }
 const name = (webm) => {
-  const base = path.basename(path.dirname(webm)).replace(/-chromium$/, "");
+  const dir = path.basename(path.dirname(webm));
+  const fromSuffix = dir.match(/\.demo\.ts-(.+)-chromium$/);
+  if (fromSuffix) return fromSuffix[1];
+  const base = dir.replace(/-chromium$/, "");
   const dup = base.match(/^([a-z0-9-]+)-\1\.demo\.ts-/);
   if (dup) return dup[1];
   const plain = base.match(/^([a-z0-9-]+)\.demo\.ts-/);
@@ -117,14 +176,9 @@ if (demoFilter) videos = videos.filter((webm) => name(webm).includes(demoFilter)
 for (const webm of videos) {
   const n = name(webm);
   console.log(`Converting ${n}…`);
-  const pts = `setpts=${demoPtsFactor}*PTS`;
-  sh("ffmpeg", ["-y", "-i", webm, "-vf",
-    `${pts},fps=12,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`,
-    path.join(gifDir, `${n}.gif`)]);
-  sh("ffmpeg", ["-y", "-i", webm, "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-    "-vf", `${pts},scale=1280:-2`, path.join(gifDir, `${n}.mp4`)]);
+  webmToWebp(webm, path.join(demoDir, `${n}.webp`), demoPtsFactor);
 }
 
-console.log(`\n✓ Recorded ${videos.length} demo(s) to ${path.relative(repoRoot, gifDir)}/`);
+console.log(`\n✓ Recorded ${videos.length} demo(s) to ${path.relative(repoRoot, demoDir)}/`);
 for (const v of videos) console.log(`  - ${name(v)}`);
 process.exit(code);
