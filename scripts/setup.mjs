@@ -37,9 +37,11 @@ run("npm", ["install"], frontendDir);
 run("npm", ["install"], testsDir);
 run("npx", ["playwright", "install", "chromium"], testsDir);
 
-// 4. Database: generate client + apply migrations.
+// 4. Database: generate client + apply migrations + seed a default agent
+//    (idempotent — no-op if the DB already has agents).
 run("npx", ["prisma", "generate"], backendDir);
 run("npx", ["prisma", "migrate", "deploy"], backendDir);
+run("npx", ["prisma", "db", "seed"], backendDir);
 
 console.log(`
 \x1b[32m✓ Setup complete.\x1b[0m

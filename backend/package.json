@@ -5,10 +5,14 @@
   "author": "",
   "private": true,
   "license": "MIT",
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
+  },
   "scripts": {
     "build": "nest build",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "dev": "node ../dev-ports/with-ports.mjs --cwd . -- nest start --watch",
     "ports:sync": "node ../dev-ports/sync-env.mjs --cwd ..",
