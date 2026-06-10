@@ -13,7 +13,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Stack
 
-[![Backend: NestJS + Express](https://img.shields.io/badge/backend-NestJS%20%2B%20Express-E0234E)](#)
+[![Backend: NestJS](https://img.shields.io/badge/backend-NestJS-E0234E)](#)
 [![Frontend: Svelte + Vite](https://img.shields.io/badge/frontend-Svelte%20%2B%20Vite-ff3e00)](#)
 [![Database: SQLite](https://img.shields.io/badge/database-SQLite-07405e)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
