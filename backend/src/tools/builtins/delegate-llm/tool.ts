@@ -10,7 +10,13 @@ import { delegateLlmParamsSchema, parseDelegateLlmParams, type DelegateLlmParams
 import { DelegateLlmRulesSchema, parseDelegateLlmRules, type DelegateLlmRules } from './rules.js';
 import { LlmProviderRegistry } from '../../../llmProviders/registry.js';
 import { LlmProviderSettingsRepo } from '../../../db/repositories/llm-provider-settings.repo.js';
-import { getCompletionText, textMessage, type LlmMessage, type LlmRequest } from '../../../llmProviders/types.js';
+import {
+  getCompletionText,
+  textMessage,
+  type LlmCompletion,
+  type LlmMessage,
+  type LlmRequest,
+} from '../../../llmProviders/types.js';
 
 @Injectable()
 export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRules> {
@@ -77,6 +83,7 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
 
   async runTool(params: DelegateLlmParams, context: ToolRunContext): Promise<unknown> {
     const rules = parseDelegateLlmRules(context.toolRules ?? this.getDefaultRules());
+    context.signal.throwIfAborted();
 
     // Validate provider is in allowlist (if list is non-empty)
     if (rules.allowed_provider_ids.length > 0 && !rules.allowed_provider_ids.includes(params.provider_id)) {
@@ -122,8 +129,23 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
 
     const request: LlmRequest = { messages };
 
-    // Call the provider (no streaming needed — ignore events)
-    const completion = await provider.streamCompletion(providerSettings, params.model_name, request, () => {});
+    // Call the provider (no streaming needed — ignore events). Pass the run
+    // signal so steering/abort cancels the in-flight call.
+    let completion: LlmCompletion;
+    try {
+      completion = await provider.streamCompletion(
+        providerSettings,
+        params.model_name,
+        request,
+        () => {}, // TODO: make it interactive
+        context.signal,
+      );
+    } catch (err) {
+      // Providers wrap aborts as StreamInterruptedError; re-surface as a clean
+      // AbortError so the runtime treats it as a cancellation.
+      if (context.signal.aborted) context.signal.throwIfAborted();
+      throw err;
+    }
 
     const fullText = getCompletionText(completion);
     const response =

@@ -77,6 +77,10 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Cancel the in-flight request when the run is steered/aborted, not just on timeout.
+    const onParentAbort = () => controller.abort(context.signal.reason);
+    if (context.signal.aborted) controller.abort(context.signal.reason);
+    else context.signal.addEventListener('abort', onParentAbort, { once: true });
     try {
       const response = await fetch(url.toString(), {
         method: params.method,
@@ -111,12 +115,16 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
         },
       };
     } catch (error) {
+      // A steering/user cancel must surface as an AbortError (clean cancel),
+      // not be mislabelled as a timeout.
+      if (context.signal.aborted) context.signal.throwIfAborted();
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`curl: request timed out after ${timeoutMs}ms`);
       }
       throw error;
     } finally {
       clearTimeout(timer);
+      context.signal.removeEventListener('abort', onParentAbort);
     }
   }
 

@@ -24,9 +24,10 @@ function execFileCapped(
   cwd: string | undefined,
   timeoutMs: number,
   maxOutputBytes: number,
+  signal: AbortSignal,
 ): Promise<BashToolResult> {
   const start = Date.now();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     execFile(
       '/bin/bash',
       ['-c', command],
@@ -35,15 +36,23 @@ function execFileCapped(
         timeout: timeoutMs,
         maxBuffer: maxOutputBytes * 2, // generous buffer; we cap manually below
         encoding: 'buffer',
+        signal,
       },
       (error, stdoutBuf, stderrBuf) => {
         const elapsed_ms = Date.now() - start;
 
-        // Determine exit code
-        let exit_code = 0;
         if (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-            // execFile sets error.killed and error.signal on timeout
+          const err = error as NodeJS.ErrnoException & { killed?: boolean };
+          // Steering / user cancellation: surface as an AbortError so the
+          // runtime records a clean cancellation (no planner follow-up).
+          if (err.code === 'ABORT_ERR' || err.name === 'AbortError') {
+            reject(Object.assign(new Error('bash: command aborted'), { name: 'AbortError' }));
+            return;
+          }
+          // Timed out: execFile kills the child (killed=true, signal set) and
+          // leaves code null. (The previous `code === 'ETIMEDOUT'` check never
+          // matched, so timeouts were misreported as exit_code 1.)
+          if (err.killed && err.code == null) {
             resolve({
               command,
               exit_code: -1,
@@ -54,8 +63,12 @@ function execFileCapped(
             });
             return;
           }
-          exit_code = (error as { code?: number }).code ?? 1;
         }
+
+        // Numeric process exit code; non-numeric codes (e.g. spawn failures or
+        // ERR_CHILD_PROCESS_STDIO_MAXBUFFER) mean "failed" → 1.
+        const rawCode = (error as { code?: unknown } | null)?.code;
+        const exit_code = !error ? 0 : typeof rawCode === 'number' ? rawCode : 1;
 
         // Cap output
         const totalBuf = Buffer.concat([stdoutBuf, stderrBuf]);
@@ -143,6 +156,6 @@ export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
 
     const cwd = params.working_dir ?? (rules.working_dir || undefined);
 
-    return execFileCapped(params.command, cwd, timeoutMs, maxOutputBytes);
+    return execFileCapped(params.command, cwd, timeoutMs, maxOutputBytes, context.signal);
   }
 }

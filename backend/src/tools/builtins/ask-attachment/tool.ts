@@ -4,7 +4,13 @@ import type { ChatAttachment, ChatEntry } from '../../../contracts/chatEntry.js'
 import { LlmProviderSettingsRepo } from '../../../db/repositories/llm-provider-settings.repo.js';
 import { expandAttachmentRefs } from '../../../llmProviders/expandAttachments.js';
 import { LlmProviderRegistry } from '../../../llmProviders/registry.js';
-import { getCompletionText, textMessage, type LlmMessage, type LlmRequest } from '../../../llmProviders/types.js';
+import {
+  getCompletionText,
+  textMessage,
+  type LlmCompletion,
+  type LlmMessage,
+  type LlmRequest,
+} from '../../../llmProviders/types.js';
 import { UploadsService } from '../../../uploads/uploads.service.js';
 import {
   BaseTool,
@@ -83,6 +89,7 @@ export class AskAttachmentTool extends BaseTool<AskAttachmentParams, AskAttachme
 
   async runTool(params: AskAttachmentParams, context: ToolRunContext): Promise<unknown> {
     const rules = parseAskAttachmentRules(context.toolRules ?? this.getDefaultRules());
+    context.signal.throwIfAborted();
     const attachment = findAttachmentInConversation(context.entries, params.attachment_id);
     if (!attachment) {
       throw new Error(`ask_attachment: attachment '${params.attachment_id}' is not on this conversation`);
@@ -111,7 +118,15 @@ export class AskAttachmentTool extends BaseTool<AskAttachmentParams, AskAttachme
       };
     });
 
-    const completion = await provider.streamCompletion(providerSettings, llm.model, wireRequest, () => {});
+    let completion: LlmCompletion;
+    try {
+      completion = await provider.streamCompletion(providerSettings, llm.model, wireRequest, () => {}, context.signal);
+    } catch (err) {
+      // Providers wrap aborts as StreamInterruptedError; re-surface as a clean
+      // AbortError so the runtime treats it as a cancellation.
+      if (context.signal.aborted) context.signal.throwIfAborted();
+      throw err;
+    }
     const fullAnswer = getCompletionText(completion).trim();
     const answer =
       fullAnswer.length > rules.max_answer_chars ? fullAnswer.slice(0, rules.max_answer_chars) : fullAnswer;

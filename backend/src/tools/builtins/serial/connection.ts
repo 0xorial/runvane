@@ -38,6 +38,13 @@ function cleanOutput(raw: string): string {
   return raw.replace(ANSI_RE, '').replace(/\r\n/g, '\n').replace(/\r/g, '');
 }
 
+/** The signal's abort reason as an Error (Node's default reason is an AbortError). */
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : Object.assign(new Error('serial_terminal: command aborted'), { name: 'AbortError' });
+}
+
 class SerialConnection {
   private socket: net.Socket | null = null;
   private state: ConnectionState = 'disconnected';
@@ -74,6 +81,7 @@ class SerialConnection {
     command: string,
     timeoutMs: number,
     maxBytes: number,
+    signal?: AbortSignal,
   ): Promise<{ stdout: string; exitCode: number; truncated: boolean }> {
     const prev = this.lock;
     let release!: () => void;
@@ -82,19 +90,22 @@ class SerialConnection {
     });
     try {
       await prev.catch(() => undefined);
+      signal?.throwIfAborted();
       if (!this.isConnected()) {
         await this.connect();
         await this.applyShellSetup();
       }
       try {
-        return await this.execRaw(command, timeoutMs, maxBytes);
+        return await this.execRaw(command, timeoutMs, maxBytes, signal);
       } catch (firstErr) {
+        // A steering/user cancel must not trigger the wedged-session retry.
+        if (signal?.aborted) throw firstErr;
         // The session may be wedged — drop it and retry once on a fresh one.
         this.disconnect();
         try {
           await this.connect();
           await this.applyShellSetup();
-          return await this.execRaw(command, timeoutMs, maxBytes);
+          return await this.execRaw(command, timeoutMs, maxBytes, signal);
         } catch {
           throw firstErr;
         }
@@ -226,10 +237,12 @@ class SerialConnection {
     command: string,
     timeoutMs: number,
     maxBytes: number,
+    signal?: AbortSignal,
   ): Promise<{ stdout: string; exitCode: number; truncated: boolean }> {
     if (!this.socket || this.socket.destroyed) {
       return Promise.reject(new Error('serial_terminal: socket is not connected'));
     }
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
     const socket = this.socket;
     const nonce = randomBytes(8).toString('hex');
     const startMarker = `__RUNVANE_START_${nonce}__`;
@@ -241,12 +254,14 @@ class SerialConnection {
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      let onAbort: (() => void) | null = null;
 
       const finish = (fn: () => void) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         socket.removeListener('close', onClose);
+        if (signal && onAbort) signal.removeEventListener('abort', onAbort);
         fn();
       };
 
@@ -264,6 +279,20 @@ class SerialConnection {
       const onClose = () =>
         finish(() => reject(new Error('serial_terminal: socket closed while waiting for command output')));
       socket.once('close', onClose);
+
+      if (signal) {
+        // Steering/user cancel: Ctrl-C the running command, then reject so the
+        // shell session stays usable for the next command.
+        onAbort = () => {
+          try {
+            this.send('\x03');
+          } catch {
+            /* ignore */
+          }
+          finish(() => reject(abortReason(signal)));
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
 
       const poll = () => {
         if (settled) return;
