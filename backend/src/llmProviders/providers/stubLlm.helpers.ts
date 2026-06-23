@@ -2,6 +2,8 @@ import type { LlmRequest } from '../types.js';
 
 export const PROBE_TIME_USER_MESSAGE = 'what is the time?';
 export const STUB_PROBE_TIME_REPLY = 'The current time is 12:00 UTC.';
+export const RAG_PROBE_MARKER = '__rag_probe__';
+export const STUB_RAG_REPLY = 'Based on the indexed notes, run the Prisma migration to update the schema.';
 export const STUB_SUMMARIZE_REPLY = 'e2e stub summary of folded turns.';
 export const STUB_ATTACHMENT_SUMMARY_REPLY = 'e2e stub attachment summary.';
 export const STUB_ASK_ATTACHMENT_REPLY =
@@ -215,12 +217,39 @@ export function stubProbeTimePlannerFinalize(): string {
   });
 }
 
+/** Drives the rag-tool e2e: a user message containing RAG_PROBE_MARKER makes
+ *  the planner call the `rag` tool once, then finalize. */
+export function stubIsRagProbeConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(RAG_PROBE_MARKER);
+}
+
+export function stubRagPlannerFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'User wants indexed notes; query the rag tool.',
+    assistant_output: 'Let me search the indexed notes.',
+    tool_requests: [{ tool_name: 'rag', tool_request: 'database migration prisma' }],
+    followup: 'continue',
+  });
+}
+
+export function stubRagPlannerFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'The rag tool returned the relevant chunk.',
+    assistant_output: STUB_RAG_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
   if (stubIsTitleGenerationRequest(blob)) return 'Time Inquiry';
   if (stubIsToolParamsRequest(blob)) {
     if (stubIsAskAttachmentToolParamsRequest(blob)) return stubAskAttachmentParamsReply(blob);
+    if (/Produce JSON args for tool "rag"/.test(blob)) {
+      return JSON.stringify({ query: 'database migration prisma' });
+    }
     return '{}';
   }
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
@@ -232,6 +261,9 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
+    if (stubIsRagProbeConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubRagPlannerFinalize() : stubRagPlannerFirstRound();
+    }
     if (stubHasPlannerToolResult(request)) return stubProbeTimePlannerFinalize();
     if (stubIsProbeTimeConversation(request)) return stubProbeTimePlannerFirstRound();
     return stubProbeTimePlannerFinalize();

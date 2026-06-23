@@ -1,61 +1,195 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { Page } from "@playwright/test";
+import { RAG_PROBE_MESSAGE, apiBaseUrl, defaultAgentId } from "./harness/client";
 import { expect, test } from "./fixtures";
 
 const runE2e = process.env.RUN_E2E_TESTS === "1";
 test.skip(!runE2e, "Set RUN_E2E_TESTS=1 with backend+frontend running");
 
 /**
- * Drives the full RAG feature through the UI: create a files-backed storage,
- * ingest it, and run a semantic query — asserting the database doc ranks above
- * the cooking doc. Embeddings go through the stub provider (deterministic
- * bag-of-words), so the ranking is stable without a live model. The test and
- * backend share the container filesystem, so the temp docs dir is readable by
- * the server.
+ * RAG end-to-end coverage through the running app (Playwright, stub-LLM mode).
+ * Embeddings go through the stub provider (deterministic bag-of-words), so
+ * ranking is stable without a live model. The test process and backend share
+ * the container filesystem, so temp doc dirs are readable by the server.
  */
-test("RAG: create a files storage, ingest, and retrieve the closest doc", async ({ app }) => {
-  const docsDir = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-docs-"));
-  await writeFile(
-    path.join(docsDir, "db.md"),
-    "SQLite database migrations are managed by Prisma. Run the migration to update the schema.",
-  );
-  await writeFile(
-    path.join(docsDir, "cooking.md"),
-    "A tomato basil pasta recipe: boil water, add salt, then cook the pasta.",
-  );
 
-  const storageName = `e2e-rag-${Date.now()}`;
-  const card = app.page.locator(`[data-testid="rag-storage"][data-storage-name="${storageName}"]`);
+const DB_DOC = "SQLite database migrations are managed by Prisma. Run the migration to update the schema.";
+const COOK_DOC = "A tomato basil pasta recipe: boil water, add salt, then cook the pasta.";
+const NET_DOC = "TCP socket connections carry packets across the network with varying latency and throughput.";
 
+async function makeDocs(files: Record<string, string>): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-docs-"));
+  for (const [name, content] of Object.entries(files)) await writeFile(path.join(dir, name), content);
+  return dir;
+}
+
+function storageCard(page: Page, name: string) {
+  return page.locator(`[data-testid="rag-storage"][data-storage-name="${name}"]`);
+}
+
+/** Fill the create form and submit; returns the new storage's card locator. */
+async function createStorage(page: Page, name: string, roots: string) {
+  await page.getByTestId("rag-name").fill(name);
+  await page.getByTestId("rag-provider").fill("stub");
+  await page.getByTestId("rag-model").fill("stub-embed");
+  await page.getByTestId("rag-roots").fill(roots);
+  await page.getByTestId("rag-create").click();
+  const card = storageCard(page, name);
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  return card;
+}
+
+test("RAG: create a files storage, ingest, retrieve the closest doc, delete", async ({ app }) => {
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const name = `e2e-life-${Date.now()}`;
   try {
     await app.page.goto("/settings/rag");
     await expect(app.page.getByTestId("rag-section")).toBeVisible();
+    const card = await createStorage(app.page, name, docs);
 
-    // Create a storage. Embeddings route through the stub provider in e2e mode.
-    await app.page.getByTestId("rag-name").fill(storageName);
-    await app.page.getByTestId("rag-provider").fill("stub");
-    await app.page.getByTestId("rag-model").fill("stub-embed");
-    await app.page.getByTestId("rag-roots").fill(docsDir);
-    await app.page.getByTestId("rag-create").click();
-    await expect(card).toBeVisible({ timeout: 10_000 });
-
-    // Ingest, then confirm the two docs landed as chunks.
     await card.getByTestId("rag-ingest").click();
     await expect(card.getByTestId("rag-ingest-result")).toContainText("+2 added", { timeout: 10_000 });
     await expect(card.getByTestId("rag-storage-meta")).toContainText("2 chunks");
 
-    // Semantic query: the database doc should rank first, not the recipe.
     await card.getByTestId("rag-query").fill("how do database migrations work in prisma");
     await card.getByTestId("rag-test").click();
-    const firstHit = card.getByTestId("rag-hit").first();
-    await expect(firstHit).toBeVisible({ timeout: 10_000 });
-    await expect(firstHit.getByTestId("rag-hit-source")).toHaveText("db.md");
+    const top = card.getByTestId("rag-hit").first().getByTestId("rag-hit-source");
+    await expect(top).toHaveText("db.md", { timeout: 10_000 });
 
-    // Clean up the storage through the UI so the test is self-contained.
     await card.getByTestId("rag-delete").click();
     await expect(card).toHaveCount(0, { timeout: 10_000 });
   } finally {
-    await rm(docsDir, { recursive: true, force: true });
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG: which document ranks first depends on the query", async ({ app }) => {
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC, "network.md": NET_DOC });
+  const name = `e2e-rank-${Date.now()}`;
+  try {
+    await app.page.goto("/settings/rag");
+    const card = await createStorage(app.page, name, docs);
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("3 chunks", { timeout: 10_000 });
+
+    const top = card.getByTestId("rag-hit").first().getByTestId("rag-hit-source");
+
+    await card.getByTestId("rag-query").fill("tomato basil pasta recipe boil water");
+    await card.getByTestId("rag-test").click();
+    await expect(top).toHaveText("cooking.md", { timeout: 10_000 });
+
+    await card.getByTestId("rag-query").fill("tcp socket packets network latency");
+    await card.getByTestId("rag-test").click();
+    await expect(top).toHaveText("network.md", { timeout: 10_000 });
+
+    await card.getByTestId("rag-delete").click();
+  } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG: re-ingest skips unchanged files and re-embeds changed ones", async ({ app }) => {
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const name = `e2e-inc-${Date.now()}`;
+  try {
+    await app.page.goto("/settings/rag");
+    const card = await createStorage(app.page, name, docs);
+
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-ingest-result")).toContainText("+2 added", { timeout: 10_000 });
+
+    // Nothing changed -> both skipped.
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-ingest-result")).toContainText("2 skipped", { timeout: 10_000 });
+
+    // Change one file on disk -> exactly one updated.
+    await writeFile(path.join(docs, "db.md"), "Entirely new content about quantum entanglement and qubits.");
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-ingest-result")).toContainText("1 updated", { timeout: 10_000 });
+
+    await card.getByTestId("rag-delete").click();
+  } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG: a storage and its counts persist across a page reload", async ({ app }) => {
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const name = `e2e-persist-${Date.now()}`;
+  try {
+    await app.page.goto("/settings/rag");
+    const card = await createStorage(app.page, name, docs);
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("2 chunks", { timeout: 10_000 });
+
+    await app.page.reload();
+    await expect(app.page.getByTestId("rag-section")).toBeVisible();
+    const reloaded = storageCard(app.page, name);
+    await expect(reloaded).toBeVisible({ timeout: 10_000 });
+    await expect(reloaded.getByTestId("rag-storage-meta")).toContainText("2 chunks");
+
+    await reloaded.getByTestId("rag-delete").click();
+  } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG: an agent retrieves from a storage via the rag tool in chat", async ({ app, request }) => {
+  const base = apiBaseUrl();
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+
+  // Seed an ingested storage directly via the API.
+  const createRes = await request.post(`${base}/api/rag/storages`, {
+    data: {
+      name: `e2e-chat-${Date.now()}`,
+      entitySource: "files",
+      embeddingProviderId: "stub",
+      embeddingModel: "stub-embed",
+      sourceParams: { roots: [docs] },
+    },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const storage = (await createRes.json()) as { id: string };
+  expect((await request.post(`${base}/api/rag/storages/${storage.id}/ingest`)).ok()).toBeTruthy();
+
+  // Point the default agent's rag tool at the storage (allowed: always).
+  const agentId = await defaultAgentId(request);
+  const agent = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
+    name: string;
+    default_llm_configuration: Record<string, unknown> | null;
+  };
+  const original = agent.default_llm_configuration ?? null;
+  const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
+  tools.rag = { enabled: true, rules: { allowed: "always", storages: [storage.id], top_k: 8, strategy: "simple" } };
+  const nextCfg = { ...(original ?? {}), tools };
+
+  try {
+    const putRes = await request.put(`${base}/api/agents/${agentId}`, {
+      data: { name: agent.name, default_llm_configuration: nextCfg },
+    });
+    expect(putRes.ok()).toBeTruthy();
+
+    // Ground-truth: the rag tool is actually enabled on the agent post-PUT.
+    const verify = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
+      default_llm_configuration?: { tools?: { rag?: { enabled?: boolean } } };
+    };
+    expect(verify.default_llm_configuration?.tools?.rag?.enabled).toBe(true);
+
+    await app.chat.gotoNew(agentId);
+    await app.chat.userInput.typeMessage(RAG_PROBE_MESSAGE);
+    await app.chat.userInput.send();
+
+    // The planner calls the rag tool, it runs, and the conversation finalizes.
+    await app.chat.transcript.waitForToolState("done");
+    await expect(app.chat.transcript.toolRow()).toContainText("rag");
+    await expect(app.chat.transcript.assistantMessage).toContainText("Prisma migration", { timeout: 15_000 });
+  } finally {
+    await request.put(`${base}/api/agents/${agentId}`, {
+      data: { name: agent.name, default_llm_configuration: original },
+    });
+    await request.delete(`${base}/api/rag/storages/${storage.id}`);
+    await rm(docs, { recursive: true, force: true });
   }
 });
