@@ -11,6 +11,7 @@ import type { UserMessageOverrides } from '../../contracts/user-message-override
 import type { LlmRef } from '../../contracts/llm.js';
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { PrismaService } from '../prisma.service.js';
+import { StreamCursorService } from '../stream-cursor.service.js';
 import type { ThoughtStepStatus } from './chat-entries.types.js';
 import { ChatEntriesBaseRepo } from './chat-entries-base.repo.js';
 
@@ -20,8 +21,8 @@ export type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat
 
 @Injectable()
 export class ChatEntriesRepo extends ChatEntriesBaseRepo {
-  constructor(prisma: PrismaService) {
-    super(prisma);
+  constructor(prisma: PrismaService, cursor: StreamCursorService) {
+    super(prisma, cursor);
   }
 
   async appendUserMessage(

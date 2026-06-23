@@ -3,12 +3,14 @@ import { Observable, Subject, interval, merge } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import type { SseEvent, SsePayload } from '../contracts/sse.js';
 import { SsePayloadSchema } from '../contracts/sse.js';
+import { StreamCursorService } from '../db/stream-cursor.service.js';
 
 @Injectable()
 export class SseHubService {
   private readonly logger = new Logger(SseHubService.name);
-  private nextSeq = 1;
   private readonly bus = new Subject<SseEvent>();
+
+  constructor(private readonly cursor: StreamCursorService) {}
 
   publish(conversationId: string, payload: SsePayload): SseEvent {
     const validation = SsePayloadSchema.safeParse(payload);
@@ -20,7 +22,7 @@ export class SseHubService {
         `SSE payload validation failed (type=${payload.type}): ${details}\nPayload: ${JSON.stringify(payload)}`,
       );
     }
-    const event = { ...payload, conversationId, seq: this.nextSeq++ } as SseEvent;
+    const event = { ...payload, conversationId, seq: this.cursor.current() } as SseEvent;
     this.bus.next(event);
     return event;
   }
@@ -31,8 +33,13 @@ export class SseHubService {
    * after it. This single watermark IS the snapshot↔stream handoff — there is
    * deliberately no replay buffer: recovery from any gap is a fresh snapshot.
    */
+  /**
+   * Latest live-stream seq (the cursor mirror). Snapshots read the DB cursor
+   * directly inside their read txn for an exact watermark; this is only for
+   * stamping live events.
+   */
   currentSeq(): number {
-    return this.nextSeq - 1;
+    return this.cursor.current();
   }
 
   /**

@@ -2,6 +2,7 @@ import type { ChatAttachment, ChatEntry, ToolInvocationEntry } from '../../contr
 import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
+import { StreamCursorService } from '../stream-cursor.service.js';
 import type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat-entries.types.js';
 
 type AppendInput = {
@@ -35,7 +36,10 @@ export class ChatEntriesBaseRepo {
    */
   private readonly appendLocks = new Map<string, Promise<unknown>>();
 
-  constructor(protected readonly prisma: PrismaService) {}
+  constructor(
+    protected readonly prisma: PrismaService,
+    protected readonly cursor: StreamCursorService,
+  ) {}
 
   protected async withAppendLock<T>(conversationId: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.appendLocks.get(conversationId) ?? Promise.resolve();
@@ -56,7 +60,7 @@ export class ChatEntriesBaseRepo {
     const createdAt = new Date().toISOString();
     const parentId = input.parentId;
     const payloadJson = JSON.stringify(input.payload);
-    return this.withAppendLock(conversationId, () =>
+    const result = await this.withAppendLock(conversationId, () =>
       this.prisma.$transaction(async (tx) => {
         const idxRows = (await tx.$queryRawUnsafe(
           `SELECT COALESCE(MAX(conversation_index), -1) + 1 AS idx
@@ -93,6 +97,8 @@ export class ChatEntriesBaseRepo {
         return { id, conversationIndex, createdAt, parentId, seq };
       }),
     );
+    this.cursor.note(result.seq);
+    return result;
   }
 
   /**
@@ -256,7 +262,7 @@ export class ChatEntriesBaseRepo {
     if (!row) throw new Error(`chat entry not found: ${entryId}`);
     const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     Object.assign(payload, patch);
-    return this.prisma.$transaction(async (tx) => {
+    const seq = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(
         `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
         JSON.stringify(payload),
@@ -265,6 +271,8 @@ export class ChatEntriesBaseRepo {
       );
       return bumpCursor(tx);
     });
+    this.cursor.note(seq);
+    return seq;
   }
 
   async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {

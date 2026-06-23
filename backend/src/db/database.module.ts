@@ -7,10 +7,12 @@ import { ModelCapabilitiesRepo } from './repositories/model-capabilities.repo.js
 import { ModelPresetsRepo } from './repositories/model-presets.repo.js';
 import { UploadsRepo } from './repositories/uploads.repo.js';
 import { PrismaService } from './prisma.service.js';
+import { StreamCursorService } from './stream-cursor.service.js';
 
 @Module({
   providers: [
     PrismaService,
+    StreamCursorService,
     ChatEntriesRepo,
     ConversationsRepo,
     AgentsRepo,
@@ -21,6 +23,7 @@ import { PrismaService } from './prisma.service.js';
   ],
   exports: [
     PrismaService,
+    StreamCursorService,
     ChatEntriesRepo,
     ConversationsRepo,
     AgentsRepo,
