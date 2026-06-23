@@ -129,7 +129,7 @@
   }
 </script>
 
-<main class="flex min-w-0 flex-col gap-3.5">
+<main class="flex min-w-0 flex-col gap-3.5" data-testid="rag-section">
   <div>
     <h1 class="text-base font-bold text-foreground">RAG storages</h1>
     <p class="text-xs text-muted-foreground">
@@ -139,7 +139,7 @@
   </div>
 
   {#if error}
-    <div class="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive" role="alert">
+    <div class="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive" role="alert" data-testid="rag-error">
       {error}
     </div>
   {/if}
@@ -150,11 +150,11 @@
     <div class="grid grid-cols-2 gap-2.5">
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Name</span>
-        <input class={inputClass} bind:value={name} placeholder="My docs" />
+        <input class={inputClass} data-testid="rag-name" bind:value={name} placeholder="My docs" />
       </label>
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Entity source</span>
-        <select class={inputClass} bind:value={entitySource}>
+        <select class={inputClass} data-testid="rag-source" bind:value={entitySource}>
           {#each sources as s (s.type)}
             <option value={s.type}>{s.label}</option>
           {/each}
@@ -162,22 +162,22 @@
       </label>
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Embedding provider id</span>
-        <input class={inputClass} bind:value={providerId} placeholder="openai / lmstudio" />
+        <input class={inputClass} data-testid="rag-provider" bind:value={providerId} placeholder="openai / lmstudio" />
       </label>
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Embedding model</span>
-        <input class={inputClass} bind:value={model} placeholder="text-embedding-3-small" />
+        <input class={inputClass} data-testid="rag-model" bind:value={model} placeholder="text-embedding-3-small" />
       </label>
       {#if entitySource === "files"}
         <label class="col-span-2 flex flex-col gap-1 text-xs">
           <span class="font-semibold text-foreground">Roots (one absolute path per line)</span>
-          <textarea class="{inputClass} min-h-[64px] resize-y font-mono" bind:value={rootsText}
+          <textarea class="{inputClass} min-h-[64px] resize-y font-mono" data-testid="rag-roots" bind:value={rootsText}
             placeholder={"/workspace/docs\n/workspace/backend/src"}></textarea>
         </label>
       {/if}
     </div>
     <div class="mt-2.5">
-      <button type="button" class="{ghostBtn} border-slate-300" disabled={!canCreate || creating} onclick={create}>
+      <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-create" disabled={!canCreate || creating} onclick={create}>
         {creating ? "Creating…" : "Create storage"}
       </button>
     </div>
@@ -187,15 +187,15 @@
   {#if loading}
     <p class="text-sm text-muted-foreground">Loading…</p>
   {:else if storages.length === 0}
-    <p class="text-sm text-muted-foreground">No storages yet. Create one above, then ingest it.</p>
+    <p class="text-sm text-muted-foreground" data-testid="rag-empty">No storages yet. Create one above, then ingest it.</p>
   {:else}
     <div class="flex flex-col gap-2.5">
       {#each storages as storage (storage.id)}
-        <section class="rounded-lg border border-border bg-card p-3">
+        <section class="rounded-lg border border-border bg-card p-3" data-testid="rag-storage" data-storage-name={storage.name}>
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <div class="text-sm font-bold text-foreground">{storage.name}</div>
-              <div class="text-xs text-muted-foreground">
+              <div class="text-sm font-bold text-foreground" data-testid="rag-storage-name">{storage.name}</div>
+              <div class="text-xs text-muted-foreground" data-testid="rag-storage-meta">
                 <code>{storage.entitySource}</code> · {storage.embeddingProviderId}/{storage.embeddingModel}
                 {#if storage.embeddingDim}· {storage.embeddingDim}d{/if}
                 · {storage.counts.chunks} chunks / {storage.counts.sources} sources
@@ -204,10 +204,10 @@
               <div class="mt-0.5 text-[11px] text-muted-foreground">id: <code>{storage.id}</code></div>
             </div>
             <div class="flex shrink-0 gap-2">
-              <button type="button" class="{ghostBtn} border-slate-300" disabled={busyId === storage.id} onclick={() => ingest(storage.id)}>
+              <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-ingest" disabled={busyId === storage.id} onclick={() => ingest(storage.id)}>
                 {busyId === storage.id ? "Working…" : "Ingest"}
               </button>
-              <button type="button" class="{ghostBtn} border-destructive/40 text-destructive" disabled={busyId === storage.id} onclick={() => remove(storage.id)}>
+              <button type="button" class="{ghostBtn} border-destructive/40 text-destructive" data-testid="rag-delete" disabled={busyId === storage.id} onclick={() => remove(storage.id)}>
                 Delete
               </button>
             </div>
@@ -215,7 +215,7 @@
 
           {#if ingestResults[storage.id]}
             {@const r = ingestResults[storage.id]}
-            <div class="mt-2 text-xs text-muted-foreground">
+            <div class="mt-2 text-xs text-muted-foreground" data-testid="rag-ingest-result">
               Ingest: +{r.added} added · {r.updated} updated · {r.skipped} skipped · {r.removed} removed
             </div>
           {/if}
@@ -223,25 +223,26 @@
           <div class="mt-2.5 flex gap-2">
             <input
               class={inputClass}
+              data-testid="rag-query"
               placeholder="Test query…"
               value={queryText[storage.id] ?? ""}
               oninput={(e) => (queryText = { ...queryText, [storage.id]: e.currentTarget.value })}
               onkeydown={(e) => e.key === "Enter" && runQuery(storage.id)}
             />
-            <button type="button" class="{ghostBtn} border-slate-300 shrink-0" disabled={busyId === storage.id} onclick={() => runQuery(storage.id)}>
+            <button type="button" class="{ghostBtn} border-slate-300 shrink-0" data-testid="rag-test" disabled={busyId === storage.id} onclick={() => runQuery(storage.id)}>
               Test
             </button>
           </div>
 
           {#if queryHits[storage.id]}
             {#if queryHits[storage.id].length === 0}
-              <div class="mt-2 text-xs text-muted-foreground">No matches.</div>
+              <div class="mt-2 text-xs text-muted-foreground" data-testid="rag-no-hits">No matches.</div>
             {:else}
               <ol class="mt-2 flex flex-col gap-1.5">
                 {#each queryHits[storage.id] as hit, i (i)}
-                  <li class="rounded-md border border-border bg-muted/40 p-2 text-xs">
+                  <li class="rounded-md border border-border bg-muted/40 p-2 text-xs" data-testid="rag-hit">
                     <div class="mb-0.5 flex justify-between gap-2 text-muted-foreground">
-                      <code class="truncate">{String(hit.metadata.relativePath ?? hit.sourceId)}</code>
+                      <code class="truncate" data-testid="rag-hit-source">{String(hit.metadata.relativePath ?? hit.sourceId)}</code>
                       <span class="shrink-0">{hit.score.toFixed(4)}</span>
                     </div>
                     <div class="line-clamp-3 whitespace-pre-wrap text-foreground">{hit.text}</div>
