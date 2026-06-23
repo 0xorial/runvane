@@ -7,6 +7,7 @@ export const SseType = {
   CONVERSATION_UPDATED: 'conversation_updated',
   CHAT_ENTRY_UPSERT: 'chat_entry_upsert',
   CHAT_ENTRY_DELTA: 'chat_entry_delta',
+  CONVERSATION_SNAPSHOT: 'conversation_snapshot',
   TOOL_INVOCATION_START: 'tool_invocation_start',
   TOOL_INVOCATION_END: 'tool_invocation_end',
   TOOL_INVOCATION_PROGRESS: 'tool_invocation_progress',
@@ -66,6 +67,17 @@ export const ChatEntryUpsertSsePayloadSchema = z.object({
   entry: ChatEntrySchema,
 });
 export type ChatEntryUpsertSsePayload = z.infer<typeof ChatEntryUpsertSsePayloadSchema>;
+
+/**
+ * First frame of a per-conversation stream: the full entries snapshot. The
+ * envelope `seq` is the watermark W — the client baselines on it and applies
+ * later frames only when their seq > W.
+ */
+export const ConversationSnapshotSsePayloadSchema = z.object({
+  type: z.literal(SseType.CONVERSATION_SNAPSHOT),
+  entries: z.array(ChatEntrySchema),
+});
+export type ConversationSnapshotSsePayload = z.infer<typeof ConversationSnapshotSsePayloadSchema>;
 
 export const ChatEntryDeltaSsePayloadSchema = z.object({
   type: z.literal(SseType.CHAT_ENTRY_DELTA),
@@ -127,6 +139,7 @@ export const SsePayloadSchema = z.discriminatedUnion('type', [
   ConversationCreatedSsePayloadSchema,
   ConversationUpdatedSsePayloadSchema,
   ChatEntryUpsertSsePayloadSchema,
+  ConversationSnapshotSsePayloadSchema,
   ChatEntryDeltaSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,

@@ -5,12 +5,15 @@ import {
   Delete,
   Get,
   HttpCode,
+  MessageEvent,
   NotFoundException,
   Param,
   Post,
   Put,
   Query,
+  Sse,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { z } from 'zod';
 import { ReprocessReasonDto } from './dto/reprocess-reason.dto.js';
 import { ReprocessUserMessageDto } from './dto/reprocess-user-message.dto.js';
@@ -177,6 +180,46 @@ export class ConversationsController {
       all: allRaw === '1' || allRaw === 'true',
     });
     return { entries: entries.map(toClientChatEntry), seq };
+  }
+
+  /**
+   * Per-conversation live stream. First frame is the full snapshot (entries +
+   * watermark seq); every frame after is a live mutation. The client seeds from
+   * the snapshot, gates by seq > W, and re-subscribes (fresh snapshot) on
+   * reconnect — no replay buffer, no client/server seq negotiation.
+   */
+  @Sse(':conversationId/stream')
+  streamConversation(@Param('conversationId') conversationId: string): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      let snapshotSent = false;
+      const buffered: MessageEvent[] = [];
+      // Subscribe to the live tail FIRST so nothing slips the gap while we read
+      // the snapshot; buffer until the snapshot frame is sent, then flush.
+      const sub = this.hub.stream({ conversationId }).subscribe({
+        next: (msg) => (snapshotSent ? subscriber.next(msg) : buffered.push(msg)),
+        error: (err) => subscriber.error(err),
+      });
+      void (async () => {
+        try {
+          const snap = await this.chatEntries.snapshot(conversationId);
+          subscriber.next({
+            id: String(snap.seq),
+            data: {
+              type: SseType.CONVERSATION_SNAPSHOT,
+              conversationId,
+              entries: snap.entries.map(toClientChatEntry),
+              seq: snap.seq,
+            },
+          });
+          snapshotSent = true;
+          for (const msg of buffered) subscriber.next(msg);
+          buffered.length = 0;
+        } catch (err) {
+          subscriber.error(err as Error);
+        }
+      })();
+      return () => sub.unsubscribe();
+    });
   }
 
   @Post(':conversationId/messages')

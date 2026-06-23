@@ -28,6 +28,8 @@ export class ChatSessionStore {
   private readonly rows: ObservableItemCollection<LinkedChatEntry>;
   private readonly pathVersion$ = createObservable({ value: 0 });
   private readonly pending$ = createObservable<{ items: PendingMessage[] }>({ items: [] });
+  /** Stream watermark: seq of the snapshot the live frames are applied on top of. */
+  private lastSeq = 0;
   private viewAnchorId: string | null = null;
 
   constructor(initial: LinkedChatEntry[] = []) {
@@ -182,6 +184,14 @@ export class ChatSessionStore {
           const prev = typeof row[ev.field] === "string" ? (row[ev.field] as string) : "";
           row[ev.field] = `${prev}${ev.delta}`;
         });
+        return;
+      }
+      case SseType.CONVERSATION_SNAPSHOT: {
+        // First frame of the per-conversation stream: seed/replace from the
+        // authoritative snapshot and baseline the watermark. Later frames apply
+        // on top; a reconnect just re-snapshots through here again.
+        this.replace(ev.entries);
+        this.lastSeq = ev.seq;
         return;
       }
       default:

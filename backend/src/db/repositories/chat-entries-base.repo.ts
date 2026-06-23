@@ -180,6 +180,28 @@ export class ChatEntriesBaseRepo {
     return rows.map(rowToChatEntry);
   }
 
+  /**
+   * Consistent snapshot for the per-conversation stream: all entries + the
+   * cursor watermark read in ONE txn, so W exactly matches the entries (no
+   * write can interleave the two reads). This is the stream's first frame.
+   */
+  async snapshot(conversationId: string): Promise<{ entries: ChatEntry[]; seq: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      const curRows = (await tx.$queryRawUnsafe(
+        `SELECT value FROM stream_cursor WHERE id = 0`,
+      )) as Array<{ value: number }>;
+      const seq = Number(curRows[0]?.value ?? 0);
+      const rows = (await tx.$queryRawUnsafe(
+        `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+         FROM chat_entries
+         WHERE conversation_id = ?
+         ORDER BY conversation_index ASC`,
+        conversationId,
+      )) as ChatEntryDbRow[];
+      return { entries: rows.map(rowToChatEntry), seq };
+    });
+  }
+
   private async fetchAllRows(conversationId: string): Promise<ChatEntryDbRow[]> {
     return (await this.prisma.$queryRawUnsafe(
       `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
