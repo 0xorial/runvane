@@ -1,5 +1,5 @@
 import { Injectable, Logger, MessageEvent } from '@nestjs/common';
-import { Observable, Subject, from, interval, merge } from 'rxjs';
+import { Observable, Subject, interval, merge } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import type { SseEvent, SsePayload } from '../contracts/sse.js';
 import { SsePayloadSchema } from '../contracts/sse.js';
@@ -9,8 +9,6 @@ export class SseHubService {
   private readonly logger = new Logger(SseHubService.name);
   private nextSeq = 1;
   private readonly bus = new Subject<SseEvent>();
-  private readonly replay: SseEvent[] = [];
-  private readonly replayMax = 256;
 
   publish(conversationId: string, payload: SsePayload): SseEvent {
     const validation = SsePayloadSchema.safeParse(payload);
@@ -23,25 +21,29 @@ export class SseHubService {
       );
     }
     const event = { ...payload, conversationId, seq: this.nextSeq++ } as SseEvent;
-    this.replay.push(event);
-    if (this.replay.length > this.replayMax) {
-      this.replay.splice(0, this.replay.length - this.replayMax);
-    }
     this.bus.next(event);
     return event;
   }
 
-  stream(input?: { conversationId?: string; afterSeq?: number }): Observable<MessageEvent> {
-    const afterSeq = input?.afterSeq ?? 0;
+  /**
+   * The seq of the last published event. A state snapshot read now reflects
+   * every event up to this seq; the client resumes the live tail strictly
+   * after it. This single watermark IS the snapshot↔stream handoff — there is
+   * deliberately no replay buffer: recovery from any gap is a fresh snapshot.
+   */
+  currentSeq(): number {
+    return this.nextSeq - 1;
+  }
+
+  /**
+   * Live event tail — purely "from now on". Each message carries its seq as the
+   * SSE `id` so the client can order/dedup and pair it with a snapshot watermark.
+   */
+  stream(input?: { conversationId?: string }): Observable<MessageEvent> {
     const conversationId = input?.conversationId;
     const inScope = (event: SseEvent): boolean =>
       conversationId ? event.conversationId === conversationId : true;
 
-    const replay$ = from(this.replay).pipe(
-      filter((event) => event.seq > afterSeq),
-      filter(inScope),
-      map((event) => this.toDefaultMessage(event)),
-    );
     const live$ = this.bus.asObservable().pipe(
       filter(inScope),
       map((event) => this.toDefaultMessage(event)),
@@ -49,7 +51,7 @@ export class SseHubService {
     const keepAlive$ = interval(15000).pipe(
       map((): MessageEvent => ({ type: 'ka', data: '{}' })),
     );
-    return merge(replay$, live$, keepAlive$);
+    return merge(live$, keepAlive$);
   }
 
   private toDefaultMessage(event: SseEvent): MessageEvent {

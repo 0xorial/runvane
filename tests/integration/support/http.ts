@@ -88,8 +88,9 @@ export async function listAllMessages(baseUrl: string, conversationId: string): 
     `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages?all=1`,
   );
   if (!res.ok) throw new Error(`GET messages failed: ${res.status}`);
-  const rows = (await res.json()) as ChatEntryRow[];
-  if (!Array.isArray(rows)) throw new Error('GET messages: expected array');
+  const body = (await res.json()) as { entries?: ChatEntryRow[] };
+  const rows = body.entries;
+  if (!Array.isArray(rows)) throw new Error('GET messages: expected { entries: [...] }');
   return rows;
 }
 

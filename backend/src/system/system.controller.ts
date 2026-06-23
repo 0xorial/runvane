@@ -1,15 +1,8 @@
-import { Controller, Get, Headers, MessageEvent, Query, Sse } from '@nestjs/common';
+import { Controller, Get, MessageEvent, Sse } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { listToolCatalog } from '../tools/tool-catalog.api.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
-
-function parseAfterSeq(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
-  return Math.trunc(parsed);
-}
 
 @Controller('api')
 export class SystemController {
@@ -29,11 +22,9 @@ export class SystemController {
   }
 
   @Sse('stream')
-  stream(
-    @Query('after_seq') afterSeqRaw?: string,
-    @Headers('last-event-id') lastEventIdRaw?: string,
-  ): Observable<MessageEvent> {
-    const afterSeq = parseAfterSeq(afterSeqRaw) ?? parseAfterSeq(lastEventIdRaw);
-    return this.hub.stream({ afterSeq });
+  stream(): Observable<MessageEvent> {
+    // Pure live tail. Resumability is the client's job: on (re)connect it takes
+    // a fresh snapshot (carrying a seq watermark) and applies events after it.
+    return this.hub.stream();
   }
 }

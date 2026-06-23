@@ -38,6 +38,12 @@ import { toClientChatEntry } from '../thoughtProcessing/inputSnapshot.js';
 import { ValidateResponse } from '../validation/validate-response.decorator.js';
 
 const ChatEntryArraySchema = z.array(ChatEntrySchema);
+const GetConversationMessagesResponseSchema = z.object({
+  entries: ChatEntryArraySchema,
+  // SSE seq watermark: these entries reflect every event up to this seq. The
+  // client baselines on it and applies live events strictly after it.
+  seq: z.number().int().nonnegative(),
+});
 
 @Controller('api/conversations')
 export class ConversationsController {
@@ -156,17 +162,21 @@ export class ConversationsController {
   }
 
   @Get(':conversationId/messages')
-  @ValidateResponse(ChatEntryArraySchema)
+  @ValidateResponse(GetConversationMessagesResponseSchema)
   async listMessages(
     @Param('conversationId') conversationId: string,
     @Query('all') allRaw?: string,
   ) {
+    // Capture the watermark BEFORE reading entries: any event published during
+    // the read has seq > this, so the client re-applies it idempotently rather
+    // than dropping it. (Capturing after the read could lose such an event.)
+    const seq = this.hub.currentSeq();
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
     const entries = await this.conversations.listChatEntries(conversationId, {
       all: allRaw === '1' || allRaw === 'true',
     });
-    return entries.map(toClientChatEntry);
+    return { entries: entries.map(toClientChatEntry), seq };
   }
 
   @Post(':conversationId/messages')

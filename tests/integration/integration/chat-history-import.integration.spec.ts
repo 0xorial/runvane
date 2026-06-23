@@ -33,7 +33,7 @@ describeLive('chat history import (integration)', () => {
     const messagesRes = await fetch(
       `${baseUrl}/api/conversations/${encodeURIComponent(body.conversationIds![0]!)}/messages?all=1`,
     );
-    const messages = (await messagesRes.json()) as Array<{ type: string; text?: string }>;
+    const messages = ((await messagesRes.json()) as { entries: Array<{ type: string; text?: string }> }).entries;
     expect(messages.some((entry) => entry.type === 'user-message' && entry.text === 'hello import')).toBe(true);
     expect(messages.some((entry) => entry.type === 'assistant-message' && entry.text === 'hello back')).toBe(true);
   });
@@ -60,7 +60,7 @@ describeLive('chat history import (integration)', () => {
     const messagesRes = await fetch(
       `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages?all=1`,
     );
-    const messages = (await messagesRes.json()) as Array<{ type: string; text?: string }>;
+    const messages = ((await messagesRes.json()) as { entries: Array<{ type: string; text?: string }> }).entries;
     expect(messages.some((entry) => entry.type === 'user-message' && entry.text === 'claude hello')).toBe(true);
   });
 
@@ -87,7 +87,7 @@ describeLive('chat history import (integration)', () => {
     const messagesRes = await fetch(
       `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages?all=1`,
     );
-    const messages = (await messagesRes.json()) as Array<{ type: string; text?: string }>;
+    const messages = ((await messagesRes.json()) as { entries: Array<{ type: string; text?: string }> }).entries;
     expect(messages.some((entry) => entry.type === 'user-message' && entry.text === 'grok hello')).toBe(true);
   });
 });

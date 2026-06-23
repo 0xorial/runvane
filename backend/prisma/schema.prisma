@@ -147,3 +147,14 @@ model UploadAttachment {
 
   @@map("uploads")
 }
+
+// Global monotonic stream cursor (single row, id=0). Bumped in the same
+// transaction as each chat_entries mutation; its value is the event seq and the
+// snapshot watermark. Accessed via raw SQL, so the generated client need not
+// know it — kept here only as the schema source of truth.
+model StreamCursor {
+  id    Int @id @default(0)
+  value Int @default(0)
+
+  @@map("stream_cursor")
+}

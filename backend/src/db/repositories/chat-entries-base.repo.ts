@@ -15,7 +15,17 @@ type AppendedRow = {
   conversationIndex: number;
   createdAt: string;
   parentId: string | null;
+  /** Stream cursor value bumped by this mutation's txn — the event's seq. */
+  seq: number;
 };
+
+/** Bump the global stream cursor inside `tx` and return its new value (the seq). */
+async function bumpCursor(tx: { $queryRawUnsafe: (sql: string) => Promise<unknown> }): Promise<number> {
+  const rows = (await tx.$queryRawUnsafe(
+    `UPDATE stream_cursor SET value = value + 1 WHERE id = 0 RETURNING value`,
+  )) as Array<{ value: number }>;
+  return Number(rows[0]?.value ?? 0);
+}
 
 export class ChatEntriesBaseRepo {
   /**
@@ -76,7 +86,11 @@ export class ChatEntriesBaseRepo {
           createdAt,
           conversationId,
         );
-        return { id, conversationIndex, createdAt, parentId };
+        // Bump the cursor in the SAME txn: its value is this mutation's seq and
+        // the snapshot watermark — born from the commit, so publish (which
+        // carries it) can't precede the write.
+        const seq = await bumpCursor(tx);
+        return { id, conversationIndex, createdAt, parentId, seq };
       }),
     );
   }
@@ -237,17 +251,20 @@ export class ChatEntriesBaseRepo {
     conversationId: string,
     entryId: string,
     patch: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<number> {
     const row = await this.fetchEntryRow(conversationId, entryId);
     if (!row) throw new Error(`chat entry not found: ${entryId}`);
     const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     Object.assign(payload, patch);
-    await this.prisma.$executeRawUnsafe(
-      `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
-      JSON.stringify(payload),
-      conversationId,
-      entryId,
-    );
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
+        JSON.stringify(payload),
+        conversationId,
+        entryId,
+      );
+      return bumpCursor(tx);
+    });
   }
 
   async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {

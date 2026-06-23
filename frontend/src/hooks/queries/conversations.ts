@@ -9,20 +9,23 @@ import { queryClient } from "@/lib/queryClient";
 import { queryKeys } from "./keys";
 
 export type ConversationSession = {
-  entries: Awaited<ReturnType<typeof getConversationMessages>>;
+  entries: Awaited<ReturnType<typeof getConversationMessages>>["entries"];
+  /** SSE seq watermark the entries reflect; the client applies live events after it. */
+  seq: number;
   anchorId: string | null;
   leafId: string | null;
 };
 
 export async function loadConversationSession(conversationId: string): Promise<ConversationSession> {
   const cid = conversationId.trim();
-  const [entries, conversation] = await Promise.all([
+  const [snapshot, conversation] = await Promise.all([
     getConversationMessages(cid, { all: true }),
     getConversation(cid),
   ]);
   queryClient.setQueryData(queryKeys.conversation(cid), conversation);
   return {
-    entries,
+    entries: snapshot.entries,
+    seq: snapshot.seq,
     anchorId: conversation.defaultViewLeafAnchorId ?? null,
     leafId: conversation.defaultViewLeafEntryId,
   };

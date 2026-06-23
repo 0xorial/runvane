@@ -178,10 +178,15 @@ export function validatePostConversationsResponse(data: unknown): ConversationRo
   return validateConversationRowResponse(data, 'POST /api/conversations');
 }
 
-export function validateGetConversationMessagesResponse(data: unknown): ChatMessageEntry[] {
-  const arr = z.array(z.unknown()).safeParse(data);
-  if (!arr.success) throw formatZodError('GET /api/conversations/:id/messages', arr.error);
-  return arr.data.map((row, i) => parseChatMessageEntry(row, i));
+export function validateGetConversationMessagesResponse(
+  data: unknown,
+): { entries: ChatMessageEntry[]; seq: number } {
+  const parsed = z.object({ entries: z.array(z.unknown()), seq: z.number() }).safeParse(data);
+  if (!parsed.success) throw formatZodError('GET /api/conversations/:id/messages', parsed.error);
+  return {
+    entries: parsed.data.entries.map((row, i) => parseChatMessageEntry(row, i)),
+    seq: parsed.data.seq,
+  };
 }
 
 export function validatePostConversationMessageResponse(data: unknown): PostConversationMessageAcceptedResponse {

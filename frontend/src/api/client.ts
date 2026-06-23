@@ -193,7 +193,7 @@ export function getConversationMessages(
   options?: {
     all?: boolean;
   },
-): Promise<ChatMessageEntry[]> {
+): Promise<{ entries: ChatMessageEntry[]; seq: number }> {
   const allQuery = options?.all === true ? "?all=1" : "";
   return getJson(`/api/conversations/${encodeURIComponent(conversationId)}/messages${allQuery}`).then(
     validateGetConversationMessagesResponse,
