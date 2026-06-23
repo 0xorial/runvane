@@ -201,7 +201,10 @@ export class ConversationsController {
       });
       void (async () => {
         try {
-          const snap = await this.chatEntries.snapshot(conversationId);
+          const [snap, conversation] = await Promise.all([
+            this.chatEntries.snapshot(conversationId),
+            this.conversations.get(conversationId, { includeDeleted: true }),
+          ]);
           subscriber.next({
             id: String(snap.seq),
             data: {
@@ -209,6 +212,8 @@ export class ConversationsController {
               conversationId,
               entries: snap.entries.map(toClientChatEntry),
               seq: snap.seq,
+              leafId: conversation?.defaultViewLeafEntryId ?? null,
+              anchorId: conversation?.defaultViewLeafAnchorId ?? null,
             },
           });
           snapshotSent = true;

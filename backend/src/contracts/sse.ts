@@ -76,6 +76,10 @@ export type ChatEntryUpsertSsePayload = z.infer<typeof ChatEntryUpsertSsePayload
 export const ConversationSnapshotSsePayloadSchema = z.object({
   type: z.literal(SseType.CONVERSATION_SNAPSHOT),
   entries: z.array(ChatEntrySchema),
+  /** Resolved default-view leaf + the user's stored anchor, so the client seeds
+   * the same branch view a fresh page load would. */
+  leafId: z.string().nullable(),
+  anchorId: z.string().nullable(),
 });
 export type ConversationSnapshotSsePayload = z.infer<typeof ConversationSnapshotSsePayloadSchema>;
 

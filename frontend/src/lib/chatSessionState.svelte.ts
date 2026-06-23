@@ -1,16 +1,17 @@
-import { setConversationDefaultViewLeaf } from "@/api/client";
+import { getConversation, setConversationDefaultViewLeaf } from "@/api/client";
 import {
   getChatSessionPending,
   getChatSessionStore,
   getEmptyChatSessionStore,
   retainChatSessionLive,
+  subscribeConversationStream,
 } from "@/lib/chatSessionRegistry";
 import { resetChatToolDraft, seedChatToolDraftFromUserMessage } from "@/lib/chatToolDraft.svelte";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ChatAttachment } from "@/protocol/chatEntry";
 import type { ChatSessionStore, PendingMessage } from "@/lib/chatSessionStore";
-import { loadConversationSession, type ConversationSession } from "@/hooks/queries/conversations";
+import { loadConversationSession } from "@/hooks/queries/conversations";
 import { queryClient } from "@/lib/queryClient";
 import { queryKeys } from "@/hooks/queries/keys";
 import { mapApiMessagesToChatEntries } from "@/utils/chatEntries";
@@ -109,36 +110,28 @@ export function createChatSessionState(getConversationId: () => string | null) {
     pathUnsub = nextStore.subscribeActivePath(bumpPath);
     pendingUnsub = nextStore.subscribePending(bumpRows);
 
-    const warmStore = nextStore.getAllRows().length > 0;
-    const cachedSession = queryClient.getQueryData<ConversationSession>(
-      queryKeys.conversationSession(boundCid),
-    );
-
-    if (warmStore && cachedSession) {
-      isSessionLoading = false;
-      seedToolDraftFromStore(nextStore);
-      return teardown;
-    }
-
-    isSessionLoading = !warmStore;
+    isSessionLoading = nextStore.getAllRows().length === 0;
     let cancelled = false;
+
+    // Per-conversation live stream: its first frame is the entries snapshot
+    // (seeds the store + baselines the watermark), then live mutations. The
+    // EventSource auto-reconnects and the server resends a snapshot first, so
+    // reconnect == re-snapshot — no replay buffer, no client seq negotiation.
+    const closeStream = subscribeConversationStream(boundCid);
 
     void (async () => {
       try {
-        const session = await loadConversationSession(boundCid);
+        // Conversation metadata (title, view anchor) — the stream carries the
+        // entries, not the conversation row.
+        const conversation = await getConversation(boundCid);
         if (cancelled) return;
-        const entries = mapApiMessagesToChatEntries(session.entries);
-        if (nextStore.getAllRows().length === 0) {
-          nextStore.replace(entries, session.leafId, session.anchorId);
-        } else {
-          for (const entry of entries) {
-            if (!nextStore.getById(entry.id)) nextStore.appendEntry(entry);
-          }
-          if (!nextStore.hasViewAnchor()) nextStore.setViewAnchor(session.anchorId);
+        queryClient.setQueryData(queryKeys.conversation(boundCid), conversation);
+        if (!nextStore.hasViewAnchor() && conversation.defaultViewLeafAnchorId) {
+          nextStore.setViewAnchor(conversation.defaultViewLeafAnchorId);
         }
         seedToolDraftFromStore(nextStore);
       } catch (err) {
-        console.error("[chatSession] Failed to load conversation messages:", err);
+        console.error("[chatSession] Failed to load conversation metadata:", err);
       } finally {
         if (!cancelled) isSessionLoading = false;
       }
@@ -147,6 +140,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
     return () => {
       cancelled = true;
       isSessionLoading = false;
+      closeStream();
       teardown();
     };
   });

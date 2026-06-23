@@ -118,6 +118,9 @@ export class ChatSessionStore {
   }
 
   applySseEvent(ev: SseEvent, pending: Map<string, string>): void {
+    // Watermark gate: drop frames already reflected in the snapshot we seeded
+    // from. The snapshot frame itself sets the baseline (handled in its case).
+    if (ev.type !== SseType.CONVERSATION_SNAPSHOT && ev.seq <= this.lastSeq) return;
     switch (ev.type) {
       case SseType.CONVERSATION_CREATED:
         return;
@@ -190,7 +193,7 @@ export class ChatSessionStore {
         // First frame of the per-conversation stream: seed/replace from the
         // authoritative snapshot and baseline the watermark. Later frames apply
         // on top; a reconnect just re-snapshots through here again.
-        this.replace(ev.entries);
+        this.replace(ev.entries, ev.leafId ?? undefined, ev.anchorId ?? undefined);
         this.lastSeq = ev.seq;
         return;
       }
