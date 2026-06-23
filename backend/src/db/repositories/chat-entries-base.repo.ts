@@ -28,6 +28,9 @@ async function bumpCursor(tx: { $queryRawUnsafe: (sql: string) => Promise<unknow
   return Number(rows[0]?.value ?? 0);
 }
 
+/** Minimal txn surface for an entry-mutating statement run via `mutateEntry`. */
+type EntryWriteTx = { $executeRawUnsafe: (sql: string, ...args: unknown[]) => Promise<unknown> };
+
 export class ChatEntriesBaseRepo {
   /**
    * Per-conversation append lock. Serializes leaf reads / inserts / leaf writes
@@ -275,6 +278,25 @@ export class ChatEntriesBaseRepo {
     );
   }
 
+  /**
+   * Run an entry-mutating statement inside a txn that ALSO bumps the stream
+   * cursor, then advance the in-memory mirror. Every published change to a
+   * chat entry must go through here (or `appendEntry`): the cursor value is the
+   * event's seq AND the snapshot watermark, so a mutation that skips the bump
+   * rides a stale seq and the client's `seq > W` gate silently drops it. A
+   * snapshot read in the window between a spliced step's append and the
+   * reparent of its successor would otherwise capture the transient fork and
+   * never receive the reparent — freezing it into a spurious sibling branch.
+   */
+  protected async mutateEntry(fn: (tx: EntryWriteTx) => Promise<unknown>): Promise<number> {
+    const seq = await this.prisma.$transaction(async (tx) => {
+      await fn(tx);
+      return bumpCursor(tx);
+    });
+    this.cursor.note(seq);
+    return seq;
+  }
+
   async mergeEntryPayload(
     conversationId: string,
     entryId: string,
@@ -284,17 +306,14 @@ export class ChatEntriesBaseRepo {
     if (!row) throw new Error(`chat entry not found: ${entryId}`);
     const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     Object.assign(payload, patch);
-    const seq = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
+    return this.mutateEntry((tx) =>
+      tx.$executeRawUnsafe(
         `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
         JSON.stringify(payload),
         conversationId,
         entryId,
-      );
-      return bumpCursor(tx);
-    });
-    this.cursor.note(seq);
-    return seq;
+      ),
+    );
   }
 
   async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {
@@ -308,11 +327,13 @@ export class ChatEntriesBaseRepo {
    * reparenting the intervening entry onto the new one.
    */
   async updateChatEntryParent(conversationId: string, entryId: string, newParentId: string | null): Promise<void> {
-    await this.prisma.$executeRawUnsafe(
-      `UPDATE chat_entries SET parent_id = ? WHERE conversation_id = ? AND id = ?`,
-      newParentId,
-      conversationId,
-      entryId,
+    await this.mutateEntry((tx) =>
+      tx.$executeRawUnsafe(
+        `UPDATE chat_entries SET parent_id = ? WHERE conversation_id = ? AND id = ?`,
+        newParentId,
+        conversationId,
+        entryId,
+      ),
     );
   }
 }
