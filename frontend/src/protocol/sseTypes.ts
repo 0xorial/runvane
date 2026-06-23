@@ -11,6 +11,7 @@ export {
   type ChatEntryDeltaField,
   type ToolInvocationStartSsePayload,
   type ToolInvocationEndSsePayload,
+  type ToolInvocationProgressSsePayload,
   type UserMessageSsePayload,
   type MessageEnqueuedSsePayload,
   type MessageDequeuedSsePayload,

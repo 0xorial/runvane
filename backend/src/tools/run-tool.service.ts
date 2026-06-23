@@ -341,6 +341,16 @@ export class RunToolService {
     let toolError: unknown = null;
     try {
       scope.throwIfAborted();
+      // Live progress (stdout, streamed tokens, …) → the running tool row.
+      const onProgress = (delta: string): void => {
+        if (!delta) return;
+        this.hub.publish(input.conversationId, {
+          type: SseType.TOOL_INVOCATION_PROGRESS,
+          chatEntryId: entryId,
+          toolName: input.toolName,
+          delta,
+        });
+      };
       output = await this.taskRegistry.run(
         {
           kind: 'tool',
@@ -356,6 +366,7 @@ export class RunToolService {
               entries,
               toolRules: parsedRules,
               signal: taskSignal,
+              onProgress,
             }),
           ),
       );

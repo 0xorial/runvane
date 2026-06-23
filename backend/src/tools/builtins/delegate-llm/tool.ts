@@ -137,7 +137,9 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
         providerSettings,
         params.model_name,
         request,
-        () => {}, // TODO: make it interactive
+        (event) => {
+          if (event.type === 'text_delta') context.onProgress?.(event.delta);
+        },
         context.signal,
       );
     } catch (err) {

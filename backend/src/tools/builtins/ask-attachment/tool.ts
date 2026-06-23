@@ -120,7 +120,15 @@ export class AskAttachmentTool extends BaseTool<AskAttachmentParams, AskAttachme
 
     let completion: LlmCompletion;
     try {
-      completion = await provider.streamCompletion(providerSettings, llm.model, wireRequest, () => {}, context.signal);
+      completion = await provider.streamCompletion(
+        providerSettings,
+        llm.model,
+        wireRequest,
+        (event) => {
+          if (event.type === 'text_delta') context.onProgress?.(event.delta);
+        },
+        context.signal,
+      );
     } catch (err) {
       // Providers wrap aborts as StreamInterruptedError; re-surface as a clean
       // AbortError so the runtime treats it as a cancellation.

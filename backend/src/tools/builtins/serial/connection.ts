@@ -82,6 +82,7 @@ class SerialConnection {
     timeoutMs: number,
     maxBytes: number,
     signal?: AbortSignal,
+    onProgress?: (delta: string) => void,
   ): Promise<{ stdout: string; exitCode: number; truncated: boolean }> {
     const prev = this.lock;
     let release!: () => void;
@@ -96,7 +97,7 @@ class SerialConnection {
         await this.applyShellSetup();
       }
       try {
-        return await this.execRaw(command, timeoutMs, maxBytes, signal);
+        return await this.execRaw(command, timeoutMs, maxBytes, signal, onProgress);
       } catch (firstErr) {
         // A steering/user cancel must not trigger the wedged-session retry.
         if (signal?.aborted) throw firstErr;
@@ -105,7 +106,7 @@ class SerialConnection {
         try {
           await this.connect();
           await this.applyShellSetup();
-          return await this.execRaw(command, timeoutMs, maxBytes, signal);
+          return await this.execRaw(command, timeoutMs, maxBytes, signal, onProgress);
         } catch {
           throw firstErr;
         }
@@ -238,6 +239,7 @@ class SerialConnection {
     timeoutMs: number,
     maxBytes: number,
     signal?: AbortSignal,
+    onProgress?: (delta: string) => void,
   ): Promise<{ stdout: string; exitCode: number; truncated: boolean }> {
     if (!this.socket || this.socket.destroyed) {
       return Promise.reject(new Error('serial_terminal: socket is not connected'));
@@ -294,6 +296,11 @@ class SerialConnection {
         signal.addEventListener('abort', onAbort, { once: true });
       }
 
+      // How much of the output region we have already streamed live, and a
+      // tail we never stream so a half-printed exit marker can't leak as output.
+      let emittedRaw = 0;
+      const EXIT_HOLDBACK = 48;
+
       const poll = () => {
         if (settled) return;
 
@@ -303,14 +310,26 @@ class SerialConnection {
           return;
         }
         const outputStart = startMatch.index + startMatch[0].length;
+        const region = this.buffer.slice(outputStart);
+        const exitMatch = exitRe.exec(region);
 
-        const exitMatch = exitRe.exec(this.buffer.slice(outputStart));
+        // Stream output as it arrives (cleaned). Before the exit marker shows
+        // up, hold back the tail so a forming marker is never emitted.
+        if (onProgress) {
+          const safeEnd = exitMatch ? exitMatch.index : Math.max(0, region.length - EXIT_HOLDBACK);
+          if (safeEnd > emittedRaw) {
+            const delta = cleanOutput(region.slice(emittedRaw, safeEnd));
+            emittedRaw = safeEnd;
+            if (delta) onProgress(delta);
+          }
+        }
+
         if (!exitMatch) {
           setTimeout(poll, 20);
           return;
         }
 
-        const rawOutput = this.buffer.slice(outputStart, outputStart + exitMatch.index);
+        const rawOutput = region.slice(0, exitMatch.index);
         const exitCode = Number.parseInt(exitMatch[1], 10);
         this.buffer = this.buffer.slice(outputStart + exitMatch.index + exitMatch[0].length);
 

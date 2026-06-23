@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   BaseTool,
   type RuleEvaluationResult,
@@ -19,71 +19,77 @@ type BashToolResult = {
   elapsed_ms: number;
 };
 
-function execFileCapped(
+function runBashCommand(
   command: string,
   cwd: string | undefined,
   timeoutMs: number,
   maxOutputBytes: number,
   signal: AbortSignal,
+  onProgress?: (delta: string) => void,
 ): Promise<BashToolResult> {
   const start = Date.now();
   return new Promise((resolve, reject) => {
-    execFile(
-      '/bin/bash',
-      ['-c', command],
-      {
-        cwd: cwd || undefined,
-        timeout: timeoutMs,
-        maxBuffer: maxOutputBytes * 2, // generous buffer; we cap manually below
-        encoding: 'buffer',
-        signal,
-      },
-      (error, stdoutBuf, stderrBuf) => {
-        const elapsed_ms = Date.now() - start;
+    const child = spawn('/bin/bash', ['-c', command], { cwd: cwd || undefined, signal });
 
-        if (error) {
-          const err = error as NodeJS.ErrnoException & { killed?: boolean };
-          // Steering / user cancellation: surface as an AbortError so the
-          // runtime records a clean cancellation (no planner follow-up).
-          if (err.code === 'ABORT_ERR' || err.name === 'AbortError') {
-            reject(Object.assign(new Error('bash: command aborted'), { name: 'AbortError' }));
-            return;
-          }
-          // Timed out: execFile kills the child (killed=true, signal set) and
-          // leaves code null. (The previous `code === 'ETIMEDOUT'` check never
-          // matched, so timeouts were misreported as exit_code 1.)
-          if (err.killed && err.code == null) {
-            resolve({
-              command,
-              exit_code: -1,
-              stdout: '',
-              stderr: `bash: command timed out after ${timeoutMs}ms`,
-              truncated: false,
-              elapsed_ms,
-            });
-            return;
-          }
-        }
+    // Accumulate raw bytes (decode once at the end so multi-byte chars are not
+    // corrupted at chunk boundaries); stream each kept slice live as it arrives.
+    const outChunks: Buffer[] = [];
+    const errChunks: Buffer[] = [];
+    let keptBytes = 0; // combined stdout+stderr budget, matching maxOutputBytes
+    let truncated = false;
+    let timedOut = false;
+    let settled = false;
 
-        // Numeric process exit code; non-numeric codes (e.g. spawn failures or
-        // ERR_CHILD_PROCESS_STDIO_MAXBUFFER) mean "failed" → 1.
-        const rawCode = (error as { code?: unknown } | null)?.code;
-        const exit_code = !error ? 0 : typeof rawCode === 'number' ? rawCode : 1;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
 
-        // Cap output
-        const totalBuf = Buffer.concat([stdoutBuf, stderrBuf]);
-        const truncated = totalBuf.length > maxOutputBytes;
+    const absorb = (chunk: Buffer, sink: Buffer[]): void => {
+      const remaining = maxOutputBytes - keptBytes;
+      if (remaining <= 0) {
+        truncated = true;
+        return;
+      }
+      const slice = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
+      if (chunk.length > remaining) truncated = true;
+      sink.push(slice);
+      keptBytes += slice.length;
+      onProgress?.(slice.toString('utf8'));
+    };
 
-        const stdoutBytes = Math.min(stdoutBuf.length, maxOutputBytes);
-        const remainingBytes = Math.max(0, maxOutputBytes - stdoutBytes);
-        const stderrBytes = Math.min(stderrBuf.length, remainingBytes);
+    child.stdout?.on('data', (chunk: Buffer) => absorb(chunk, outChunks));
+    child.stderr?.on('data', (chunk: Buffer) => absorb(chunk, errChunks));
 
-        const stdout = stdoutBuf.slice(0, stdoutBytes).toString('utf8');
-        const stderr = stderrBuf.slice(0, stderrBytes).toString('utf8');
+    child.once('error', (error: NodeJS.ErrnoException) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // Steering / user cancellation → clean AbortError (no planner follow-up).
+      if (error.code === 'ABORT_ERR' || error.name === 'AbortError' || signal.aborted) {
+        reject(Object.assign(new Error('bash: command aborted'), { name: 'AbortError' }));
+        return;
+      }
+      // Could not spawn the process (bad cwd, missing shell, …).
+      reject(error);
+    });
 
-        resolve({ command, exit_code, stdout, stderr, truncated, elapsed_ms });
-      },
-    );
+    child.once('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const elapsed_ms = Date.now() - start;
+      const stdout = Buffer.concat(outChunks).toString('utf8');
+      let stderr = Buffer.concat(errChunks).toString('utf8');
+      if (timedOut) {
+        stderr += `${stderr ? '\n' : ''}bash: command timed out after ${timeoutMs}ms`;
+        resolve({ command, exit_code: -1, stdout, stderr, truncated, elapsed_ms });
+        return;
+      }
+      // `code` is null when the child was killed by a signal → treat as failure.
+      const exit_code = typeof code === 'number' ? code : 1;
+      resolve({ command, exit_code, stdout, stderr, truncated, elapsed_ms });
+    });
   });
 }
 
@@ -156,6 +162,6 @@ export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
 
     const cwd = params.working_dir ?? (rules.working_dir || undefined);
 
-    return execFileCapped(params.command, cwd, timeoutMs, maxOutputBytes, context.signal);
+    return runBashCommand(params.command, cwd, timeoutMs, maxOutputBytes, context.signal, context.onProgress);
   }
 }

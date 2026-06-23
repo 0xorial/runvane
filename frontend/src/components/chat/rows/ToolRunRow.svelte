@@ -9,7 +9,7 @@
 
   let toggled = $state<boolean | null>(null);
   let approving = $state(false);
-  const expanded = $derived(toggled ?? entry.state === "requested");
+  const expanded = $derived(toggled ?? (entry.state === "requested" || entry.state === "running"));
 
   const toolName = $derived(entry.toolId || "tool");
   const guardrailReason = $derived.by(() => {
@@ -21,6 +21,8 @@
   const paramsText = $derived(stringifyMaybe(entry.parameters));
   const outputText = $derived(entry.result?.output != null ? stringifyMaybe(entry.result.output) : "");
   const errorText = $derived(entry.result?.error ?? "");
+  // Transient live output streamed while the tool runs (see chatSessionStore).
+  const liveOutput = $derived((entry as unknown as { liveOutput?: string }).liveOutput ?? "");
   const statusLabel = $derived(
     guardrailReason
       ? "Guardrail flagged"
@@ -89,6 +91,14 @@
             <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Arguments</span>
             <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{paramsText}</pre>
           </div>
+          {#if entry.state === "running" && liveOutput}
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Live output</span>
+              <pre
+                class="scrollbar-thin mt-1 max-h-40 overflow-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground"
+                data-testid="tool-live-output">{liveOutput}</pre>
+            </div>
+          {/if}
           {#if outputText}
             <div>
               <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Result</span>

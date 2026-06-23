@@ -90,7 +90,7 @@ export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRul
 
     const conn = this.manager.getOrCreate(rules.socket_path, rules);
     // run() serialises concurrent calls, (re)connects, and retries once.
-    const result = await conn.run(params.command, timeoutMs, rules.max_output_bytes, context.signal);
+    const result = await conn.run(params.command, timeoutMs, rules.max_output_bytes, context.signal, context.onProgress);
 
     return {
       command: params.command,

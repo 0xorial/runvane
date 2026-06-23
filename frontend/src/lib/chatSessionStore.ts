@@ -127,6 +127,19 @@ export class ChatSessionStore {
       case SseType.TOOL_INVOCATION_START:
       case SseType.TOOL_INVOCATION_END:
         return;
+      case SseType.TOOL_INVOCATION_PROGRESS: {
+        // Append live output onto the running tool row (same mechanism as
+        // CHAT_ENTRY_DELTA). Transient/ephemeral — replaced by the persisted
+        // result once the entry's final upsert arrives.
+        const row$ = this.rows.getById(ev.chatEntryId);
+        if (!row$) return;
+        row$.mutate((current) => {
+          const row = current as Record<string, unknown>;
+          const prev = typeof row.liveOutput === "string" ? (row.liveOutput as string) : "";
+          row.liveOutput = `${prev}${ev.delta}`;
+        });
+        return;
+      }
       case SseType.MESSAGE_ENQUEUED: {
         const { clientRequestId, text } = ev;
         this.pending$.mutate((state) => {

@@ -25,6 +25,12 @@ export type ToolRunContext = {
   entries: ChatEntry[];
   toolRules?: unknown;
   signal: AbortSignal;
+  /**
+   * Emit incremental progress (stdout, streamed tokens, …) for the live tool
+   * row while the tool runs. Ephemeral — not persisted; the final result is
+   * still the saved output. Optional so non-streaming callers/tests can omit it.
+   */
+  onProgress?: (delta: string) => void;
 };
 
 export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknown>> {

@@ -9,6 +9,7 @@ export const SseType = {
   CHAT_ENTRY_DELTA: 'chat_entry_delta',
   TOOL_INVOCATION_START: 'tool_invocation_start',
   TOOL_INVOCATION_END: 'tool_invocation_end',
+  TOOL_INVOCATION_PROGRESS: 'tool_invocation_progress',
   MESSAGE_ENQUEUED: 'message_enqueued',
   MESSAGE_DEQUEUED: 'message_dequeued',
 } as const;
@@ -97,6 +98,15 @@ export const ToolInvocationEndSsePayloadSchema = z.object({
 });
 export type ToolInvocationEndSsePayload = z.infer<typeof ToolInvocationEndSsePayloadSchema>;
 
+/** Incremental live output from a running tool (stdout, streamed tokens, …). */
+export const ToolInvocationProgressSsePayloadSchema = z.object({
+  type: z.literal(SseType.TOOL_INVOCATION_PROGRESS),
+  chatEntryId: z.string(),
+  toolName: z.string(),
+  delta: z.string(),
+});
+export type ToolInvocationProgressSsePayload = z.infer<typeof ToolInvocationProgressSsePayloadSchema>;
+
 /** A user message held in the per-conversation queue, awaiting drain. */
 export const MessageEnqueuedSsePayloadSchema = z.object({
   type: z.literal(SseType.MESSAGE_ENQUEUED),
@@ -120,6 +130,7 @@ export const SsePayloadSchema = z.discriminatedUnion('type', [
   ChatEntryDeltaSsePayloadSchema,
   ToolInvocationStartSsePayloadSchema,
   ToolInvocationEndSsePayloadSchema,
+  ToolInvocationProgressSsePayloadSchema,
   MessageEnqueuedSsePayloadSchema,
   MessageDequeuedSsePayloadSchema,
 ]);
