@@ -9,6 +9,7 @@
     agents: "Agents",
     tools: "Tools",
     skills: "Skills",
+    rag: "RAG",
   };
 
   let {

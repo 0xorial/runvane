@@ -66,4 +66,17 @@ export interface LlmProvider {
     onEvent: (event: LlmStreamEvent) => void,
     signal?: AbortSignal,
   ): Promise<LlmCompletion>;
+
+  /**
+   * Optional: embed a batch of texts, returning one vector per input in the
+   * same order. Not every provider supports embeddings (e.g. routing-only
+   * backends), so this is optional — callers check for its presence and
+   * surface a clear error when a chosen provider can't embed.
+   */
+  embedTexts?(
+    settings: ProviderSettingsDict,
+    model: string,
+    texts: string[],
+    signal?: AbortSignal,
+  ): Promise<number[][]>;
 }

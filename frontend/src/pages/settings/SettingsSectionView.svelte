@@ -7,6 +7,7 @@
   import ModelPresetsEditor from "./ModelPresetsEditor.svelte";
   import ModelPricingEditor from "./ModelPricingEditor.svelte";
   import ProviderCard from "./ProviderCard.svelte";
+  import RagStoragesSection from "./RagStoragesSection.svelte";
   import SettingsHeader from "./SettingsHeader.svelte";
   import { buildModelGroups, filterProviders, type SettingsSection } from "./helpers";
   import { ghostBtn, settingsPlaceholderBox } from "./settingsClasses";
@@ -92,7 +93,8 @@
     section !== "model-providers" &&
       section !== "model-presets" &&
       section !== "model-pricing" &&
-      section !== "agents",
+      section !== "agents" &&
+      section !== "rag",
   );
 </script>
 
@@ -166,6 +168,8 @@
       Per-agent tool enablement and approval policy: open <strong>Agents</strong> → pick an agent →
       <strong>Tools &amp; permissions</strong>.
     </div>
+  {:else if section === "rag"}
+    <RagStoragesSection />
   {:else}
     <div class={settingsPlaceholderBox}>Skills UI placeholder.</div>
   {/if}

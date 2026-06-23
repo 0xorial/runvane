@@ -7,6 +7,7 @@ import { BashTool } from './builtins/bash/tool.js';
 import { ConversationsTool } from './builtins/conversations/tool.js';
 import { CurlTool } from './builtins/curl/tool.js';
 import { RagSearchTool } from './builtins/rag-search/tool.js';
+import { RagTool } from './builtins/rag/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
 import { FilesystemIndexTool } from './builtins/filesystem-index/tool.js';
@@ -16,10 +17,11 @@ import { SerialTerminalTool } from './builtins/serial/tool.js';
 import { SerialConnectionManager } from './builtins/serial/connection.js';
 import { TOOL_TOKEN, ToolRegistry } from './tool-registry.js';
 import { DatabaseModule } from '../db/database.module.js';
+import { RagModule } from '../rag/rag.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
 
 @Module({
-  imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule],
+  imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule, RagModule],
   providers: [
     GetCurrentTimeTool,
     CurlTool,
@@ -28,6 +30,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     FilesystemIndexStore,
     FilesystemIndexTool,
     RagSearchTool,
+    RagTool,
     ApiTool,
     ConversationsTool,
     DelegateLlmTool,
@@ -44,6 +47,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         FilesystemTool,
         FilesystemIndexTool,
         RagSearchTool,
+        RagTool,
         ApiTool,
         ConversationsTool,
         DelegateLlmTool,

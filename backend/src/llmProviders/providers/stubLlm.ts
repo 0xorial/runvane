@@ -13,6 +13,7 @@ import {
 } from './stubLlm.helpers.js';
 import { instantStubText, streamStubText } from './stubLlm.stream.js';
 import { STUB_E2E_MODELS } from './stubLlm.models.js';
+import { hashEmbedding } from './stubLlm.embeddings.js';
 
 export type StubLlmOptions = {
   /** Default token delay when a queued response omits `streamMs`. */
@@ -87,5 +88,13 @@ export class StubLlmProvider implements LlmProvider, StubLlmControl {
       return instantStubText(text, onEvent);
     }
     return streamStubText(text, streamMs, onEvent, signal);
+  }
+
+  async embedTexts(
+    _settings: ProviderSettingsDict,
+    _model: string,
+    texts: string[],
+  ): Promise<number[][]> {
+    return texts.map((text) => hashEmbedding(text));
   }
 }

@@ -11,6 +11,8 @@ dist/
 .DS_Store
 
 backend/data/
+backend/.rag/
+.rag/
 
 .env
 .env.user

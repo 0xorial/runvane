@@ -12,6 +12,7 @@ export const SETTINGS_SECTIONS = [
   "agents",
   "tools",
   "skills",
+  "rag",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
