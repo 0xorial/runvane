@@ -71,3 +71,15 @@ test("manual move pins the chat; unlocking re-categorizes it", async ({ request 
   // Leave categorization off so it can't perturb later runs.
   await setConversationConfig(request, { enabled: false });
 });
+
+test("conversations page renders with search and a toggleable categorization panel", async ({ app }) => {
+  await app.page.goto("/conversations", { waitUntil: "domcontentloaded" });
+
+  await expect(app.page.getByRole("heading", { name: "Conversations" })).toBeVisible();
+  await expect(app.page.getByTestId("conversations-search")).toBeVisible();
+
+  const panelText = app.page.getByText("Auto-categorize new conversations");
+  await expect(panelText).toBeHidden();
+  await app.page.getByTestId("conversations-settings-toggle").click();
+  await expect(panelText).toBeVisible();
+});
