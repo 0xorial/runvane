@@ -34,7 +34,50 @@ export async function defaultAgentId(request: APIRequestContext): Promise<string
   return agent.id;
 }
 
-type ConversationRow = { id: string; groupId: string | null; title: string | null };
+type ConversationRow = {
+  id: string;
+  groupId: string | null;
+  groupPinned?: boolean;
+  title: string | null;
+};
+
+type ConversationConfig = {
+  enabled: boolean;
+  sidebarRecentLimit: number;
+  seedCategories: string[];
+  prompt: string;
+};
+
+export async function getConversationConfig(request: APIRequestContext): Promise<ConversationConfig> {
+  const res = await request.get(`${apiBaseUrl()}/api/conversations/config`);
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as ConversationConfig;
+}
+
+export async function setConversationConfig(
+  request: APIRequestContext,
+  patch: Partial<ConversationConfig>,
+): Promise<ConversationConfig> {
+  const current = await getConversationConfig(request);
+  const res = await request.put(`${apiBaseUrl()}/api/conversations/config`, {
+    data: { ...current, ...patch },
+  });
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as ConversationConfig;
+}
+
+export async function setConversationGroupPinned(
+  request: APIRequestContext,
+  conversationId: string,
+  pinned: boolean,
+): Promise<ConversationRow> {
+  const res = await request.put(
+    `${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}`,
+    { data: { groupPinned: pinned } },
+  );
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as ConversationRow;
+}
 
 export async function createConversation(
   request: APIRequestContext,

@@ -29,7 +29,7 @@ VALUES (
 INSERT INTO settings (key, value_json, updated_at)
 VALUES (
   'conversation_categorization',
-  '{"enabled":false,"sidebarRecentLimit":20,"seedCategories":["Work","Coding","Personal","Research","Admin"],"prompt":"Classify the conversation into a single short category."}',
+  '{"enabled":false,"sidebarRecentLimit":200,"seedCategories":["Work","Coding","Personal","Research","Admin"],"prompt":"Classify the conversation into a single short category."}',
   datetime('now')
 );
 
