@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
+  import type { ToolEnvironment } from "../../../../backend/src/contracts/tool-environment";
   import AgentIcon from "@/components/ui/AgentIcon.svelte";
   import { createAgentsQuery } from "@/hooks/queries/referenceData";
   import { getAgentColor } from "@/pages/settings/agentColors";
@@ -38,6 +39,15 @@
     replacePath(next ? `${pathOnly}?${next}` : pathOnly);
   }
 
+  function envDescription(env: ToolEnvironment): string {
+    if (env.kind === "none") return "No sandbox — runtime tools are disabled for this chat.";
+    if (env.kind === "ssh" && env.ssh) {
+      const target = `${env.ssh.user ? `${env.ssh.user}@` : ""}${env.ssh.host}${env.ssh.port ? `:${env.ssh.port}` : ""}`;
+      return `Tools run over ssh on ${target}.`;
+    }
+    return "Tools run on the same host as the agentic framework.";
+  }
+
   function enabledToolIds(agent: AgentListItemResponse): string[] {
     const tools = agent.default_llm_configuration?.tools;
     if (!tools) return [];
@@ -62,19 +72,55 @@
 {#if agents.length > 0}
   <div class="flex h-full w-full items-center justify-center px-4 py-8">
     <div class="w-full max-w-3xl">
+      {#snippet envIcon(kind: string)}
+        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
+          {#if kind === "none"}
+            <circle cx="12" cy="12" r="9" />
+            <path d="m5.7 5.7 12.6 12.6" />
+          {:else if kind === "ssh"}
+            <rect x="3" y="4" width="18" height="7" rx="2" />
+            <rect x="3" y="13" width="18" height="7" rx="2" />
+            <path d="M7 7.5h.01M7 16.5h.01" />
+          {:else}
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+            <rect x="9" y="9" width="6" height="6" />
+            <path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" />
+          {/if}
+        </svg>
+      {/snippet}
       {#if environments.length > 1}
-        <div class="mb-3 flex items-center justify-end gap-2">
-          <label for="tool-env-select" class="text-xs text-muted-foreground">Tool environment</label>
-          <select
-            id="tool-env-select"
-            class="rounded-md border border-border bg-card/40 px-2 py-1 text-xs text-foreground focus:border-primary/60 focus:outline-none"
-            bind:value={selectedEnvId}
-            onchange={() => selectEnv(selectedEnvId)}
-          >
+        <div class="mb-4">
+          <div class="mb-1.5 text-xs font-medium text-muted-foreground">Tool environment</div>
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {#each environments as env (env.id)}
-              <option value={env.id}>{env.name}</option>
+              {@const selected = selectedEnvId === env.id}
+              <div
+                role="button"
+                tabindex="0"
+                data-testid="tool-env-card"
+                data-env-id={env.id}
+                aria-pressed={selected}
+                onclick={() => selectEnv(env.id)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    selectEnv(env.id);
+                  }
+                }}
+                class="group flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-card/40 p-2.5 text-left transition-colors hover:border-primary/60 hover:bg-card {selected
+                  ? 'border-primary/70 bg-primary/5'
+                  : ''}"
+              >
+                <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/60 text-foreground">
+                  {@render envIcon(env.kind)}
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium text-foreground">{env.name}</span>
+                  <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{envDescription(env)}</span>
+                </span>
+              </div>
             {/each}
-          </select>
+          </div>
         </div>
       {/if}
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
