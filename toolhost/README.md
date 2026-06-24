@@ -32,6 +32,15 @@ Start with one local in-process instance (current default). The interfaces are
 shared across all three, so going per-chat or remote later is a transport swap,
 not a rewrite.
 
+**Deploying over ssh.** `connectSsh` is the bare primitive: it runs a command on
+the remote (default `runvane-toolhost`) and speaks the protocol over its stdio,
+so used directly the remote must already have a host. Runvane's server fills that
+gap — for an ssh environment with no explicit remote command it ships this `src/`
+tree to the remote (content-hashed into `~/.cache/runvane-toolhost/<hash>`) and
+runs it with `node` type-stripping. The remote then needs only `node` (>=22),
+`tar`, and a POSIX shell — no preinstall. Set a remote command to opt out and
+point at a host you installed yourself.
+
 The server flips between them with a single config via `connectToolHost`:
 
 ```ts

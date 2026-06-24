@@ -15,6 +15,7 @@ import { HostToolProxy, type ConversationToolRouter, type RouterInvokeOptions } 
 import type { InvocationResult } from './protocol.js';
 import { ToolEnvironmentsService } from './tool-environments.service.js';
 import { ToolHostClient, type ToolHostSpawnConfig } from './tool-host-client.js';
+import { deployToolHostOverSsh } from './ssh-deploy.js';
 
 /** The tool-host lives in-repo as a sibling of backend/ and frontend/. */
 const HOST_ENTRY_RELATIVE = 'toolhost/src/host/main.ts';
@@ -107,7 +108,17 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
     const existing = this.clients.get(env.id);
     if (existing) return existing;
 
-    const config = spawnConfigForEnvironment(env);
+    if (env.kind === 'ssh' && env.ssh && !env.ssh.remoteCommand?.trim()) {
+      this.logger.log(`deploying tool-host to "${env.name}" (${env.ssh.host}) over ssh`);
+    }
+
+    let config: ToolHostSpawnConfig | null;
+    try {
+      config = await resolveSpawnConfig(env);
+    } catch (err) {
+      this.logger.warn(`tool environment "${env.name}" deploy failed: ${(err as Error).message}`);
+      return null;
+    }
     if (!config) return null;
 
     const client = new ToolHostClient(config);
@@ -130,20 +141,26 @@ function errorResult(message: string): InvocationResult {
   return { ok: false, output: null, error: message, timing: { startedAt: now, finishedAt: now, elapsedMs: 0 } };
 }
 
-function spawnConfigForEnvironment(env: ToolEnvironment): ToolHostSpawnConfig | null {
+async function resolveSpawnConfig(env: ToolEnvironment): Promise<ToolHostSpawnConfig | null> {
   if (env.kind === 'none') return null;
   if (env.kind === 'ssh' && env.ssh) return sshSpawnConfig(env.ssh);
   return resolveLocalSpawnConfig();
 }
 
-function sshSpawnConfig(ssh: SshEnvironmentConfig): ToolHostSpawnConfig {
+/**
+ * Build the ssh spawn config. With no explicit `remoteCommand`, the in-repo
+ * tool-host source is shipped to the remote first (see ssh-deploy) and run via
+ * node — so a bare container works with no preinstall. A `remoteCommand` opts
+ * out: the remote is assumed to already expose a host on its PATH.
+ */
+async function sshSpawnConfig(ssh: SshEnvironmentConfig): Promise<ToolHostSpawnConfig> {
   const destination = ssh.user ? `${ssh.user}@${ssh.host}` : ssh.host;
-  const remote = ssh.remoteCommand?.trim() || 'runvane-toolhost';
-  const args = ['-T', '-o', 'BatchMode=yes'];
-  if (ssh.port) args.push('-p', String(ssh.port));
-  if (ssh.identityFile) args.push('-i', ssh.identityFile);
-  args.push(destination, remote);
-  return { command: 'ssh', args };
+  const baseArgs = ['-T', '-o', 'BatchMode=yes'];
+  if (ssh.port) baseArgs.push('-p', String(ssh.port));
+  if (ssh.identityFile) baseArgs.push('-i', ssh.identityFile);
+  baseArgs.push(destination);
+  const remote = ssh.remoteCommand?.trim() || (await deployToolHostOverSsh(baseArgs));
+  return { command: 'ssh', args: [...baseArgs, remote] };
 }
 
 /**

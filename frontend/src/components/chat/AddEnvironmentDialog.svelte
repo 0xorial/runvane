@@ -102,7 +102,7 @@
         </label>
         <label class="flex flex-col gap-1 text-xs">
           <span class="font-semibold text-foreground">Remote command (optional)</span>
-          <input class={inputClass} bind:value={remoteCommand} placeholder="runvane-toolhost" />
+          <input class={inputClass} bind:value={remoteCommand} placeholder="blank = auto-deploy the host" />
         </label>
       </div>
 
