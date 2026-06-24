@@ -2,20 +2,38 @@ import {
   BaseTool,
   type RuleEvaluationResult,
   type ToolLocation,
+  type ToolPermissionContext,
   type ToolRunContext,
 } from '../tools/base-tool.js';
-import type { HostToolDescriptor } from './protocol.js';
-import type { ToolHostClient } from './tool-host-client.js';
+import type { ToolEnvironmentKind } from '../contracts/tool-environment.js';
+import type { HostToolDescriptor, InvocationResult } from './protocol.js';
+
+export type RouterInvokeOptions = { signal?: AbortSignal; onProgress?: (delta: string) => void };
 
 /**
- * Exposes a tool-host runtime tool to the brain as a BaseTool. `runTool`
- * delegates over the wire with the run context's signal + onProgress, so
- * run-tool.service runs it inside `taskRegistry.run(...)` exactly like a local
- * tool — giving running-tasks monitoring and cancel propagation for free.
+ * Routes a runtime tool to the tool-host for a given conversation's environment.
+ * Implemented by ToolHostService; the proxy depends only on this interface.
+ */
+export interface ConversationToolRouter {
+  environmentKindForConversation(conversationId: string): Promise<ToolEnvironmentKind>;
+  invokeForConversation(
+    conversationId: string,
+    toolName: string,
+    params: unknown,
+    opts: RouterInvokeOptions,
+  ): Promise<InvocationResult>;
+}
+
+/**
+ * Exposes a tool-host runtime tool to the brain as a BaseTool. Execution is
+ * routed to the conversation's bound environment, so the same registered tool
+ * runs locally, over ssh, or is forbidden (environment `none`) depending on the
+ * conversation. Because run-tool.service runs `runTool` inside
+ * `taskRegistry.run(...)`, monitoring and cancel propagation come for free.
  */
 export class HostToolProxy extends BaseTool {
   constructor(
-    private readonly client: ToolHostClient,
+    private readonly router: ConversationToolRouter,
     private readonly descriptor: HostToolDescriptor,
   ) {
     super();
@@ -57,14 +75,24 @@ export class HostToolProxy extends BaseTool {
     return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   }
 
-  evaluatePermission(): RuleEvaluationResult[] {
-    // The tool runs in the sandbox, not on the host machine, so allow by
-    // default. Agents can still tighten this per-tool via guardrails.
-    return [{ ruleName: 'tool-host', permission: 'allow', detail: 'runtime tool (sandboxed)' }];
+  async evaluatePermission(context: ToolPermissionContext<Record<string, unknown>>): Promise<RuleEvaluationResult[]> {
+    const kind = await this.router.environmentKindForConversation(context.conversationId);
+    if (kind === 'none') {
+      return [
+        {
+          ruleName: 'tool-environment',
+          permission: 'forbid',
+          detail: 'runtime tools are disabled for this conversation (environment: none)',
+        },
+      ];
+    }
+    // Runs in the sandbox, not on the host machine — allow by default; agents
+    // can still tighten this per-tool via guardrails.
+    return [{ ruleName: 'tool-host', permission: 'allow', detail: `runtime tool (${kind})` }];
   }
 
   async runTool(params: unknown, context: ToolRunContext): Promise<unknown> {
-    const result = await this.client.invoke(this.descriptor.name, params, {
+    const result = await this.router.invokeForConversation(context.conversationId, this.descriptor.name, params, {
       signal: context.signal,
       onProgress: context.onProgress,
     });

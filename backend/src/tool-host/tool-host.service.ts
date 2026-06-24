@@ -2,29 +2,44 @@ import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@ne
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  DEFAULT_TOOL_ENVIRONMENT_ID,
+  LOCAL_ENVIRONMENT_ID,
+  type SshEnvironmentConfig,
+  type ToolEnvironment,
+  type ToolEnvironmentKind,
+} from '../contracts/tool-environment.js';
+import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
-import { HostToolProxy } from './host-tool-proxy.js';
+import { HostToolProxy, type ConversationToolRouter, type RouterInvokeOptions } from './host-tool-proxy.js';
+import type { InvocationResult } from './protocol.js';
+import { ToolEnvironmentsService } from './tool-environments.service.js';
 import { ToolHostClient, type ToolHostSpawnConfig } from './tool-host-client.js';
 
 /** The tool-host lives in-repo as a sibling of backend/ and frontend/. */
 const HOST_ENTRY_RELATIVE = 'toolhost/src/host/main.ts';
 
 /**
- * Connects the brain to a tool-host and registers its runtime tools as proxies
- * in the shared ToolRegistry. The host is the in-repo toolhost/ package; the
- * server runs it directly as a local child, or refers to one running externally
- * over ssh (RUNVANE_TOOLHOST_SSH). Best-effort: if the host can't be reached the
- * app still boots, just without runtime tools.
+ * Connects the brain to tool-hosts and registers their runtime tools as proxies
+ * in the shared ToolRegistry. The catalog is enumerated once from the local
+ * host; each conversation's bound environment decides *where* a registered tool
+ * actually runs — locally, over ssh, or not at all (`none`). One client per
+ * environment is started lazily and reused. Best-effort: the app boots even if
+ * no host is reachable, just without runtime tools.
  */
 @Injectable()
-export class ToolHostService implements OnModuleInit, OnModuleDestroy {
+export class ToolHostService implements OnModuleInit, OnModuleDestroy, ConversationToolRouter {
   private readonly logger = new Logger(ToolHostService.name);
-  private client: ToolHostClient | null = null;
+  private readonly clients = new Map<string, ToolHostClient>();
 
-  constructor(private readonly tools: ToolRegistry) {}
+  constructor(
+    private readonly tools: ToolRegistry,
+    private readonly conversations: ConversationsRepo,
+    private readonly environments: ToolEnvironmentsService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
-    const config = resolveSpawnConfig();
+    const config = resolveLocalSpawnConfig();
     if (!config) {
       this.logger.log('tool-host disabled (no host entry found); runtime tools not registered');
       return;
@@ -35,18 +50,16 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy {
       client.start();
       await client.ready();
       const descriptors = await client.listTools();
+      this.clients.set(LOCAL_ENVIRONMENT_ID, client);
       let registered = 0;
       for (const descriptor of descriptors) {
         try {
-          this.tools.register(new HostToolProxy(client, descriptor));
+          this.tools.register(new HostToolProxy(this, descriptor));
           registered += 1;
         } catch (err) {
-          // A name collision with a built-in tool just means we keep the local
-          // one; log and move on rather than failing startup.
           this.logger.warn(`skipping host tool ${descriptor.name}: ${(err as Error).message}`);
         }
       }
-      this.client = client;
       this.logger.log(`tool-host connected via ${config.command}; registered ${registered} runtime tool(s)`);
     } catch (err) {
       this.logger.warn(`tool-host unavailable: ${(err as Error).message}; continuing without runtime tools`);
@@ -55,17 +68,88 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client?.close();
-    this.client = null;
+    await Promise.all([...this.clients.values()].map((c) => c.close()));
+    this.clients.clear();
+  }
+
+  // ─── ConversationToolRouter ──────────────────────────────────────────────
+
+  async environmentKindForConversation(conversationId: string): Promise<ToolEnvironmentKind> {
+    return (await this.resolveEnvironment(conversationId)).kind;
+  }
+
+  async invokeForConversation(
+    conversationId: string,
+    toolName: string,
+    params: unknown,
+    opts: RouterInvokeOptions,
+  ): Promise<InvocationResult> {
+    const env = await this.resolveEnvironment(conversationId);
+    if (env.kind === 'none') {
+      return errorResult('runtime tools are disabled for this conversation (environment: none)');
+    }
+    const client = await this.clientForEnvironment(env);
+    if (!client) return errorResult(`tool environment "${env.name}" is unavailable`);
+    return client.invoke(toolName, params, opts);
+  }
+
+  // ─── internals ───────────────────────────────────────────────────────────
+
+  private async resolveEnvironment(conversationId: string): Promise<ToolEnvironment> {
+    const envId = conversationId ? await this.conversations.getToolEnvironmentId(conversationId) : null;
+    return this.environments.getOrDefault(envId ?? DEFAULT_TOOL_ENVIRONMENT_ID);
+  }
+
+  /** The connected client for an environment, started + cached on first use. */
+  private async clientForEnvironment(env: ToolEnvironment): Promise<ToolHostClient | null> {
+    const existing = this.clients.get(env.id);
+    if (existing) return existing;
+
+    const config = spawnConfigForEnvironment(env);
+    if (!config) return null;
+
+    const client = new ToolHostClient(config);
+    try {
+      client.start();
+      await client.ready();
+      this.clients.set(env.id, client);
+      this.logger.log(`tool environment "${env.name}" connected via ${config.command}`);
+      return client;
+    } catch (err) {
+      this.logger.warn(`tool environment "${env.name}" failed to connect: ${(err as Error).message}`);
+      await client.close();
+      return null;
+    }
   }
 }
 
+function errorResult(message: string): InvocationResult {
+  const now = new Date().toISOString();
+  return { ok: false, output: null, error: message, timing: { startedAt: now, finishedAt: now, elapsedMs: 0 } };
+}
+
+function spawnConfigForEnvironment(env: ToolEnvironment): ToolHostSpawnConfig | null {
+  if (env.kind === 'none') return null;
+  if (env.kind === 'ssh' && env.ssh) return sshSpawnConfig(env.ssh);
+  return resolveLocalSpawnConfig();
+}
+
+function sshSpawnConfig(ssh: SshEnvironmentConfig): ToolHostSpawnConfig {
+  const destination = ssh.user ? `${ssh.user}@${ssh.host}` : ssh.host;
+  const remote = ssh.remoteCommand?.trim() || 'runvane-toolhost';
+  const args = ['-T', '-o', 'BatchMode=yes'];
+  if (ssh.port) args.push('-p', String(ssh.port));
+  if (ssh.identityFile) args.push('-i', ssh.identityFile);
+  args.push(destination, remote);
+  return { command: 'ssh', args };
+}
+
 /**
- * The single switch the server flips: refer to an external host over ssh, or
- * run one directly as a local child. Returns null when no local host entry is
- * present (so the app boots without runtime tools).
+ * The local built-in environment: run the in-repo host as a child, or — when
+ * RUNVANE_TOOLHOST_SSH is set — point "local" at an external host. Returns null
+ * when no host entry is present (so the app boots without runtime tools).
  */
-function resolveSpawnConfig(): ToolHostSpawnConfig | null {
+function resolveLocalSpawnConfig(): ToolHostSpawnConfig | null {
   const ssh = process.env.RUNVANE_TOOLHOST_SSH?.trim();
   if (ssh) {
     const remote = process.env.RUNVANE_TOOLHOST_REMOTE_CMD?.trim() || 'runvane-toolhost';
