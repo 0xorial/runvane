@@ -5,7 +5,7 @@
   import { getChatSessionStore, retainChatSessionLive } from "@/lib/chatSessionRegistry";
   import type { OptimisticUserMessage } from "@/lib/chatSessionState.svelte";
   import { conversationHasRunningTask, ensureTasksStream } from "@/lib/tasksStore.svelte";
-  import { agentIdFromSearch, replacePath } from "@/lib/router";
+  import { agentIdFromSearch, replacePath, toolEnvironmentIdFromSearch } from "@/lib/router";
   import { onMount } from "svelte";
   import type { ChatAgentSelection } from "./ChatAgentToolbar.svelte";
   import AttachmentChips, { type SelectedAttachment } from "./AttachmentChips.svelte";
@@ -112,7 +112,9 @@
       }
 
       if (!conversationId) {
-        const created = await createConversation();
+        const created = await createConversation({
+          toolEnvironmentId: toolEnvironmentIdFromSearch(search) || undefined,
+        });
         const cid = String(created.id || "").trim();
         if (!cid) throw new Error("createConversation returned no id");
         retainChatSessionLive();

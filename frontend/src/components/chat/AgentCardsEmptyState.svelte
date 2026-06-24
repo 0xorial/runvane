@@ -5,12 +5,38 @@
   import { getAgentColor } from "@/pages/settings/agentColors";
   import { getAgentLlm } from "@/pages/settings/agentLlm";
   import { sortAgents } from "@/pages/settings/helpers";
-  import { replacePath, pathname as pathnameStore } from "@/lib/router";
+  import { replacePath, pathname as pathnameStore, toolEnvironmentIdFromSearch } from "@/lib/router";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { getToolEnvironments } from "@/api/client";
+  import { queryKeys } from "@/hooks/queries/keys";
 
   let { selectedAgentId }: { selectedAgentId: string } = $props();
 
   const agentsQuery = createAgentsQuery();
   const agents = $derived(sortAgents(agentsQuery.data ?? []));
+
+  // Tool environment for the new conversation, persisted in the URL (?env=) so
+  // ChatComposer reads it when it creates the conversation.
+  const envQuery = createQuery(() => ({ queryKey: queryKeys.toolEnvironments, queryFn: getToolEnvironments }));
+  const environments = $derived(envQuery.data ?? []);
+  let selectedEnvId = $state("local");
+  $effect(() => {
+    const path = $pathnameStore;
+    const q = path.indexOf("?");
+    const fromUrl = toolEnvironmentIdFromSearch(q >= 0 ? path.slice(q + 1) : "") || "local";
+    if (fromUrl !== selectedEnvId) selectedEnvId = fromUrl;
+  });
+
+  function selectEnv(envId: string): void {
+    const path = $pathnameStore;
+    const q = path.indexOf("?");
+    const pathOnly = q >= 0 ? path.slice(0, q) : path;
+    const params = new URLSearchParams(q >= 0 ? path.slice(q + 1) : "");
+    if (envId && envId !== "local") params.set("env", envId);
+    else params.delete("env");
+    const next = params.toString();
+    replacePath(next ? `${pathOnly}?${next}` : pathOnly);
+  }
 
   function enabledToolIds(agent: AgentListItemResponse): string[] {
     const tools = agent.default_llm_configuration?.tools;
@@ -35,7 +61,23 @@
 
 {#if agents.length > 0}
   <div class="flex h-full w-full items-center justify-center px-4 py-8">
-    <div class="grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="w-full max-w-3xl">
+      {#if environments.length > 1}
+        <div class="mb-3 flex items-center justify-end gap-2">
+          <label for="tool-env-select" class="text-xs text-muted-foreground">Tool environment</label>
+          <select
+            id="tool-env-select"
+            class="rounded-md border border-border bg-card/40 px-2 py-1 text-xs text-foreground focus:border-primary/60 focus:outline-none"
+            bind:value={selectedEnvId}
+            onchange={() => selectEnv(selectedEnvId)}
+          >
+            {#each environments as env (env.id)}
+              <option value={env.id}>{env.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {#each agents as agent (agent.id)}
         {@const llm = getAgentLlm(agent)}
         {@const model = llm.model.trim()}
@@ -97,6 +139,7 @@
           </a>
         </div>
       {/each}
+      </div>
     </div>
   </div>
 {/if}

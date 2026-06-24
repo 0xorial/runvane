@@ -47,6 +47,10 @@ export function agentIdFromSearch(search: string): string {
   return new URLSearchParams(search).get("agent")?.trim() ?? "";
 }
 
+export function toolEnvironmentIdFromSearch(search: string): string {
+  return new URLSearchParams(search).get("env")?.trim() ?? "";
+}
+
 export function settingsLinkFromSearch(search: string): string {
   const agent = new URLSearchParams(search).get("agent")?.trim();
   if (agent) return `/settings/agents?agent=${encodeURIComponent(agent)}`;

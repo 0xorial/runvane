@@ -42,6 +42,8 @@ import {
 } from "../../../backend/src/contracts/settings";
 import type { ToolCatalogItemResponse } from "../../../backend/src/contracts/system";
 import { validateGetToolsResponse } from "../../../backend/src/contracts/system";
+import type { ToolEnvironment } from "../../../backend/src/contracts/tool-environment";
+import { validateListToolEnvironmentsResponse } from "../../../backend/src/contracts/tool-environment";
 import type { UploadFileResponse } from "../../../backend/src/contracts/uploads";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import { validateUploadFileResponse } from "../../../backend/src/contracts/uploads";
@@ -161,7 +163,7 @@ export async function getConversationDefaultViewLeafEntryId(conversationId: stri
   return raw.length > 0 ? raw : null;
 }
 
-export function createConversation(body: { title?: string } = {}): Promise<ConversationRow> {
+export function createConversation(body: { title?: string; toolEnvironmentId?: string } = {}): Promise<ConversationRow> {
   return sendJson("/api/conversations", "POST", body).then(validatePostConversationsResponse);
 }
 
@@ -507,6 +509,10 @@ export function testLlmProviderConnection(body: {
 
 export function getTools(): Promise<ToolCatalogItemResponse[]> {
   return getJson("/api/tools").then(validateGetToolsResponse);
+}
+
+export function getToolEnvironments(): Promise<ToolEnvironment[]> {
+  return getJson("/api/tool-environments").then((data) => validateListToolEnvironmentsResponse(data).environments);
 }
 
 export function getAgentById(agentId: string): Promise<AgentListItemResponse> {
