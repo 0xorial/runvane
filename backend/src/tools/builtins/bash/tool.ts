@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import {
   BaseTool,
   type RuleEvaluationResult,
+  type ToolLocation,
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../../base-tool.js';
@@ -95,6 +96,10 @@ function runBashCommand(
 
 @Injectable()
 export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
+  getLocation(): ToolLocation {
+    return 'runtime';
+  }
+
   getName(): string {
     return 'bash';
   }

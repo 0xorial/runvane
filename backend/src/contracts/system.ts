@@ -5,6 +5,7 @@ export const ToolCatalogItemResponseSchema = z
     name: z.string(),
     description: z.string().optional(),
     ui: z.boolean().optional(),
+    location: z.enum(['brain', 'runtime']).optional(),
   })
   .passthrough();
 export type ToolCatalogItemResponse = z.infer<typeof ToolCatalogItemResponseSchema>;

@@ -2,6 +2,9 @@ import type { ChatEntry } from '../contracts/chatEntry.js';
 
 export type ToolPermission = 'allow' | 'ask_user' | 'forbid';
 
+/** Where a tool executes — `runtime` tools run in the sandbox/tool-host; `brain` tools run centrally. */
+export type ToolLocation = 'brain' | 'runtime';
+
 export type RuleEvaluationResult = {
   ruleName: string;
   permission: ToolPermission;
@@ -50,6 +53,15 @@ export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknow
   ): Promise<RuleEvaluationResult[]> | RuleEvaluationResult[];
 
   abstract runTool(params: TParams, context: ToolRunContext): Promise<unknown> | unknown;
+
+  /**
+   * Where this tool executes. `runtime` tools run in the sandbox/tool-host;
+   * `brain` tools run centrally (the default). Surfaced to the UI and used to
+   * route execution — override in subclasses that run in the sandbox.
+   */
+  getLocation(): ToolLocation {
+    return 'brain';
+  }
 }
 
 const rank: Record<ToolPermission, number> = {

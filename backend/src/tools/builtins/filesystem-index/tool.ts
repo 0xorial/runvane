@@ -4,6 +4,7 @@ import { realpath } from 'node:fs/promises';
 import {
   BaseTool,
   type RuleEvaluationResult,
+  type ToolLocation,
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../../base-tool.js';
@@ -32,6 +33,10 @@ async function resolveRoots(allowedRoots: string[]): Promise<string[]> {
 
 @Injectable()
 export class FilesystemIndexTool extends BaseTool<FilesystemIndexParams, FilesystemIndexRules> {
+  getLocation(): ToolLocation {
+    return 'runtime';
+  }
+
   constructor(private readonly index: FilesystemIndexStore) {
     super();
   }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   BaseTool,
   type RuleEvaluationResult,
+  type ToolLocation,
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../../base-tool.js';
@@ -34,6 +35,10 @@ type ListDirResult = {
 
 @Injectable()
 export class FilesystemTool extends BaseTool<FilesystemToolParams, FilesystemToolRules> {
+  getLocation(): ToolLocation {
+    return 'runtime';
+  }
+
   getName(): string {
     return 'filesystem';
   }

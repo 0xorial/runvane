@@ -1,4 +1,4 @@
-import type { BaseTool } from './base-tool.js';
+import type { BaseTool, ToolLocation } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
 
 export type ToolCatalogRow = {
@@ -8,6 +8,7 @@ export type ToolCatalogRow = {
   params_schema: unknown;
   rules_schema: unknown;
   default_rules: unknown;
+  location: ToolLocation;
 };
 
 export function toToolCatalogRow(tool: BaseTool): ToolCatalogRow {
@@ -18,6 +19,7 @@ export function toToolCatalogRow(tool: BaseTool): ToolCatalogRow {
     params_schema: tool.getParamsSchema(),
     rules_schema: tool.getRulesSchema(),
     default_rules: tool.getDefaultRules(),
+    location: tool.getLocation(),
   };
 }
 
