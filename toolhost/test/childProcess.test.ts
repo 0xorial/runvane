@@ -20,10 +20,10 @@ test('child process: write then read a file back over stdio', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'toolhost-'));
   const file = join(dir, 'note.txt');
 
-  const written = await client.invoke('write_file', { path: file, content: 'roundtrip ok' });
+  const written = await client.invoke('filesystem', { operation: 'write_file', path: file, content: 'roundtrip ok' });
   assert.equal(written.ok, true, written.error ?? '');
 
-  const read = await client.invoke('read_file', { path: file });
+  const read = await client.invoke('filesystem', { operation: 'read_file', path: file });
   assert.equal(read.ok, true, read.error ?? '');
   assert.equal((read.output as { content: string }).content, 'roundtrip ok');
 

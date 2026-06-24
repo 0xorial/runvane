@@ -54,7 +54,9 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
       let registered = 0;
       for (const descriptor of descriptors) {
         try {
-          this.tools.register(new HostToolProxy(this, descriptor));
+          // Host runtime tools supersede a same-named builtin (one `filesystem`,
+          // env-routed) instead of colliding with it.
+          this.tools.register(new HostToolProxy(this, descriptor), { override: true });
           registered += 1;
         } catch (err) {
           this.logger.warn(`skipping host tool ${descriptor.name}: ${(err as Error).message}`);

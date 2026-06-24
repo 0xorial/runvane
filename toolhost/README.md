@@ -49,7 +49,7 @@ const result = await client.invoke('exec', { command: 'ls -la' }, { onProgress }
 
 Every tool has a **location**:
 
-- `runtime` — touches the sandbox's files/processes (`exec`, `read_file`, …).
+- `runtime` — touches the sandbox's files/processes (`exec`, `filesystem`).
   Lives here, in the host.
 - `brain` — touches central state (`rag_search`, `conversations`, `api`).
   Stays in the brain; never crosses the wire. RAG indexes are local to the

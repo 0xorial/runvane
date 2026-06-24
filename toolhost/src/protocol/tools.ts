@@ -23,10 +23,6 @@ export const TOOL_LOCATION_META: Record<ToolLocation, { label: string; accent: s
  */
 export const DEFAULT_TOOL_LOCATIONS: Record<string, ToolLocation> = {
   exec: 'runtime',
-  read_file: 'runtime',
-  write_file: 'runtime',
-  list_dir: 'runtime',
-  stat: 'runtime',
   filesystem: 'runtime',
   filesystem_index: 'runtime',
   rag_search: 'brain',
