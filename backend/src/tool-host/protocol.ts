@@ -1,6 +1,6 @@
 /**
- * Wire messages for the runvane tool-host, mirroring @runvane/toolhost
- * (/shared/runvane-toolhost). The brain (this backend) speaks these as NDJSON
+ * Wire messages for the runvane tool-host, mirroring the in-repo toolhost/
+ * package. The brain (this backend) speaks these as NDJSON
  * over a child process's stdio. Kept in-tree because the package ships as TS
  * source (run via Node type-stripping) and isn't imported into the Nest build;
  * the backend spawns it as a host process instead.

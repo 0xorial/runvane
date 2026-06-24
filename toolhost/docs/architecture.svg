@@ -1,0 +1,56 @@
+<svg viewBox="0 0 680 462" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+<title>runvane tool-host topology</title>
+<desc>Left: today's model runs the full agent inside each devcontainer, so the api key and untrusted code share a sealed container that still needs LLM egress. Right: the proposed model keeps a central runvane brain that holds the key and talks to the LLM, while each sealed devcontainer runs only a thin tool-host the brain drives with tool-invocation calls and never needs outbound egress.</desc>
+<style>
+  text { fill: #1f2024; }
+  .t { font-size: 14px; }
+  .ts { font-size: 12px; fill: #55585f; }
+  .th { font-size: 14px; font-weight: 500; }
+  .box rect { fill: #f4f5f7; stroke: #d7d9de; stroke-width: .5; }
+  .c-purple rect { fill: #eeedfe; stroke: #534ab7; stroke-width: .5; }
+  .c-purple text { fill: #26215c; }
+  .c-teal rect { fill: #e1f5ee; stroke: #0f6e56; stroke-width: .5; }
+  .c-teal text { fill: #06403a; }
+  .seal { fill: none; stroke: #b9bcc4; stroke-width: .5; stroke-dasharray: 4 3; }
+  .div { stroke: #d7d9de; stroke-width: .5; stroke-dasharray: 3 4; }
+  .arr { stroke: #8a8d94; stroke-width: 1.5; fill: none; }
+  @media (prefers-color-scheme: dark) {
+    text { fill: #e6e7ea; }
+    .ts { fill: #a8abb2; }
+    .box rect { fill: #26282d; stroke: #3a3d44; }
+    .c-purple rect { fill: #2a2660; stroke: #7f77dd; } .c-purple text { fill: #cecbf6; }
+    .c-teal rect { fill: #0c3a30; stroke: #5dcaa5; } .c-teal text { fill: #9fe1cb; }
+    .seal { stroke: #4a4d54; } .div { stroke: #3a3d44; }
+  }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+<line class="div" x1="340" y1="46" x2="340" y2="402"/>
+
+<text x="20" y="28" class="th">today — full agent in the container</text>
+<g class="box"><rect x="105" y="48" width="120" height="34" rx="6"/><text x="165" y="69" class="t" text-anchor="middle">LLM provider</text></g>
+<line class="arr" x1="172" y1="186" x2="166" y2="84" marker-end="url(#arrow)"/>
+<text x="182" y="128" class="ts">egress + key</text>
+<rect class="seal" x="40" y="150" width="270" height="120" rx="8"/>
+<text x="52" y="170" class="ts">devcontainer · sealed</text>
+<g class="c-purple"><rect x="70" y="186" width="210" height="64" rx="6"/><text x="175" y="212" class="th" text-anchor="middle">full agent</text><text x="175" y="232" class="ts" text-anchor="middle">loop · context · tools · key</text></g>
+
+<text x="360" y="28" class="th">your idea — central brain + tool-hosts</text>
+<g class="box"><rect x="450" y="48" width="120" height="34" rx="6"/><text x="510" y="69" class="t" text-anchor="middle">LLM provider</text></g>
+<line class="arr" x1="510" y1="108" x2="510" y2="84" marker-end="url(#arrow)"/>
+<g class="c-purple"><rect x="418" y="108" width="184" height="58" rx="6"/><text x="510" y="132" class="th" text-anchor="middle">runvane brain</text><text x="510" y="151" class="ts" text-anchor="middle">loop · context · db · ui</text></g>
+<line class="arr" x1="470" y1="168" x2="436" y2="212" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<line class="arr" x1="550" y1="168" x2="584" y2="212" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="510" y="194" class="ts" text-anchor="middle">tool-invocation</text>
+<rect class="seal" x="366" y="214" width="132" height="92" rx="8"/>
+<text x="378" y="232" class="ts">devcontainer</text>
+<g class="c-teal"><rect x="380" y="244" width="104" height="50" rx="6"/><text x="432" y="266" class="th" text-anchor="middle">tool-host</text><text x="432" y="283" class="ts" text-anchor="middle">fs · term · exec</text></g>
+<rect class="seal" x="520" y="214" width="132" height="92" rx="8"/>
+<text x="532" y="232" class="ts">devcontainer</text>
+<g class="c-teal"><rect x="534" y="244" width="104" height="50" rx="6"/><text x="586" y="266" class="th" text-anchor="middle">tool-host</text><text x="586" y="283" class="ts" text-anchor="middle">fs · term · exec</text></g>
+
+<g class="c-purple"><rect x="118" y="430" width="14" height="14" rx="3"/></g>
+<text x="140" y="441" class="ts">trusted brain · holds the key</text>
+<g class="c-teal"><rect x="380" y="430" width="14" height="14" rx="3"/></g>
+<text x="402" y="441" class="ts">sealed sandbox · no LLM egress</text>
+</svg>

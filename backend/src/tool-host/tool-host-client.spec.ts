@@ -1,10 +1,12 @@
 import { existsSync } from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
 import type { ChatEntry } from '../contracts/chatEntry.js';
 import { HostToolProxy } from './host-tool-proxy.js';
 import { ToolHostClient } from './tool-host-client.js';
 
-const HOST_ENTRY = process.env.RUNVANE_TOOLHOST_HOST_ENTRY || '/shared/runvane-toolhost/src/host/main.ts';
+const HOST_ENTRY =
+  process.env.RUNVANE_TOOLHOST_HOST_ENTRY || path.resolve(process.cwd(), '../toolhost/src/host/main.ts');
 
 // Exercises the real extracted host (spawned as a child). Skips where the
 // package isn't on disk (e.g. CI that hasn't checked out /shared).

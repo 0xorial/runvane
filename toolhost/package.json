@@ -1,0 +1,23 @@
+{
+  "name": "@runvane/toolhost",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Sandboxed tool-host for runvane: runs runtime tools (fs, exec) behind a small wire protocol so the brain can drive them in-process, as a local child, or over ssh.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "host": "node src/host/main.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.2"
+  }
+}
