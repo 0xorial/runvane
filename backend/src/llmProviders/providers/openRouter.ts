@@ -15,6 +15,7 @@ import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../types.js';
 import {
   OpenAiStreamAccumulator,
   buildOpenRouterBody,
+  fetchLlm,
   ingestOpenAiChunk,
   parseChatCompletionsUsage,
 } from './openAiShared.js';
@@ -235,7 +236,7 @@ export class OpenRouterProvider implements LlmProvider {
       { providerId: this.id, model, baseUrl, requestUrl, turns: request.messages.length },
       '[llm-provider] openrouter completion request sending',
     );
-    const res = await fetch(requestUrl, {
+    const res = await fetchLlm(requestUrl, {
       method: 'POST',
       headers: buildHeaders(settings),
       body: JSON.stringify(buildOpenRouterBody(model, request)),

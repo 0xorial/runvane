@@ -1,10 +1,29 @@
 import {
   buildOpenRouterBody,
+  describeFetchCause,
   isAnthropicOpenRouterModel,
   parseChatCompletionsUsage,
   withAnthropicCacheBreakpoints,
 } from './openAiShared.js';
 import type { LlmRequest } from '../types.js';
+
+describe('describeFetchCause', () => {
+  it('unwraps undici cause code + message from a "fetch failed" TypeError', () => {
+    const err = new TypeError('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:1234'), { code: 'ECONNREFUSED' }),
+    });
+    expect(describeFetchCause(err)).toBe('ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:1234');
+  });
+
+  it('falls back to the cause code alone', () => {
+    const err = new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } });
+    expect(describeFetchCause(err)).toBe('ENOTFOUND');
+  });
+
+  it('falls back to the error message when there is no cause', () => {
+    expect(describeFetchCause(new Error('boom'))).toBe('boom');
+  });
+});
 
 describe('parseChatCompletionsUsage', () => {
   it('reads OpenRouter prompt_tokens_details.cached_tokens', () => {

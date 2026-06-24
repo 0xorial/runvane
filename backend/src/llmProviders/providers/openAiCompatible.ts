@@ -7,7 +7,7 @@ import type {
 } from '../provider.js';
 import { StreamInterruptedError, isAbortError } from '../provider.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmUsage } from '../types.js';
-import { OpenAiStreamAccumulator, buildOpenAiBody, ingestOpenAiChunk, parseChatCompletionsUsage } from './openAiShared.js';
+import { OpenAiStreamAccumulator, buildOpenAiBody, fetchLlm, ingestOpenAiChunk, parseChatCompletionsUsage } from './openAiShared.js';
 
 async function sleep(ms: number) {
   return new Promise<void>((resolve) => {
@@ -144,7 +144,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     );
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (key) headers.Authorization = `Bearer ${key}`;
-    const res = await fetch(requestUrl, {
+    const res = await fetchLlm(requestUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify(buildOpenAiBody(model, request)),

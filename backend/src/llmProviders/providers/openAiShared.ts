@@ -386,6 +386,38 @@ export function mapFinishReason(raw: unknown): LlmFinishReason {
   }
 }
 
+/**
+ * `fetch`, but connection-level failures carry the method, URL, and underlying
+ * cause. undici collapses DNS/connect/TLS/timeout failures into a bare
+ * `TypeError: fetch failed`; this unwraps `error.cause` (e.g. `ECONNREFUSED`,
+ * `ENOTFOUND`, `UND_ERR_CONNECT_TIMEOUT`) so the error shown in the UI is
+ * actionable instead of just "fetch failed". An `AbortError` passes through
+ * untouched so the caller's abort handling still recognises it.
+ */
+export async function fetchLlm(url: string, init: RequestInit & { method?: string }): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw new Error(`${init.method ?? 'GET'} ${url} failed: ${describeFetchCause(error)}`, { cause: error });
+  }
+}
+
+/** Best-effort one-line description of a thrown fetch error's root cause. */
+export function describeFetchCause(error: unknown): string {
+  const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
+  if (cause && typeof cause === 'object') {
+    const c = cause as { code?: unknown; message?: unknown };
+    const code = typeof c.code === 'string' ? c.code : '';
+    const msg = typeof c.message === 'string' ? c.message : '';
+    if (code && msg) return `${code}: ${msg}`;
+    if (code) return code;
+    if (msg) return msg;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
 /** Parse one OpenAI SSE chunk into accumulator events. */
 export function ingestOpenAiChunk(
   chunk: {
