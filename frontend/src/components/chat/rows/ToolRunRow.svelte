@@ -88,6 +88,8 @@
               ? 'bg-teal-500/15 text-teal-600'
               : 'bg-violet-500/15 text-violet-600'}"
             title={locationTitle}
+            data-testid="tool-location"
+            data-tool-location={toolLocation}
           >
             {toolLocation === "runtime" ? "sandbox" : "brain"}
           </span>
