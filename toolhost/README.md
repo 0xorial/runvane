@@ -38,7 +38,9 @@ so used directly the remote must already have a host. Runvane's server fills tha
 gap — for an ssh environment with no explicit remote command it ships this `src/`
 tree to the remote (content-hashed into `~/.cache/runvane-toolhost/<hash>`) and
 runs it with `node` type-stripping. The remote then needs only `node` (>=22),
-`tar`, and a POSIX shell — no preinstall. Set a remote command to opt out and
+`tar`, and a POSIX shell — no preinstall. First contact trusts the remote host
+key (`StrictHostKeyChecking=accept-new`), so a fresh container connects without
+a known_hosts entry. Set a remote command to opt out and
 point at a host you installed yourself.
 
 The server flips between them with a single config via `connectToolHost`:

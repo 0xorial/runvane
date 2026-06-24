@@ -155,7 +155,10 @@ async function resolveSpawnConfig(env: ToolEnvironment): Promise<ToolHostSpawnCo
  */
 async function sshSpawnConfig(ssh: SshEnvironmentConfig): Promise<ToolHostSpawnConfig> {
   const destination = ssh.user ? `${ssh.user}@${ssh.host}` : ssh.host;
-  const baseArgs = ['-T', '-o', 'BatchMode=yes'];
+  // accept-new trusts the host key on first contact (these are sandboxes we're
+  // standing up) but still refuses if a known key later changes. Without it,
+  // BatchMode rejects the unknown key and a fresh container never connects.
+  const baseArgs = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new'];
   if (ssh.port) baseArgs.push('-p', String(ssh.port));
   if (ssh.identityFile) baseArgs.push('-i', ssh.identityFile);
   baseArgs.push(destination);
@@ -172,7 +175,7 @@ function resolveLocalSpawnConfig(): ToolHostSpawnConfig | null {
   const ssh = process.env.RUNVANE_TOOLHOST_SSH?.trim();
   if (ssh) {
     const remote = process.env.RUNVANE_TOOLHOST_REMOTE_CMD?.trim() || 'runvane-toolhost';
-    return { command: 'ssh', args: ['-T', '-o', 'BatchMode=yes', ssh, remote] };
+    return { command: 'ssh', args: ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', ssh, remote] };
   }
 
   const entry = resolveHostEntry();
