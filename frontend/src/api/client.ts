@@ -42,7 +42,7 @@ import {
 } from "../../../backend/src/contracts/settings";
 import type { ToolCatalogItemResponse } from "../../../backend/src/contracts/system";
 import { validateGetToolsResponse } from "../../../backend/src/contracts/system";
-import type { ToolEnvironment } from "../../../backend/src/contracts/tool-environment";
+import type { SshEnvironmentConfig, ToolEnvironment } from "../../../backend/src/contracts/tool-environment";
 import { validateListToolEnvironmentsResponse } from "../../../backend/src/contracts/tool-environment";
 import type { UploadFileResponse } from "../../../backend/src/contracts/uploads";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
@@ -513,6 +513,14 @@ export function getTools(): Promise<ToolCatalogItemResponse[]> {
 
 export function getToolEnvironments(): Promise<ToolEnvironment[]> {
   return getJson("/api/tool-environments").then((data) => validateListToolEnvironmentsResponse(data).environments);
+}
+
+export function createToolEnvironment(body: { name: string; ssh: SshEnvironmentConfig }): Promise<ToolEnvironment> {
+  return sendJson("/api/tool-environments", "POST", body) as Promise<ToolEnvironment>;
+}
+
+export function deleteToolEnvironment(id: string): Promise<void> {
+  return deleteJson(`/api/tool-environments/${encodeURIComponent(id)}`).then(() => undefined);
 }
 
 export function getAgentById(agentId: string): Promise<AgentListItemResponse> {
