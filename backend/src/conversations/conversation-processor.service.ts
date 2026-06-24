@@ -15,6 +15,7 @@ import type { ChatAttachment } from '../contracts/chatEntry.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { ConversationCategorizerService } from './conversation-categorizer.service.js';
 import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { LifecycleScope } from './lifecycle-scope.js';
@@ -49,6 +50,7 @@ export class ConversationProcessorService {
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
+    private readonly categorizer: ConversationCategorizerService,
   ) {}
 
   async approveToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
@@ -445,6 +447,10 @@ export class ConversationProcessorService {
         chain: args.chain,
         llm: args.titleLlm,
       });
+      // Auto-categorize the conversation off the run path: it classifies from
+      // the first user message and assigns a group (unless pinned). Best-effort
+      // and self-contained, so it never blocks or breaks message processing.
+      this.categorizer.categorizeInBackground(args.conversationId);
     }
     const summaryAttachments = args.attachments.filter((a) => a.mode === 'summary');
     if (summaryAttachments.length === 0) {

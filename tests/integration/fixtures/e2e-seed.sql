@@ -24,6 +24,15 @@ VALUES (
   datetime('now')
 );
 
+-- Auto-categorization is OFF by default for tests so it can't perturb specs
+-- that don't opt in; the categorization spec enables it via the settings API.
+INSERT INTO settings (key, value_json, updated_at)
+VALUES (
+  'conversation_categorization',
+  '{"enabled":false,"sidebarRecentLimit":20,"seedCategories":["Work","Coding","Personal","Research","Admin"],"prompt":"Classify the conversation into a single short category."}',
+  datetime('now')
+);
+
 INSERT INTO agents (
   id,
   name,

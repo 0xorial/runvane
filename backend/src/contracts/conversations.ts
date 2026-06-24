@@ -26,6 +26,8 @@ export const ConversationRowSchema = z.object({
   id: z.string(),
   title: z.string(),
   groupId: z.string().nullable(),
+  /** Group assignment is pinned by the user; the auto-categorizer skips it. */
+  groupPinned: z.boolean(),
   isDeleted: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -70,6 +72,12 @@ export const UpdateConversationRequestSchema = z.object({
   title: z.string().min(1).optional(),
   groupId: z.string().min(1).nullable().optional(),
   newGroupName: z.string().min(1).optional(),
+  /**
+   * Pin/unpin the group assignment against the auto-categorizer. A group change
+   * (groupId/newGroupName) always implies a pin; pass this on its own to
+   * pin/unpin without moving. Unpinning re-runs categorization in the background.
+   */
+  groupPinned: z.boolean().optional(),
 });
 export type UpdateConversationRequest = z.infer<typeof UpdateConversationRequestSchema>;
 

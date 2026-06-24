@@ -71,8 +71,15 @@ export function stubHasPlannerToolResult(request: LlmRequest): boolean {
   return request.messages.some((message) => message.parts.some((part) => part.kind === 'tool_result'));
 }
 
+export const STUB_CATEGORY_REPLY = 'Coding';
+
 export function stubIsTitleGenerationRequest(blob: string): boolean {
   return /title this conversation/i.test(blob);
+}
+
+/** Auto-categorizer requests carry this fixed, prompt-independent reminder. */
+export function stubIsCategorizationRequest(blob: string): boolean {
+  return /Reply with ONLY the category name/i.test(blob);
 }
 
 export function stubIsToolParamsRequest(blob: string): boolean {
@@ -245,6 +252,7 @@ export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
   if (stubIsTitleGenerationRequest(blob)) return 'Time Inquiry';
+  if (stubIsCategorizationRequest(blob)) return STUB_CATEGORY_REPLY;
   if (stubIsToolParamsRequest(blob)) {
     if (stubIsAskAttachmentToolParamsRequest(blob)) return stubAskAttachmentParamsReply(blob);
     if (/Produce JSON args for tool "rag"/.test(blob)) {

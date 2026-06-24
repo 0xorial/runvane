@@ -11,11 +11,13 @@ export type { ConversationRow, ConversationGroupRow, GetConversationsResponse };
 export function toConversationRow(
   entity: ConversationEntity,
   tokenUsageByModel: ConversationRow['tokenUsageByModel'] = [],
+  groupPinned = false,
 ): ConversationRow {
   return {
     id: entity.id,
     title: entity.title,
     groupId: entity.groupId,
+    groupPinned,
     isDeleted: entity.isDeleted,
     createdAt: entity.createdAt.toISOString(),
     updatedAt: entity.updatedAt.toISOString(),

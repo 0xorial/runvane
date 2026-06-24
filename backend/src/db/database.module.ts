@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AgentsRepo } from './repositories/agents.repo.js';
+import { AppSettingsRepo } from './repositories/app-settings.repo.js';
 import { ChatEntriesRepo } from './repositories/chat-entries.repo.js';
 import { ConversationsRepo } from './repositories/conversations.repo.js';
 import { LlmProviderSettingsRepo } from './repositories/llm-provider-settings.repo.js';
@@ -16,6 +17,7 @@ import { StreamCursorService } from './stream-cursor.service.js';
     ChatEntriesRepo,
     ConversationsRepo,
     AgentsRepo,
+    AppSettingsRepo,
     LlmProviderSettingsRepo,
     ModelPresetsRepo,
     ModelCapabilitiesRepo,
@@ -27,6 +29,7 @@ import { StreamCursorService } from './stream-cursor.service.js';
     ChatEntriesRepo,
     ConversationsRepo,
     AgentsRepo,
+    AppSettingsRepo,
     LlmProviderSettingsRepo,
     ModelPresetsRepo,
     ModelCapabilitiesRepo,

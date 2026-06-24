@@ -13,6 +13,7 @@ import { ThoughtProcessingService } from '../thoughtProcessing/thought-processin
 import { RunToolService } from '../tools/run-tool.service.js';
 import { ToolsModule } from '../tools/tools.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
+import { ConversationCategorizerService } from './conversation-categorizer.service.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
 import { ConversationsController } from './conversations.controller.js';
 import { ConversationsService } from './conversations.service.js';
@@ -22,6 +23,7 @@ import { ConversationsService } from './conversations.service.js';
   controllers: [ConversationsController],
   providers: [
     ConversationsService,
+    ConversationCategorizerService,
     ThoughtProcessingService,
     ConversationProcessorService,
     PrepareStep,

@@ -176,6 +176,40 @@ export class ConversationsRepo {
   }
 
   /**
+   * Whether the conversation's group assignment is pinned/locked against the
+   * auto-categorizer. Stored in the raw `group_pinned` column (absent from the
+   * generated Prisma client), so read/write goes through raw SQL.
+   */
+  async getGroupPinned(id: string): Promise<boolean> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT group_pinned AS pinned FROM conversations WHERE id = ?`,
+      id,
+    )) as Array<{ pinned: number | bigint | null }>;
+    return Number(rows[0]?.pinned ?? 0) === 1;
+  }
+
+  /** Bulk variant for list endpoints: map of conversationId -> pinned. */
+  async getGroupPinnedByIds(ids: string[]): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>();
+    if (ids.length === 0) return map;
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id, group_pinned AS pinned FROM conversations WHERE id IN (${placeholders})`,
+      ...ids,
+    )) as Array<{ id: string; pinned: number | bigint | null }>;
+    for (const row of rows) map.set(row.id, Number(row.pinned ?? 0) === 1);
+    return map;
+  }
+
+  async setGroupPinned(id: string, pinned: boolean): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE conversations SET group_pinned = ? WHERE id = ?`,
+      pinned ? 1 : 0,
+      id,
+    );
+  }
+
+  /**
    * Fork provenance for a conversation. These columns are written by the split
    * flow and aren't part of the generated Prisma client, so they're read with
    * raw SQL. The source title is resolved live (null if the source is gone).

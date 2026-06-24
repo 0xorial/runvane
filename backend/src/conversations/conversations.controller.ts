@@ -37,6 +37,8 @@ import { CancelPendingMessageDto } from './dto/cancel-pending-message.dto.js';
 import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
 import { SetDefaultViewLeafDto } from './dto/set-default-view-leaf.dto.js';
 import { UpdateConversationDto } from './dto/update-conversation.dto.js';
+import { ConversationCategorizationConfigDto } from './dto/conversation-categorization-config.dto.js';
+import { ConversationCategorizerService } from './conversation-categorizer.service.js';
 import { ConversationProcessorService } from './conversation-processor.service.js';
 import { toClientChatEntry } from '../thoughtProcessing/inputSnapshot.js';
 import { ValidateResponse } from '../validation/validate-response.decorator.js';
@@ -57,6 +59,7 @@ export class ConversationsController {
     private readonly conversationsRepo: ConversationsRepo,
     private readonly chatEntries: ChatEntriesRepo,
     private readonly hub: SseHubService,
+    private readonly categorizer: ConversationCategorizerService,
   ) {}
 
   @Get()
@@ -64,6 +67,18 @@ export class ConversationsController {
   async list(@Query('deleted') deleted?: string) {
     const deletedOnly = deleted === 'only';
     return this.conversations.list({ deletedOnly });
+  }
+
+  // NOTE: declared before the `:conversationId` route so the static `config`
+  // segment isn't captured as a conversation id.
+  @Get('config')
+  async getConfig() {
+    return this.categorizer.getConfig();
+  }
+
+  @Put('config')
+  async putConfig(@Body() body: ConversationCategorizationConfigDto) {
+    return this.categorizer.setConfig(body);
   }
 
   @Get(':conversationId')
@@ -97,8 +112,9 @@ export class ConversationsController {
     const hasTitleUpdate = body.title !== undefined;
     const hasGroupIdUpdate = body.groupId !== undefined;
     const hasNewGroupNameUpdate = body.newGroupName !== undefined;
-    if (!hasTitleUpdate && !hasGroupIdUpdate && !hasNewGroupNameUpdate) {
-      throw new BadRequestException('title or group update is required');
+    const hasGroupPinnedUpdate = body.groupPinned !== undefined;
+    if (!hasTitleUpdate && !hasGroupIdUpdate && !hasNewGroupNameUpdate && !hasGroupPinnedUpdate) {
+      throw new BadRequestException('title, group, or pin update is required');
     }
     if (hasGroupIdUpdate && hasNewGroupNameUpdate) {
       throw new BadRequestException('provide either groupId or newGroupName, not both');
@@ -133,6 +149,17 @@ export class ConversationsController {
       const groupUpdated = await this.conversations.updateGroupName(conversationId, nextGroupName);
       if (!groupUpdated) throw new NotFoundException('conversation not found or deleted');
       updated = groupUpdated;
+    }
+
+    // A manual group move always pins (locks) the assignment so the
+    // auto-categorizer leaves it alone. Otherwise honor an explicit pin/unpin.
+    // Unpinning frees the conversation, so re-run categorization in the background.
+    const groupChanged = hasGroupIdUpdate || hasNewGroupNameUpdate;
+    const pinTarget = groupChanged ? true : hasGroupPinnedUpdate ? body.groupPinned! : undefined;
+    if (pinTarget !== undefined) {
+      const pinned = await this.conversations.setGroupPinned(conversationId, pinTarget);
+      if (pinned) updated = pinned;
+      if (pinTarget === false) this.categorizer.categorizeInBackground(conversationId);
     }
 
     await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);

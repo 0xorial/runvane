@@ -55,6 +55,14 @@ export class ConversationsService {
     return updated ? this.toApiRow(updated) : null;
   }
 
+  /** Pin/unpin the conversation's group against the auto-categorizer. */
+  async setGroupPinned(conversationId: string, pinned: boolean): Promise<ConversationRow | null> {
+    const current = await this.conversations.get(conversationId, { includeDeleted: true });
+    if (!current) return null;
+    await this.conversations.setGroupPinned(conversationId, pinned);
+    return this.toApiRow(current);
+  }
+
   async softDelete(conversationId: string): Promise<ConversationRow | null> {
     const updated = await this.conversations.softDelete(conversationId);
     return updated ? this.toApiRow(updated) : null;
@@ -125,11 +133,12 @@ export class ConversationsService {
    * lives in columns the Prisma client doesn't know about, so it's read here.
    */
   private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
-    const [tokenUsageByModel, forkLink] = await Promise.all([
+    const [tokenUsageByModel, forkLink, groupPinned] = await Promise.all([
       this.chatEntries.tokenUsageByModel(entity.id),
       this.conversations.getForkLink(entity.id),
+      this.conversations.getGroupPinned(entity.id),
     ]);
-    const row = toConversationRow(entity, tokenUsageByModel);
+    const row = toConversationRow(entity, tokenUsageByModel, groupPinned);
     row.defaultViewLeafAnchorId = entity.defaultViewLeafEntryId;
     row.defaultViewLeafEntryId = await this.chatEntries.resolveDefaultViewLeaf(entity.id);
     row.forkedFromConversationId = forkLink.forkedFromConversationId;

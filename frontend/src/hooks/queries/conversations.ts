@@ -76,6 +76,9 @@ export function mergeSseConversation(
 ): ConversationRow {
   return {
     ...incoming,
+    // The SSE row doesn't carry the pin flag; keep the last known value (new
+    // conversations default to unpinned). A REST list refetch corrects it.
+    groupPinned: previous?.groupPinned ?? false,
     defaultViewLeafAnchorId: incoming.defaultViewLeafAnchorId,
     defaultViewLeafEntryId: previous?.defaultViewLeafEntryId ?? null,
     // Fork provenance isn't carried on SSE rows (it's immutable post-creation);
