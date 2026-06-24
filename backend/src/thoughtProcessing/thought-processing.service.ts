@@ -145,21 +145,26 @@ export class ThoughtProcessingService {
     args: {
       conversationId: string;
       sourceEntryId: string;
-      editedRequestText: string;
+      editedRequestText?: string;
       llm?: LlmRef;
     },
     scope: LifecycleScope,
     chain: ChatChain,
   ): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     scope.throwIfAborted();
-    const editedRequestText = args.editedRequestText.trim();
-    if (!editedRequestText) throw new Error('editedRequestText is required');
-    // The editor surface is the JSON of the LlmRequest — what you see is what
-    // gets sent. Parse it eagerly so a malformed edit fails the API call
-    // before we mutate the chain.
-    const request = parseEditedRequest(editedRequestText);
-    const display = requestToDisplay(request);
     const branch = await this.resolvePrepareSource(args.conversationId, args.sourceEntryId);
+    // The edit-the-prompt flow sends the (possibly edited) request text. A
+    // model-only branch or a plain retry sends nothing — reuse the source
+    // prepare entry's own stored request rather than round-tripping it.
+    const sourceText = (args.editedRequestText ?? '').trim() || (branch.requestText ?? '').trim();
+    if (!sourceText) {
+      throw new Error(
+        `cannot reprocess: no edited request supplied and prepare entry ${branch.prepareEntryId} has no stored request`,
+      );
+    }
+    // Parse eagerly so a malformed edit fails the API call before we mutate the chain.
+    const request = parseEditedRequest(sourceText);
+    const display = requestToDisplay(request);
     const provider = await this.resolveProviderForThought(args.conversationId, branch.thoughtId);
     if (branch.inputJson === null) {
       throw new Error(
@@ -253,6 +258,7 @@ export class ThoughtProcessingService {
     parentId: string | null;
     thoughtId: string;
     inputJson: string | null;
+    requestText: string | null;
     llm: LlmRef | null;
   }> {
     const sourceEntry = await this.chatEntries.getChatEntry(conversationId, sourceEntryId);
@@ -265,6 +271,7 @@ export class ThoughtProcessingService {
       parentId: sourceEntry.parentId,
       thoughtId: sourceEntry.thoughtId,
       inputJson: sourceEntry.inputJson ?? null,
+      requestText: sourceEntry.requestText ?? null,
       llm: sourceEntry.llm ?? null,
     };
   }

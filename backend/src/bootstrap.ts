@@ -1,6 +1,7 @@
 import { Logger } from 'nestjs-pino';
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module.js';
@@ -76,7 +77,14 @@ export async function createRunvaneApp(config: RunvaneBootConfig): Promise<Runva
   process.env.PORT = String(config.port);
   process.env.FRONTEND_ORIGIN = config.frontendOrigin;
 
-  const app = await NestFactory.create(AppModule.register(config), { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule.register(config), {
+    bufferLogs: true,
+    bodyParser: false,
+  });
+  // Editing a thought's context (the edit-the-prompt flow) can post a request
+  // body larger than Express's 100kb default; raise it so those don't 413.
+  app.useBodyParser('json', { limit: '16mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '16mb' });
   app.useLogger(app.get(Logger));
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableCors({

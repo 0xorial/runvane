@@ -192,7 +192,7 @@ export class ConversationProcessorService {
   async startReprocessContext(args: {
     conversationId: string;
     sourceEntryId: string;
-    editedRequestText: string;
+    editedRequestText?: string;
     llm?: LlmRef;
   }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     const { scope, chain } = await this.beginRun(args.conversationId);

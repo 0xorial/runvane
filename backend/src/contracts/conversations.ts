@@ -122,7 +122,10 @@ export const SplitConversationRequestSchema = z.object({ entryId: z.string().min
 export type SplitConversationRequest = z.infer<typeof SplitConversationRequestSchema>;
 
 export const ReprocessContextRequestSchema = z.object({
-  editedRequestText: z.string().min(1),
+  // Optional: omit to re-run the thought's stored context unchanged (a model-only
+  // branch or a plain retry — no need to round-trip the whole context). When
+  // present, it replaces the context (the edit-the-prompt flow).
+  editedRequestText: z.string().min(1).optional(),
   llm: LlmRefSchema.optional(),
 });
 export type ReprocessContextRequest = z.infer<typeof ReprocessContextRequestSchema>;

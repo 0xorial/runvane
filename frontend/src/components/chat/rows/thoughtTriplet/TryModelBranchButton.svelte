@@ -37,8 +37,9 @@
     pickerOpen = false;
     isRebranching = true;
     try {
+      // Model-only branch: send just the new model. The server re-runs the
+      // thought's stored context — no need to round-trip the whole thing.
       const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
-        editedRequestText: requestText,
         llm: { providerId: pid, model: modelName },
       });
       await session.setActiveLeaf(result.data.leafEntryId);

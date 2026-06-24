@@ -371,8 +371,10 @@ export async function reprocessThoughtContext(
   conversationId: string,
   entryId: string,
   input: {
-    editedRequestText: string;
-    llm: LlmRef;
+    /** Omit for a model-only branch / plain retry — the server reuses the
+     *  thought's stored context instead of round-tripping it. */
+    editedRequestText?: string;
+    llm?: LlmRef;
   },
 ): Promise<
   PostAcceptedResult<{ conversationId: string; plannerEntryId: string; leafEntryId: string; queuedToolCalls: number }>

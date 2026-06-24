@@ -460,7 +460,7 @@ export class ConversationsController {
       const result = await this.conversationProcessor.startReprocessContext({
         conversationId,
         sourceEntryId: entryId,
-        editedRequestText: body.editedRequestText,
+        ...(body.editedRequestText ? { editedRequestText: body.editedRequestText } : {}),
         ...(body.llm ? { llm: body.llm } : {}),
       });
       return {

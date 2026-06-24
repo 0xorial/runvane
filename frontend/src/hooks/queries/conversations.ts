@@ -86,5 +86,7 @@ export function mergeSseConversation(
     forkedFromConversationId: previous?.forkedFromConversationId ?? null,
     forkedFromEntryId: previous?.forkedFromEntryId ?? null,
     forkedFromConversationTitle: previous?.forkedFromConversationTitle ?? null,
+    // Also not on the SSE row; preserve the cached value (REST refetch corrects).
+    toolEnvironmentId: previous?.toolEnvironmentId ?? null,
   };
 }

@@ -74,8 +74,9 @@
     }
     isRetrying = true;
     try {
+      // Plain retry: reuse the thought's stored context server-side; only the
+      // model ref is sent (cheap), not the whole request payload.
       const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
-        editedRequestText: requestText,
         llm: { providerId, model },
       });
       await session.setActiveLeaf(result.data.leafEntryId);
