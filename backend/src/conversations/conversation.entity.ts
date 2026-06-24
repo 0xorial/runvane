@@ -17,6 +17,7 @@ export type ConversationEntity = z.infer<typeof ConversationEntitySchema>;
 
 export const CreateConversationInputSchema = z.object({
   title: z.string().optional(),
+  toolEnvironmentId: z.string().optional(),
 });
 export type CreateConversationInput = z.infer<typeof CreateConversationInputSchema>;
 

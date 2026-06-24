@@ -32,6 +32,7 @@ export function toConversationRow(
     forkedFromConversationId: null,
     forkedFromEntryId: null,
     forkedFromConversationTitle: null,
+    toolEnvironmentId: null,
     tokenUsageByModel,
   };
 }

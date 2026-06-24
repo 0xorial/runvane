@@ -30,8 +30,8 @@ export class ConversationsService {
     };
   }
 
-  async create(input: { title?: string }): Promise<ConversationRow> {
-    const created = await this.conversations.create({ title: input.title });
+  async create(input: { title?: string; toolEnvironmentId?: string }): Promise<ConversationRow> {
+    const created = await this.conversations.create({ title: input.title, toolEnvironmentId: input.toolEnvironmentId });
     return this.toApiRow(created);
   }
 
@@ -133,10 +133,11 @@ export class ConversationsService {
    * lives in columns the Prisma client doesn't know about, so it's read here.
    */
   private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
-    const [tokenUsageByModel, forkLink, groupPinned] = await Promise.all([
+    const [tokenUsageByModel, forkLink, groupPinned, toolEnvironmentId] = await Promise.all([
       this.chatEntries.tokenUsageByModel(entity.id),
       this.conversations.getForkLink(entity.id),
       this.conversations.getGroupPinned(entity.id),
+      this.conversations.getToolEnvironmentId(entity.id),
     ]);
     const row = toConversationRow(entity, tokenUsageByModel, groupPinned);
     row.defaultViewLeafAnchorId = entity.defaultViewLeafEntryId;
@@ -144,6 +145,7 @@ export class ConversationsService {
     row.forkedFromConversationId = forkLink.forkedFromConversationId;
     row.forkedFromEntryId = forkLink.forkedFromEntryId;
     row.forkedFromConversationTitle = forkLink.forkedFromConversationTitle;
+    row.toolEnvironmentId = toolEnvironmentId;
     return row;
   }
 }

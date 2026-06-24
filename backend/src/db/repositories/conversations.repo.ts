@@ -61,12 +61,22 @@ export class ConversationsRepo {
   }
 
   async create(input: CreateConversationInput = {}): Promise<ConversationEntity> {
-    return this.prisma.conversation.create({
+    const id = crypto.randomUUID();
+    const created = await this.prisma.conversation.create({
       data: {
-        id: crypto.randomUUID(),
+        id,
         title: this.normalizeTitle(input.title),
       },
     });
+    // tool_environment_id is a raw column the generated client doesn't track.
+    if (input.toolEnvironmentId) {
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE conversations SET tool_environment_id = ? WHERE id = ?`,
+        input.toolEnvironmentId,
+        id,
+      );
+    }
+    return created;
   }
 
   async getById(id: string): Promise<ConversationEntity | null> {
@@ -186,6 +196,15 @@ export class ConversationsRepo {
       id,
     )) as Array<{ pinned: number | bigint | null }>;
     return Number(rows[0]?.pinned ?? 0) === 1;
+  }
+
+  /** tool_environment_id is a raw column the generated client doesn't track. */
+  async getToolEnvironmentId(id: string): Promise<string | null> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT tool_environment_id AS envId FROM conversations WHERE id = ?`,
+      id,
+    )) as Array<{ envId: string | null }>;
+    return rows[0]?.envId ?? null;
   }
 
   /** Bulk variant for list endpoints: map of conversationId -> pinned. */
