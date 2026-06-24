@@ -42,6 +42,12 @@ test("new-chat env cards render and bind the environment to the conversation", a
   expect(res.ok()).toBeTruthy();
   const conversation = (await res.json()) as { toolEnvironmentId: string | null };
   expect(conversation.toolEnvironmentId).toBe("none");
+
+  // The chat header surfaces the bound environment next to the title.
+  const headerBadge = page.getByTestId("chat-tool-env");
+  await expect(headerBadge).toBeVisible();
+  await expect(headerBadge).toHaveAttribute("data-env-id", "none");
+  await expect(headerBadge).toContainText("None");
 });
 
 test("add-environment card opens a dialog that creates and selects a new ssh env", async ({ app, page, request }) => {

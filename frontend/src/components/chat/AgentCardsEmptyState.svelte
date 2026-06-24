@@ -12,6 +12,8 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import { queryClient } from "@/lib/queryClient";
   import AddEnvironmentDialog from "./AddEnvironmentDialog.svelte";
+  import ToolEnvironmentIcon from "./ToolEnvironmentIcon.svelte";
+  import { toolEnvironmentDescription } from "@/lib/toolEnvironment";
 
   let { selectedAgentId }: { selectedAgentId: string } = $props();
 
@@ -47,15 +49,6 @@
     selectEnv(env.id);
   }
 
-  function envDescription(env: ToolEnvironment): string {
-    if (env.kind === "none") return "No sandbox — runtime tools are disabled for this chat.";
-    if (env.kind === "ssh" && env.ssh) {
-      const target = `${env.ssh.user ? `${env.ssh.user}@` : ""}${env.ssh.host}${env.ssh.port ? `:${env.ssh.port}` : ""}`;
-      return `Tools run over ssh on ${target}.`;
-    }
-    return "Tools run on the same host as the agentic framework.";
-  }
-
   function enabledToolIds(agent: AgentListItemResponse): string[] {
     const tools = agent.default_llm_configuration?.tools;
     if (!tools) return [];
@@ -80,22 +73,6 @@
 {#if agents.length > 0}
   <div class="flex h-full w-full items-center justify-center px-4 py-8">
     <div class="w-full max-w-3xl">
-      {#snippet envIcon(kind: string)}
-        <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">
-          {#if kind === "none"}
-            <circle cx="12" cy="12" r="9" />
-            <path d="m5.7 5.7 12.6 12.6" />
-          {:else if kind === "ssh"}
-            <rect x="3" y="4" width="18" height="7" rx="2" />
-            <rect x="3" y="13" width="18" height="7" rx="2" />
-            <path d="M7 7.5h.01M7 16.5h.01" />
-          {:else}
-            <rect x="4" y="4" width="16" height="16" rx="2" />
-            <rect x="9" y="9" width="6" height="6" />
-            <path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" />
-          {/if}
-        </svg>
-      {/snippet}
       {#if environments.length > 1}
         <div class="mb-4">
           <div class="mb-1.5 text-xs font-medium text-muted-foreground">Tool environment</div>
@@ -120,11 +97,11 @@
                   : ''}"
               >
                 <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/60 text-foreground">
-                  {@render envIcon(env.kind)}
+                  <ToolEnvironmentIcon kind={env.kind} />
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-sm font-medium text-foreground">{env.name}</span>
-                  <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{envDescription(env)}</span>
+                  <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{toolEnvironmentDescription(env)}</span>
                 </span>
               </div>
             {/each}

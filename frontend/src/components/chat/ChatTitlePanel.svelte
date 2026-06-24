@@ -14,6 +14,7 @@
   import EditableConversationTitle from "./header/EditableConversationTitle.svelte";
   import PanelIconButton from "./header/PanelIconButton.svelte";
   import TaskStatusButton from "./header/TaskStatusButton.svelte";
+  import ChatToolEnvironmentBadge from "./ChatToolEnvironmentBadge.svelte";
 
   let {
     conversationId,
@@ -44,6 +45,8 @@
     queryFn: () => getConversation(conversationId!.trim()),
     enabled: Boolean(conversationId?.trim()),
   }));
+
+  const toolEnvironmentId = $derived(conversationQuery.data?.toolEnvironmentId ?? null);
 
   const pricingQuery = createModelCapabilitiesQuery();
   const pricingByModel = $derived(pricingFromCapabilities(pricingQuery.data));
@@ -132,6 +135,9 @@
         estimatedCostUsd={estimatedCostUsd}
         {unpricedModels}
       />
+      {#if conversationId && conversationQuery.data}
+        <ChatToolEnvironmentBadge {toolEnvironmentId} />
+      {/if}
     </div>
   </div>
   <div class="flex items-center gap-0.5">

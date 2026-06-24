@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { createToolEnvironment, deleteToolEnvironment, getToolEnvironments } from "@/api/client";
-  import type { SshEnvironmentConfig, ToolEnvironment } from "../../../backend/src/contracts/tool-environment";
+  import type { SshEnvironmentConfig, ToolEnvironment } from "../../../../backend/src/contracts/tool-environment";
   import { ghostBtn, ghostDanger } from "./settingsClasses";
 
   let environments = $state<ToolEnvironment[]>([]);
