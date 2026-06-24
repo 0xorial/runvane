@@ -10,6 +10,8 @@
   import { createQuery } from "@tanstack/svelte-query";
   import { getToolEnvironments } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
+  import { queryClient } from "@/lib/queryClient";
+  import AddEnvironmentDialog from "./AddEnvironmentDialog.svelte";
 
   let { selectedAgentId }: { selectedAgentId: string } = $props();
 
@@ -37,6 +39,12 @@
     else params.delete("env");
     const next = params.toString();
     replacePath(next ? `${pathOnly}?${next}` : pathOnly);
+  }
+
+  let addOpen = $state(false);
+  async function onEnvCreated(env: ToolEnvironment): Promise<void> {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.toolEnvironments });
+    selectEnv(env.id);
   }
 
   function envDescription(env: ToolEnvironment): string {
@@ -120,9 +128,21 @@
                 </span>
               </div>
             {/each}
+            <button
+              type="button"
+              data-testid="tool-env-add"
+              onclick={() => (addOpen = true)}
+              class="group flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-border bg-transparent p-2.5 text-left transition-colors hover:border-primary/60 hover:bg-card/40"
+            >
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/40 text-muted-foreground">
+                <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              </span>
+              <span class="text-sm font-medium text-muted-foreground">Add environment</span>
+            </button>
           </div>
         </div>
       {/if}
+      <div class="mb-1.5 text-xs font-medium text-muted-foreground">Agent</div>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {#each agents as agent (agent.id)}
         {@const llm = getAgentLlm(agent)}
@@ -188,4 +208,5 @@
       </div>
     </div>
   </div>
+  <AddEnvironmentDialog open={addOpen} onOpenChange={(o) => (addOpen = o)} onCreated={onEnvCreated} />
 {/if}
