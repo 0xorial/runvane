@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { ChatTranscript } from "./ChatTranscript";
 import { UserInput } from "./UserInput";
 
@@ -9,6 +9,20 @@ export class ChatPage {
   constructor(private readonly page: Page) {
     this.userInput = new UserInput(page);
     this.transcript = new ChatTranscript(page);
+  }
+
+  get forkedFromBanner(): Locator {
+    return this.page.getByTestId("forked-from-banner");
+  }
+
+  /** Wait until the URL points at a conversation other than `fromId`, then
+   * return the new conversation id (used after a split navigates away). */
+  async waitForConversationChange(fromId: string): Promise<string> {
+    await this.page.waitForURL((url) => {
+      const id = url.pathname.match(/\/chat\/([^/?#]+)/)?.[1];
+      return id != null && id !== "new" && id !== fromId;
+    });
+    return this.conversationIdFromUrl();
   }
 
   async gotoNew(agentId: string): Promise<void> {

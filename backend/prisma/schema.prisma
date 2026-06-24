@@ -19,9 +19,12 @@ model Conversation {
   cachedPromptTokensTotal Int               @default(0) @map("cached_prompt_tokens_total")
   completionTokensTotal   Int               @default(0) @map("completion_tokens_total")
   defaultViewLeafEntryId  String?           @map("default_view_leaf_entry_id")
+  forkedFromConversationId String?          @map("forked_from_conversation_id")
+  forkedFromEntryId       String?           @map("forked_from_entry_id")
   group                   ConversationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   chatEntries             ChatEntry[]
 
+  @@index([forkedFromConversationId])
   @@map("conversations")
 }
 

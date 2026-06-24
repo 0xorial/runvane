@@ -336,4 +336,123 @@ export class ChatEntriesBaseRepo {
       ),
     );
   }
+
+  /**
+   * Move the subtree rooted at `rootEntryId` out of `sourceConversationId` and
+   * into the (empty, pre-created) `targetConversationId`, recording fork
+   * provenance on the target. This is the data half of "split from here":
+   *
+   *  - the root + every descendant (by `parent_id`) are reassigned to the
+   *    target and re-indexed 0..n-1 in their original order;
+   *  - the root is detached (`parent_id = NULL`) so it becomes a target root;
+   *  - the target's fork columns point back at the source and at the entry the
+   *    split detached from (the root's former parent, which stays in the
+   *    source) so the UI can render a "forked from" link;
+   *  - the target's view anchor follows the branch the user was viewing if it
+   *    moved, else the new root; the source's anchor is repaired if it pointed
+   *    into the moved subtree (so the source no longer resolves to a gone leaf).
+   *
+   * All in one txn that bumps the stream cursor once, so the SSE watermark
+   * advances and a fresh snapshot for either conversation reflects the move.
+   */
+  async splitOffSubtree(
+    sourceConversationId: string,
+    rootEntryId: string,
+    targetConversationId: string,
+  ): Promise<{ rootEntryId: string; forkParentEntryId: string | null; movedCount: number }> {
+    const result = await this.withAppendLock(sourceConversationId, () =>
+      this.prisma.$transaction(async (tx) => {
+        const rootRows = (await tx.$queryRawUnsafe(
+          `SELECT parent_id AS parentId FROM chat_entries WHERE conversation_id = ? AND id = ? LIMIT 1`,
+          sourceConversationId,
+          rootEntryId,
+        )) as Array<{ parentId: string | null }>;
+        if (rootRows.length === 0) {
+          throw new Error(`entry not found in conversation: ${rootEntryId}`);
+        }
+        const forkParentEntryId = rootRows[0]?.parentId ?? null;
+
+        const anchorRows = (await tx.$queryRawUnsafe(
+          `SELECT default_view_leaf_entry_id AS anchor FROM conversations WHERE id = ?`,
+          sourceConversationId,
+        )) as Array<{ anchor: string | null }>;
+        const sourceAnchor = anchorRows[0]?.anchor ?? null;
+
+        const subtreeRows = (await tx.$queryRawUnsafe(
+          `WITH RECURSIVE sub(id) AS (
+             SELECT id FROM chat_entries WHERE conversation_id = ? AND id = ?
+             UNION ALL
+             SELECT e.id FROM chat_entries e JOIN sub ON e.parent_id = sub.id
+             WHERE e.conversation_id = ?
+           )
+           SELECT e.id FROM chat_entries e JOIN sub ON sub.id = e.id
+           WHERE e.conversation_id = ?
+           ORDER BY e.conversation_index ASC`,
+          sourceConversationId,
+          rootEntryId,
+          sourceConversationId,
+          sourceConversationId,
+        )) as Array<{ id: string }>;
+        const movedIds = subtreeRows.map((r) => r.id);
+        const movedSet = new Set(movedIds);
+
+        let index = 0;
+        for (const id of movedIds) {
+          await tx.$executeRawUnsafe(
+            `UPDATE chat_entries SET conversation_id = ?, conversation_index = ? WHERE conversation_id = ? AND id = ?`,
+            targetConversationId,
+            index,
+            sourceConversationId,
+            id,
+          );
+          index += 1;
+        }
+        await tx.$executeRawUnsafe(
+          `UPDATE chat_entries SET parent_id = NULL WHERE conversation_id = ? AND id = ?`,
+          targetConversationId,
+          rootEntryId,
+        );
+
+        const now = new Date().toISOString();
+        // Target: record provenance, anchor on the viewed branch if it moved.
+        const targetAnchor = sourceAnchor && movedSet.has(sourceAnchor) ? sourceAnchor : rootEntryId;
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET forked_from_conversation_id = ?, forked_from_entry_id = ?,
+               default_view_leaf_entry_id = ?, last_message_at = ?, updated_at = ?
+           WHERE id = ?`,
+          sourceConversationId,
+          forkParentEntryId,
+          targetAnchor,
+          now,
+          now,
+          targetConversationId,
+        );
+        // Source: drop a dangling anchor back to the detach point; always bump updated_at.
+        if (sourceAnchor && movedSet.has(sourceAnchor)) {
+          await tx.$executeRawUnsafe(
+            `UPDATE conversations SET default_view_leaf_entry_id = ?, updated_at = ? WHERE id = ?`,
+            forkParentEntryId,
+            now,
+            sourceConversationId,
+          );
+        } else {
+          await tx.$executeRawUnsafe(
+            `UPDATE conversations SET updated_at = ? WHERE id = ?`,
+            now,
+            sourceConversationId,
+          );
+        }
+
+        const seq = await bumpCursor(tx);
+        return { forkParentEntryId, movedCount: movedIds.length, seq };
+      }),
+    );
+    this.cursor.note(result.seq);
+    return {
+      rootEntryId,
+      forkParentEntryId: result.forkParentEntryId,
+      movedCount: result.movedCount,
+    };
+  }
 }

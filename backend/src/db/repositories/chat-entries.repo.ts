@@ -273,6 +273,41 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     );
   }
 
+  /**
+   * Re-sum the stored conversation token counters straight from the llm_stream
+   * entries, mirroring exactly what `addTokenUsage` accumulated during the run
+   * (raw `promptTokens` / `cachedPromptTokens` / `completionTokens`). Used after
+   * a split moves entries between conversations so both totals stay truthful.
+   */
+  async rawTokenTotals(
+    conversationId: string,
+  ): Promise<{ promptTokens: number; cachedPromptTokens: number; completionTokens: number }> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT payload_json
+       FROM chat_entries
+       WHERE conversation_id = ? AND type LIKE '%llm_stream%'`,
+      conversationId,
+    )) as Array<{ payload_json: string }>;
+    let promptTokens = 0;
+    let cachedPromptTokens = 0;
+    let completionTokens = 0;
+    for (const row of rows) {
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const p = payload.promptTokens;
+      const c = payload.cachedPromptTokens;
+      const comp = payload.completionTokens;
+      if (typeof p === 'number' && Number.isFinite(p)) promptTokens += Math.trunc(p);
+      if (typeof c === 'number' && Number.isFinite(c)) cachedPromptTokens += Math.trunc(c);
+      if (typeof comp === 'number' && Number.isFinite(comp)) completionTokens += Math.trunc(comp);
+    }
+    return { promptTokens, cachedPromptTokens, completionTokens };
+  }
+
   async tokenUsageByModel(conversationId: string): Promise<ConversationRow['tokenUsageByModel']> {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT payload_json

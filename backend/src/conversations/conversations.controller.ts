@@ -31,6 +31,7 @@ import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-helpers.js';
 import { ConversationsService } from './conversations.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto.js';
+import { SplitConversationDto } from './dto/split-conversation.dto.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { CancelPendingMessageDto } from './dto/cancel-pending-message.dto.js';
 import { ReprocessContextDto } from './dto/reprocess-context.dto.js';
@@ -136,6 +137,56 @@ export class ConversationsController {
 
     await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);
     return updated;
+  }
+
+  @Post(':conversationId/split')
+  @HttpCode(201)
+  @ValidateResponse(ConversationRowSchema)
+  async split(
+    @Param('conversationId') conversationId: string,
+    @Body() body: SplitConversationDto,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+
+    let created;
+    try {
+      created = await this.conversations.split(conversationId, body.entryId);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to split conversation';
+      if (detail.startsWith('entry not found')) throw new NotFoundException(detail);
+      throw new BadRequestException(detail);
+    }
+
+    // New conversation shows up in the sidebar.
+    const createdEntity = await this.conversationsRepo.get(created.id);
+    if (createdEntity) {
+      this.hub.publish(created.id, {
+        type: SseType.CONVERSATION_CREATED,
+        conversation: toConversationSseRow(createdEntity, created.tokenUsageByModel),
+      });
+    }
+    // Source conversation: refresh sidebar totals, and push a fresh transcript
+    // snapshot so any open view of it drops the entries that just moved out.
+    await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);
+    await this.publishConversationSnapshot(conversationId);
+
+    return created;
+  }
+
+  /** Re-broadcast the full entry snapshot for a conversation onto its live
+   * stream (used after a split mutates which entries belong to it). */
+  private async publishConversationSnapshot(conversationId: string): Promise<void> {
+    const [snap, conversation] = await Promise.all([
+      this.chatEntries.snapshot(conversationId),
+      this.conversations.get(conversationId, { includeDeleted: true }),
+    ]);
+    this.hub.publish(conversationId, {
+      type: SseType.CONVERSATION_SNAPSHOT,
+      entries: snap.entries.map(toClientChatEntry),
+      leafId: conversation?.defaultViewLeafEntryId ?? null,
+      anchorId: conversation?.defaultViewLeafAnchorId ?? null,
+    });
   }
 
   @Delete(':conversationId')

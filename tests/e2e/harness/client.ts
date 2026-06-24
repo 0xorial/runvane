@@ -9,6 +9,8 @@ export const STUB_ASK_ATTACHMENT_REPLY =
   "Dominant palette: deep violet on pure black. Mood: precise, technical, premium — suited to developer tooling.";
 export const FOLD_MSG_ONE = "e2e fold message one";
 export const FOLD_MSG_TWO = "e2e fold message two";
+export const SPLIT_MSG_ONE = "e2e split alpha message";
+export const SPLIT_MSG_TWO = "e2e split bravo message";
 export const USER_MSG_HELLO = "hello e2e user message";
 export const ATTACHMENT_MSG = "see attached e2e notes";
 export const GUARDED_AGENT_ID = "e2e00000-0000-4000-8000-000000000002";

@@ -2,6 +2,7 @@
   import ChatTranscript from "@/components/chat/ChatTranscript.svelte";
   import ChatComposer from "@/components/chat/ChatComposer.svelte";
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
+  import ForkedFromBanner from "@/components/chat/ForkedFromBanner.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
@@ -98,6 +99,7 @@
     onOpenSettings={openSettings}
     {settingsPressed}
   />
+  <ForkedFromBanner {conversationId} />
   {#if rightSidebarVisible}
     <PaneGroup direction="horizontal" autoSaveId="chat-right-branches-layout" class="min-h-0 min-w-0 flex-1">
       <Pane minSize={30} class="flex min-h-0 min-w-0 flex-col overflow-hidden">

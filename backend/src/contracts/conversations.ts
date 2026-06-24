@@ -37,6 +37,12 @@ export const ConversationRowSchema = z.object({
   defaultViewLeafAnchorId: z.string().nullable(),
   /** Resolved live tip of the anchored branch (API convenience). */
   defaultViewLeafEntryId: z.string().nullable(),
+  /** Source conversation this one was split out of, or null if created normally. */
+  forkedFromConversationId: z.string().nullable(),
+  /** Entry in the source the split detached from (the parent left behind), or null. */
+  forkedFromEntryId: z.string().nullable(),
+  /** Live title of the source conversation, for the "forked from" link (null if gone). */
+  forkedFromConversationTitle: z.string().nullable(),
   tokenUsageByModel: z.array(ConversationTokenUsageByModelSchema),
 });
 export type ConversationRow = z.infer<typeof ConversationRowSchema>;
@@ -97,6 +103,10 @@ export type CancelPendingMessageRequest = z.infer<typeof CancelPendingMessageReq
 
 export const SetConversationActiveLeafRequestSchema = z.object({ entryId: z.string().min(1) });
 export type SetConversationActiveLeafRequest = z.infer<typeof SetConversationActiveLeafRequestSchema>;
+
+/** Split the subtree rooted at `entryId` out into a brand-new conversation. */
+export const SplitConversationRequestSchema = z.object({ entryId: z.string().min(1) });
+export type SplitConversationRequest = z.infer<typeof SplitConversationRequestSchema>;
 
 export const ReprocessContextRequestSchema = z.object({
   editedRequestText: z.string().min(1),

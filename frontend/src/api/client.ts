@@ -226,6 +226,15 @@ export async function setConversationDefaultViewLeaf(
   };
 }
 
+/** Split the subtree rooted at `entryId` into a brand-new conversation that
+ * links back to this one. Returns the newly created conversation row. */
+export async function splitConversation(conversationId: string, entryId: string): Promise<ConversationRow> {
+  const result = await postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/split`, {
+    entryId,
+  });
+  return validateConversationRowResponse(result.data, "POST /api/conversations/:id/split");
+}
+
 export async function postConversationMessage(
   conversationId: string,
   body: PostConversationMessageInput,

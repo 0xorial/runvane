@@ -78,5 +78,10 @@ export function mergeSseConversation(
     ...incoming,
     defaultViewLeafAnchorId: incoming.defaultViewLeafAnchorId,
     defaultViewLeafEntryId: previous?.defaultViewLeafEntryId ?? null,
+    // Fork provenance isn't carried on SSE rows (it's immutable post-creation);
+    // keep whatever the authoritative GET /:id fetch already cached.
+    forkedFromConversationId: previous?.forkedFromConversationId ?? null,
+    forkedFromEntryId: previous?.forkedFromEntryId ?? null,
+    forkedFromConversationTitle: previous?.forkedFromConversationTitle ?? null,
   };
 }

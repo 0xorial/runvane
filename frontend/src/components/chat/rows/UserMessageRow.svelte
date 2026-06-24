@@ -9,6 +9,7 @@
   import BranchSelector from "../BranchSelector.svelte";
   import ChatMessageShell from "../ChatMessageShell.svelte";
   import FoldFromHereButton from "./FoldFromHereButton.svelte";
+  import SplitFromHereButton from "./SplitFromHereButton.svelte";
 
   let { entry, conversationId }: { entry: UserMessageEntry; conversationId: string } = $props();
 
@@ -79,6 +80,7 @@
       <BranchSelector entryId={entry.id} />
       {#if !isEditing}
         <FoldFromHereButton {conversationId} entryId={entry.id} />
+        <SplitFromHereButton {conversationId} entryId={entry.id} />
       {/if}
       {#if canEdit && !isEditing}
         <button

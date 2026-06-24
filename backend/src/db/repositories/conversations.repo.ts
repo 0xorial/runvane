@@ -139,6 +139,12 @@ export class ConversationsRepo {
     return true;
   }
 
+  /** Delete unconditionally (cascades to chat entries). Used to clean up a
+   * half-created split target when the subtree move fails. */
+  async hardDeleteRegardless(id: string): Promise<void> {
+    await this.prisma.conversation.delete({ where: { id } });
+  }
+
   async addTokenUsage(
     id: string,
     tokens: { promptTokens: number; cachedPromptTokens: number; completionTokens: number },
@@ -151,5 +157,48 @@ export class ConversationsRepo {
         completionTokensTotal: { increment: tokens.completionTokens },
       },
     });
+  }
+
+  /** Overwrite the stored token counters (used after a split moves entries away). */
+  async setTokenTotals(
+    id: string,
+    tokens: { promptTokens: number; cachedPromptTokens: number; completionTokens: number },
+  ): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE conversations
+       SET prompt_tokens_total = ?, cached_prompt_tokens_total = ?, completion_tokens_total = ?
+       WHERE id = ?`,
+      Math.max(0, Math.trunc(tokens.promptTokens)),
+      Math.max(0, Math.trunc(tokens.cachedPromptTokens)),
+      Math.max(0, Math.trunc(tokens.completionTokens)),
+      id,
+    );
+  }
+
+  /**
+   * Fork provenance for a conversation. These columns are written by the split
+   * flow and aren't part of the generated Prisma client, so they're read with
+   * raw SQL. The source title is resolved live (null if the source is gone).
+   */
+  async getForkLink(id: string): Promise<{
+    forkedFromConversationId: string | null;
+    forkedFromEntryId: string | null;
+    forkedFromConversationTitle: string | null;
+  }> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT c.forked_from_conversation_id AS fromId,
+              c.forked_from_entry_id AS fromEntry,
+              src.title AS fromTitle
+       FROM conversations c
+       LEFT JOIN conversations src ON src.id = c.forked_from_conversation_id
+       WHERE c.id = ?`,
+      id,
+    )) as Array<{ fromId: string | null; fromEntry: string | null; fromTitle: string | null }>;
+    const row = rows[0];
+    return {
+      forkedFromConversationId: row?.fromId ?? null,
+      forkedFromEntryId: row?.fromEntry ?? null,
+      forkedFromConversationTitle: row?.fromTitle ?? null,
+    };
   }
 }

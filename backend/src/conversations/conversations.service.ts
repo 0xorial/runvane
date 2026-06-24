@@ -85,15 +85,65 @@ export class ConversationsService {
   }
 
   /**
+   * Split the subtree rooted at `entryId` out of `sourceConversationId` into a
+   * brand-new conversation that records where it was forked from. Returns the
+   * new conversation's API row (fork provenance populated). Throws if the entry
+   * doesn't belong to the source.
+   */
+  async split(sourceConversationId: string, entryId: string): Promise<ConversationRow> {
+    const source = await this.conversations.get(sourceConversationId);
+    if (!source) throw new Error(`conversation not found: ${sourceConversationId}`);
+    const rootEntry = await this.chatEntries.getChatEntry(sourceConversationId, entryId);
+    if (!rootEntry) throw new Error(`entry not found in conversation: ${entryId}`);
+
+    const target = await this.conversations.create({ title: deriveSplitTitle(rootEntry, source.title) });
+    try {
+      await this.chatEntries.splitOffSubtree(sourceConversationId, entryId, target.id);
+      await Promise.all([
+        this.recomputeTokenTotals(sourceConversationId),
+        this.recomputeTokenTotals(target.id),
+      ]);
+    } catch (error) {
+      // The move failed; don't leave an orphan empty conversation behind.
+      await this.conversations.hardDeleteRegardless(target.id).catch(() => undefined);
+      throw error;
+    }
+    const created = await this.conversations.get(target.id);
+    if (!created) throw new Error('split target vanished after creation');
+    return this.toApiRow(created);
+  }
+
+  private async recomputeTokenTotals(conversationId: string): Promise<void> {
+    const totals = await this.chatEntries.rawTokenTotals(conversationId);
+    await this.conversations.setTokenTotals(conversationId, totals);
+  }
+
+  /**
    * Map a conversation entity to its API row, replacing the stored anchor
    * with the resolved branch leaf. Anchor is only ever written by user
-   * actions; resolution gives us the live tip of that branch.
+   * actions; resolution gives us the live tip of that branch. Fork provenance
+   * lives in columns the Prisma client doesn't know about, so it's read here.
    */
   private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
-    const tokenUsageByModel = await this.chatEntries.tokenUsageByModel(entity.id);
+    const [tokenUsageByModel, forkLink] = await Promise.all([
+      this.chatEntries.tokenUsageByModel(entity.id),
+      this.conversations.getForkLink(entity.id),
+    ]);
     const row = toConversationRow(entity, tokenUsageByModel);
     row.defaultViewLeafAnchorId = entity.defaultViewLeafEntryId;
     row.defaultViewLeafEntryId = await this.chatEntries.resolveDefaultViewLeaf(entity.id);
+    row.forkedFromConversationId = forkLink.forkedFromConversationId;
+    row.forkedFromEntryId = forkLink.forkedFromEntryId;
+    row.forkedFromConversationTitle = forkLink.forkedFromConversationTitle;
     return row;
   }
+}
+
+/** A readable title for a split-off conversation: the root user message, else a suffix. */
+function deriveSplitTitle(rootEntry: ChatEntry, sourceTitle: string): string {
+  if (rootEntry.type === 'user-message') {
+    const firstLine = (rootEntry.text ?? '').replace(/\s+/g, ' ').trim();
+    if (firstLine) return firstLine.length > 60 ? `${firstLine.slice(0, 57)}…` : firstLine;
+  }
+  return `${sourceTitle} (split)`;
 }

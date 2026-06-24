@@ -133,6 +133,12 @@ export class ChatTranscript {
     await row.getByTestId("fold-from-here").click();
   }
 
+  async splitFromUserMessage(index: number): Promise<void> {
+    const row = this.entry("user-message").nth(index);
+    await expect(row).toBeVisible();
+    await row.getByTestId("split-from-here").click();
+  }
+
   async waitForCheckpointSummary(
     expectedText: string = STUB_SUMMARIZE_REPLY,
     timeoutMs = E2E_LLM_TIMEOUT_MS,

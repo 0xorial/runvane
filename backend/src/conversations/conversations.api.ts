@@ -25,6 +25,11 @@ export function toConversationRow(
     completionTokensTotal: entity.completionTokensTotal,
     defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
     defaultViewLeafEntryId: null,
+    // Fork provenance lives in columns the generated Prisma client doesn't know
+    // about; the service overrides these via a raw lookup in toApiRow.
+    forkedFromConversationId: null,
+    forkedFromEntryId: null,
+    forkedFromConversationTitle: null,
     tokenUsageByModel,
   };
 }
