@@ -41,6 +41,7 @@ export const settingsSection = derived(pathOnly, ($path) => {
 
 export const isChatRoute = derived(pathOnly, ($path) => $path.startsWith("/chat"));
 export const isSettingsRoute = derived(pathOnly, ($path) => $path.startsWith("/settings"));
+export const isConversationsRoute = derived(pathOnly, ($path) => $path.startsWith("/conversations"));
 
 export function agentIdFromSearch(search: string): string {
   return new URLSearchParams(search).get("agent")?.trim() ?? "";

@@ -20,6 +20,7 @@
     selectConversation,
     renameConversation,
     moveConversationToGroup,
+    setGroupPinned,
     softDeleteConversation,
     undeleteConversation,
     permanentlyDeleteConversation,
@@ -37,6 +38,7 @@
       conversation: ConversationRow,
       target: { groupId?: string | null; newGroupName?: string },
     ) => void | Promise<void>;
+    setGroupPinned: (conversation: ConversationRow, pinned: boolean) => void | Promise<void>;
     softDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
     undeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
     permanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
@@ -101,6 +103,9 @@
       <span class="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
         {conversation.title || "Untitled"}
       </span>
+      {#if conversation.groupPinned}
+        <Icon name="lock" class="h-3 w-3 shrink-0 text-muted-foreground" />
+      {/if}
     </div>
     {#if stamp}
       <span class="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
@@ -138,6 +143,7 @@
         closeMenu={() => (menuOpen = false)}
         {renameConversation}
         {moveConversationToGroup}
+        {setGroupPinned}
         {softDeleteConversation}
         {undeleteConversation}
         {permanentlyDeleteConversation}

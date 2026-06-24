@@ -3,6 +3,7 @@
   import ResizableSidePanel from "@/components/ui/ResizableSidePanel.svelte";
   import ChatPage from "@/pages/ChatPage.svelte";
   import SettingsPage from "@/pages/SettingsPage.svelte";
+  import ConversationsPage from "@/pages/ConversationsPage.svelte";
   import ToastHost from "@/components/ToastHost.svelte";
   import ErrorInboxButton from "@/components/ErrorInboxButton.svelte";
   import ThemeToggle from "@/components/ThemeToggle.svelte";
@@ -16,6 +17,7 @@
     settingsSection,
     isChatRoute,
     isSettingsRoute,
+    isConversationsRoute,
     navigate,
     settingsLinkFromSearch,
   } from "@/lib/router";
@@ -83,6 +85,13 @@
             </button>
             <button
               type="button"
+              class="{navBtnBase} {$isConversationsRoute ? navBtnDefault : navBtnOutline}"
+              onclick={() => navigate(`/conversations${$chatSearch}`)}
+            >
+              Conversations
+            </button>
+            <button
+              type="button"
               class="{navBtnBase} {$isSettingsRoute ? navBtnDefault : navBtnOutline}"
               onclick={() => navigate(settingsLinkFromSearch($chatSearch))}
             >
@@ -130,6 +139,8 @@
         <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {#if $isSettingsRoute}
             <SettingsPage sectionRaw={$settingsSection} />
+          {:else if $isConversationsRoute}
+            <ConversationsPage onSelect={onSelectConversation} search={$chatSearch} />
           {:else}
             <div class="p-8 text-sm text-muted-foreground">Unknown route {$pathname}</div>
           {/if}

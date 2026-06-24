@@ -20,6 +20,8 @@ import type {
   GetConversationsResponse,
   PostConversationMessageAcceptedResponse,
 } from "../../../backend/src/contracts/conversations";
+import type { ConversationCategorizationConfig } from "../../../backend/src/contracts/conversation-config";
+import { validateConversationCategorizationConfig } from "../../../backend/src/contracts/conversation-config";
 import {
   validateConversationRowResponse,
   validateGetConversationMessagesResponse,
@@ -165,10 +167,29 @@ export function createConversation(body: { title?: string } = {}): Promise<Conve
 
 export function renameConversation(
   conversationId: string,
-  body: { title?: string; groupId?: string | null; newGroupName?: string },
+  body: { title?: string; groupId?: string | null; newGroupName?: string; groupPinned?: boolean },
 ): Promise<ConversationRow> {
   return sendJson(`/api/conversations/${encodeURIComponent(conversationId)}`, "PUT", body).then((data) =>
     validateConversationRowResponse(data, "PUT /api/conversations/:id"),
+  );
+}
+
+/** Pin (lock) or unpin a conversation's group against the auto-categorizer. */
+export function setConversationGroupPinned(conversationId: string, pinned: boolean): Promise<ConversationRow> {
+  return renameConversation(conversationId, { groupPinned: pinned });
+}
+
+export function getConversationConfig(): Promise<ConversationCategorizationConfig> {
+  return getJson("/api/conversations/config").then((data) =>
+    validateConversationCategorizationConfig(data, "GET /api/conversations/config"),
+  );
+}
+
+export function updateConversationConfig(
+  body: ConversationCategorizationConfig,
+): Promise<ConversationCategorizationConfig> {
+  return sendJson("/api/conversations/config", "PUT", body).then((data) =>
+    validateConversationCategorizationConfig(data, "PUT /api/conversations/config"),
   );
 }
 

@@ -16,6 +16,7 @@
     selectConversation,
     renameConversation,
     moveConversationToGroup,
+    setGroupPinned,
     softDeleteConversation,
     undeleteConversation,
     permanentlyDeleteConversation,
@@ -34,6 +35,7 @@
       conversation: ConversationRow,
       target: { groupId?: string | null; newGroupName?: string },
     ) => void | Promise<void>;
+    setGroupPinned: (conversation: ConversationRow, pinned: boolean) => void | Promise<void>;
     softDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
     undeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
     permanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
@@ -53,6 +55,7 @@
       {selectConversation}
       {renameConversation}
       {moveConversationToGroup}
+      {setGroupPinned}
       {softDeleteConversation}
       {undeleteConversation}
       {permanentlyDeleteConversation}
@@ -79,6 +82,7 @@
           {selectConversation}
           {renameConversation}
           {moveConversationToGroup}
+          {setGroupPinned}
           {softDeleteConversation}
           {undeleteConversation}
           {permanentlyDeleteConversation}

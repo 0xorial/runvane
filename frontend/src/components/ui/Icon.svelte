@@ -23,7 +23,10 @@
       | "x-circle"
       | "folder-input"
       | "folder"
-      | "message-square";
+      | "message-square"
+      | "lock"
+      | "search"
+      | "list";
     class?: string;
     strokeWidth?: number;
   } = $props();
@@ -72,5 +75,11 @@
     <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
   {:else if name === "message-square"}
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  {:else if name === "lock"}
+    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  {:else if name === "search"}
+    <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+  {:else if name === "list"}
+    <path d="M3 12h.01" /><path d="M3 18h.01" /><path d="M3 6h.01" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M8 6h13" />
   {/if}
 </svg>

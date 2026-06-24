@@ -11,6 +11,7 @@
     closeMenu,
     renameConversation,
     moveConversationToGroup,
+    setGroupPinned,
     softDeleteConversation,
     undeleteConversation,
     permanentlyDeleteConversation,
@@ -27,6 +28,7 @@
       conversation: ConversationRow,
       target: { groupId?: string | null; newGroupName?: string },
     ) => void | Promise<void>;
+    setGroupPinned: (conversation: ConversationRow, pinned: boolean) => void | Promise<void>;
     softDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
     undeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
     permanentlyDeleteConversation: (conversation: ConversationRow) => void | Promise<void>;
@@ -148,6 +150,15 @@
           </div>
         {/if}
       </div>
+      <button
+        class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+        title={conversation.groupPinned
+          ? "Let auto-categorization manage this chat's group again"
+          : "Keep this chat in its group; auto-categorization won't move it"}
+        onclick={() => { close(); void setGroupPinned(conversation, !conversation.groupPinned); }}
+      >
+        {conversation.groupPinned ? "Unlock from group" : "Lock to group"}
+      </button>
       <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { close(); void softDeleteConversation(conversation); }}>
         Delete
       </button>
