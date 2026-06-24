@@ -24,8 +24,8 @@ export const BashToolRulesSchema = z
       .int()
       .min(1)
       .max(10000000)
-      .default(100000)
-      .describe('Hard cap on combined stdout+stderr bytes returned.'),
+      .default(20000)
+      .describe('Hard cap on combined stdout+stderr bytes returned (keep modest — this output lands in the model context).'),
   })
   .strict();
 
