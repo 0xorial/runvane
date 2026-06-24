@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { approveToolInvocation } from "@/api/client";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { approveToolInvocation, getTools } from "@/api/client";
+  import { queryKeys } from "@/hooks/queries/keys";
   import type { ToolInvocationEntry } from "@/protocol/chatEntry";
   import { notifyError } from "@/utils/toast";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
@@ -12,6 +14,16 @@
   const expanded = $derived(toggled ?? (entry.state === "requested" || entry.state === "running"));
 
   const toolName = $derived(entry.toolId || "tool");
+  // Where this tool ran — looked up from the catalog so the row shows whether
+  // the call hit the sandbox tool-host or stayed in the brain.
+  const toolsQuery = createQuery(() => ({ queryKey: queryKeys.tools, queryFn: getTools }));
+  const toolLocation = $derived.by(() => {
+    const row = (toolsQuery.data ?? []).find((t) => t.name === toolName);
+    return row?.location === "runtime" || row?.location === "brain" ? row.location : null;
+  });
+  const locationTitle = $derived(
+    toolLocation === "runtime" ? "Runs in the sandbox tool-host" : "Runs in the brain",
+  );
   const guardrailReason = $derived.by(() => {
     const err = entry.result?.error ?? null;
     if (!err) return null;
@@ -70,6 +82,16 @@
         <RowIcon name="chevron" class="h-3 w-3 shrink-0 text-muted-foreground {expanded ? 'rotate-90' : ''}" />
         <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />
         <span class="font-mono font-medium text-foreground">{toolName}</span>
+        {#if toolLocation}
+          <span
+            class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {toolLocation === 'runtime'
+              ? 'bg-teal-500/15 text-teal-600'
+              : 'bg-violet-500/15 text-violet-600'}"
+            title={locationTitle}
+          >
+            {toolLocation === "runtime" ? "sandbox" : "brain"}
+          </span>
+        {/if}
         <span class="ml-auto text-[10px] font-medium {entry.state === 'requested' ? 'text-warning' : 'text-muted-foreground'}">
           {statusLabel}
         </span>
