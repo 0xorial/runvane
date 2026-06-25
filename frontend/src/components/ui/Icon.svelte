@@ -26,7 +26,8 @@
       | "message-square"
       | "lock"
       | "search"
-      | "list";
+      | "list"
+      | "help";
     class?: string;
     strokeWidth?: number;
   } = $props();
@@ -81,5 +82,7 @@
     <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
   {:else if name === "list"}
     <path d="M3 12h.01" /><path d="M3 18h.01" /><path d="M3 6h.01" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M8 6h13" />
+  {:else if name === "help"}
+    <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" />
   {/if}
 </svg>

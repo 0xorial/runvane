@@ -3,7 +3,7 @@
   import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
   import type { LlmSettings } from "@/types/llmSettings";
   import AgentsEditor from "./AgentsEditor.svelte";
-  import GlobalModelSettingsCard from "./GlobalModelSettingsCard.svelte";
+  import SystemSettingsSection from "./SystemSettingsSection.svelte";
   import ModelPresetsEditor from "./ModelPresetsEditor.svelte";
   import ModelPricingEditor from "./ModelPricingEditor.svelte";
   import ProviderCard from "./ProviderCard.svelte";
@@ -108,12 +108,19 @@
     />
   {/if}
 
-  {#if section === "model-providers"}
+  {#if section === "system"}
+    <SystemSettingsSection
+      {settings}
+      {settingsLoading}
+      {modelGroups}
+      {onSettingsChange}
+      {onSaveProviders}
+    />
+  {:else if section === "model-providers"}
     {#if settingsLoading || !settings}
       <p class="text-sm text-muted-foreground">Loading…</p>
     {:else}
       <div class="flex flex-col gap-3">
-        <GlobalModelSettingsCard {settings} {modelGroups} onSettingsChange={onSettingsChange} />
         {#each providerCards as provider (provider.id)}
           <ProviderCard
             provider={provider}

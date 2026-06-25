@@ -3,6 +3,7 @@
   import type { SettingsSection } from "./helpers";
 
   const SECTION_TITLES: Record<SettingsSection, string> = {
+    system: "System",
     "model-providers": "Model Providers",
     "model-presets": "Model Presets",
     "model-pricing": "Model Pricing",

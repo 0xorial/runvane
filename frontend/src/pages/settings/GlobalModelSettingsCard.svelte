@@ -2,6 +2,8 @@
   import type { LlmSettings } from "@/types/llmSettings";
   import type { ModelGroup } from "./helpers";
   import ModelGroupSelect from "./ModelGroupSelect.svelte";
+  import HintTooltip from "@/components/ui/HintTooltip.svelte";
+  import Icon from "@/components/ui/Icon.svelte";
 
   let {
     settings,
@@ -26,7 +28,14 @@
   <div class="grid grid-cols-1 gap-px bg-border md:grid-cols-3">
     <div class="bg-card p-4">
       <div class="flex flex-col gap-1">
-        <div class="text-[13px] font-semibold text-foreground">Reasoning model</div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[13px] font-semibold text-foreground">Reasoning model</span>
+          <HintTooltip
+            content="The model used can be overridden in several places. Precedence, highest first: last user message → agent default → system default (this setting)."
+          >
+            <Icon name="help" class="h-3.5 w-3.5 cursor-help text-muted-foreground" />
+          </HintTooltip>
+        </div>
         <div class="mb-1 text-[12px] leading-snug text-muted-foreground">Used for agent responses and planning.</div>
         <ModelGroupSelect
           value={settings.llm_configuration?.model_name || ""}

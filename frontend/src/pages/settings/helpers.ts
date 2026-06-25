@@ -6,6 +6,7 @@ export function sortAgents(list: AgentListItemResponse[] | null | undefined): Ag
 }
 
 export const SETTINGS_SECTIONS = [
+  "system",
   "model-providers",
   "model-presets",
   "model-pricing",

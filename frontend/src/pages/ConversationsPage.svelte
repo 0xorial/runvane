@@ -113,18 +113,6 @@
         </p>
 
         <label class="block">
-          <span class="mb-1 block font-medium text-foreground">Recent chats shown in the sidebar</span>
-          <input
-            type="number"
-            min="1"
-            max="200"
-            class="w-24 rounded-md border border-border bg-background px-2 py-1"
-            bind:value={draft.sidebarRecentLimit}
-            oninput={() => (dirty = true)}
-          />
-        </label>
-
-        <label class="block">
           <span class="mb-1 block font-medium text-foreground">Seed categories (one per line)</span>
           <textarea
             rows="4"
