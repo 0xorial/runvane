@@ -28,14 +28,17 @@ function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): str
   if (agentSystemPrompt.trim().length > 0) parts.push(agentSystemPrompt.trim());
   parts.push(toolIds.length > 0 ? `Tools: ${toolIds.join(', ')}` : 'Tools: (none)');
   parts.push(
-    'Reply with one JSON object, no markedown, no prose:\n' +
+    'Reply with one JSON object (preferred — it is the only format that lets you set assistant_output and followup explicitly):\n' +
       '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string}], "followup": "finalize"|"continue"}\n' +
       '`assistant_thinking` is a brief summary of your thoughts and plans for the next step. ' +
       '`assistant_output` is the user-facing text of your response. ' +
       '`tool_requests` is an array of tool requests. ' +
       '`followup` is the mode for the next step: "finalize" if you need to finalize the conversation, "continue" if you need to continue the conversation. ' +
-      '`tool_request` is a natural-language brief; a separate agent will fills the JSON args. ' +
-      'Use "continue" only if you need tool results before replying.',
+      '`tool_request` is a natural-language brief; a separate agent then fills the JSON args. ' +
+      'Use "continue" only if you need tool results before replying.\n' +
+      'Code fences or surrounding prose are fine. If that JSON is impractical, you may instead write your reply as prose and ' +
+      'express tool calls in any common format (e.g. <tool_call>{"name": ..., "arguments": ...}</tool_call> or [TOOL_CALLS] [...]); ' +
+      'these are parsed too, and your prose then becomes the user-facing text.',
   );
   return parts.join('\n\n');
 }
