@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { approveToolInvocation, getTools } from "@/api/client";
+  import { approveToolInvocation, denyToolInvocation, getTools } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
   import type { ToolInvocationEntry } from "@/protocol/chatEntry";
   import { notifyError } from "@/utils/toast";
@@ -11,6 +11,7 @@
 
   let toggled = $state<boolean | null>(null);
   let approving = $state(false);
+  let denying = $state(false);
   const expanded = $derived(toggled ?? (entry.state === "requested" || entry.state === "running"));
 
   const toolName = $derived(entry.toolId || "tool");
@@ -44,16 +45,20 @@
           ? "Running"
           : entry.state === "done"
             ? "Done"
-            : "Failed",
+            : entry.state === "denied"
+              ? "Denied"
+              : "Failed",
   );
   const borderClass = $derived(
     entry.state === "requested"
       ? "border-warning/40 bg-warning/5"
-      : "bg-secondary/50",
+      : entry.state === "denied"
+        ? "border-muted-foreground/20 bg-secondary/30"
+        : "bg-secondary/50",
   );
 
   async function onApproveClick(): Promise<void> {
-    if (!conversationId || approving) return;
+    if (!conversationId || approving || denying) return;
     approving = true;
     try {
       await approveToolInvocation(conversationId, entry.id);
@@ -61,6 +66,18 @@
       notifyError(e instanceof Error ? e.message : "Failed to approve tool");
     } finally {
       approving = false;
+    }
+  }
+
+  async function onDenyClick(): Promise<void> {
+    if (!conversationId || approving || denying) return;
+    denying = true;
+    try {
+      await denyToolInvocation(conversationId, entry.id);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Failed to deny tool");
+    } finally {
+      denying = false;
     }
   }
 
@@ -111,6 +128,11 @@
               <span class="font-semibold">Error:</span> {errorText}
             </div>
           {/if}
+          {#if entry.state === "denied"}
+            <div class="rounded-md bg-secondary/60 px-2.5 py-2 text-xs text-muted-foreground">
+              <span class="font-semibold">Denied</span> — this tool was not run.
+            </div>
+          {/if}
           <div>
             <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Arguments</span>
             <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{paramsText}</pre>
@@ -138,10 +160,22 @@
                   e.stopPropagation();
                   void onApproveClick();
                 }}
-                disabled={!conversationId || approving}
+                disabled={!conversationId || approving || denying}
                 class="flex items-center gap-1.5 rounded-md bg-success/15 px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/25 disabled:opacity-50"
               >
                 {approving ? "Approving…" : "Approve & run"}
+              </button>
+              <button
+                type="button"
+                data-testid="tool-deny-button"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  void onDenyClick();
+                }}
+                disabled={!conversationId || approving || denying}
+                class="flex items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+              >
+                {denying ? "Denying…" : "Deny"}
               </button>
             </div>
           {/if}

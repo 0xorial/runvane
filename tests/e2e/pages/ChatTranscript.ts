@@ -191,7 +191,7 @@ export class ChatTranscript {
   }
 
   async waitForToolState(
-    state: "requested" | "running" | "done" | "error",
+    state: "requested" | "running" | "done" | "error" | "denied",
     index = 0,
     timeoutMs = E2E_LLM_TIMEOUT_MS,
   ): Promise<void> {

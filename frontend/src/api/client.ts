@@ -298,6 +298,16 @@ export async function approveToolInvocation(
   );
 }
 
+export async function denyToolInvocation(
+  conversationId: string,
+  entryId: string,
+): Promise<PostAcceptedResult<unknown>> {
+  return postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/deny`,
+    {},
+  );
+}
+
 export async function getTasks(): Promise<import("../../../backend/src/contracts/task").TaskInfo[]> {
   const data = (await getJson("/api/tasks")) as { tasks?: unknown };
   if (!data || !Array.isArray(data.tasks)) throw new Error("GET /api/tasks: invalid response");

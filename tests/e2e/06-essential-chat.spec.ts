@@ -48,6 +48,18 @@ test("guardrail flags tool and user approval runs it", async ({ app }) => {
   await app.chat.transcript.waitForToolState("done");
 });
 
+test("guardrail flags tool and user denial rejects it", async ({ app }) => {
+  await app.chat.gotoNew(GUARDED_AGENT_ID);
+  await app.chat.userInput.typeMessage(PROBE_MESSAGE);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForToolState("requested");
+  const tool = app.chat.transcript.toolRow();
+  await expect(tool.getByTestId("tool-deny-button")).toBeVisible();
+  await tool.getByTestId("tool-deny-button").click();
+  await app.chat.transcript.waitForToolState("denied");
+  await expect(tool).toContainText("Denied");
+});
+
 test("forbidden tool is rejected without approval affordance", async ({ app }) => {
   await app.chat.gotoNew(FORBID_AGENT_ID);
   await app.chat.userInput.typeMessage(PROBE_MESSAGE);
