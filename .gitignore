@@ -18,6 +18,7 @@ backend/.rag/
 .env.user
 .env.ports
 backend/prisma/backend.sqlite
+backend/prisma/backend.dev.sqlite*
 backend/backend.sqlite
 
 tests/metrics/ledger.json
