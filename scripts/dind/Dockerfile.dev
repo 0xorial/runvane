@@ -1,0 +1,25 @@
+# Single dev container for runvane: mounts the live workspace and runs the
+# backend (nest --watch) + frontend (vite) together. node_modules are shadowed
+# by named volumes (see dev-entry.sh) so the Mac's macOS-native binaries on the
+# virtiofs share are never used and no Linux binaries leak back onto the share.
+#
+# bookworm (glibc), not alpine — rolldown/lightningcss/Prisma want -gnu binaries.
+# Node 22, not 20: the backend imports the built-in `node:sqlite` (rag-store),
+# which only exists in Node 22.5+. Matches the host's v22.x. N-API keeps the
+# shadow-volume native deps (Prisma engine, rolldown, lightningcss) ABI-compatible.
+FROM node:22-bookworm-slim
+
+COPY dev-entry.sh /usr/local/bin/dev-entry.sh
+RUN chmod +x /usr/local/bin/dev-entry.sh
+
+# Defaults; override per-run with -e. DATABASE_URL is absolute to remove any
+# doubt about Prisma's relative-path resolution — it points at the workspace DB.
+ENV BACKEND_PORT=52200 \
+    FRONTEND_PORT=52201 \
+    FRONTEND_ORIGIN=http://localhost:52201 \
+    VITE_API_BASE_URL=http://localhost:52200 \
+    DATABASE_URL=file:/workspace/backend/prisma/backend.sqlite
+
+WORKDIR /workspace
+EXPOSE 52200 52201
+CMD ["/usr/local/bin/dev-entry.sh"]
