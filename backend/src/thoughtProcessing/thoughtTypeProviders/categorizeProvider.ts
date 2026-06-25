@@ -20,7 +20,7 @@ export type CategorizeInput = {
   conversationId: string;
   title: string;
   firstUserText: string;
-  knownCategories: string[];
+  existingGroups: string[];
   prompt: string;
 };
 
@@ -30,9 +30,11 @@ export type CategorizeInput = {
  * is no separate output entry — `runDecision` writes the group on the
  * conversation and records the chosen category as the thought-action summary.
  *
- * Gating (feature enabled, group not pinned, a first user message exists) lives
- * in the trigger, not here: the conversation-processor checks it before
- * starting this thought on the run (first message) or standalone (unpin).
+ * Gating (feature enabled, group not pinned, a first user message exists, and
+ * at least one group already exists) lives in the trigger, not here: the
+ * conversation-processor checks it before starting this thought on the run
+ * (first message) or standalone (unpin). With no existing groups there is
+ * nothing to classify into, so categorization is skipped entirely.
  */
 @Injectable()
 export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<CategorizeInput> {
@@ -62,16 +64,16 @@ export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<Catego
     if (!firstUserText) throw new Error(`categorize requires a user message in conversation ${conversationId}`);
 
     const groups = await this.conversations.listGroups();
-    const knownCategories = dedupeCategories([...config.seedCategories, ...groups.map((g) => g.name)]);
-    return { conversationId, title: conversation.title, firstUserText, knownCategories, prompt: config.prompt };
+    const existingGroups = groups.map((g) => g.name.trim()).filter((name) => name.length > 0);
+    return { conversationId, title: conversation.title, firstUserText, existingGroups, prompt: config.prompt };
   };
 
   runPrepare = (input: CategorizeInput): LlmRequest => {
-    const categoryList = input.knownCategories.length > 0 ? input.knownCategories.join(', ') : '(none yet)';
+    const groupList = (input.existingGroups ?? []).join(', ');
     const system = [
       input.prompt,
       '',
-      `Existing categories (prefer one of these): ${categoryList}.`,
+      `Existing groups (prefer one of these): ${groupList}.`,
       CATEGORIZATION_FORMAT_REMINDER,
     ].join('\n');
     const titleLine = input.title && input.title !== 'New chat' ? `Title: ${input.title}\n` : '';
@@ -79,9 +81,9 @@ export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<Catego
       messages: [
         textMessage('system', system),
         textMessage('user', `${titleLine}First message:\n${input.firstUserText}`),
-        // Mirror auto-title: prefill a closed thinking block to suppress local
-        // models' reasoning phase so the response is just the category.
-        { role: 'assistant', parts: [{ kind: 'text', text: '<think></think>\n\n' }] },
+        // No <think></think> assistant prefill: auto-title dropped the same
+        // workaround, and parseCategory() strips any leftover <think>…</think>
+        // from the response, so there's nothing to suppress up front.
       ],
     };
   };
@@ -98,7 +100,7 @@ export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<Catego
       await this.completeThoughtAction(ctx, 'No category');
       return;
     }
-    const category = canonicalizeCategory(parsed, input.knownCategories);
+    const category = canonicalizeCategory(parsed, input.existingGroups);
 
     // Re-check the pin: the user may have organized this conversation while the
     // model was running. Never override a manual choice.
@@ -122,20 +124,6 @@ export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<Catego
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
   }
-}
-
-function dedupeCategories(names: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of names) {
-    const name = String(raw ?? '').trim();
-    if (!name) continue;
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(name);
-  }
-  return out;
 }
 
 /** Extract a single short category label from raw model output. */

@@ -12,21 +12,11 @@ export const DEFAULT_CATEGORIZATION_PROMPT =
   'of them are a good match. Categories should be reusable across many conversations, not specific ' +
   'to a single chat.';
 
-export const DEFAULT_SEED_CATEGORIES: readonly string[] = [
-  'Work',
-  'Coding',
-  'Personal',
-  'Research',
-  'Admin',
-];
-
 export const ConversationCategorizationConfigSchema = z.object({
   /** Master switch for the auto-categorizer (runs once after the first message). */
   enabled: z.boolean(),
   /** How many of the most-recent conversations the slim left sidebar shows. */
   sidebarRecentLimit: z.number().int().min(1).max(200),
-  /** Hybrid taxonomy seed: the model prefers these but may add new categories. */
-  seedCategories: z.array(z.string().trim().min(1)).max(100),
   /** The editable system instruction used to classify a conversation. */
   prompt: z.string().trim().min(1).max(8000),
 });
@@ -35,7 +25,6 @@ export type ConversationCategorizationConfig = z.infer<typeof ConversationCatego
 export const DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG: ConversationCategorizationConfig = {
   enabled: true,
   sidebarRecentLimit: 5,
-  seedCategories: [...DEFAULT_SEED_CATEGORIES],
   prompt: DEFAULT_CATEGORIZATION_PROMPT,
 };
 
@@ -53,13 +42,6 @@ export function normalizeConversationCategorizationConfig(raw: unknown): Convers
     if (typeof rec.enabled === 'boolean') base.enabled = rec.enabled;
     if (typeof rec.sidebarRecentLimit === 'number' && Number.isFinite(rec.sidebarRecentLimit)) {
       base.sidebarRecentLimit = Math.min(200, Math.max(1, Math.trunc(rec.sidebarRecentLimit)));
-    }
-    if (Array.isArray(rec.seedCategories)) {
-      const seeds = rec.seedCategories
-        .map((s) => String(s ?? '').trim())
-        .filter((s) => s.length > 0)
-        .slice(0, 100);
-      base.seedCategories = seeds;
     }
     if (typeof rec.prompt === 'string' && rec.prompt.trim()) {
       base.prompt = rec.prompt.trim().slice(0, 8000);

@@ -35,13 +35,17 @@ export class ConversationCategorizerService {
 
   /**
    * Whether a categorize thought should run: the feature is enabled, the
-   * conversation's group isn't pinned, and there's a first user message to
-   * classify from. Cheap enough to call on the message-post path.
+   * conversation's group isn't pinned, at least one group already exists to
+   * sort into, and there's a first user message to classify from. Cheap enough
+   * to call on the message-post path.
    */
   async shouldCategorize(conversationId: string): Promise<boolean> {
     const config = await this.getConfig();
     if (!config.enabled) return false;
     if (await this.conversations.getGroupPinned(conversationId)) return false;
+    // No existing groups means nothing to classify into — skip the LLM call.
+    const groups = await this.conversations.listGroups();
+    if (groups.length === 0) return false;
     const messages = await this.chatEntries.listMessages(conversationId);
     const firstUser = messages.find((entry) => entry.type === 'user-message');
     const firstUserText = firstUser && 'text' in firstUser ? String(firstUser.text ?? '').trim() : '';

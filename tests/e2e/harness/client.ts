@@ -44,7 +44,6 @@ type ConversationRow = {
 type ConversationConfig = {
   enabled: boolean;
   sidebarRecentLimit: number;
-  seedCategories: string[];
   prompt: string;
 };
 

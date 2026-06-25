@@ -24,29 +24,13 @@
   let saving = $state(false);
   // Editable draft, seeded from the server config and kept in sync until edited.
   let draft = $state<ConversationCategorizationConfig>({ ...DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG });
-  let seedText = $state(DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG.seedCategories.join("\n"));
   let dirty = $state(false);
 
   $effect(() => {
     const data = configQuery.data;
     if (!data || dirty) return;
     draft = { ...data };
-    seedText = data.seedCategories.join("\n");
   });
-
-  function parseSeedCategories(text: string): string[] {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const raw of text.split(/[\n,]/)) {
-      const name = raw.trim();
-      if (!name) continue;
-      const key = name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(name);
-    }
-    return out;
-  }
 
   async function saveConfig(): Promise<void> {
     saving = true;
@@ -54,14 +38,12 @@
       const next: ConversationCategorizationConfig = {
         enabled: draft.enabled,
         sidebarRecentLimit: Math.min(200, Math.max(1, Math.trunc(draft.sidebarRecentLimit || 1))),
-        seedCategories: parseSeedCategories(seedText),
         prompt: draft.prompt.trim() || DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG.prompt,
       };
       const saved = await updateConversationConfig(next);
       queryClient.setQueryData(queryKeys.conversationConfig, saved);
       dirty = false;
       draft = { ...saved };
-      seedText = saved.seedCategories.join("\n");
       notifySuccess("Conversation settings saved");
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -108,22 +90,9 @@
           <span class="font-medium text-foreground">Auto-categorize new conversations</span>
         </label>
         <p class="text-muted-foreground">
-          A system query classifies each new chat into a group after its first message. Manually moving a chat (or
-          locking it) pins it so it won't be re-categorized.
+          A system query sorts each new chat into a group after its first message. It only runs once you have at least
+          one group to sort into. Manually moving a chat (or locking it) pins it so it won't be re-categorized.
         </p>
-
-        <label class="block">
-          <span class="mb-1 block font-medium text-foreground">Seed categories (one per line)</span>
-          <textarea
-            rows="4"
-            class="w-full resize-y rounded-md border border-border bg-background px-2 py-1 font-mono"
-            bind:value={seedText}
-            oninput={() => (dirty = true)}
-          ></textarea>
-          <span class="mt-1 block text-muted-foreground">
-            The model prefers these but may add a new category when none fit.
-          </span>
-        </label>
 
         <label class="block">
           <span class="mb-1 block font-medium text-foreground">Categorization system query</span>

@@ -1,4 +1,5 @@
 import {
+  createConversation,
   createProbeConversation,
   defaultAgentId,
   getConversation,
@@ -26,11 +27,23 @@ async function groupNameOf(
   return groups.find((g) => g.id === conv.groupId)?.name ?? null;
 }
 
-test("auto-categorizes a new conversation into a group after its first message", async ({ request }) => {
-  test.setTimeout(20_000);
-  await setConversationConfig(request, { enabled: true });
+// Categorization is gated on having at least one group to sort into. Create one
+// so these specs pass even against a freshly-seeded (group-less) database. Use a
+// title-only conversation (no message → no LLM run) and just move it into a new
+// group, so the bootstrap adds no DB-write contention with the spec's real run.
+async function ensureAGroupExists(request: Parameters<typeof createConversation>[0]): Promise<void> {
+  const bootstrapConv = await createConversation(request, "e2e group anchor");
+  await moveConversationToGroup(request, bootstrapConv, { newGroupName: `existing ${Date.now()}` });
+}
 
+test("auto-categorizes a new conversation into an existing group", async ({ request }) => {
+  test.setTimeout(25_000);
+  await setConversationConfig(request, { enabled: true });
   const agentId = await defaultAgentId(request);
+
+  // Categorization only runs once at least one group exists to sort into.
+  await ensureAGroupExists(request);
+
   const conversationId = await createProbeConversation(request, agentId);
 
   await expect
@@ -48,10 +61,14 @@ test("auto-categorizes a new conversation into a group after its first message",
 });
 
 test("manual move pins the chat; unlocking re-categorizes it", async ({ request }) => {
-  test.setTimeout(25_000);
+  test.setTimeout(30_000);
   await setConversationConfig(request, { enabled: true });
 
   const agentId = await defaultAgentId(request);
+
+  // Categorization needs an existing group to sort into.
+  await ensureAGroupExists(request);
+
   const conversationId = await createProbeConversation(request, agentId);
 
   // Wait for the initial auto-categorization to land.

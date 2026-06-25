@@ -1,5 +1,12 @@
-import { canonicalizeCategory, parseCategory } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
+import {
+  canonicalizeCategory,
+  CategorizeThoughtTypeProvider,
+  parseCategory,
+  type CategorizeInput,
+} from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { normalizeConversationCategorizationConfig } from '../contracts/conversation-config.js';
+import { ConversationCategorizerService } from './conversation-categorizer.service.js';
+import { getMessageText } from '../llmProviders/types.js';
 
 describe('parseCategory', () => {
   it('returns a clean single-word category', () => {
@@ -44,12 +51,38 @@ describe('canonicalizeCategory', () => {
   });
 });
 
+describe('CategorizeThoughtTypeProvider.runPrepare', () => {
+  // runPrepare is a pure function of its input (no `this`), so stub deps are fine.
+  const provider = new CategorizeThoughtTypeProvider({} as any, {} as any, {} as any, {} as any);
+  const baseInput: CategorizeInput = {
+    conversationId: 'c1',
+    title: 'New chat',
+    firstUserText: 'How do I center a div?',
+    existingGroups: ['Work', 'Coding', 'Personal Finance'],
+    prompt: 'Classify the conversation.',
+  };
+
+  it('lists every existing group in the system prompt', () => {
+    const request = provider.runPrepare(baseInput);
+    expect(request.messages[0].role).toBe('system');
+    const system = getMessageText(request.messages[0]);
+    for (const group of baseInput.existingGroups) {
+      expect(system).toContain(group);
+    }
+  });
+
+  it('does not prefill a <think></think> assistant turn', () => {
+    const request = provider.runPrepare(baseInput);
+    expect(request.messages.every((m) => m.role !== 'assistant')).toBe(true);
+    expect(JSON.stringify(request)).not.toContain('<think>');
+  });
+});
+
 describe('normalizeConversationCategorizationConfig', () => {
   it('fills defaults from an empty/invalid blob', () => {
     const cfg = normalizeConversationCategorizationConfig(null);
     expect(cfg.enabled).toBe(true);
     expect(cfg.sidebarRecentLimit).toBe(5);
-    expect(cfg.seedCategories.length).toBeGreaterThan(0);
     expect(cfg.prompt.length).toBeGreaterThan(0);
   });
 
@@ -58,9 +91,46 @@ describe('normalizeConversationCategorizationConfig', () => {
     expect(cfg.enabled).toBe(false);
     expect(cfg.sidebarRecentLimit).toBe(200);
   });
+});
 
-  it('drops blank seed categories', () => {
-    const cfg = normalizeConversationCategorizationConfig({ seedCategories: ['Work', '', '  '] });
-    expect(cfg.seedCategories).toEqual(['Work']);
+describe('ConversationCategorizerService.shouldCategorize', () => {
+  // Stub the three repos shouldCategorize touches; getConfig reads getJson then normalizes.
+  const make = (over: {
+    enabled?: boolean;
+    pinned?: boolean;
+    groups?: Array<{ name: string }>;
+    messages?: Array<{ type: string; text?: string }>;
+  } = {}): ConversationCategorizerService => {
+    const {
+      enabled = true,
+      pinned = false,
+      groups = [{ name: 'Work' }],
+      messages = [{ type: 'user-message', text: 'hi' }],
+    } = over;
+    return new ConversationCategorizerService(
+      { getJson: async () => ({ enabled }) } as any,
+      { getGroupPinned: async () => pinned, listGroups: async () => groups } as any,
+      { listMessages: async () => messages } as any,
+    );
+  };
+
+  it('runs when enabled, unpinned, a group exists, and a first user message exists', async () => {
+    expect(await make().shouldCategorize('c1')).toBe(true);
+  });
+
+  it('does NOT run when there are no existing groups', async () => {
+    expect(await make({ groups: [] }).shouldCategorize('c1')).toBe(false);
+  });
+
+  it('does not run when disabled', async () => {
+    expect(await make({ enabled: false }).shouldCategorize('c1')).toBe(false);
+  });
+
+  it('does not run when the group is pinned', async () => {
+    expect(await make({ pinned: true }).shouldCategorize('c1')).toBe(false);
+  });
+
+  it('does not run without a first user message', async () => {
+    expect(await make({ messages: [] }).shouldCategorize('c1')).toBe(false);
   });
 });
