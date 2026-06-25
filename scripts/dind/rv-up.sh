@@ -13,7 +13,7 @@ STABLE_DB=/workspace/backend/prisma/backend.sqlite
 DEV_DB=/workspace/backend/prisma/backend.dev.sqlite
 
 # 1. Image (built from this dir; Dockerfile.dev COPYs dev-entry.sh).
-docker image inspect runvane-dev >/dev/null 2>&1 || docker build -t runvane-dev "$HERE"
+docker image inspect runvane-dev >/dev/null 2>&1 || docker build -t runvane-dev -f "$HERE/Dockerfile.dev" "$HERE"
 
 # 2. Pinned worktree for rv-stable (detached at current main if absent).
 [ -e "$WORKTREE" ] || git -C /workspace worktree add --detach "$WORKTREE" HEAD
@@ -30,6 +30,7 @@ docker run -d --name rv-dev -p 52200:52200 -p 52201:52201 \
   -v /workspace:/workspace \
   -v rv-backend-nm:/workspace/backend/node_modules \
   -v rv-frontend-nm:/workspace/frontend/node_modules \
+  -v "$HERE/dev-entry.sh":/usr/local/bin/dev-entry.sh \
   runvane-dev
 
 # 5. rv-stable — pinned snapshot, real DB, built artifacts (entry mounted from this repo).
