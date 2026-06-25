@@ -18,6 +18,13 @@ import { ChatEntriesBaseRepo } from './chat-entries-base.repo.js';
 // Max ids per `IN (...)` query; SQLite caps bound variables per statement.
 const ID_IN_CHUNK = 500;
 
+// SQL predicate selecting entries that carry streamed LLM token usage. The
+// `thought_stream_unify` migration collapsed the per-stage `*_llm_stream` types
+// (planner_llm_stream, title_llm_stream, …) into a single `thought_stream`
+// type; older rows keep the legacy names, so match both. Token aggregation
+// downstream still drops any matched row that lacks a model or usage.
+const STREAM_USAGE_TYPE_SQL = "(type = 'thought_stream' OR type LIKE '%llm_stream%')";
+
 export type ToolInvocationState = ToolInvocationEntry['state'];
 
 export type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat-entries.types.js';
@@ -278,10 +285,10 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   }
 
   /**
-   * Re-sum the stored conversation token counters straight from the llm_stream
-   * entries, mirroring exactly what `addTokenUsage` accumulated during the run
-   * (raw `promptTokens` / `cachedPromptTokens` / `completionTokens`). Used after
-   * a split moves entries between conversations so both totals stay truthful.
+   * Re-sum the stored conversation token counters straight from the streamed
+   * LLM entries, mirroring exactly what `addTokenUsage` accumulated during the
+   * run (raw `promptTokens` / `cachedPromptTokens` / `completionTokens`). Used
+   * after a split moves entries between conversations so both totals stay truthful.
    */
   async rawTokenTotals(
     conversationId: string,
@@ -289,7 +296,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT payload_json
        FROM chat_entries
-       WHERE conversation_id = ? AND type LIKE '%llm_stream%'`,
+       WHERE conversation_id = ? AND ${STREAM_USAGE_TYPE_SQL}`,
       conversationId,
     )) as Array<{ payload_json: string }>;
     let promptTokens = 0;
@@ -316,7 +323,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT payload_json
        FROM chat_entries
-       WHERE conversation_id = ? AND type LIKE '%llm_stream%'`,
+       WHERE conversation_id = ? AND ${STREAM_USAGE_TYPE_SQL}`,
       conversationId,
     )) as Array<{ payload_json: string }>;
     return aggregateTokenUsageByModel(toStreamPayloads(rows.map((row) => row.payload_json)));
@@ -340,7 +347,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       const rows = (await this.prisma.$queryRawUnsafe(
         `SELECT conversation_id AS conversationId, payload_json
          FROM chat_entries
-         WHERE conversation_id IN (${placeholders}) AND type LIKE '%llm_stream%'`,
+         WHERE conversation_id IN (${placeholders}) AND ${STREAM_USAGE_TYPE_SQL}`,
         ...part,
       )) as Array<{ conversationId: string; payload_json: string }>;
       for (const row of rows) {
