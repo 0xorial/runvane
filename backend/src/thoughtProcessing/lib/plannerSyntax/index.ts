@@ -8,25 +8,40 @@
 import { SyntaxRegistry } from '../../syntax/index.js';
 import type { ParsedPlannerOutput } from './plannerOutput.js';
 import { jsonPlannerSyntax } from './jsonSyntax.js';
+import { functionCallJsonSyntax } from './functionCallJsonSyntax.js';
 import { gemmaPlannerSyntax } from './gemmaSyntax.js';
-import { xmlPlannerSyntax } from './xmlSyntax.js';
+import { toolCallTagsSyntax } from './toolCallTagsSyntax.js';
+import { mistralSyntax } from './mistralSyntax.js';
+import { llamaSyntax } from './llamaSyntax.js';
 import { plainTextPlannerSyntax } from './plainTextSyntax.js';
 
 export { PLAINTEXT_SYNTAX_NAME } from './plainTextSyntax.js';
-export { jsonPlannerSyntax, gemmaPlannerSyntax, xmlPlannerSyntax, plainTextPlannerSyntax };
+export {
+  jsonPlannerSyntax,
+  functionCallJsonSyntax,
+  gemmaPlannerSyntax,
+  toolCallTagsSyntax,
+  mistralSyntax,
+  llamaSyntax,
+  plainTextPlannerSyntax,
+};
 
 /**
  * Build a registry over all planner dialects. Order in `register` is irrelevant
  * (the registry sorts by priority). A complete tool-call structure is a certain
  * match (confidence 1) and wins over a JSON object with no tool requests (0.5),
  * which in turn beats the plaintext catch-all (0.01). When several dialects are
- * equally certain, higher priority decides: JSON (100) > Gemma (70) > XML (60).
+ * equally certain, higher priority decides: planner JSON (100) > bare
+ * function-call JSON (90) > Gemma (70) > tag/Mistral/Llama dialects (60).
  */
 export function buildPlannerSyntaxRegistry(): SyntaxRegistry<ParsedPlannerOutput> {
   return new SyntaxRegistry<ParsedPlannerOutput>().register(
     jsonPlannerSyntax,
+    functionCallJsonSyntax,
     gemmaPlannerSyntax,
-    xmlPlannerSyntax,
+    toolCallTagsSyntax,
+    mistralSyntax,
+    llamaSyntax,
     plainTextPlannerSyntax,
   );
 }

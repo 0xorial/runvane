@@ -1,16 +1,12 @@
 import { defineSyntax, MatchKind } from '../../syntax/index.js';
 import {
+  looksLikeJsonStart,
   parseJsonObjectLoose,
   plannerOutputFromJson,
   plainTextPlannerOutput,
   toolRequestsFromJson,
   type ParsedPlannerOutput,
 } from './plannerOutput.js';
-
-/** True once the first non-space char looks like the start of a JSON object or fence. */
-function looksLikeJsonStart(text: string): boolean {
-  return /^\s*(```|\{)/.test(text);
-}
 
 /**
  * The intended planner format: a JSON object with `assistant_output`,

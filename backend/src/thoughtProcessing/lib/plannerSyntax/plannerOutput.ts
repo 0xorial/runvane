@@ -56,13 +56,13 @@ export function extractAssistantOutputFromJsonLike(text: string): string {
   return out;
 }
 
-/** Return the last balanced `{...}` object in `text`, or `null` if none ends it. */
-export function extractLastBalancedJsonObject(text: string): string | null {
+/** Return the last balanced `open…close` span ending `text`, or `null` if none does. */
+function extractLastBalancedJson(text: string, open: string, close: string): string | null {
   const source = String(text ?? '');
   if (!source) return null;
   let end = source.length - 1;
   while (end >= 0 && /\s/.test(source[end])) end -= 1;
-  if (end < 0 || source[end] !== '}') return null;
+  if (end < 0 || source[end] !== close) return null;
 
   let depth = 0;
   let inString = false;
@@ -76,13 +76,28 @@ export function extractLastBalancedJsonObject(text: string): string | null {
       continue;
     }
     if (ch === '"') { inString = true; continue; }
-    if (ch === '}') { depth += 1; continue; }
-    if (ch === '{') {
+    if (ch === close) { depth += 1; continue; }
+    if (ch === open) {
       depth -= 1;
       if (depth === 0) return source.slice(i, end + 1).trim();
     }
   }
   return null;
+}
+
+/** Return the last balanced `{...}` object in `text`, or `null` if none ends it. */
+export function extractLastBalancedJsonObject(text: string): string | null {
+  return extractLastBalancedJson(text, '{', '}');
+}
+
+/** Return the last balanced `[...]` array in `text`, or `null` if none ends it. */
+export function extractLastBalancedJsonArray(text: string): string | null {
+  return extractLastBalancedJson(text, '[', ']');
+}
+
+/** True once the first non-space char looks like the start of a JSON object or fence. */
+export function looksLikeJsonStart(text: string): boolean {
+  return /^\s*(```|\{)/.test(text);
 }
 
 /** Strip a single leading/trailing ```` ``` ```` / ```` ```json ```` fence. */
@@ -111,6 +126,40 @@ export function parseJsonObjectLoose(text: string): Record<string, unknown> | nu
     }
   }
   return null;
+}
+
+/**
+ * Best-effort parse of any JSON value (object OR array) from possibly-fenced,
+ * possibly-trailing text. Used by the function-call dialects whose payload may
+ * be a single call object or an array of them.
+ */
+export function parseJsonValueLoose(text: string): unknown {
+  const stripped = stripFences(text);
+  if (!stripped) return undefined;
+  const candidates = [stripped, extractLastBalancedJsonObject(stripped), extractLastBalancedJsonArray(stripped)];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate) as unknown;
+    } catch {
+      // try next candidate
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Parse text that should be JSON *in its entirety* (after fence-stripping).
+ * Unlike {@link parseJsonValueLoose} this does NOT extract an embedded value, so
+ * a marker-prefixed payload like `[TOOL_CALLS] [...]` is rejected and left to its
+ * own dialect. Returns `undefined` on any failure.
+ */
+export function parseJsonValueStrict(text: string): unknown {
+  try {
+    return JSON.parse(stripFences(text)) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Read `tool_requests: [{ tool_name, tool_request }]` from a parsed JSON object. */

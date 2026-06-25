@@ -82,6 +82,6 @@ describe('planner syntax registry — streaming', () => {
   it('waits on an unclosed <tool_call> then locks the XML dialect', () => {
     const selector = buildPlannerSyntaxRegistry().createSelector();
     expect(selector.observe('thinking <tool_call name="search">do')).toBeNull();
-    expect(selector.observe('thinking <tool_call name="search">dogs</tool_call>')?.name).toBe('xml-tags');
+    expect(selector.observe('thinking <tool_call name="search">dogs</tool_call>')?.name).toBe('tool-call-tags');
   });
 });
