@@ -23,7 +23,7 @@ export class ConversationsService {
       this.conversations.list({ deletedOnly: input.deletedOnly }),
       this.conversations.listGroups(),
     ]);
-    const conversations = await Promise.all(rows.map((row) => this.toApiRow(row)));
+    const conversations = await this.toApiRowsBatch(rows);
     return {
       conversations,
       groups: groups.map(toConversationGroupRow),
@@ -147,6 +147,39 @@ export class ConversationsService {
     row.forkedFromConversationTitle = forkLink.forkedFromConversationTitle;
     row.toolEnvironmentId = toolEnvironmentId;
     return row;
+  }
+
+  /**
+   * Batch variant of {@link toApiRow} for the list endpoint. Resolves the
+   * per-row lookups (token usage, fork link, group pin, tool env) in four bulk
+   * queries instead of N×4, and deliberately skips the per-row default-view-leaf
+   * tree walk: list rows never render the resolved leaf — consumers re-resolve
+   * it via GET /:id when a conversation is opened — so leaving it null here turns
+   * an O(depth) walk per conversation into nothing. The free stored anchor
+   * (defaultViewLeafAnchorId) is still populated by toConversationRow.
+   */
+  private async toApiRowsBatch(entities: ConversationEntity[]): Promise<ConversationRow[]> {
+    if (entities.length === 0) return [];
+    const ids = entities.map((entity) => entity.id);
+    const [tokenUsageById, forkLinkById, groupPinnedById, toolEnvById] = await Promise.all([
+      this.chatEntries.tokenUsageByModelByIds(ids),
+      this.conversations.getForkLinksByIds(ids),
+      this.conversations.getGroupPinnedByIds(ids),
+      this.conversations.getToolEnvironmentIdsByIds(ids),
+    ]);
+    return entities.map((entity) => {
+      const row = toConversationRow(
+        entity,
+        tokenUsageById.get(entity.id) ?? [],
+        groupPinnedById.get(entity.id) ?? false,
+      );
+      const forkLink = forkLinkById.get(entity.id);
+      row.forkedFromConversationId = forkLink?.forkedFromConversationId ?? null;
+      row.forkedFromEntryId = forkLink?.forkedFromEntryId ?? null;
+      row.forkedFromConversationTitle = forkLink?.forkedFromConversationTitle ?? null;
+      row.toolEnvironmentId = toolEnvById.get(entity.id) ?? null;
+      return row;
+    });
   }
 }
 

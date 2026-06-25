@@ -207,6 +207,19 @@ export class ConversationsRepo {
     return rows[0]?.envId ?? null;
   }
 
+  /** Bulk variant for list endpoints: map of conversationId -> tool_environment_id. */
+  async getToolEnvironmentIdsByIds(ids: string[]): Promise<Map<string, string | null>> {
+    const map = new Map<string, string | null>();
+    if (ids.length === 0) return map;
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id, tool_environment_id AS envId FROM conversations WHERE id IN (${placeholders})`,
+      ...ids,
+    )) as Array<{ id: string; envId: string | null }>;
+    for (const row of rows) map.set(row.id, row.envId ?? null);
+    return map;
+  }
+
   /** Bulk variant for list endpoints: map of conversationId -> pinned. */
   async getGroupPinnedByIds(ids: string[]): Promise<Map<string, boolean>> {
     const map = new Map<string, boolean>();
@@ -253,5 +266,46 @@ export class ConversationsRepo {
       forkedFromEntryId: row?.fromEntry ?? null,
       forkedFromConversationTitle: row?.fromTitle ?? null,
     };
+  }
+
+  /** Bulk variant of {@link getForkLink} for list endpoints. */
+  async getForkLinksByIds(ids: string[]): Promise<
+    Map<
+      string,
+      {
+        forkedFromConversationId: string | null;
+        forkedFromEntryId: string | null;
+        forkedFromConversationTitle: string | null;
+      }
+    >
+  > {
+    const map = new Map<
+      string,
+      {
+        forkedFromConversationId: string | null;
+        forkedFromEntryId: string | null;
+        forkedFromConversationTitle: string | null;
+      }
+    >();
+    if (ids.length === 0) return map;
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT c.id AS id,
+              c.forked_from_conversation_id AS fromId,
+              c.forked_from_entry_id AS fromEntry,
+              src.title AS fromTitle
+       FROM conversations c
+       LEFT JOIN conversations src ON src.id = c.forked_from_conversation_id
+       WHERE c.id IN (${placeholders})`,
+      ...ids,
+    )) as Array<{ id: string; fromId: string | null; fromEntry: string | null; fromTitle: string | null }>;
+    for (const row of rows) {
+      map.set(row.id, {
+        forkedFromConversationId: row.fromId ?? null,
+        forkedFromEntryId: row.fromEntry ?? null,
+        forkedFromConversationTitle: row.fromTitle ?? null,
+      });
+    }
+    return map;
   }
 }

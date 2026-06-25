@@ -315,17 +315,59 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
        WHERE conversation_id = ? AND type LIKE '%llm_stream%'`,
       conversationId,
     )) as Array<{ payload_json: string }>;
-    const streamPayloads: Array<{ modelName: string; payload: Record<string, unknown> }> = [];
-    for (const row of rows) {
-      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
-      const llm = payload.llm;
-      const modelName =
-        llm && typeof llm === 'object' && !Array.isArray(llm)
-          ? String((llm as { model?: unknown }).model ?? '').trim()
-          : '';
-      if (!modelName) continue;
-      streamPayloads.push({ modelName, payload });
-    }
-    return aggregateTokenUsageByModel(streamPayloads);
+    return aggregateTokenUsageByModel(toStreamPayloads(rows.map((row) => row.payload_json)));
   }
+
+  /**
+   * Bulk variant of {@link tokenUsageByModel} for list endpoints: a single
+   * query across all conversation ids, aggregated per conversation. Avoids the
+   * per-conversation N+1 the sidebar/list otherwise triggers. Conversations
+   * with no stream entries are simply absent from the map (callers default to []).
+   */
+  async tokenUsageByModelByIds(
+    ids: string[],
+  ): Promise<Map<string, ConversationRow['tokenUsageByModel']>> {
+    const map = new Map<string, ConversationRow['tokenUsageByModel']>();
+    if (ids.length === 0) return map;
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT conversation_id AS conversationId, payload_json
+       FROM chat_entries
+       WHERE conversation_id IN (${placeholders}) AND type LIKE '%llm_stream%'`,
+      ...ids,
+    )) as Array<{ conversationId: string; payload_json: string }>;
+    const byConversation = new Map<string, string[]>();
+    for (const row of rows) {
+      const list = byConversation.get(row.conversationId);
+      if (list) list.push(row.payload_json);
+      else byConversation.set(row.conversationId, [row.payload_json]);
+    }
+    for (const [conversationId, payloads] of byConversation) {
+      map.set(conversationId, aggregateTokenUsageByModel(toStreamPayloads(payloads)));
+    }
+    return map;
+  }
+}
+
+/** Parse llm_stream payload_json blobs, keeping only those that name a model. */
+function toStreamPayloads(
+  payloadJsons: string[],
+): Array<{ modelName: string; payload: Record<string, unknown> }> {
+  const streamPayloads: Array<{ modelName: string; payload: Record<string, unknown> }> = [];
+  for (const json of payloadJsons) {
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(json) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const llm = payload.llm;
+    const modelName =
+      llm && typeof llm === 'object' && !Array.isArray(llm)
+        ? String((llm as { model?: unknown }).model ?? '').trim()
+        : '';
+    if (!modelName) continue;
+    streamPayloads.push({ modelName, payload });
+  }
+  return streamPayloads;
 }

@@ -34,7 +34,7 @@ export type ConversationCategorizationConfig = z.infer<typeof ConversationCatego
 
 export const DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG: ConversationCategorizationConfig = {
   enabled: true,
-  sidebarRecentLimit: 20,
+  sidebarRecentLimit: 5,
   seedCategories: [...DEFAULT_SEED_CATEGORIES],
   prompt: DEFAULT_CATEGORIZATION_PROMPT,
 };
