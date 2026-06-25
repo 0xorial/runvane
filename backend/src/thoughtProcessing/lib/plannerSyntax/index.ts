@@ -13,6 +13,7 @@ import { gemmaPlannerSyntax } from './gemmaSyntax.js';
 import { toolCallTagsSyntax } from './toolCallTagsSyntax.js';
 import { mistralSyntax } from './mistralSyntax.js';
 import { llamaSyntax } from './llamaSyntax.js';
+import { deepseekSyntax } from './deepseekSyntax.js';
 import { plainTextPlannerSyntax } from './plainTextSyntax.js';
 
 export { PLAINTEXT_SYNTAX_NAME } from './plainTextSyntax.js';
@@ -23,6 +24,7 @@ export {
   toolCallTagsSyntax,
   mistralSyntax,
   llamaSyntax,
+  deepseekSyntax,
   plainTextPlannerSyntax,
 };
 
@@ -42,6 +44,7 @@ export function buildPlannerSyntaxRegistry(): SyntaxRegistry<ParsedPlannerOutput
     toolCallTagsSyntax,
     mistralSyntax,
     llamaSyntax,
+    deepseekSyntax,
     plainTextPlannerSyntax,
   );
 }
