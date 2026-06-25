@@ -257,7 +257,10 @@
           : undefined,
       });
       const data = await refreshConversations(showDeletedOnly, recentLimit);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.conversationList(showDeletedOnly) });
+      // Invalidate the whole conversation-list family: the active query is keyed
+      // with `limit: recentLimit`, so a `limit: null` key would not match it and
+      // a freshly created group would never re-render.
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] });
       const groupId = target.groupId;
       if (typeof groupId === "string" && groupId.trim()) {
         collapsedGroups = { ...collapsedGroups, [groupId]: false };
