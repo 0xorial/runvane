@@ -6,7 +6,7 @@
   import { subscribeGlobalLive } from "@/protocol/runLiveClient";
   import { SseType } from "@/protocol/sseTypes";
   import { TokenUsageMapper, type EntryTokenUsage } from "../../../../backend/src/contracts/token-usage";
-  import { estimateConversationCostUsd, hasUnpricedUsage } from "@/lib/costEstimation";
+  import { estimateConversationCostUsd, hasUnpricedUsage, unpricedModelsWithUsage } from "@/lib/costEstimation";
   import { notifyError } from "@/utils/toast";
   import { onMount } from "svelte";
   import ThemeToggle from "@/components/ThemeToggle.svelte";
@@ -60,12 +60,7 @@
     return estimateConversationCostUsd(tokenUsageByModel, pricingByModel);
   });
 
-  const unpricedModels = $derived(
-    tokenUsageByModel
-      .filter((u) => !pricingByModel.has(String(u.modelName || "").trim()))
-      .map((u) => String(u.modelName || "").trim())
-      .filter((name) => name.length > 0),
-  );
+  const unpricedModels = $derived(unpricedModelsWithUsage(tokenUsageByModel, pricingByModel));
 
   $effect(() => {
     if (!conversationId) {

@@ -58,14 +58,33 @@ export function estimateConversationCostUsd(
   return Number(total.toFixed(8));
 }
 
+/**
+ * Distinct model names that actually consumed tokens but have no pricing entry —
+ * i.e. the specific models that make a whole-conversation cost estimate impossible.
+ * Names are trimmed and de-duplicated; blank names are dropped. Order follows first
+ * appearance in `usageRows`.
+ */
+export function unpricedModelsWithUsage(
+  usageRows: TokenUsageByModelRow[],
+  pricingByModel: Map<string, ModelPricing>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const usage of usageRows) {
+    const totalTokens = usage.promptTokens + usage.cachedPromptTokens + usage.completionTokens;
+    if (totalTokens === 0) continue;
+    const name = String(usage.modelName || "").trim();
+    if (!name || seen.has(name) || pricingByModel.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
 /** Returns true if any usage row with tokens has no matching pricing entry. */
 export function hasUnpricedUsage(
   usageRows: TokenUsageByModelRow[],
   pricingByModel: Map<string, ModelPricing>,
 ): boolean {
-  return usageRows.some((usage) => {
-    const totalTokens = usage.promptTokens + usage.cachedPromptTokens + usage.completionTokens;
-    if (totalTokens === 0) return false;
-    return !pricingByModel.has(String(usage.modelName || "").trim());
-  });
+  return unpricedModelsWithUsage(usageRows, pricingByModel).length > 0;
 }

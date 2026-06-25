@@ -23,19 +23,43 @@
   const rows = $derived(capabilitiesQuery.data?.models ?? []);
   const grouped = $derived(groupPricingRows(rows));
 
-  const focusModels = $derived.by(() => {
+  // Models the caller asked us to locate (e.g. the unpriced models from a chat's
+  // cost badge), parsed from `?focus=a,b`. De-duplicated, first-appearance order.
+  const focusList = $derived.by(() => {
     const raw = new URLSearchParams($chatSearch).get("focus");
-    if (!raw) return new Set<string>();
-    return new Set(
-      raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    );
+    if (!raw) return [] as string[];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const part of raw.split(",")) {
+      const name = part.trim();
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        out.push(name);
+      }
+    }
+    return out;
   });
+  const focusModels = $derived(new Set(focusList));
+  // Focused models that have no row to highlight — used in a chat but absent from
+  // every override and verified provider, so there is nothing to scroll to.
+  const focusMissingRows = $derived(focusList.filter((m) => !rows.some((r) => r.model_name === m)));
 
   let rowState = $state<Map<string, PricingRowState>>(new Map());
-  let didScrollFocus = $state(false);
+  let rootEl = $state<HTMLElement | null>(null);
+  let scrolledFocusKey = $state("");
+
+  // Scroll the first focused row into view once its data is present. Re-runs when
+  // the focus target changes (e.g. navigating from a different chat) and survives
+  // the editor already being mounted, unlike a one-shot mount action.
+  $effect(() => {
+    const key = focusList.join(",");
+    if (!key || key === scrolledFocusKey || rows.length === 0 || !rootEl) return;
+    const target = Array.from(rootEl.querySelectorAll<HTMLElement>("[data-model-row]")).find((el) =>
+      focusModels.has(el.dataset.modelRow ?? ""),
+    );
+    scrolledFocusKey = key;
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 
   function getRowState(row: ModelCapabilityRow): PricingRowState {
     return (
@@ -97,13 +121,6 @@
     }
   }
 
-  function scrollFocus(node: HTMLTableRowElement, focused: boolean): { destroy?: () => void } {
-    if (focused && !didScrollFocus) {
-      didScrollFocus = true;
-      node.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-    return {};
-  }
 </script>
 
 {#if capabilitiesQuery.isPending}
@@ -117,10 +134,24 @@
     No models discovered yet. Connect a provider in <strong>Model Providers</strong> to populate this list.
   </div>
 {:else}
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-4" bind:this={rootEl}>
     <p class="text-[13px] text-muted-foreground">
       Override per-model pricing (USD per 1M tokens). Affects cost estimates in the chat UI.
     </p>
+    {#if focusList.length > 0}
+      <div class="rounded-[10px] border border-primary/40 bg-primary/10 px-3 py-2.5 text-[13px]">
+        <span class="text-muted-foreground">Set pricing for </span>
+        {#each focusList as model, i (model)}{i > 0 ? ", " : ""}<span class="font-mono font-medium text-foreground">{model}</span>{/each}<span class="text-muted-foreground"> — highlighted below.</span>
+        {#if focusMissingRows.length > 0}
+          <div class="mt-1.5 text-[12px] text-amber-700 dark:text-amber-400">
+            Not in the catalog (used in a chat but not offered by any verified provider, so they can't be
+            located here):
+            {#each focusMissingRows as model, i (model)}{i > 0 ? ", " : ""}<span class="font-mono">{model}</span>{/each}.
+            Add the provider/model under <strong>Model Providers</strong> first.
+          </div>
+        {/if}
+      </div>
+    {/if}
     {#each [...grouped.entries()] as [providerId, providerRows] (providerId)}
       <div class="rounded-lg border border-border bg-card">
         <div class="border-b border-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -144,10 +175,10 @@
               {@const missing = !hasPricing(row) && !state.editing}
               {@const focused = focusModels.has(row.model_name)}
               <tr
+                data-model-row={row.model_name}
                 class="border-b border-border/50 last:border-0 {missing ? 'bg-amber-500/5' : ''} {focused
-                  ? 'bg-primary/10 ring-1 ring-primary/30'
+                  ? 'bg-primary/15 ring-2 ring-inset ring-primary/50'
                   : ''}"
-                use:scrollFocus={focused}
               >
                 <td class="px-4 py-2.5 font-mono text-[12px]">
                   <span class={missing ? "text-amber-700 dark:text-amber-400" : ""}>{row.model_name}</span>

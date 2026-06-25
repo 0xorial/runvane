@@ -81,10 +81,14 @@
     if (estimatedCostUsd === null) {
       const focusQuery =
         unpricedModels.length > 0 ? `?focus=${encodeURIComponent(unpricedModels.join(","))}` : "";
+      const title =
+        unpricedModels.length > 0
+          ? `No pricing configured for ${unpricedModels.length === 1 ? "model" : "models"}: ${unpricedModels.join(", ")}. Click to set it.`
+          : "No pricing configured. Click to set it.";
       out.push({
         key: "usd",
         label: "set pricing",
-        title: "Pricing not configured for one or more models used. Click to configure.",
+        title,
         href: `/settings/model-pricing${focusQuery}`,
       });
     } else if (typeof estimatedCostUsd === "number") {
