@@ -19,10 +19,12 @@ export type ChatEntryRow = {
   text?: string;
   title?: string;
   toolId?: string;
+  state?: string;
 };
 
 export type AgentRow = {
   id: string;
+  name?: string;
   is_default?: boolean;
 };
 
@@ -63,7 +65,13 @@ export async function postConversationMessage(
   conversationId: string,
   agentId: string,
   message: string,
-  options?: { steer?: boolean; enqueue?: boolean; parentId?: string | null; clientRequestId?: string },
+  options?: {
+    steer?: boolean;
+    enqueue?: boolean;
+    parentId?: string | null;
+    clientRequestId?: string;
+    overrides?: unknown;
+  },
 ): Promise<void> {
   const res = await fetch(`${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST',
@@ -75,11 +83,62 @@ export async function postConversationMessage(
       ...(options?.enqueue ? { enqueue: true } : {}),
       ...(options?.clientRequestId ? { clientRequestId: options.clientRequestId } : {}),
       ...(options?.parentId !== undefined ? { parentId: options.parentId } : {}),
+      ...(options?.overrides !== undefined ? { overrides: options.overrides } : {}),
     }),
   });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`POST /api/conversations/:id/messages failed: ${res.status} ${detail}`);
+  }
+}
+
+export async function getAgentIdByName(baseUrl: string, name: string): Promise<string> {
+  const res = await fetch(`${baseUrl}/api/agents`);
+  if (!res.ok) throw new Error(`GET /api/agents failed: ${res.status}`);
+  const agents = (await res.json()) as AgentRow[];
+  const agent = agents.find((row) => row.name === name);
+  if (!agent?.id) throw new Error(`integration setup: no agent named "${name}"`);
+  return agent.id;
+}
+
+export async function approveToolInvocation(
+  baseUrl: string,
+  conversationId: string,
+  entryId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/approve`,
+    { method: 'POST', headers: { 'content-type': 'application/json' } },
+  );
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`POST approve failed: ${res.status} ${detail}`);
+  }
+}
+
+export async function denyToolInvocation(baseUrl: string, conversationId: string, entryId: string): Promise<void> {
+  const res = await fetch(
+    `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/deny`,
+    { method: 'POST', headers: { 'content-type': 'application/json' } },
+  );
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`POST deny failed: ${res.status} ${detail}`);
+  }
+}
+
+/** Poll `fn` until it returns a truthy value, or throw after `timeoutMs`. */
+export async function pollUntil<T>(
+  fn: () => Promise<T | null | undefined | false>,
+  description: string,
+  timeoutMs = INTEGRATION_LLM_TIMEOUT_MS,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await fn();
+    if (value) return value;
+    if (Date.now() >= deadline) throw new Error(`pollUntil timeout (${timeoutMs}ms): ${description}`);
+    await sleep(POLL_MS);
   }
 }
 

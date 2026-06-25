@@ -22,7 +22,7 @@ import type { ChatEntryDbRow } from './chat-entries.types.js';
 const STEP_STATUSES: readonly ThoughtStepStatus[] = ['running', 'completed', 'failed', 'cancelled'];
 
 const AttachmentsArraySchema = z.array(ChatAttachmentSchema);
-const TOOL_STATES = ['requested', 'running', 'done', 'error'] as const;
+const TOOL_STATES = ['requested', 'running', 'done', 'error', 'denied'] as const;
 type ToolState = (typeof TOOL_STATES)[number];
 
 export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {

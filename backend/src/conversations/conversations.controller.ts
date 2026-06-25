@@ -368,6 +368,23 @@ export class ConversationsController {
     }
   }
 
+  @Post(':conversationId/tool-invocations/:entryId/deny')
+  @HttpCode(202)
+  async denyToolInvocation(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+    try {
+      await this.conversationProcessor.denyToolInvocation({ conversationId, toolEntryId: entryId });
+      return { conversationId, toolEntryId: entryId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to deny tool invocation';
+      throw new BadRequestException(detail);
+    }
+  }
+
   @Post(':conversationId/cancel-processing')
   async cancelProcessing(@Param('conversationId') conversationId: string) {
     const exists = await this.conversations.get(conversationId);

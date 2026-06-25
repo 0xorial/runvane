@@ -16,6 +16,16 @@ import type { AgentToolConfig } from '../agents/agent.entity.js';
 import type { GuardrailConfig } from '../contracts/guardrail.js';
 import { resolveToolConfig } from './resolve-tool-config.js';
 
+/**
+ * Identifies the fan-out batch a tool belongs to. When the planner requests N
+ * tools in one decision, all N share one `{ id, size: N }`. The planner only
+ * continues once every member of the batch has reached a terminal state — see
+ * {@link RunToolService.memberResolved}. Stamped onto the tool-invocation entry
+ * (via `toParametersPayload`) so a tool approved/denied in a later HTTP request
+ * still resolves against the same batch.
+ */
+export type ToolBatchRef = { id: string; size: number };
+
 export type RunToolInput = {
   conversationId: string;
   agentId: string;
@@ -24,6 +34,7 @@ export type RunToolInput = {
   toolRequest?: string;
   approvalGranted?: boolean;
   plannerFollowup?: { mode: 'continue' | 'finalize' };
+  toolBatch?: ToolBatchRef;
   guardrailConfig?: GuardrailConfig;
   /**
    * Set by the guardrail thought provider when the guardrail LLM flagged the
@@ -52,9 +63,19 @@ type ToolEnvelope = {
   timing: { started_at: string; finished_at: string; elapsed_ms: number };
 };
 
+type ToolBatchState = { size: number; resolved: Set<string>; continued: boolean };
+
 @Injectable()
 export class RunToolService {
   private readonly logger = new Logger(RunToolService.name);
+
+  /**
+   * Fan-in state per tool-fanout batch, keyed by `ToolBatchRef.id`. Lives in
+   * the (singleton) service so it survives across the separate HTTP requests
+   * that approve/deny a tool. An entry is created lazily on the first member to
+   * resolve and deleted once the planner continuation has been kicked off.
+   */
+  private readonly toolBatches = new Map<string, ToolBatchState>();
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -87,6 +108,40 @@ export class RunToolService {
     if (!chainTip) throw new Error(`runTool: chain tip is unset (conversation=${input.conversationId})`);
     const entries = await this.chatEntries.listChatEntriesFromLeaf(input.conversationId, chainTip);
 
+    // Static, config-level permission gate — the same Off / Ask / Allow the
+    // settings UI surfaces, resolved centrally here so each tool's
+    // evaluatePermission no longer has to translate its own `allowed` rule.
+    // evaluatePermission still runs below for the allow case, so a tool can
+    // keep returning 'ask_user'/'forbid' for dynamic, per-call reasons (e.g.
+    // the api tool, which always asks).
+    const configPermission = this.resolveConfigPermission(toolCfg, parsedRules);
+    if (configPermission === 'forbid') {
+      // "Off": tool disabled or allowed='never'. A forbidden tool is a terminal
+      // (resolved) batch member, so count it toward the fan-in before returning.
+      const blocked = await this.recordBlocked({ input, permission: 'forbid', parsedParams, chain });
+      this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
+      return blocked;
+    }
+    // Guardrail-flagged calls block with permission='ask_user' even when the
+    // config/rules would allow — user must approve past the guardrail.
+    if (input.guardrailFlagReason && input.approvalGranted !== true) {
+      return this.recordBlocked({
+        input,
+        permission: 'ask_user',
+        parsedParams,
+        chain,
+        guardrailReason: input.guardrailFlagReason,
+      });
+    }
+    if (configPermission === 'ask_user' && input.approvalGranted !== true) {
+      // "Ask": allowed='ask'. Request approval up front — no need to consult
+      // the tool's own permission check first.
+      return this.recordBlocked({ input, permission: 'ask_user', parsedParams, chain });
+    }
+
+    // Config allows (or the user already approved). Let the tool apply any
+    // dynamic, per-call permission logic of its own — it can still escalate to
+    // 'ask_user'/'forbid' here.
     scope.throwIfAborted();
     const ruleResults = await tool.evaluatePermission({
       conversationId: input.conversationId,
@@ -99,20 +154,10 @@ export class RunToolService {
       },
     });
     const permission = mostPermissivePermission(ruleResults);
-
     if (permission === 'forbid') {
-      return this.recordBlocked({ input, permission, parsedParams, chain });
-    }
-    // Guardrail-flagged calls block with permission='ask_user' even when the
-    // permission rules said 'allow' — user must approve past the guardrail.
-    if (input.guardrailFlagReason && input.approvalGranted !== true) {
-      return this.recordBlocked({
-        input,
-        permission: 'ask_user',
-        parsedParams,
-        chain,
-        guardrailReason: input.guardrailFlagReason,
-      });
+      const blocked = await this.recordBlocked({ input, permission, parsedParams, chain });
+      this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
+      return blocked;
     }
     if (permission === 'ask_user' && input.approvalGranted !== true) {
       return this.recordBlocked({ input, permission, parsedParams, chain });
@@ -128,6 +173,22 @@ export class RunToolService {
       chain,
       llm,
     });
+  }
+
+  /**
+   * The tool's static permission as configured on the agent — the same
+   * Off / Ask / Allow the settings UI surfaces. A tool turned off
+   * (`enabled: false`) or with `allowed: 'never'` is forbidden; `allowed: 'ask'`
+   * requires user approval; anything else (`allowed: 'always'`, or a tool with
+   * no `allowed` rule) returns 'allow' and defers to the tool's own
+   * evaluatePermission.
+   */
+  private resolveConfigPermission(toolCfg: AgentToolConfig, parsedRules: Record<string, unknown>): ToolPermission {
+    if (toolCfg.enabled === false) return 'forbid';
+    const allowed = parsedRules.allowed;
+    if (allowed === 'never') return 'forbid';
+    if (allowed === 'ask') return 'ask_user';
+    return 'allow';
   }
 
   /**
@@ -154,8 +215,9 @@ export class RunToolService {
 
     // Strip the planner-meta keys toParametersPayload() added to recover the
     // real tool params; the tool's strict param schema rejects extras.
-    const { tool_request, source: _source, ...rawParams } = entry.parameters;
+    const { tool_request, source: _source, __tool_batch, ...rawParams } = entry.parameters;
     const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
+    const toolBatch = parseToolBatch(__tool_batch);
 
     const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
@@ -176,6 +238,7 @@ export class RunToolService {
       // decide whether to continue or finalize.
       plannerFollowup: { mode: 'continue' },
       ...(toolRequest ? { toolRequest } : {}),
+      ...(toolBatch ? { toolBatch } : {}),
       ...(toolOverrides ? { toolOverrides } : {}),
     };
 
@@ -194,6 +257,68 @@ export class RunToolService {
         llm,
         existingEntryId: args.toolEntryId,
       });
+    });
+  }
+
+  /**
+   * User-denial path: the user rejected a `requested` tool invocation. Marks
+   * the entry terminal as `denied` (the tool never runs), then resolves it as a
+   * batch member so the planner continues once every sibling has settled — a
+   * denial counts as a resolution, same as a completion or a failure.
+   */
+  async denyToolInvocation(
+    args: { conversationId: string; toolEntryId: string; agentId: string },
+    scope: LifecycleScope,
+    chain: ChatChain,
+    llm: LlmRef,
+  ): Promise<void> {
+    const entry = await this.chatEntries.getChatEntry(args.conversationId, args.toolEntryId);
+    if (!entry || entry.type !== 'tool-invocation') {
+      throw new Error(`deny: entry ${args.toolEntryId} is not a tool-invocation`);
+    }
+    if (entry.state !== 'requested') {
+      throw new Error(`deny: tool invocation ${args.toolEntryId} is not awaiting approval (state=${entry.state})`);
+    }
+    const now = new Date().toISOString();
+    const envelope: ToolEnvelope = {
+      ok: false,
+      toolId: entry.toolId,
+      output: null,
+      error: 'Denied by user.',
+      permission_state: 'ask_user',
+      timing: { started_at: now, finished_at: now, elapsed_ms: 0 },
+    };
+    await this.chatEntries.updateToolInvocation(args.conversationId, {
+      id: entry.id,
+      state: 'denied',
+      result: envelope,
+    });
+    this.hub.publish(args.conversationId, {
+      type: SseType.TOOL_INVOCATION_END,
+      chatEntryId: entry.id,
+      toolName: entry.toolId,
+      output: 'Denied by user.',
+      ok: false,
+      runContinues: true,
+    });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, args.conversationId, entry.id);
+
+    // The planner continuation hangs off the denied entry, mirroring approve.
+    chain.setTip(entry.id);
+    const toolBatch = parseToolBatch((entry.parameters as Record<string, unknown>).__tool_batch);
+    this.memberResolved({
+      input: {
+        conversationId: args.conversationId,
+        agentId: args.agentId,
+        toolName: entry.toolId,
+        params: {},
+        plannerFollowup: { mode: 'continue' },
+        ...(toolBatch ? { toolBatch } : {}),
+      },
+      entryId: entry.id,
+      scope,
+      chain,
+      llm,
     });
   }
 
@@ -234,7 +359,7 @@ export class RunToolService {
     parsedParams: unknown;
     chain: ChatChain;
     guardrailReason?: string;
-  }): Promise<RunToolResult> {
+  }): Promise<{ kind: 'blocked'; toolEntryId: string }> {
     const { input, permission, parsedParams, chain, guardrailReason } = args;
     const startedAt = new Date();
     const baseReason = permission === 'ask_user' ? 'Tool requires user approval.' : 'Tool is forbidden by permission rules.';
@@ -409,16 +534,9 @@ export class RunToolService {
           ok: false,
           runContinues: input.plannerFollowup?.mode === 'continue',
         });
-        // Continue planning so the agent can see the failure and adapt.
-        if (input.plannerFollowup?.mode === 'continue') {
-          this.thoughtProcessing.startThought({
-            provider: this.plannerProvider,
-            conversationId: input.conversationId,
-            scope,
-            chain,
-            llm,
-          });
-        }
+        // A failed tool is a resolved batch member — continue planning (once
+        // every sibling resolves) so the agent can see the failure and adapt.
+        this.memberResolved({ input, entryId, scope, chain, llm });
       }
       return { kind: 'completed', toolEntryId: entryId };
     }
@@ -442,24 +560,114 @@ export class RunToolService {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
-    if (input.plannerFollowup?.mode === 'continue') {
-      scope.throwIfAborted();
-      this.thoughtProcessing.startThought({
-        provider: this.plannerProvider,
-        conversationId: input.conversationId,
-        scope,
-        chain,
-        llm,
-      });
-    }
+    this.memberResolved({ input, entryId, scope, chain, llm });
     return { kind: 'completed', toolEntryId: entryId };
+  }
+
+  /**
+   * Records one fan-out batch member reaching a terminal state (done / error /
+   * forbidden / denied) and, once **every** member has resolved, continues the
+   * planner exactly once. Tools awaiting approval are NOT terminal and must not
+   * call this until they are approved (→ run) or denied.
+   *
+   * Synchronous on purpose: the resolved-set update and the "already continued"
+   * test-and-set happen without an intervening await, so concurrently-finishing
+   * siblings can't both trip the continuation. Single-tool flows (size 1) and
+   * any caller without batch context continue immediately, preserving the old
+   * one-tool-then-planner behavior.
+   */
+  private memberResolved(args: {
+    input: RunToolInput;
+    entryId: string;
+    scope: LifecycleScope;
+    chain: ChatChain;
+    llm: LlmRef;
+  }): void {
+    const { input, entryId, scope, chain, llm } = args;
+    const shouldContinue = input.plannerFollowup?.mode === 'continue';
+    const batch = input.toolBatch;
+    if (!batch) {
+      if (shouldContinue) this.continuePlanner(input.conversationId, scope, chain, llm);
+      return;
+    }
+    let state = this.toolBatches.get(batch.id);
+    if (!state) {
+      state = { size: batch.size, resolved: new Set<string>(), continued: false };
+      this.toolBatches.set(batch.id, state);
+    }
+    state.resolved.add(entryId);
+    if (state.continued || state.resolved.size < state.size) return;
+    state.continued = true;
+    this.toolBatches.delete(batch.id);
+    if (shouldContinue) this.continuePlanner(input.conversationId, scope, chain, llm);
+  }
+
+  private continuePlanner(conversationId: string, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): void {
+    if (scope.signal.aborted) return;
+    this.thoughtProcessing.startThought({
+      provider: this.plannerProvider,
+      conversationId,
+      scope,
+      chain,
+      llm,
+    });
+  }
+
+  /**
+   * Resolve a fan-out member whose parameter-resolution thought failed before
+   * any tool-invocation entry was created (e.g. the LLM returned unparseable
+   * args). Keyed by the failing thought's id since there is no tool entry. Lets
+   * the fan-in complete instead of stranding the planner. (A param-resolution
+   * failure that throws in prepare/reason — rather than a parse error in
+   * runDecision — isn't signaled here; if it is the last member it leaves the
+   * planner waiting, same limitation as the summarize-attachment batch.)
+   */
+  resolveFailedToolParamsMember(args: {
+    conversationId: string;
+    thoughtId: string;
+    toolBatch?: ToolBatchRef;
+    plannerFollowup?: { mode: 'continue' | 'finalize' };
+    scope: LifecycleScope;
+    chain: ChatChain;
+    llm: LlmRef;
+  }): void {
+    this.memberResolved({
+      input: {
+        conversationId: args.conversationId,
+        agentId: '',
+        toolName: '',
+        params: {},
+        ...(args.plannerFollowup ? { plannerFollowup: args.plannerFollowup } : {}),
+        ...(args.toolBatch ? { toolBatch: args.toolBatch } : {}),
+      },
+      entryId: args.thoughtId,
+      scope: args.scope,
+      chain: args.chain,
+      llm: args.llm,
+    });
   }
 
   private toParametersPayload(input: RunToolInput, params: unknown): Record<string, unknown> {
     const base = params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : { raw: params };
-    if (!input.toolRequest) return base;
-    return { ...base, tool_request: input.toolRequest, source: 'planner_tool_request' };
+    const out: Record<string, unknown> = { ...base };
+    if (input.toolRequest) {
+      out.tool_request = input.toolRequest;
+      out.source = 'planner_tool_request';
+    }
+    // Persist the fan-out batch on the entry so an approve/deny in a later
+    // request can resolve this member against the same batch. Stripped before
+    // the tool's strict param schema re-parses (see approveAndRun).
+    if (input.toolBatch) out.__tool_batch = input.toolBatch;
+    return out;
   }
+}
+
+/** Recover a {@link ToolBatchRef} stamped onto a tool-invocation entry's params. */
+function parseToolBatch(value: unknown): ToolBatchRef | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { id, size } = value as Record<string, unknown>;
+  if (typeof id !== 'string' || typeof size !== 'number') return undefined;
+  return { id, size };
 }
 
 function stringifyOutput(value: unknown): string {

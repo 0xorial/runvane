@@ -5,7 +5,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
 import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
-import { RunToolService } from '../../tools/run-tool.service.js';
+import { RunToolService, type ToolBatchRef } from '../../tools/run-tool.service.js';
 import type { AgentToolConfig } from '../../agents/agent.entity.js';
 import type { GuardrailConfig } from '../../contracts/guardrail.js';
 import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
@@ -20,6 +20,7 @@ export type ToolParamsInput = {
   toolParamsSchema: unknown;
   toolRequest: string;
   plannerFollowup: { mode: 'continue' | 'finalize' };
+  toolBatch?: ToolBatchRef;
   paramsContextNote?: string;
   guardrailConfig?: GuardrailConfig;
   toolOverrides?: Record<string, AgentToolConfig>;
@@ -70,6 +71,17 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await this.markActionFailed(ctx, detail);
+      // This member failed before a tool-invocation entry existed — resolve it
+      // against its fan-out batch so the planner isn't stranded waiting on it.
+      this.runTool.resolveFailedToolParamsMember({
+        conversationId: input.conversationId,
+        thoughtId: ctx.thoughtId,
+        plannerFollowup: input.plannerFollowup,
+        scope,
+        chain: ctx.chain,
+        llm: ctx.llm,
+        ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
+      });
       throw new Error(`toolParams: ${detail}`, { cause: error });
     }
 
@@ -90,6 +102,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           guardrailConfig: input.guardrailConfig,
           plannerFollowup: input.plannerFollowup,
           mainLlm,
+          ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
           ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
         },
         scope,
@@ -107,6 +120,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         toolRequest: input.toolRequest,
         plannerFollowup: input.plannerFollowup,
         decidingThoughtId: ctx.thoughtId,
+        ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,

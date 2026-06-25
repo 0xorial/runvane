@@ -204,7 +204,7 @@ export const ToolEnvelopeSchema = z.object({
 });
 export type ToolEnvelope = z.infer<typeof ToolEnvelopeSchema>;
 
-export const ToolStateSchema = z.enum(['requested', 'running', 'done', 'error']);
+export const ToolStateSchema = z.enum(['requested', 'running', 'done', 'error', 'denied']);
 export type ToolState = z.infer<typeof ToolStateSchema>;
 
 export const ToolInvocationEntrySchema = ChatEntryBaseSchema.extend({

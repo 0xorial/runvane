@@ -8,7 +8,7 @@ import { publishChatEntryUpsert, publishStreamFieldDelta } from '../../sse/sse-h
 import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import type { AgentToolConfig } from '../../agents/agent.entity.js';
-import { RunToolService } from '../../tools/run-tool.service.js';
+import { RunToolService, type ToolBatchRef } from '../../tools/run-tool.service.js';
 import { DEFAULT_GUARDRAIL_PROMPT, type GuardrailConfig } from '../../contracts/guardrail.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
 import type { LlmRef, ThoughtContext, ThoughtTypeProvider } from '../types.js';
@@ -26,6 +26,7 @@ export type GuardrailProviderInput = {
   toolRequest?: string;
   guardrailConfig: GuardrailConfig;
   plannerFollowup: { mode: 'continue' | 'finalize' };
+  toolBatch?: ToolBatchRef;
   /** The main agent LLM — used when calling runTool after guardrail approves. */
   mainLlm: LlmRef;
   toolOverrides?: Record<string, AgentToolConfig>;
@@ -128,6 +129,7 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
         plannerFollowup: input.plannerFollowup,
         decidingThoughtId: ctx.thoughtId,
         ...(verdict.verdict === 'flag' ? { guardrailFlagReason: verdict.reason } : {}),
+        ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,

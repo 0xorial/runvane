@@ -59,9 +59,28 @@ export class ConversationProcessorService {
     if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
     const agentId = anchorUser.agentId;
     const llm = await this.resolveLlmRef({ agentId });
-    const { scope, chain } = await this.beginRun(args.conversationId);
+    const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.approveAndRun(
+        { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
+        scope,
+        chain,
+        llm,
+      );
+    } finally {
+      scope.rootDone();
+    }
+  }
+
+  async denyToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
+    const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
+    if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
+    const agentId = anchorUser.agentId;
+    const llm = await this.resolveLlmRef({ agentId });
+    const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
+    try {
+      await this.runTool.denyToolInvocation(
         { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
         scope,
         chain,
@@ -93,9 +112,19 @@ export class ConversationProcessorService {
     return this.thoughtProcessing.getLlmRef();
   }
 
-  private async beginRun(conversationId: string): Promise<ConversationRun> {
+  /**
+   * Start a run scope + chain for a conversation.
+   *
+   * By default a new run steers: it aborts and replaces any active run. Pass
+   * `joinActive` for approve/deny of a fanned-out tool — those must NOT disturb
+   * sibling tools still executing in the original run, so when a run is already
+   * active we leave it registered and run alongside it. The shared (durable)
+   * fan-in coordinator still ties the two together and continues the planner
+   * once, whichever scope resolves the final tool.
+   */
+  private async beginRun(conversationId: string, opts: { joinActive?: boolean } = {}): Promise<ConversationRun> {
     const prev = this.activeExecutions.get(conversationId);
-    if (prev) {
+    if (prev && !opts.joinActive) {
       prev.abort();
       await prev.whenFinished();
     }
@@ -120,7 +149,12 @@ export class ConversationProcessorService {
         );
       },
     );
-    this.activeExecutions.set(conversationId, scope);
+    // When joining an already-active run, leave it registered so steering and
+    // `isProcessing` still track the original turn; otherwise this run owns the
+    // slot. (If nothing is active, a joining run registers normally.)
+    if (!(opts.joinActive && prev)) {
+      this.activeExecutions.set(conversationId, scope);
+    }
     const reparent = async (entryId: string, newParentId: string) => {
       await this.chatEntries.updateChatEntryParent(conversationId, entryId, newParentId);
       await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, entryId);

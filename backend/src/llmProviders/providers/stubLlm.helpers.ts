@@ -248,6 +248,43 @@ export function stubRagPlannerFinalize(): string {
   });
 }
 
+/**
+ * Drives the tool-fanout integration tests: a user message containing
+ * MOCK_FANOUT_MARKER makes the planner fan out the three mock tools at once,
+ * then finalize once their results come back. Tool params resolve to `{}`
+ * (default tool-params branch) and any guardrail flags by default
+ * (`stubGuardrailFlagReply`), so the test controls outcomes via the mock tool
+ * and the approve/deny endpoints rather than via the LLM.
+ */
+export const MOCK_FANOUT_MARKER = '__mock_fanout__';
+export const MOCK_FANOUT_TOOL_NAMES = ['mock_tool_1', 'mock_tool_2', 'mock_tool_3'] as const;
+export const STUB_MOCK_FANOUT_REPLY = 'Mock fan-out complete.';
+
+export function stubIsMockFanoutConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(MOCK_FANOUT_MARKER);
+}
+
+export function stubMockFanoutFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Fan out the three mock tools in one decision.',
+    assistant_output: 'Running the mock tools.',
+    tool_requests: MOCK_FANOUT_TOOL_NAMES.map((name) => ({
+      tool_name: name,
+      tool_request: `invoke ${name}`,
+    })),
+    followup: 'continue',
+  });
+}
+
+export function stubMockFanoutFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'All mock tools settled; summarize.',
+    assistant_output: STUB_MOCK_FANOUT_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
@@ -266,6 +303,9 @@ export function pickStubReply(request: LlmRequest): string {
   if (stubIsAskAttachmentSubagentRequest(blob)) return STUB_ASK_ATTACHMENT_REPLY;
 
   if (stubIsPlannerRequest(request)) {
+    if (stubIsMockFanoutConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubMockFanoutFinalize() : stubMockFanoutFirstRound();
+    }
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();

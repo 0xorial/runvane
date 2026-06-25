@@ -146,9 +146,12 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (requestedToolCalls.length === 0) return;
     const agent = await this.agents.get(input.agentId);
     if (!agent) throw new Error(`planner: agent not found for tool execution: ${input.agentId}`);
+    // One fan-out batch for this decision: the planner continues only after all
+    // `size` tools reach a terminal state (RunToolService.memberResolved).
+    const toolBatch = { id: crypto.randomUUID(), size: requestedToolCalls.length };
     for (const requested of requestedToolCalls) {
       scope.throwIfAborted();
-      this.startToolParamsThought({ input, agent, requested, followup: parsed.followup }, ctx, scope);
+      this.startToolParamsThought({ input, agent, requested, followup: parsed.followup, toolBatch }, ctx, scope);
     }
   };
 
@@ -165,6 +168,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       agent: AgentEntity;
       requested: { toolName: string; toolRequest: string };
       followup: 'continue' | 'finalize';
+      toolBatch: { id: string; size: number };
     },
     ctx: ThoughtContext,
     scope: LifecycleScope,
@@ -184,6 +188,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       toolParamsSchema: tool.getParamsSchema(),
       toolRequest: args.requested.toolRequest,
       plannerFollowup: { mode: args.followup },
+      toolBatch: args.toolBatch,
       ...(paramsContextNote ? { paramsContextNote } : {}),
       ...(args.input.toolOverrides ? { toolOverrides: args.input.toolOverrides } : {}),
     };
