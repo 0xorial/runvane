@@ -13,7 +13,6 @@ import {
   publishConversationUpdated,
   publishStreamFieldDelta,
 } from '../../sse/sse-helpers.js';
-import { getCompletionText } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
@@ -22,7 +21,7 @@ import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
 import { buildPlannerMessages } from '../lib/plannerPrompt.js';
 import {
   extractAssistantOutputFromJsonLike,
-  parsePlannerOutput,
+  parsePlannerCompletion,
   type ParsedPlannerOutput,
 } from '../lib/plannerTextParsing.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
@@ -126,7 +125,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (state) await state.pending.catch(() => undefined);
     this.liveStreamState.delete(streamEntryId);
 
-    const parsed = parsePlannerOutput(getCompletionText(completion), (raw) =>
+    const parsed = parsePlannerCompletion(completion, (raw) =>
       this.logger.warn(`planner JSON parse failed — treating reply as plain text (${raw.length} chars)`),
     );
     const requestedToolCalls = parsed.toolRequests.filter((t) => input.enabledToolIds.includes(t.toolName));

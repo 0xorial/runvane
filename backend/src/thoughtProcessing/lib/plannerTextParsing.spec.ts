@@ -3,7 +3,41 @@ import {
   parseGemma4ToolCallArgs,
   parseGemma4ToolCalls,
 } from './gemma4ToolCallParsing.js';
-import { parsePlannerOutput } from './plannerTextParsing.js';
+import { parsePlannerCompletion, parsePlannerOutput } from './plannerTextParsing.js';
+import type { LlmCompletion } from '../../llmProviders/types.js';
+
+describe('parsePlannerCompletion — native tool_calls', () => {
+  it('surfaces native OpenAI tool_calls as tool requests (empty text content)', () => {
+    const completion: LlmCompletion = {
+      parts: [{ kind: 'tool_call', callId: 'c1', toolName: 'bash', args: { command: 'ls -la' } }],
+      finishReason: 'tool_calls',
+    };
+    const parsed = parsePlannerCompletion(completion);
+    expect(parsed.toolRequests).toEqual([{ toolName: 'bash', toolRequest: '{"command":"ls -la"}' }]);
+    expect(parsed.followup).toBe('continue');
+  });
+
+  it('merges native tool_calls with parsed text and keeps the prose', () => {
+    const completion: LlmCompletion = {
+      parts: [
+        { kind: 'text', text: '{"assistant_output":"On it."}' },
+        { kind: 'tool_call', callId: 'c1', toolName: 'search', args: { q: 'cats' } },
+      ],
+      finishReason: 'tool_calls',
+    };
+    const parsed = parsePlannerCompletion(completion);
+    expect(parsed.assistantOutput).toBe('On it.');
+    expect(parsed.toolRequests).toEqual([{ toolName: 'search', toolRequest: '{"q":"cats"}' }]);
+  });
+
+  it('falls back to text parsing when there are no native tool_calls', () => {
+    const completion: LlmCompletion = {
+      parts: [{ kind: 'text', text: '{"tool_requests":[{"tool_name":"x","tool_request":"y"}]}' }],
+      finishReason: 'tool_calls',
+    };
+    expect(parsePlannerCompletion(completion).toolRequests).toEqual([{ toolName: 'x', toolRequest: 'y' }]);
+  });
+});
 
 describe('gemma4ToolCallParsing', () => {
   it('parses curl call with quoted url', () => {

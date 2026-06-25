@@ -1,5 +1,8 @@
 import { buildPlannerSyntaxRegistry, PLAINTEXT_SYNTAX_NAME } from './plannerSyntax/index.js';
 import { plainTextPlannerOutput } from './plannerSyntax/plannerOutput.js';
+import { argsToToolRequest } from './plannerSyntax/functionCall.js';
+import { getCompletionText, getCompletionToolCalls } from '../../llmProviders/types.js';
+import type { LlmCompletion } from '../../llmProviders/types.js';
 
 // Back-compat re-exports: these helpers used to be defined here and are imported
 // from this module elsewhere (notably plannerProvider's streaming mirror).
@@ -37,4 +40,30 @@ export function parsePlannerOutput(
   }
   if (parser.name === PLAINTEXT_SYNTAX_NAME) onJsonParseFailed?.(raw);
   return parser.parse(raw);
+}
+
+/**
+ * Parse a planner *completion*: the text dialects PLUS any native tool calls the
+ * model emitted out-of-band as OpenAI-style `tool_calls` (captured as completion
+ * `tool_call` parts, not in the text). Without this, a model that answers via
+ * native function-calling — empty text content + `finish_reason: "tool_calls"` —
+ * has its tool calls silently dropped and nothing executes.
+ */
+export function parsePlannerCompletion(
+  completion: LlmCompletion,
+  onJsonParseFailed?: (reply: string) => void,
+): ParsedPlannerOutput {
+  const native = getCompletionToolCalls(completion).map((call) => ({
+    toolName: call.toolName,
+    toolRequest: argsToToolRequest(call.args),
+  }));
+  // Empty/plaintext content is expected when the model answers via native tool
+  // calls, so don't raise the "parse failed" diagnostic in that case.
+  const fromText = parsePlannerOutput(getCompletionText(completion), native.length > 0 ? undefined : onJsonParseFailed);
+  if (native.length === 0) return fromText;
+  return {
+    assistantOutput: fromText.assistantOutput,
+    toolRequests: [...fromText.toolRequests, ...native],
+    followup: 'continue',
+  };
 }
