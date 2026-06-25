@@ -146,3 +146,19 @@
     border-radius: 3px;
   }
 }
+
+/*
+ * Fenced code blocks: the <pre> owns the background, text color, and padding
+ * (see `proseChat` in lib/markdown.ts). The inline-code utilities
+ * `prose-code:bg-muted`/`rounded`/`px-1` apply to every <code>, including those
+ * inside <pre>, and the intended reset `prose-pre:prose-code:*` compiles to a
+ * reversed `code pre` selector that never matches real <pre><code> — so in light
+ * mode the near-white inline-code background landed under the pre's light text,
+ * rendering code blocks as invisible "white bars". Reset code-in-pre explicitly
+ * (real-element selector outranks the :where()-based utilities).
+ */
+.prose pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
