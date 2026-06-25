@@ -161,7 +161,7 @@ export class ConversationsController {
     if (pinTarget !== undefined) {
       const pinned = await this.conversations.setGroupPinned(conversationId, pinTarget);
       if (pinned) updated = pinned;
-      if (pinTarget === false) this.categorizer.categorizeInBackground(conversationId);
+      if (pinTarget === false) this.conversationProcessor.recategorizeInBackground(conversationId);
     }
 
     await publishConversationUpdated(this.hub, this.conversationsRepo, this.chatEntries, conversationId);

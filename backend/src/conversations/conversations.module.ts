@@ -4,6 +4,7 @@ import { DecisionStep } from '../thoughtProcessing/steps/decisionStep.js';
 import { PrepareStep } from '../thoughtProcessing/steps/prepareStep.js';
 import { ReasonStep } from '../thoughtProcessing/steps/reasonStep.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
+import { CategorizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { GuardrailThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/guardrailProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
@@ -30,6 +31,7 @@ import { ConversationsService } from './conversations.service.js';
     ReasonStep,
     DecisionStep,
     AutoTitleThoughtTypeProvider,
+    CategorizeThoughtTypeProvider,
     PlannerThoughtTypeProvider,
     ToolParamsThoughtTypeProvider,
     SummarizeThoughtTypeProvider,

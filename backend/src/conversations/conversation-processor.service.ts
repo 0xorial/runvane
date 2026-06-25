@@ -8,6 +8,7 @@ import { publishConversationUpdated, publishChatEntryUpsert } from '../sse/sse-h
 import { createBatchBarrier } from '../thoughtProcessing/lib/batchBarrier.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
+import { CategorizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
@@ -44,6 +45,7 @@ export class ConversationProcessorService {
     private readonly conversations: ConversationsRepo,
     private readonly hub: SseHubService,
     private readonly autoTitleProvider: AutoTitleThoughtTypeProvider,
+    private readonly categorizeProvider: CategorizeThoughtTypeProvider,
     private readonly plannerProvider: PlannerThoughtTypeProvider,
     private readonly summarizeProvider: SummarizeThoughtTypeProvider,
     private readonly summarizeAttachmentProvider: SummarizeAttachmentThoughtTypeProvider,
@@ -339,6 +341,48 @@ export class ConversationProcessorService {
     }
   }
 
+  /**
+   * Re-run categorization as a standalone thought after a pinned chat is
+   * unlocked. Fire-and-forget. There's no active run to ride here, so it opens
+   * its own run, appends the categorize thought at the current leaf, and
+   * advances the default-view leaf so the thought renders and a later message
+   * chains after it rather than branching off the old leaf.
+   */
+  recategorizeInBackground(conversationId: string): void {
+    void this.recategorize(conversationId).catch((error) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`recategorize ${conversationId} failed: ${detail}`);
+    });
+  }
+
+  private async recategorize(conversationId: string): Promise<void> {
+    if (!(await this.categorizer.shouldCategorize(conversationId))) return;
+    const titleLlm = await this.thoughtProcessing.getTitleLlmRef();
+    const conversation = await this.conversations.get(conversationId);
+    const leaf = conversation?.defaultViewLeafEntryId ?? null;
+
+    const { scope, chain } = await this.beginRun(conversationId);
+    try {
+      if (leaf) chain.setTip(leaf);
+      this.thoughtProcessing.startThought({
+        provider: this.categorizeProvider,
+        conversationId,
+        scope,
+        chain,
+        llm: titleLlm,
+      });
+    } finally {
+      scope.rootDone();
+    }
+    await scope.whenFinished();
+
+    const tip = chain.getTip();
+    if (tip && tip !== leaf) {
+      await this.chatEntries.setDefaultViewLeaf(conversationId, tip);
+      await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, conversationId);
+    }
+  }
+
   isProcessing(conversationId: string): boolean {
     return this.activeExecutions.has(conversationId);
   }
@@ -399,11 +443,14 @@ export class ConversationProcessorService {
           ...(body.clientRequestId ? { clientRequestId: body.clientRequestId } : {}),
         });
 
+        const isFirstMessage = existingMessages.length === 0;
+        const categorize = isFirstMessage && (await this.categorizer.shouldCategorize(conversationId));
         this.startThoughts({
           conversationId,
           userMessageId: userEntry.id,
           attachments: attachments ?? [],
-          isFirstMessage: existingMessages.length === 0,
+          isFirstMessage,
+          categorize,
           scope,
           chain,
           llm,
@@ -468,6 +515,7 @@ export class ConversationProcessorService {
     userMessageId: string;
     attachments: ChatAttachment[];
     isFirstMessage: boolean;
+    categorize: boolean;
     scope: LifecycleScope;
     chain: ChatChain;
     llm: LlmRef;
@@ -481,10 +529,18 @@ export class ConversationProcessorService {
         chain: args.chain,
         llm: args.titleLlm,
       });
-      // Auto-categorize the conversation off the run path: it classifies from
-      // the first user message and assigns a group (unless pinned). Best-effort
-      // and self-contained, so it never blocks or breaks message processing.
-      this.categorizer.categorizeInBackground(args.conversationId);
+      // Auto-categorize as a first-class thought on the run's chain (right after
+      // the title) so it stays linear with the rest of the run instead of
+      // branching off the user message. Gated upstream by `shouldCategorize`.
+      if (args.categorize) {
+        this.thoughtProcessing.startThought({
+          provider: this.categorizeProvider,
+          conversationId: args.conversationId,
+          scope: args.scope,
+          chain: args.chain,
+          llm: args.titleLlm,
+        });
+      }
     }
     const summaryAttachments = args.attachments.filter((a) => a.mode === 'summary');
     if (summaryAttachments.length === 0) {

@@ -2,6 +2,7 @@ import {
   createProbeConversation,
   defaultAgentId,
   getConversation,
+  getConversationEntries,
   listConversations,
   moveConversationToGroup,
   setConversationConfig,
@@ -38,6 +39,12 @@ test("auto-categorizes a new conversation into a group after its first message",
 
   const conv = await getConversation(request, conversationId);
   expect(conv.groupPinned ?? false).toBe(false);
+
+  // Categorization is a first-class thought now (not a hidden side-channel
+  // call): it leaves a persisted, inspectable thought stream on the chain.
+  const entries = await getConversationEntries(request, conversationId);
+  expect(entries.some((e) => e.type === "thought_stream" && e.thoughtType === "categorize")).toBe(true);
+  expect(entries.some((e) => e.type === "thought-prepare" && e.title === "Categorize conversation")).toBe(true);
 });
 
 test("manual move pins the chat; unlocking re-categorizes it", async ({ request }) => {

@@ -1,4 +1,4 @@
-import { canonicalizeCategory, parseCategory } from './conversation-categorizer.service.js';
+import { canonicalizeCategory, parseCategory } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { normalizeConversationCategorizationConfig } from '../contracts/conversation-config.js';
 
 describe('parseCategory', () => {

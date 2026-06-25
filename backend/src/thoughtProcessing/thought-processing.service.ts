@@ -7,6 +7,7 @@ import { parseEditedRequest, requestToDisplay } from '../llmProviders/messages.j
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitleProvider.js';
+import { CategorizeThoughtTypeProvider } from './thoughtTypeProviders/categorizeProvider.js';
 import { GuardrailThoughtTypeProvider } from './thoughtTypeProviders/guardrailProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from './thoughtTypeProviders/summarizeAttachmentProvider.js';
@@ -39,6 +40,7 @@ export class ThoughtProcessingService {
     private readonly llmProviderSettings: LlmProviderSettingsRepo,
     private readonly hub: SseHubService,
     autoTitleProvider: AutoTitleThoughtTypeProvider,
+    categorizeProvider: CategorizeThoughtTypeProvider,
     @Inject(forwardRef(() => PlannerThoughtTypeProvider))
     plannerProvider: PlannerThoughtTypeProvider,
     @Inject(forwardRef(() => ToolParamsThoughtTypeProvider))
@@ -50,6 +52,7 @@ export class ThoughtProcessingService {
   ) {
     this.providers = [
       autoTitleProvider,
+      categorizeProvider,
       plannerProvider,
       toolParamsProvider,
       summarizeProvider,

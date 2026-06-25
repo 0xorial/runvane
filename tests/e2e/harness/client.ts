@@ -143,3 +143,17 @@ export async function createProbeConversation(
   expect(msgRes.ok()).toBeTruthy();
   return created.id;
 }
+
+type TranscriptEntry = { type: string; thoughtType?: string; title?: string };
+
+export async function getConversationEntries(
+  request: APIRequestContext,
+  conversationId: string,
+): Promise<TranscriptEntry[]> {
+  const res = await request.get(
+    `${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+  );
+  expect(res.ok()).toBeTruthy();
+  const body = (await res.json()) as { entries: TranscriptEntry[] };
+  return body.entries;
+}
