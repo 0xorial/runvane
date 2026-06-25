@@ -64,9 +64,11 @@ export class ConversationsController {
 
   @Get()
   @ValidateResponse(GetConversationsResponseSchema)
-  async list(@Query('deleted') deleted?: string) {
+  async list(@Query('deleted') deleted?: string, @Query('limit') limitRaw?: string) {
     const deletedOnly = deleted === 'only';
-    return this.conversations.list({ deletedOnly });
+    const parsedLimit = Number(limitRaw);
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
+    return this.conversations.list({ deletedOnly, limit });
   }
 
   // NOTE: declared before the `:conversationId` route so the static `config`

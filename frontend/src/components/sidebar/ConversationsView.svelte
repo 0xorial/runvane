@@ -31,6 +31,7 @@
   import { notifyError } from "@/utils/toast";
   import { onMount } from "svelte";
   import Icon from "@/components/ui/Icon.svelte";
+  import Spinner from "@/components/ui/Spinner.svelte";
   import MultiSelectPanel from "./MultiSelectPanel.svelte";
   import SidebarSectionsList from "./SidebarSectionsList.svelte";
   import TextInputDialog from "./TextInputDialog.svelte";
@@ -75,14 +76,17 @@
   let renameTarget = $state<ConversationRow | null>(null);
 
   const conversationsQuery = createQuery(() => ({
-    queryKey: queryKeys.conversationList(showDeletedOnly),
-    queryFn: () => getConversations({ deletedOnly: showDeletedOnly }),
+    queryKey: queryKeys.conversationList(showDeletedOnly, recentLimit),
+    queryFn: () => getConversations({ deletedOnly: showDeletedOnly, limit: recentLimit }),
   }));
 
   const pricingQuery = createModelCapabilitiesQuery();
   const pricingByModel = $derived(pricingFromCapabilities(pricingQuery.data));
   const conversations = $derived(conversationsQuery.data?.conversations ?? []);
   const groups = $derived(conversationsQuery.data?.groups ?? []);
+  // Server-reported count of all conversations in scope (ignores the fetch
+  // limit); falls back to what we have when the field is absent.
+  const total = $derived(conversationsQuery.data?.total ?? conversations.length);
   const knownGroups = $derived(groups.filter((g: ConversationGroupRow) => String(g.id || "").trim()));
 
   const normalizedFilter = $derived(filterText.trim().toLowerCase());
@@ -102,7 +106,7 @@
   });
   const hiddenByLimit = $derived(
     typeof recentLimit === "number" && recentLimit > 0
-      ? Math.max(0, conversations.length - filteredConversations.length)
+      ? Math.max(0, total - filteredConversations.length)
       : 0,
   );
   const sections = $derived(groupConversations(filteredConversations, groups));
@@ -176,10 +180,10 @@
           const groupId = String(ev.conversation.groupId || "").trim();
           if (groupId) {
             const cached = queryClient.getQueryData<GetConversationsResponse>(
-              queryKeys.conversationList(showDeletedOnly),
+              queryKeys.conversationList(showDeletedOnly, recentLimit),
             );
             if (cached && !cached.groups.some((group) => group.id === groupId)) {
-              void refreshConversations(showDeletedOnly);
+              void refreshConversations(showDeletedOnly, recentLimit);
             }
           }
         }
@@ -249,7 +253,7 @@
           ? String(target.newGroupName ?? "")
           : undefined,
       });
-      const data = await refreshConversations(showDeletedOnly);
+      const data = await refreshConversations(showDeletedOnly, recentLimit);
       await queryClient.invalidateQueries({ queryKey: queryKeys.conversationList(showDeletedOnly) });
       const groupId = target.groupId;
       if (typeof groupId === "string" && groupId.trim()) {
@@ -270,7 +274,7 @@
       const updated = await setConversationGroupPinned(conversation.id, pinned);
       upsertConversationInList(showDeletedOnly, updated);
       // Unpinning re-runs categorization server-side; pick up the new group.
-      if (!pinned) await refreshConversations(showDeletedOnly);
+      if (!pinned) await refreshConversations(showDeletedOnly, recentLimit);
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
     }
@@ -285,7 +289,7 @@
   async function onSoftDeleteConversation(conversation: ConversationRow): Promise<void> {
     try {
       await softDeleteConversation(conversation.id);
-      await refreshConversations(showDeletedOnly);
+      await refreshConversations(showDeletedOnly, recentLimit);
       deselect(conversation.id);
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -295,7 +299,7 @@
   async function onUndeleteConversation(conversation: ConversationRow): Promise<void> {
     try {
       await undeleteConversation(conversation.id);
-      await refreshConversations(showDeletedOnly);
+      await refreshConversations(showDeletedOnly, recentLimit);
       deselect(conversation.id);
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -306,7 +310,7 @@
     if (!window.confirm("Delete this conversation permanently? This action is irreversible.")) return;
     try {
       await permanentlyDeleteConversation(conversation.id);
-      await refreshConversations(showDeletedOnly);
+      await refreshConversations(showDeletedOnly, recentLimit);
       deselect(conversation.id);
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e));
@@ -331,7 +335,7 @@
       failedIds.push(ids[index]);
       if (!firstReason) firstReason = result.reason instanceof Error ? result.reason.message : String(result.reason);
     });
-    await refreshConversations(showDeletedOnly);
+    await refreshConversations(showDeletedOnly, recentLimit);
     if (failedIds.length > 0) {
       setSelectedConversationIds(failedIds);
       notifyError(`Deleted ${ids.length - failedIds.length}/${ids.length}. ${firstReason}`);
@@ -391,7 +395,7 @@
         {selectedConversationIds}
         {knownGroups}
         deletedMode={showDeletedOnly}
-        reloadConversations={() => refreshConversations(showDeletedOnly)}
+        reloadConversations={() => refreshConversations(showDeletedOnly, recentLimit)}
         onSelectionChange={setSelectedConversationIds}
         onExpandGroup={(groupId) => (collapsedGroups = { ...collapsedGroups, [groupId]: false })}
         onDeleteSelected={onDeleteSelectedConversations}
@@ -401,14 +405,22 @@
   <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     {#if hiddenByLimit > 0 && !normalizedFilter}
       <div class="shrink-0 px-2.5 pt-1.5 text-[10px] text-muted-foreground">
-        Showing latest {recentLimit} of {conversations.length}
+        Showing latest {recentLimit} of {total}
       </div>
     {/if}
     <div
       class="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 py-1.5"
       data-testid="conversations-list"
     >
-      {#if sections.length === 0}
+      {#if conversationsQuery.isPending}
+        <div
+          class="flex items-center justify-center gap-2 px-2 py-6 text-xs text-muted-foreground"
+          data-testid="conversations-loading"
+        >
+          <Spinner size={14} />
+          <span>Loading conversations…</span>
+        </div>
+      {:else if sections.length === 0}
         <div class="px-2 py-6 text-center text-xs text-muted-foreground">
           {normalizedFilter ? "No conversations match your search." : "No conversations yet."}
         </div>

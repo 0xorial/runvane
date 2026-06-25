@@ -62,6 +62,11 @@ export type ConversationGroupRow = z.infer<typeof ConversationGroupRowSchema>;
 export const GetConversationsResponseSchema = z.object({
   conversations: z.array(ConversationRowSchema),
   groups: z.array(ConversationGroupRowSchema),
+  /** Total active (or deleted) conversation count, ignoring any `limit` —
+   * lets the sidebar show "latest N of total" while fetching only N rows.
+   * Optional so an older backend (no `total`) doesn't fail client validation;
+   * the client falls back to the number of rows it received. */
+  total: z.number().int().nonnegative().optional(),
 });
 export type GetConversationsResponse = z.infer<typeof GetConversationsResponseSchema>;
 

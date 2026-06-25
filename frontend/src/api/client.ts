@@ -138,9 +138,18 @@ export type PostConversationMessageInput = {
   overrides?: import("../../../backend/src/contracts/user-message-overrides").UserMessageOverrides;
 };
 
-export function getConversations(options?: { deletedOnly?: boolean }): Promise<GetConversationsResponse> {
-  const deletedOnly = options?.deletedOnly === true;
-  const path = deletedOnly ? "/api/conversations?deleted=only" : "/api/conversations";
+export function getConversations(options?: {
+  deletedOnly?: boolean;
+  /** Cap the response to the N most-recent conversations (sidebar). Omit = all. */
+  limit?: number;
+}): Promise<GetConversationsResponse> {
+  const params = new URLSearchParams();
+  if (options?.deletedOnly === true) params.set("deleted", "only");
+  if (typeof options?.limit === "number" && options.limit > 0) {
+    params.set("limit", String(Math.trunc(options.limit)));
+  }
+  const query = params.toString();
+  const path = query ? `/api/conversations?${query}` : "/api/conversations";
   return getJson(path).then(validateGetConversationsResponse);
 }
 

@@ -21,10 +21,19 @@ export class ConversationsRepo {
     return name;
   }
 
-  async list(options?: { deletedOnly?: boolean }): Promise<ConversationEntity[]> {
+  async list(options?: { deletedOnly?: boolean; limit?: number }): Promise<ConversationEntity[]> {
+    const limit = options?.limit;
     return this.prisma.conversation.findMany({
       where: { isDeleted: options?.deletedOnly === true },
       orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
+      ...(typeof limit === 'number' && limit > 0 ? { take: limit } : {}),
+    });
+  }
+
+  /** Count of conversations matching the filter, ignoring any list `limit`. */
+  async count(options?: { deletedOnly?: boolean }): Promise<number> {
+    return this.prisma.conversation.count({
+      where: { isDeleted: options?.deletedOnly === true },
     });
   }
 

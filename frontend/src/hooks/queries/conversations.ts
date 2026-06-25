@@ -40,21 +40,33 @@ export function fetchConversationSession(conversationId: string): Promise<Conver
   });
 }
 
-export function refreshConversations(deletedOnly: boolean): Promise<GetConversationsResponse> {
+export function refreshConversations(deletedOnly: boolean, limit?: number): Promise<GetConversationsResponse> {
   return queryClient.fetchQuery({
-    queryKey: queryKeys.conversationList(deletedOnly),
-    queryFn: () => getConversations({ deletedOnly }),
+    queryKey: queryKeys.conversationList(deletedOnly, limit),
+    queryFn: () => getConversations({ deletedOnly, limit }),
   });
 }
 
+/**
+ * Apply an updater to every cached conversation-list query for this
+ * `deletedOnly` scope, regardless of the `limit` window. The sidebar (limit N)
+ * and the full Conversations page (no limit) keep separate cache entries under
+ * different keys, so a created/renamed/moved conversation must reflect in
+ * whichever ones currently exist.
+ */
 export function patchConversationsList(
   deletedOnly: boolean,
   updater: (prev: GetConversationsResponse) => GetConversationsResponse,
 ): void {
-  queryClient.setQueryData<GetConversationsResponse>(queryKeys.conversationList(deletedOnly), (prev) => {
-    if (!prev) return prev;
-    return updater(prev);
-  });
+  queryClient.setQueriesData<GetConversationsResponse>(
+    {
+      predicate: (query) => {
+        const [head, params] = query.queryKey as [unknown, { deletedOnly?: boolean } | undefined];
+        return head === "conversations" && !!params && params.deletedOnly === deletedOnly;
+      },
+    },
+    (prev) => (prev ? updater(prev) : prev),
+  );
 }
 
 export function upsertConversationInList(deletedOnly: boolean, conversation: ConversationRow): void {

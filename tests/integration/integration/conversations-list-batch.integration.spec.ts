@@ -18,10 +18,12 @@ type ListRow = {
 type ListResponse = {
   conversations: ListRow[];
   groups: Array<{ id: string; name: string }>;
+  total: number;
 };
 
-async function listConversations(baseUrl: string): Promise<ListResponse> {
-  const res = await fetch(`${baseUrl}/api/conversations`);
+async function listConversations(baseUrl: string, limit?: number): Promise<ListResponse> {
+  const query = typeof limit === 'number' ? `?limit=${limit}` : '';
+  const res = await fetch(`${baseUrl}/api/conversations${query}`);
   if (!res.ok) throw new Error(`GET /api/conversations failed: ${res.status}`);
   return (await res.json()) as ListResponse;
 }
@@ -86,5 +88,21 @@ describeIntegration('conversations list batch mapping (integration)', () => {
     // The single-row GET path (toApiRow) is unchanged and still returns the row.
     const single = await getConversation(baseUrl, grouped);
     expect(single.id).toBe(grouped);
+  }, 30_000);
+
+  it('caps rows with ?limit while reporting the full total', async () => {
+    // Guarantee at least two active conversations exist for the count.
+    await createConversation(baseUrl);
+    await createConversation(baseUrl);
+
+    const all = await listConversations(baseUrl);
+    // Unlimited list: total equals the number of rows returned.
+    expect(all.total).toBe(all.conversations.length);
+    expect(all.total).toBeGreaterThanOrEqual(2);
+
+    const limited = await listConversations(baseUrl, 1);
+    expect(limited.conversations.length).toBe(1);
+    // total ignores the limit window -> still the full count.
+    expect(limited.total).toBe(all.total);
   }, 30_000);
 });
