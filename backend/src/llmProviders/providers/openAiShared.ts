@@ -168,6 +168,7 @@ export class OpenAiStreamAccumulator {
   private finishReason: LlmFinishReason = 'stop';
   private usage: LlmUsage | undefined;
   private generationId: string | undefined;
+  private readonly rawChunks: unknown[] = [];
 
   constructor(private readonly emit: (event: LlmStreamEvent) => void) {}
 
@@ -177,6 +178,11 @@ export class OpenAiStreamAccumulator {
 
   generationIdValue(): string | undefined {
     return this.generationId;
+  }
+
+  /** Record a raw provider chunk exactly as received (for the raw-response view). */
+  recordRawChunk(chunk: unknown): void {
+    this.rawChunks.push(chunk);
   }
 
   usageValue(): LlmUsage | undefined {
@@ -243,6 +249,7 @@ export class OpenAiStreamAccumulator {
     this.emit({ type: 'finish', reason: this.finishReason });
     const completion: LlmCompletion = { parts, finishReason: this.finishReason };
     if (this.usage) completion.usage = this.usage;
+    if (this.rawChunks.length > 0) completion.rawChunks = this.rawChunks;
     return completion;
   }
 }
@@ -441,6 +448,7 @@ export function ingestOpenAiChunk(
   acc: OpenAiStreamAccumulator,
   parseUsage: (raw: unknown) => LlmUsage | undefined,
 ): void {
+  acc.recordRawChunk(chunk);
   if (typeof chunk.id === 'string' && chunk.id.trim()) acc.ingestGenerationId(chunk.id.trim());
   const usage = parseUsage(chunk.usage);
   if (usage) acc.ingestUsage(usage);

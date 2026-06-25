@@ -1,11 +1,31 @@
 import {
   buildOpenRouterBody,
   describeFetchCause,
+  ingestOpenAiChunk,
   isAnthropicOpenRouterModel,
+  OpenAiStreamAccumulator,
   parseChatCompletionsUsage,
   withAnthropicCacheBreakpoints,
 } from './openAiShared.js';
-import type { LlmRequest } from '../types.js';
+import { getCompletionText, type LlmRequest } from '../types.js';
+
+describe('OpenAiStreamAccumulator rawChunks', () => {
+  it('records each ingested chunk verbatim on the finalized completion', () => {
+    const acc = new OpenAiStreamAccumulator(() => {});
+    const c1 = { id: 'gen-1', choices: [{ delta: { content: 'Hel' } }] };
+    const c2 = { id: 'gen-1', choices: [{ delta: { content: 'lo' }, finish_reason: 'stop' }] };
+    ingestOpenAiChunk(c1, acc, parseChatCompletionsUsage);
+    ingestOpenAiChunk(c2, acc, parseChatCompletionsUsage);
+
+    const completion = acc.finalize();
+    expect(completion.rawChunks).toEqual([c1, c2]);
+    expect(getCompletionText(completion)).toBe('Hello');
+  });
+
+  it('leaves rawChunks undefined when no chunk was ingested', () => {
+    expect(new OpenAiStreamAccumulator(() => {}).finalize().rawChunks).toBeUndefined();
+  });
+});
 
 describe('describeFetchCause', () => {
   it('unwraps undici cause code + message from a "fetch failed" TypeError', () => {

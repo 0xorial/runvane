@@ -110,6 +110,12 @@ export type LlmCompletion = {
   parts: LlmOutputPart[];
   finishReason: LlmFinishReason;
   usage?: LlmUsage;
+  /**
+   * Raw provider chunks exactly as received — the parsed JSON of each streaming
+   * `data: {…}` payload (or the single body for non-streaming). Present only for
+   * adapters that capture it (OpenAI-compatible); used for the raw-response view.
+   */
+  rawChunks?: unknown[];
 };
 
 /** Convenience: build a single-text-part message. */

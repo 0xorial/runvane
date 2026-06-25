@@ -182,9 +182,15 @@ export class ReasonStep {
 
     const responseText = getCompletionText(completion);
     const thinkingText = getCompletionThinking(completion);
+    // Raw-response view shows the provider's chunks exactly as received; fall
+    // back to the assembled text for adapters that don't capture them (stub).
+    const rawResponse =
+      completion.rawChunks && completion.rawChunks.length > 0
+        ? JSON.stringify(completion.rawChunks, null, 2)
+        : responseText;
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
       status: 'completed',
-      llmResponse: responseText,
+      llmResponse: rawResponse,
       ...(thinkingText ? { thinkingText } : {}),
       thoughtMs: Date.now() - startedAt,
     });
