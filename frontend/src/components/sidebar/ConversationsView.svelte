@@ -49,6 +49,7 @@
   let {
     onSelect,
     onNewChat,
+    onShowAll,
     showProbe = false,
     recentLimit,
     enableTextSearch = false,
@@ -57,6 +58,8 @@
     onSelect: (id: string) => void;
     /** When provided, render a New Chat button. */
     onNewChat?: () => void;
+    /** When provided, render an "All conversations" link beside the count row. */
+    onShowAll?: () => void;
     /** Sidebar-only temporary probe button. */
     showProbe?: boolean;
     /** Cap the list to the N most-recent conversations (sidebar). Omit = all. */
@@ -403,9 +406,24 @@
     {/if}
   </div>
   <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-    {#if hiddenByLimit > 0 && !normalizedFilter}
-      <div class="shrink-0 px-2.5 pt-1.5 text-[10px] text-muted-foreground">
-        Showing latest {recentLimit} of {total}
+    {#if onShowAll || (hiddenByLimit > 0 && !normalizedFilter)}
+      <div class="flex shrink-0 items-center gap-2 px-2.5 pt-1.5">
+        {#if hiddenByLimit > 0 && !normalizedFilter}
+          <span class="text-[10px] text-muted-foreground">
+            Showing latest {recentLimit} of {total}
+          </span>
+        {/if}
+        {#if onShowAll}
+          <button
+            type="button"
+            data-testid="sidebar-all-conversations"
+            class="ml-auto flex items-center gap-1 rounded text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            onclick={onShowAll}
+          >
+            <Icon name="list" class="h-3 w-3 shrink-0" />
+            All conversations
+          </button>
+        {/if}
       </div>
     {/if}
     <div

@@ -4,7 +4,6 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import { navigate } from "@/lib/router";
   import { DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG } from "../../../../backend/src/contracts/conversation-config";
-  import Icon from "@/components/ui/Icon.svelte";
   import ChatToolsPanel from "./ChatToolsPanel.svelte";
   import ConversationsView from "./ConversationsView.svelte";
 
@@ -40,17 +39,7 @@
     <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
 
-  <ConversationsView {onSelect} {onNewChat} showProbe recentLimit={recentLimit} />
-
-  <button
-    type="button"
-    data-testid="sidebar-all-conversations"
-    class="flex shrink-0 items-center gap-1.5 border-t border-sidebar-border px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-    onclick={openAllConversations}
-  >
-    <Icon name="list" class="h-3.5 w-3.5 shrink-0" />
-    All conversations
-  </button>
+  <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
 
   <ChatToolsPanel {search} />
 </aside>
