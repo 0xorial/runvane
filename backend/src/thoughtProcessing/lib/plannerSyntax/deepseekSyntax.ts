@@ -16,9 +16,10 @@ const CALL_END = `<${BAR}tool${SEP}call${SEP}end${BAR}>`;
 const CALLS_END = `<${BAR}tool${SEP}calls${SEP}end${BAR}>`;
 const TOOL_SEP = `<${BAR}tool${SEP}sep${BAR}>`;
 
-// Matches the canonical `<｜tool▁calls▁begin｜>` opener and the user's literal
-// `<｜｜DSML｜｜tool_calls>` variant: a fullwidth-bar token containing "tool_calls".
-const OPENER = new RegExp(`<${BAR}[^<>]*tool[${SEP}_]calls[^<>]*>`, 'i');
+// Canonical DeepSeek `<｜tool▁calls▁begin｜>` opener — requires the ▁ (U+2581)
+// separator. DSML's `<｜DSML｜tool_calls>` uses an underscore and a different
+// (invoke/parameter) body, so it is handled by dsmlSyntax, not here.
+const OPENER = new RegExp(`<${BAR}[^<>]*tool${SEP}calls[^<>]*>`, 'i');
 const ARGS_FENCE = /```(?:json)?\s*([\s\S]*?)```/i;
 
 type DeepseekCall = { toolName: string; toolRequest: string; complete: boolean };

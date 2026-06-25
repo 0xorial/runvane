@@ -14,6 +14,7 @@ import { toolCallTagsSyntax } from './toolCallTagsSyntax.js';
 import { mistralSyntax } from './mistralSyntax.js';
 import { llamaSyntax } from './llamaSyntax.js';
 import { deepseekSyntax } from './deepseekSyntax.js';
+import { dsmlSyntax } from './dsmlSyntax.js';
 import { cohereSyntax } from './cohereSyntax.js';
 import { anthropicInvokeSyntax } from './anthropicInvokeSyntax.js';
 import { plainTextPlannerSyntax } from './plainTextSyntax.js';
@@ -27,6 +28,7 @@ export {
   mistralSyntax,
   llamaSyntax,
   deepseekSyntax,
+  dsmlSyntax,
   cohereSyntax,
   anthropicInvokeSyntax,
   plainTextPlannerSyntax,
@@ -49,6 +51,7 @@ export function buildPlannerSyntaxRegistry(): SyntaxRegistry<ParsedPlannerOutput
     mistralSyntax,
     llamaSyntax,
     deepseekSyntax,
+    dsmlSyntax,
     cohereSyntax,
     anthropicInvokeSyntax,
     plainTextPlannerSyntax,

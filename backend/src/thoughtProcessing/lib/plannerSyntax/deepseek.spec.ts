@@ -10,7 +10,6 @@ const CALL_BEGIN = `<${BAR}tool${SEP}call${SEP}begin${BAR}>`;
 const CALL_END = `<${BAR}tool${SEP}call${SEP}end${BAR}>`;
 const CALLS_END = `<${BAR}tool${SEP}calls${SEP}end${BAR}>`;
 const TOOL_SEP = `<${BAR}tool${SEP}sep${BAR}>`;
-const DSML_OPENER = `<${BAR}${BAR}DSML${BAR}${BAR}tool_calls>`;
 
 const call = (name: string, argsJson: string): string =>
   `${CALL_BEGIN}function${TOOL_SEP}${name}\n` + '```json\n' + argsJson + '\n```' + CALL_END;
@@ -30,11 +29,6 @@ describe('DeepSeek V3/R1 (deepseek)', () => {
       { toolName: 'search', toolRequest: '{"q":"cats"}' },
       { toolName: 'get_time', toolRequest: '{}' },
     ]);
-  });
-
-  it('also fires on the literal <｜｜DSML｜｜tool_calls> opener', () => {
-    const raw = DSML_OPENER + call('search', '{"q":"cats"}') + CALLS_END;
-    expect(parsePlannerOutput(raw).toolRequests).toEqual([{ toolName: 'search', toolRequest: '{"q":"cats"}' }]);
   });
 
   it('waits while args are still streaming, then locks deepseek', () => {
