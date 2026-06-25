@@ -1,4 +1,4 @@
-import type { ChatEntry, SummarizeAttachmentLlmStreamEntry } from '../../contracts/chatEntry.js';
+import type { ChatEntry, ThoughtStreamEntry } from '../../contracts/chatEntry.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 
 export type BuildPlannerMessagesInput = {
@@ -8,15 +8,16 @@ export type BuildPlannerMessagesInput = {
 };
 
 /**
- * Index of `summarize_attachment_llm_stream` entries (which carry the
+ * Index of `summarize_attachment` thought-stream entries (which carry the
  * persisted `summaryText`) by attachmentId. When multiple exist for the
  * same attachment (e.g. reprocessed), the latest by `conversationIndex`
  * wins — that matches what the user sees in chat.
  */
-function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, SummarizeAttachmentLlmStreamEntry> {
-  const out = new Map<string, SummarizeAttachmentLlmStreamEntry>();
+function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, ThoughtStreamEntry> {
+  const out = new Map<string, ThoughtStreamEntry>();
   for (const e of entries) {
-    if (e.type !== 'summarize_attachment_llm_stream') continue;
+    if (e.type !== 'thought_stream' || e.thoughtType !== 'summarize_attachment') continue;
+    if (!e.attachmentId) continue;
     const prev = out.get(e.attachmentId);
     if (!prev || prev.conversationIndex < e.conversationIndex) out.set(e.attachmentId, e);
   }
@@ -55,7 +56,7 @@ function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): str
  */
 function userMessageParts(
   entry: Extract<ChatEntry, { type: 'user-message' }>,
-  summaries: Map<string, SummarizeAttachmentLlmStreamEntry>,
+  summaries: Map<string, ThoughtStreamEntry>,
 ): LlmContentPart[] {
   const parts: LlmContentPart[] = [{ kind: 'text', text: entry.text }];
   const ordered = [...(entry.attachments ?? [])].sort((a, b) => a.id.localeCompare(b.id));
@@ -112,7 +113,7 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
 
 function entryToMessages(
   entry: ChatEntry,
-  summaries: Map<string, SummarizeAttachmentLlmStreamEntry>,
+  summaries: Map<string, ThoughtStreamEntry>,
 ): LlmMessage[] {
   switch (entry.type) {
     case 'user-message':
@@ -129,12 +130,7 @@ function entryToMessages(
       return [textMessage('system', `[Earlier in this conversation, summarized]\n${entry.summaryText}`)];
     case 'thought-prepare':
     case 'thought-action':
-    case 'planner_llm_stream':
-    case 'title_llm_stream':
-    case 'tool_params_llm_stream':
-    case 'summarize_llm_stream':
-    case 'summarize_attachment_llm_stream':
-    case 'guardrail_llm_stream':
+    case 'thought_stream':
       return [];
     default: {
       const _exhaustive: never = entry;

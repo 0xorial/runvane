@@ -14,7 +14,7 @@ export type AutoTitleInput = {
 
 @Injectable()
 export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTitleInput> {
-  readonly streamEntryType = 'title_llm_stream' as const;
+  readonly thoughtType = 'title' as const;
   readonly prepareTitle = 'Title generation';
 
   constructor(
@@ -47,7 +47,7 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
       // Harmless on Anthropic (native prefill) and on non-reasoning models
       // that just continue from the prefix; the response cleanup strips
       // any leftover `<think>…</think>` from the title.
-      { role: 'assistant', parts: [{ kind: 'text', text: '<think></think>\n\n' }] },
+      // { role: 'assistant', parts: [{ kind: 'text', text: '<think></think>\n\n' }] },
     ],
   });
 

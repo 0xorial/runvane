@@ -29,7 +29,7 @@ export function entryPreview(entry: ChatEntry): string {
     const head = entry.summaryText.trim().split(/\s+/).slice(0, 12).join(" ");
     return head ? `Summary: ${head}…` : "Summary";
   }
-  if (entry.type === "summarize_attachment_llm_stream") {
+  if (entry.type === "thought_stream" && entry.thoughtType === "summarize_attachment") {
     const name = String(entry.filename ?? "").trim();
     const status = displayStatus(String(entry.status || "running").trim());
     return [status, name ? `Summarize: ${name}` : "Summarize attachment"].filter((x) => x.length > 0).join(" ");

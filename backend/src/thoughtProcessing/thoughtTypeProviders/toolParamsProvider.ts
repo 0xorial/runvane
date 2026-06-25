@@ -28,7 +28,7 @@ export type ToolParamsInput = {
 
 @Injectable()
 export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolParamsInput> {
-  readonly streamEntryType = 'tool_params_llm_stream' as const;
+  readonly thoughtType = 'tool_params' as const;
   readonly prepareTitle = 'Resolve tool parameters';
 
   constructor(

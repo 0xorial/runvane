@@ -44,7 +44,7 @@ const UNAVAILABLE_PLACEHOLDER = '[summary unavailable]';
  */
 @Injectable()
 export class SummarizeAttachmentThoughtTypeProvider implements ThoughtTypeProvider<SummarizeAttachmentInput> {
-  readonly streamEntryType = 'summarize_attachment_llm_stream' as const;
+  readonly thoughtType = 'summarize_attachment' as const;
   readonly prepareTitle = 'Summarize attachment';
   private readonly logger = new Logger(SummarizeAttachmentThoughtTypeProvider.name);
   /**

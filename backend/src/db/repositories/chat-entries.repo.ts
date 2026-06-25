@@ -9,7 +9,7 @@ import type {
 } from '../../contracts/chatEntry.js';
 import type { UserMessageOverrides } from '../../contracts/user-message-overrides.js';
 import type { LlmRef } from '../../contracts/llm.js';
-import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
+import type { ThoughtType } from '../../contracts/chatEntry.js';
 import { PrismaService } from '../prisma.service.js';
 import { StreamCursorService } from '../stream-cursor.service.js';
 import type { ThoughtStepStatus } from './chat-entries.types.js';
@@ -114,7 +114,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   async appendThoughtStreamEntry(
     conversationId: string,
     input: {
-      type: ThoughtStreamEntryType;
+      thoughtType: ThoughtType;
       thoughtId: string;
       parentId: string | null;
       status?: ThoughtStepStatus;
@@ -123,6 +123,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
       thoughtId: input.thoughtId,
+      thoughtType: input.thoughtType,
       llmRequest: '',
       llmResponse: '',
       thoughtMs: null,
@@ -131,7 +132,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     };
     if (input.llm) payload.llm = input.llm;
     const row = await this.appendEntry(conversationId, {
-      type: input.type,
+      type: 'thought_stream',
       parentId: input.parentId,
       payload,
     });

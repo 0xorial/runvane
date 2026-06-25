@@ -35,7 +35,7 @@ export type SummarizeInput = {
  */
 @Injectable()
 export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<SummarizeInput> {
-  readonly streamEntryType = 'summarize_llm_stream' as const;
+  readonly thoughtType = 'summarize' as const;
   readonly prepareTitle = 'Summarize tail';
 
   constructor(
@@ -114,25 +114,20 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
       case 'checkpoint-summary':
         lines.push(`<earlier-summary>\n${e.summaryText}\n</earlier-summary>`);
         break;
-      case 'summarize_attachment_llm_stream':
-        // The stream entry carries the persisted summary text — fold it in
-        // as the user-visible attachment summary for the conversation
-        // summary input.
-        if (e.summaryText) {
+      case 'thought_stream':
+        // The summarize-attachment stream carries the persisted summary text —
+        // fold it in as the user-visible attachment summary. Other thought
+        // streams (planner/title/etc.) are internal plumbing; skip them.
+        if (e.thoughtType === 'summarize_attachment' && e.summaryText) {
           lines.push(
             `<attachment-summary filename="${e.filename ?? ''}" mime="${e.mimeType ?? ''}">\n${e.summaryText}\n</attachment-summary>`,
           );
         }
         break;
-      // Thought scaffolding (prepare/stream/action) is internal plumbing,
-      // not user-visible content; skip from the summary input.
+      // Remaining thought scaffolding is internal plumbing, not user-visible
+      // content; skip from the summary input.
       case 'thought-prepare':
       case 'thought-action':
-      case 'planner_llm_stream':
-      case 'title_llm_stream':
-      case 'tool_params_llm_stream':
-      case 'summarize_llm_stream':
-      case 'guardrail_llm_stream':
         break;
       default: {
         const _exhaustive: never = e;

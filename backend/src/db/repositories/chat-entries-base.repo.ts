@@ -1,5 +1,4 @@
 import type { ChatAttachment, ChatEntry, ToolInvocationEntry } from '../../contracts/chatEntry.js';
-import type { ThoughtStreamEntryType } from '../../thoughtProcessing/types.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
 import { StreamCursorService } from '../stream-cursor.service.js';

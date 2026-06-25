@@ -47,7 +47,7 @@ export class ReasonStep {
     return this.taskRegistry.run(
       {
         kind: 'llm',
-        title: `${provider.streamEntryType} · ${ctx.llm.model}`,
+        title: `${provider.thoughtType} · ${ctx.llm.model}`,
         conversationId: ctx.conversationId,
         parentSignal: scope.signal,
       },
@@ -82,7 +82,7 @@ export class ReasonStep {
   ): Promise<string> {
     const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-        type: provider.streamEntryType,
+        thoughtType: provider.thoughtType,
         thoughtId: ctx.thoughtId,
         parentId,
         status: 'running',

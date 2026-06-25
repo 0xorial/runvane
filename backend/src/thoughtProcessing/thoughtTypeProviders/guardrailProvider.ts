@@ -34,7 +34,7 @@ export type GuardrailProviderInput = {
 
 @Injectable()
 export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<GuardrailProviderInput> {
-  readonly streamEntryType = 'guardrail_llm_stream' as const;
+  readonly thoughtType = 'guardrail' as const;
   readonly prepareTitle = 'Guardrail check';
 
   private readonly logger = new Logger(GuardrailThoughtTypeProvider.name);

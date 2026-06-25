@@ -17,6 +17,7 @@ import {
   isThoughtStreamEntry,
   type LlmRef,
   type ThoughtContext,
+  type ThoughtStreamEntry,
   type ThoughtTypeProvider,
 } from './types.js';
 import { hydrateThoughtInput, serializeThoughtInput } from './inputSnapshot.js';
@@ -284,13 +285,15 @@ export class ThoughtProcessingService {
    */
   private async resolveProviderForThought(conversationId: string, thoughtId: string): Promise<AnyThoughtProvider> {
     const all = await this.chatEntries.listChatEntries(conversationId, { all: true });
-    const streamEntry = all.find((e) => isThoughtStreamEntry(e) && e.thoughtId === thoughtId);
+    const streamEntry = all.find(
+      (e): e is ThoughtStreamEntry => isThoughtStreamEntry(e) && e.thoughtId === thoughtId,
+    );
     if (!streamEntry) {
       throw new Error(`thought ${thoughtId} has no stream entry to identify provider`);
     }
-    const provider = this.providers.find((p) => p.streamEntryType === streamEntry.type);
+    const provider = this.providers.find((p) => p.thoughtType === streamEntry.thoughtType);
     if (!provider) {
-      throw new Error(`no provider registered for stream entry type ${streamEntry.type}`);
+      throw new Error(`no provider registered for thoughtType ${streamEntry.thoughtType}`);
     }
     return provider;
   }
@@ -310,9 +313,9 @@ export class ThoughtProcessingService {
     if (!isThoughtStreamEntry(source)) {
       throw new Error(`reprocess-reason source entry is not a stream entry: ${source.type}`);
     }
-    const provider = this.providers.find((p) => p.streamEntryType === source.type);
+    const provider = this.providers.find((p) => p.thoughtType === source.thoughtType);
     if (!provider) {
-      throw new Error(`no provider registered for stream entry type ${source.type}`);
+      throw new Error(`no provider registered for thoughtType ${source.thoughtType}`);
     }
     if (!source.parentId) throw new Error(`${source.type} ${sourceEntryId} has no parent`);
     const out: {
@@ -362,7 +365,7 @@ export class ThoughtProcessingService {
   ): Promise<string> {
     const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-        type: provider.streamEntryType,
+        thoughtType: provider.thoughtType,
         thoughtId: ctx.thoughtId,
         parentId,
         status: 'running',
@@ -395,7 +398,7 @@ export class ThoughtProcessingService {
   ): Promise<string> {
     const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-        type: provider.streamEntryType,
+        thoughtType: provider.thoughtType,
         thoughtId: ctx.thoughtId,
         parentId,
         status: 'completed',

@@ -142,7 +142,7 @@
   {#if isEditing}
     <div class="space-y-1.5">
       <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Edit response</div>
-      {#if stream.type === "planner_llm_stream"}
+      {#if stream.thoughtType === "planner"}
         <ZodJsonEditor
           schema={AgenticPlannerOutputSchema}
           value={editedResponse}

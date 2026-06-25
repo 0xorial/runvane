@@ -126,54 +126,47 @@ const ThoughtStreamEntryBaseSchema = ChatEntryBaseSchema.extend({
   provider_cost_breakdown: ProviderCostBreakdownSchema.optional(),
 });
 
-export const PlannerLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('planner_llm_stream'),
-  parseResult: PlannerParseResultSchema.optional(),
-});
-export type PlannerLlmStreamEntry = z.infer<typeof PlannerLlmStreamEntrySchema>;
-
-export const TitleLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('title_llm_stream'),
-});
-export type TitleLlmStreamEntry = z.infer<typeof TitleLlmStreamEntrySchema>;
-
-export const ToolParamsLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('tool_params_llm_stream'),
-});
-export type ToolParamsLlmStreamEntry = z.infer<typeof ToolParamsLlmStreamEntrySchema>;
-
-export const SummarizeLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('summarize_llm_stream'),
-});
-export type SummarizeLlmStreamEntry = z.infer<typeof SummarizeLlmStreamEntrySchema>;
+/**
+ * The kind of framework LLM cycle a thought stream represents. This — not the
+ * chat-entry `type` — is the discriminant for which provider produced a stream
+ * entry. Adding a new thought is one value here + one provider, with no new
+ * entry type rippling through the contract, mapper, repo, and frontend union.
+ */
+export const ThoughtTypeSchema = z.enum([
+  'planner',
+  'title',
+  'tool_params',
+  'summarize',
+  'summarize_attachment',
+  'guardrail',
+]);
+export type ThoughtType = z.infer<typeof ThoughtTypeSchema>;
 
 /**
- * Carries both the LLM-call trace and the produced summary text. There is no
- * separate "attachment-summary" output entry: the stream entry IS the
- * persisted output. `summaryText` lands on completion of `runDecision`;
- * `filename` / `mimeType` / `sizeBytes` are stamped at stream-entry
- * creation for offline consumers (planner prompt, ask_attachment tool, UI).
+ * Single chat-entry type for every thought's LLM-call trace. The specific kind
+ * is carried in `thoughtType`. Per-thoughtType extras are optional and only
+ * populated for their owning thoughtType:
+ *  - planner: `parseResult`
+ *  - summarize_attachment: `attachmentId` / `userMessageId` / `filename` /
+ *    `mimeType` / `sizeBytes` / `summaryText`. The stream entry IS the
+ *    persisted attachment summary (no separate output entry); `summaryText`
+ *    lands on `runDecision`, the file metadata is stamped at creation for
+ *    offline consumers (planner prompt, ask_attachment tool, UI).
  */
-export const SummarizeAttachmentLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('summarize_attachment_llm_stream'),
-  attachmentId: z.string(),
-  /**
-   * Id of the user-message this summary was triggered by. Used to scope
-   * the "all peers settled?" check to a single batch when starting the
-   * planner.
-   */
-  userMessageId: z.string(),
+export const ThoughtStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
+  type: z.literal('thought_stream'),
+  thoughtType: ThoughtTypeSchema,
+  // planner
+  parseResult: PlannerParseResultSchema.optional(),
+  // summarize_attachment
+  attachmentId: z.string().optional(),
+  userMessageId: z.string().optional(),
   filename: z.string().optional(),
   mimeType: z.string().optional(),
   sizeBytes: z.number().optional(),
   summaryText: z.string().optional(),
 });
-export type SummarizeAttachmentLlmStreamEntry = z.infer<typeof SummarizeAttachmentLlmStreamEntrySchema>;
-
-export const GuardrailLlmStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('guardrail_llm_stream'),
-});
-export type GuardrailLlmStreamEntry = z.infer<typeof GuardrailLlmStreamEntrySchema>;
+export type ThoughtStreamEntry = z.infer<typeof ThoughtStreamEntrySchema>;
 
 export const ThoughtActionEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal('thought-action'),
@@ -239,12 +232,7 @@ export type CheckpointSummaryEntry = z.infer<typeof CheckpointSummaryEntrySchema
 export const ChatEntrySchema = z.discriminatedUnion('type', [
   UserMessageEntrySchema,
   ThoughtPrepareEntrySchema,
-  PlannerLlmStreamEntrySchema,
-  TitleLlmStreamEntrySchema,
-  ToolParamsLlmStreamEntrySchema,
-  SummarizeLlmStreamEntrySchema,
-  SummarizeAttachmentLlmStreamEntrySchema,
-  GuardrailLlmStreamEntrySchema,
+  ThoughtStreamEntrySchema,
   ThoughtActionEntrySchema,
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,

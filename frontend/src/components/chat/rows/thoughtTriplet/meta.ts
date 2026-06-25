@@ -52,7 +52,7 @@ export function actionMetaLabel(
 ): { usesTool: boolean; status: string; toolName: string | null } {
   const toolName = String(actionEntry?.toolName || "").trim();
   const action = String(actionEntry?.action || "").trim();
-  const decision = stream.type === "planner_llm_stream" ? (stream.decision ?? null) : null;
+  const decision = stream.thoughtType === "planner" ? (stream.decision ?? null) : null;
   const streamToolName = decision?.type === "tool-invocation" ? String(decision.toolId || "").trim() : "";
   const streamTool = streamToolName.length > 0;
   const usesTool = Boolean(toolName) || action === "tool_call" || streamTool;

@@ -458,7 +458,7 @@ export class ConversationProcessorService {
    *   summarize-attachment provider starts the planner itself (see
    *   `SummarizeAttachmentThoughtTypeProvider.maybeStartPlanner`), so
    *   the planner prompt is guaranteed to see every
-   *   `summarize_attachment_llm_stream` entry with its persisted
+   *   `summarize_attachment` thought stream with its persisted
    *   `summaryText`.
    *
    * All calls are fire-and-forget; lifecycle is owned by `scope`.

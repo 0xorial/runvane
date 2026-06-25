@@ -1,39 +1,13 @@
-import type {
-  ChatEntry,
-  GuardrailLlmStreamEntry,
-  PlannerLlmStreamEntry,
-  SummarizeAttachmentLlmStreamEntry,
-  SummarizeLlmStreamEntry,
-  TitleLlmStreamEntry,
-  ToolParamsLlmStreamEntry,
-} from '../contracts/chatEntry.js';
+import type { ChatEntry, ThoughtStreamEntry, ThoughtType } from '../contracts/chatEntry.js';
 import type { LlmRef } from '../contracts/llm.js';
 import type { ChatChain } from '../conversations/chat-chain.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../llmProviders/types.js';
 
-export type { LlmRef };
-
-export type ThoughtStreamEntry =
-  | PlannerLlmStreamEntry
-  | TitleLlmStreamEntry
-  | ToolParamsLlmStreamEntry
-  | SummarizeLlmStreamEntry
-  | SummarizeAttachmentLlmStreamEntry
-  | GuardrailLlmStreamEntry;
-export type ThoughtStreamEntryType = ThoughtStreamEntry['type'];
-
-const THOUGHT_STREAM_ENTRY_TYPES: ReadonlySet<ThoughtStreamEntryType> = new Set<ThoughtStreamEntryType>([
-  'planner_llm_stream',
-  'title_llm_stream',
-  'tool_params_llm_stream',
-  'summarize_llm_stream',
-  'summarize_attachment_llm_stream',
-  'guardrail_llm_stream',
-]);
+export type { LlmRef, ThoughtStreamEntry, ThoughtType };
 
 export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEntry {
-  return THOUGHT_STREAM_ENTRY_TYPES.has(entry.type as ThoughtStreamEntryType);
+  return entry.type === 'thought_stream';
 }
 
 export type ThoughtContext = {
@@ -48,7 +22,7 @@ export type ThoughtContext = {
 };
 
 export type ThoughtTypeProvider<TInput> = {
-  streamEntryType: ThoughtStreamEntryType;
+  thoughtType: ThoughtType;
   prepareTitle: string;
   initialActionSummary?: string;
   /**
@@ -69,9 +43,9 @@ export type ThoughtTypeProvider<TInput> = {
   runPrepare: (input: TInput) => LlmRequest;
   /**
    * Optional payload merged onto the stream entry at creation time. Lets
-   * provider-specific fields (e.g. `attachmentId` on
-   * `summarize_attachment_llm_stream`) land on the stream entry without each
-   * provider re-implementing chain append.
+   * provider-specific fields (e.g. `attachmentId` on the
+   * `summarize_attachment` thought stream) land on the stream entry without
+   * each provider re-implementing chain append.
    */
   streamEntryExtraPayload?: (input: TInput) => Record<string, unknown>;
   onLlmEvent?: (input: TInput, ctx: ThoughtContext, event: LlmStreamEvent) => void;

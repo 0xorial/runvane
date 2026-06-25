@@ -29,7 +29,7 @@
   {@const summary = String(actionEntry?.summary || "").trim()}
   {@const action = String(actionEntry?.action || "").trim()}
   {@const error = String(actionEntry?.error || stream.error || "").trim()}
-  {@const decision = stream.type === "planner_llm_stream" ? (stream.decision ?? null) : null}
+  {@const decision = stream.thoughtType === "planner" ? (stream.decision ?? null) : null}
   {@const parseJson = actionEntry?.parseResult
     ? JSON.stringify(actionEntry.parseResult, null, 2)
     : decision
