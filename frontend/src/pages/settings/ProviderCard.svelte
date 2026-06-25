@@ -50,7 +50,7 @@
   const settingsSpec = $derived(Array.isArray(provider.settings_spec) ? provider.settings_spec : []);
 
   function mutProviders(fn: (providers: Provider[], index: number) => void): void {
-    const next = structuredClone(settings);
+    const next = $state.snapshot(settings);
     const i = next.providers.findIndex((x) => x.id === provider.id);
     if (i < 0) return;
     fn(next.providers as Provider[], i);

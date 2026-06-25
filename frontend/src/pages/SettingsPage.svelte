@@ -76,7 +76,7 @@
     if (!res?.ok) throw new Error(res?.detail || "Connection test failed");
     const fetchedModels = Array.isArray(res?.models) ? res.models : [];
     if (!settings) return;
-    const next = structuredClone(settings);
+    const next = $state.snapshot(settings);
     const idx = next.providers.findIndex((x) => x?.id === provider?.id);
     if (idx >= 0) {
       const p = next.providers[idx] as Record<string, unknown>;

@@ -42,7 +42,7 @@
           groups={modelGroups}
           placeholder="Select model"
           onchange={(nextValue, providerId) => {
-            const next = structuredClone(settings);
+            const next = $state.snapshot(settings) as LlmSettings;
             next.llm_configuration.model_name = nextValue;
             if (providerId?.trim()) next.llm_configuration.provider_id = providerId.trim();
             onSettingsChange(next);
@@ -59,7 +59,7 @@
           groups={modelGroups}
           placeholder="Same as reasoning model"
           onchange={(nextValue, providerId) => {
-            const next = structuredClone(settings);
+            const next = $state.snapshot(settings) as LlmSettings;
             next.llm_configuration.title_model_name = nextValue || undefined;
             next.llm_configuration.title_provider_id = nextValue
               ? providerId?.trim() || next.llm_configuration.title_provider_id
@@ -72,7 +72,7 @@
             type="button"
             class="mt-1.5 text-left text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
             onclick={() => {
-              const next = structuredClone(settings);
+              const next = $state.snapshot(settings) as LlmSettings;
               next.llm_configuration.title_model_name = undefined;
               next.llm_configuration.title_provider_id = undefined;
               onSettingsChange(next);
@@ -92,7 +92,7 @@
           groups={modelGroups}
           placeholder="Select model"
           onchange={(nextValue) => {
-            const next = structuredClone(settings);
+            const next = $state.snapshot(settings) as LlmSettings;
             next.llm_configuration.model_settings = {
               ...next.llm_configuration.model_settings,
               embedding_model: nextValue,
