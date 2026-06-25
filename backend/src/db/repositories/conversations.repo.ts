@@ -6,6 +6,10 @@ import type {
 } from '../../conversations/conversation.entity.js';
 import { PrismaService } from '../prisma.service.js';
 
+// Max ids per `IN (...)` query. SQLite caps bound variables per statement
+// (commonly 999), so bulk lookups over many conversations must be chunked.
+const ID_IN_CHUNK = 500;
+
 @Injectable()
 export class ConversationsRepo {
   constructor(private readonly prisma: PrismaService) {}
@@ -216,28 +220,40 @@ export class ConversationsRepo {
     return rows[0]?.envId ?? null;
   }
 
+  /**
+   * Run an `id IN (...)` SELECT in chunks so we never exceed SQLite's bound-
+   * variable limit when a caller passes many ids (e.g. the full conversation
+   * list). Returns the concatenated rows across chunks.
+   */
+  private async chunkedInQuery<R>(ids: string[], buildSql: (placeholders: string) => string): Promise<R[]> {
+    const out: R[] = [];
+    for (let i = 0; i < ids.length; i += ID_IN_CHUNK) {
+      const part = ids.slice(i, i + ID_IN_CHUNK);
+      const placeholders = part.map(() => '?').join(', ');
+      const rows = (await this.prisma.$queryRawUnsafe(buildSql(placeholders), ...part)) as R[];
+      for (const row of rows) out.push(row);
+    }
+    return out;
+  }
+
   /** Bulk variant for list endpoints: map of conversationId -> tool_environment_id. */
   async getToolEnvironmentIdsByIds(ids: string[]): Promise<Map<string, string | null>> {
+    const rows = await this.chunkedInQuery<{ id: string; envId: string | null }>(
+      ids,
+      (placeholders) => `SELECT id, tool_environment_id AS envId FROM conversations WHERE id IN (${placeholders})`,
+    );
     const map = new Map<string, string | null>();
-    if (ids.length === 0) return map;
-    const placeholders = ids.map(() => '?').join(', ');
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT id, tool_environment_id AS envId FROM conversations WHERE id IN (${placeholders})`,
-      ...ids,
-    )) as Array<{ id: string; envId: string | null }>;
     for (const row of rows) map.set(row.id, row.envId ?? null);
     return map;
   }
 
   /** Bulk variant for list endpoints: map of conversationId -> pinned. */
   async getGroupPinnedByIds(ids: string[]): Promise<Map<string, boolean>> {
+    const rows = await this.chunkedInQuery<{ id: string; pinned: number | bigint | null }>(
+      ids,
+      (placeholders) => `SELECT id, group_pinned AS pinned FROM conversations WHERE id IN (${placeholders})`,
+    );
     const map = new Map<string, boolean>();
-    if (ids.length === 0) return map;
-    const placeholders = ids.map(() => '?').join(', ');
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT id, group_pinned AS pinned FROM conversations WHERE id IN (${placeholders})`,
-      ...ids,
-    )) as Array<{ id: string; pinned: number | bigint | null }>;
     for (const row of rows) map.set(row.id, Number(row.pinned ?? 0) === 1);
     return map;
   }
@@ -296,18 +312,21 @@ export class ConversationsRepo {
         forkedFromConversationTitle: string | null;
       }
     >();
-    if (ids.length === 0) return map;
-    const placeholders = ids.map(() => '?').join(', ');
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT c.id AS id,
+    const rows = await this.chunkedInQuery<{
+      id: string;
+      fromId: string | null;
+      fromEntry: string | null;
+      fromTitle: string | null;
+    }>(
+      ids,
+      (placeholders) => `SELECT c.id AS id,
               c.forked_from_conversation_id AS fromId,
               c.forked_from_entry_id AS fromEntry,
               src.title AS fromTitle
        FROM conversations c
        LEFT JOIN conversations src ON src.id = c.forked_from_conversation_id
        WHERE c.id IN (${placeholders})`,
-      ...ids,
-    )) as Array<{ id: string; fromId: string | null; fromEntry: string | null; fromTitle: string | null }>;
+    );
     for (const row of rows) {
       map.set(row.id, {
         forkedFromConversationId: row.fromId ?? null,

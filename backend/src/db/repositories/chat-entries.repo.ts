@@ -15,6 +15,9 @@ import { StreamCursorService } from '../stream-cursor.service.js';
 import type { ThoughtStepStatus } from './chat-entries.types.js';
 import { ChatEntriesBaseRepo } from './chat-entries-base.repo.js';
 
+// Max ids per `IN (...)` query; SQLite caps bound variables per statement.
+const ID_IN_CHUNK = 500;
+
 export type ToolInvocationState = ToolInvocationEntry['state'];
 
 export type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat-entries.types.js';
@@ -329,18 +332,21 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   ): Promise<Map<string, ConversationRow['tokenUsageByModel']>> {
     const map = new Map<string, ConversationRow['tokenUsageByModel']>();
     if (ids.length === 0) return map;
-    const placeholders = ids.map(() => '?').join(', ');
-    const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT conversation_id AS conversationId, payload_json
-       FROM chat_entries
-       WHERE conversation_id IN (${placeholders}) AND type LIKE '%llm_stream%'`,
-      ...ids,
-    )) as Array<{ conversationId: string; payload_json: string }>;
     const byConversation = new Map<string, string[]>();
-    for (const row of rows) {
-      const list = byConversation.get(row.conversationId);
-      if (list) list.push(row.payload_json);
-      else byConversation.set(row.conversationId, [row.payload_json]);
+    for (let i = 0; i < ids.length; i += ID_IN_CHUNK) {
+      const part = ids.slice(i, i + ID_IN_CHUNK);
+      const placeholders = part.map(() => '?').join(', ');
+      const rows = (await this.prisma.$queryRawUnsafe(
+        `SELECT conversation_id AS conversationId, payload_json
+         FROM chat_entries
+         WHERE conversation_id IN (${placeholders}) AND type LIKE '%llm_stream%'`,
+        ...part,
+      )) as Array<{ conversationId: string; payload_json: string }>;
+      for (const row of rows) {
+        const list = byConversation.get(row.conversationId);
+        if (list) list.push(row.payload_json);
+        else byConversation.set(row.conversationId, [row.payload_json]);
+      }
     }
     for (const [conversationId, payloads] of byConversation) {
       map.set(conversationId, aggregateTokenUsageByModel(toStreamPayloads(payloads)));
