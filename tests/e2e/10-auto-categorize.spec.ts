@@ -54,10 +54,23 @@ test("auto-categorizes a new conversation into an existing group", async ({ requ
   expect(conv.groupPinned ?? false).toBe(false);
 
   // Categorization is a first-class thought now (not a hidden side-channel
-  // call): it leaves a persisted, inspectable thought stream on the chain.
-  const entries = await getConversationEntries(request, conversationId);
-  expect(entries.some((e) => e.type === "thought_stream" && e.thoughtType === "categorize")).toBe(true);
-  expect(entries.some((e) => e.type === "thought-prepare" && e.title === "Categorize conversation")).toBe(true);
+  // call): it leaves a persisted, inspectable thought stream on the chain. The
+  // categorize thought runs concurrently with the probe and persists its entries
+  // independently of the group write, so the entry can land just after the group
+  // becomes visible — poll for it rather than reading entries once (avoids a race
+  // under load).
+  await expect
+    .poll(
+      async () => {
+        const entries = await getConversationEntries(request, conversationId);
+        return (
+          entries.some((e) => e.type === "thought_stream" && e.thoughtType === "categorize") &&
+          entries.some((e) => e.type === "thought-prepare" && e.title === "Categorize conversation")
+        );
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
 });
 
 test("manual move pins the chat; unlocking re-categorizes it", async ({ request }) => {
