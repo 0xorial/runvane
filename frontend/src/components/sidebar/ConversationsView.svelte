@@ -53,6 +53,7 @@
     showProbe = false,
     recentLimit,
     enableTextSearch = false,
+    enableMultiSelect = false,
     dense = true,
   }: {
     onSelect: (id: string) => void;
@@ -66,6 +67,8 @@
     recentLimit?: number;
     /** Render a title filter box (full page). */
     enableTextSearch?: boolean;
+    /** Enable per-row selection checkboxes and the multi-select panel (full page only). */
+    enableMultiSelect?: boolean;
     /** Compact paddings for the narrow sidebar. */
     dense?: boolean;
   } = $props();
@@ -90,6 +93,10 @@
   // Server-reported count of all conversations in scope (ignores the fetch
   // limit); falls back to what we have when the field is absent.
   const total = $derived(conversationsQuery.data?.total ?? conversations.length);
+  // Per-group totals ignore the recent-N window, so a group's counter reflects
+  // its full size rather than only the rows that fit in the window. Absent on
+  // the unwindowed full-page list, where loaded rows already cover each group.
+  const groupTotals = $derived(conversationsQuery.data?.groupTotals);
   const knownGroups = $derived(groups.filter((g: ConversationGroupRow) => String(g.id || "").trim()));
 
   const normalizedFilter = $derived(filterText.trim().toLowerCase());
@@ -112,21 +119,22 @@
       ? Math.max(0, total - filteredConversations.length)
       : 0,
   );
-  const sections = $derived(groupConversations(filteredConversations, groups));
+  const sections = $derived(groupConversations(filteredConversations, groups, groupTotals));
   const selectedConversationIds = $derived.by(() => {
     void $conversationSelectionRevision;
-    return getSelectedConversationIds();
+    return enableMultiSelect ? getSelectedConversationIds() : [];
   });
   const selectedConversationIdSet = $derived(new Set(selectedConversationIds));
-  const multiSelectMode = $derived(selectedConversationIds.length > 0);
+  const multiSelectMode = $derived(enableMultiSelect && selectedConversationIds.length > 0);
 
   $effect(() => {
     void showDeletedOnly;
+    if (!enableMultiSelect) return;
     clearConversationSelection();
   });
 
   $effect(() => {
-    if (conversations.length === 0) return;
+    if (!enableMultiSelect || conversations.length === 0) return;
     const current = getSelectedConversationIds();
     const valid = current.filter((id) => conversations.some((row: ConversationRow) => row.id === id));
     if (valid.length !== current.length || valid.some((id, index) => id !== current[index])) {
@@ -450,6 +458,7 @@
           {sections}
           {collapsedGroups}
           {knownGroups}
+          {enableMultiSelect}
           {multiSelectMode}
           {selectedConversationIdSet}
           deletedMode={showDeletedOnly}

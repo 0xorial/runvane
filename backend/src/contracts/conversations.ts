@@ -67,6 +67,12 @@ export const GetConversationsResponseSchema = z.object({
    * Optional so an older backend (no `total`) doesn't fail client validation;
    * the client falls back to the number of rows it received. */
   total: z.number().int().nonnegative().optional(),
+  /** Per-group conversation counts keyed by groupId, ignoring any `limit` and
+   * matching the deleted scope. Lets the sidebar show a group's true size even
+   * when only the latest N conversations are loaded (most of the group sitting
+   * outside the window). Only populated when the list is windowed; optional for
+   * backward compat — the client falls back to the loaded row count. */
+  groupTotals: z.record(z.string(), z.number().int().nonnegative()).optional(),
 });
 export type GetConversationsResponse = z.infer<typeof GetConversationsResponseSchema>;
 

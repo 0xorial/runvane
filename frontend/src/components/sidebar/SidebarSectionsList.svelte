@@ -9,6 +9,7 @@
     sections,
     collapsedGroups,
     knownGroups,
+    enableMultiSelect,
     multiSelectMode,
     selectedConversationIdSet,
     deletedMode,
@@ -25,6 +26,7 @@
     sections: SidebarSection[];
     collapsedGroups: Record<string, boolean>;
     knownGroups: ConversationGroupRow[];
+    enableMultiSelect: boolean;
     multiSelectMode: boolean;
     selectedConversationIdSet: Set<string>;
     deletedMode: boolean;
@@ -49,6 +51,7 @@
       conversation={section.row}
       selected={selectedConversationIdSet.has(section.row.id)}
       {knownGroups}
+      {enableMultiSelect}
       {multiSelectMode}
       {deletedMode}
       {pricingByModel}
@@ -65,7 +68,7 @@
     <ConversationGroupItem
       groupId={section.groupId}
       groupName={section.groupName}
-      rowCount={section.rows.length}
+      rowCount={section.totalCount}
       latestTimestampIso={section.latestTimestampIso}
       {collapsed}
       onToggle={toggleGroup}
@@ -76,6 +79,7 @@
           selected={selectedConversationIdSet.has(row.id)}
           nested
           {knownGroups}
+          {enableMultiSelect}
           {multiSelectMode}
           {deletedMode}
           {pricingByModel}

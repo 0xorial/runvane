@@ -12,15 +12,15 @@ export class ToolRegistry {
   }
 
   /**
-   * Register a tool by name. Names are unique, so a collision throws — except
-   * when `override` is set, which lets a tool-host target tool supersede a
-   * same-named builtin (e.g. the target sandbox `filesystem` replaces the in-harness one
-   * when a host is connected, falling back to the builtin when it isn't).
+   * Register a tool by name. Names are unique and a tool may never replace an
+   * already-registered one — a collision throws. Safety invariant: a tool-host
+   * proxy (which carries no rules/permission schema) must not be able to
+   * silently supersede a safety-bearing builtin like `filesystem`.
    */
-  register(tool: BaseTool, options?: { override?: boolean }): void {
+  register(tool: BaseTool): void {
     const name = tool.getName();
     if (!name) throw new Error('tool name is required');
-    if (this.byName.has(name) && !options?.override) throw new Error(`tool name collision: ${name}`);
+    if (this.byName.has(name)) throw new Error(`tool name collision: ${name}`);
     this.byName.set(name, tool);
   }
 

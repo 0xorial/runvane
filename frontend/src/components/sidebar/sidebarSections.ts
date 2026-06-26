@@ -7,6 +7,10 @@ export type SidebarSection =
       groupId: string;
       groupName: string;
       rows: ConversationRow[];
+      /** Full conversation count for the group, ignoring the sidebar's
+       * recent-N window. Falls back to `rows.length` when the backend doesn't
+       * report per-group totals (unwindowed list or older backend). */
+      totalCount: number;
       latestMs: number;
       latestTimestampIso: string;
     };
@@ -33,6 +37,7 @@ function latestSectionTimestamp(rows: ConversationRow[]): { ms: number; raw: str
 export function groupConversations(
   conversations: ConversationRow[],
   groups: ConversationGroupRow[],
+  groupTotals?: Record<string, number>,
 ): SidebarSection[] {
   const ungrouped: ConversationRow[] = [];
   const byGroupId = new Map<string, ConversationRow[]>();
@@ -67,6 +72,7 @@ export function groupConversations(
         groupId,
         groupName,
         rows,
+        totalCount: groupTotals?.[groupId] ?? rows.length,
         latestMs: latest.ms,
         latestTimestampIso: latest.raw,
       };

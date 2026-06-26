@@ -41,6 +41,23 @@ export class ConversationsRepo {
     });
   }
 
+  /** Per-group conversation counts (groupId → count) matching the deleted
+   * filter and ignoring any list `limit`. Ungrouped rows (null groupId) are
+   * omitted. Lets the sidebar show a group's full size even when only the
+   * latest N conversations are loaded. */
+  async countByGroup(options?: { deletedOnly?: boolean }): Promise<Record<string, number>> {
+    const grouped = await this.prisma.conversation.groupBy({
+      by: ['groupId'],
+      where: { isDeleted: options?.deletedOnly === true, groupId: { not: null } },
+      _count: { _all: true },
+    });
+    const totals: Record<string, number> = {};
+    for (const row of grouped) {
+      if (row.groupId) totals[row.groupId] = row._count._all;
+    }
+    return totals;
+  }
+
   async get(id: string, options?: { includeDeleted?: boolean }): Promise<ConversationEntity | null> {
     const row = await this.prisma.conversation.findUnique({ where: { id } });
     if (!row) return null;

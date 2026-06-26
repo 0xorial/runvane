@@ -20,18 +20,22 @@ export class ConversationsService {
 
   async list(input: { deletedOnly?: boolean; limit?: number }): Promise<GetConversationsResponse> {
     const limited = typeof input.limit === 'number' && input.limit > 0;
-    const [rows, groups, counted] = await Promise.all([
+    const [rows, groups, counted, groupTotals] = await Promise.all([
       this.conversations.list({ deletedOnly: input.deletedOnly, limit: input.limit }),
       this.conversations.listGroups(),
       // When unlimited we already fetch every row, so rows.length is the total
       // and an extra COUNT(*) is wasted; only count when the list is windowed.
       limited ? this.conversations.count({ deletedOnly: input.deletedOnly }) : Promise.resolve(null),
+      // Likewise the per-group totals only matter under a window: without a
+      // limit each group's loaded rows already cover it in full.
+      limited ? this.conversations.countByGroup({ deletedOnly: input.deletedOnly }) : Promise.resolve(null),
     ]);
     const conversations = await this.toApiRowsBatch(rows);
     return {
       conversations,
       groups: groups.map(toConversationGroupRow),
       total: counted ?? rows.length,
+      ...(groupTotals ? { groupTotals } : {}),
     };
   }
 

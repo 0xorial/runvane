@@ -13,6 +13,7 @@
     nested = false,
     knownGroups,
     selected,
+    enableMultiSelect,
     multiSelectMode,
     deletedMode,
     pricingByModel,
@@ -28,6 +29,7 @@
     nested?: boolean;
     knownGroups: ConversationGroupRow[];
     selected: boolean;
+    enableMultiSelect: boolean;
     multiSelectMode: boolean;
     deletedMode: boolean;
     pricingByModel: Map<string, ModelPricing>;
@@ -71,23 +73,25 @@
     ? 'ml-3'
     : ''}"
 >
-  <div class="flex w-6 shrink-0 items-center justify-center">
-    <input
-      type="checkbox"
-      data-testid={`sidebar-select-${conversation.id}`}
-      class="h-4 w-4 {multiSelectMode ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}"
-      checked={selected}
-      aria-label={`Select conversation ${conversation.title || conversation.id}`}
-      onchange={(event) => {
-        event.stopPropagation();
-        toggleConversationSelected(conversation.id, event.currentTarget.checked);
-      }}
-    />
-  </div>
+  {#if enableMultiSelect}
+    <div class="flex w-6 shrink-0 items-center justify-center">
+      <input
+        type="checkbox"
+        data-testid={`sidebar-select-${conversation.id}`}
+        class="h-4 w-4 {multiSelectMode ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}"
+        checked={selected}
+        aria-label={`Select conversation ${conversation.title || conversation.id}`}
+        onchange={(event) => {
+          event.stopPropagation();
+          toggleConversationSelected(conversation.id, event.currentTarget.checked);
+        }}
+      />
+    </div>
+  {/if}
   <button
     type="button"
     data-testid={`sidebar-conversation-${conversation.id}`}
-    class="min-w-0 flex-1 py-2 pl-0.5 pr-2.5 text-left"
+    class="min-w-0 flex-1 py-2 pr-2.5 text-left {enableMultiSelect ? 'pl-0.5' : 'pl-2.5'}"
     onclick={() => {
       if (multiSelectMode) toggleConversationSelected(conversation.id, !selected);
       else selectConversation(conversation.id);

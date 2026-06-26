@@ -19,6 +19,7 @@ type ListResponse = {
   conversations: ListRow[];
   groups: Array<{ id: string; name: string }>;
   total: number;
+  groupTotals?: Record<string, number>;
 };
 
 async function listConversations(baseUrl: string, limit?: number): Promise<ListResponse> {
@@ -104,5 +105,36 @@ describeIntegration('conversations list batch mapping (integration)', () => {
     expect(limited.conversations.length).toBe(1);
     // total ignores the limit window -> still the full count.
     expect(limited.total).toBe(all.total);
+  }, 30_000);
+
+  it('reports a group its full size via groupTotals, independent of the ?limit window', async () => {
+    const groupName = `grouptotals-grp-${Date.now()}`;
+    // Two conversations sharing one uniquely-named group (reused by name).
+    const memberA = await createConversation(baseUrl);
+    const memberB = await createConversation(baseUrl);
+    await moveToNewGroup(baseUrl, memberA, groupName);
+    await moveToNewGroup(baseUrl, memberB, groupName);
+    // Newer ungrouped conversations to crowd a small recent window.
+    await createConversation(baseUrl);
+    await createConversation(baseUrl);
+    await createConversation(baseUrl);
+
+    const all = await listConversations(baseUrl);
+    const group = all.groups.find((g) => g.name === groupName);
+    expect(group).toBeDefined();
+    const groupId = group!.id;
+    const members = all.conversations.filter((row) => row.groupId === groupId).map((row) => row.id);
+    expect(members.sort()).toEqual([memberA, memberB].sort());
+    // Unlimited list omits groupTotals -> the loaded rows already cover the group.
+    expect(all.groupTotals).toBeUndefined();
+
+    // Windowed to a single row: however many group rows land inside the window,
+    // groupTotals still reports the group's full size (this is the fix — the
+    // sidebar counter would otherwise show only the loaded subset).
+    const limited = await listConversations(baseUrl, 1);
+    expect(limited.groupTotals).toBeDefined();
+    expect(limited.groupTotals![groupId]).toBe(2);
+    const loadedInGroup = limited.conversations.filter((row) => row.groupId === groupId).length;
+    expect(limited.groupTotals![groupId]).toBeGreaterThanOrEqual(loadedInGroup);
   }, 30_000);
 });
