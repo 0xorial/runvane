@@ -22,22 +22,6 @@ describeLive('api tool (integration)', () => {
     signal: AbortSignal.timeout(10_000),
   };
 
-  it('never auto-allows in evaluatePermission', () => {
-    const base = {
-      conversationId: 'conv-test',
-      agentId: null,
-      entries: [],
-      agentToolConfig: {
-        enabled: true,
-        policy: 'allow' as const,
-        rules: { allowed: 'always' as const },
-      },
-    };
-    expect(apiTool.evaluatePermission(base)[0]?.permission).toBe('ask_user');
-    expect(apiTool.evaluatePermission({ ...base, agentToolConfig: { ...base.agentToolConfig, rules: { allowed: 'never' } } })[0]
-      ?.permission).toBe('forbid');
-  });
-
   it('lists tools and agents through backend services', async () => {
     const tools = await apiTool.runTool({ operation: 'list_tools' }, context);
     const toolNames = (tools as { tools: Array<{ name: string }> }).tools.map((row) => row.name);

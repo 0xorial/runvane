@@ -1,42 +1,45 @@
 <script lang="ts">
-  import CodeEditor from "@/components/ui/CodeEditor.svelte";
   import Icon from "@/components/ui/Icon.svelte";
-  import ZodJsonEditor from "@/components/ui/ZodJsonEditor.svelte";
+  import ToolRulesEditor from "@/components/settings/ToolRulesEditor.svelte";
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
-  import { DEFAULT_GUARDRAIL_PROMPT } from "../../../../backend/src/contracts/guardrail";
   import { readGuardrailConfig } from "./agentGuardrail";
   import {
     getToolConfigFromAgent,
     getToolDefaultConfig,
     patchToolConfigOnAgent,
+    TOOL_POLICIES,
     type ToolConfig,
+    type ToolPolicy,
   } from "./agentTools";
-  import { sortAgents } from "./helpers";
   import { buildToolRulesZodSchemas } from "./toolRulesSchemas";
 
   let {
     currentAgent,
-    agents,
     toolCatalog,
     canEdit,
     onAgentChange,
   }: {
     currentAgent: AgentListItemResponse;
-    agents: AgentListItemResponse[];
     toolCatalog: Record<string, unknown>[];
     canEdit: boolean;
     onAgentChange: (agent: AgentListItemResponse) => void;
   } = $props();
 
   let expandedTools = $state<Record<string, boolean>>({});
-  let toolConfigDrafts = $state<Record<string, string>>({});
-  let toolConfigErrors = $state<Record<string, string>>({});
 
   const guardrailLlm = $derived(readGuardrailConfig(currentAgent.default_llm_configuration as Record<string, unknown>));
   const guardrailLlmConfigured = $derived(
     guardrailLlm.provider_id.length > 0 && guardrailLlm.model_name.length > 0,
   );
   const toolRulesZodSchemas = $derived(buildToolRulesZodSchemas(toolCatalog));
+
+  // Segment colours mirror the chat-sidebar tool control for visual parity.
+  const POLICY_SEGMENTS: { id: ToolPolicy; label: string; activeClass: string }[] = [
+    { id: "off", label: "Off", activeClass: "bg-muted font-semibold text-foreground" },
+    { id: "ask", label: "Ask", activeClass: "bg-sky-500/25 font-semibold text-sky-800 dark:text-sky-200" },
+    { id: "allow", label: "Allow", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
+    { id: "custom", label: "Custom", activeClass: "bg-emerald-500/25 font-semibold text-emerald-800 dark:text-emerald-200" },
+  ];
 
   function getToolConfig(toolName: string): ToolConfig {
     return getToolConfigFromAgent(currentAgent, toolName);
@@ -51,29 +54,23 @@
     expandedTools = { ...expandedTools, [toolName]: next ?? !expandedTools[toolName] };
   }
 
-  function getToolConfigDraft(toolName: string): string {
-    const existing = toolConfigDrafts[toolName];
-    if (existing != null) return existing;
-    const current = getToolConfig(toolName).config;
-    const base = Object.keys(current).length > 0 ? current : getToolDefaultConfig(toolCatalog, toolName);
-    return JSON.stringify(base, null, 2);
+  function setPolicy(toolName: string, policy: ToolPolicy): void {
+    if (!canEdit) return;
+    patchTool(toolName, { policy });
+    if (policy === "off") {
+      toggleExpanded(toolName, false);
+      return;
+    }
+    // Seed the tool's default rules the first time it's switched on.
+    if (Object.keys(getToolConfig(toolName).config).length === 0) {
+      const defaults = getToolDefaultConfig(toolCatalog, toolName);
+      if (Object.keys(defaults).length > 0) patchTool(toolName, { config: defaults });
+    }
+    if (policy === "custom") toggleExpanded(toolName, true);
   }
 
-  function onToolConfigDraftChange(toolName: string, raw: string): void {
-    toolConfigDrafts = { ...toolConfigDrafts, [toolName]: raw };
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        toolConfigErrors = { ...toolConfigErrors, [toolName]: "Config must be a JSON object." };
-        return;
-      }
-      patchTool(toolName, { config: parsed as Record<string, unknown> });
-      const nextErrors = { ...toolConfigErrors };
-      delete nextErrors[toolName];
-      toolConfigErrors = nextErrors;
-    } catch {
-      toolConfigErrors = { ...toolConfigErrors, [toolName]: "Invalid JSON." };
-    }
+  function policyTitle(id: ToolPolicy): string {
+    return TOOL_POLICIES.find((p) => p.value === id)?.hint ?? "";
   }
 </script>
 
@@ -86,8 +83,7 @@
       <tr>
         <th>Tool</th>
         <th>Description</th>
-        <th>Enabled</th>
-        <th title="Requires Guardrail LLM to be configured above">Guardrail</th>
+        <th title="Off · Ask · Allow · Custom (defer to the tool)">Permission</th>
       </tr>
     </thead>
     <tbody>
@@ -96,10 +92,11 @@
         {@const name = String(row.name ?? "").trim()}
         {#if name}
           {@const cfg = getToolConfig(name)}
-          {@const expanded = !!expandedTools[name] && cfg.enabled}
+          {@const on = cfg.policy !== "off"}
+          {@const expanded = !!expandedTools[name] && on}
           <tr>
             <td>
-              {#if cfg.enabled}
+              {#if on}
                 <button
                   type="button"
                   class="-mx-1 inline-flex items-center gap-2 rounded-md border-0 bg-transparent px-1 py-0.5 text-left hover:bg-muted disabled:cursor-default"
@@ -124,113 +121,43 @@
               {row.description != null ? String(row.description) : "—"}
             </td>
             <td>
-              <input
-                type="checkbox"
-                checked={cfg.enabled}
-                disabled={!canEdit}
-                onchange={(e) => {
-                  const nextEnabled = e.currentTarget.checked;
-                  patchTool(name, { enabled: nextEnabled });
-                  if (nextEnabled) {
-                    if (Object.keys(cfg.config).length === 0) {
-                      const defaults = getToolDefaultConfig(toolCatalog, name);
-                      if (Object.keys(defaults).length > 0) patchTool(name, { config: defaults });
-                    }
-                    toggleExpanded(name, true);
-                  } else {
-                    toggleExpanded(name, false);
-                  }
-                }}
-              />
-            </td>
-            <td>
-              <input
-                type="checkbox"
-                checked={cfg.guardrail}
-                disabled={!canEdit || !cfg.enabled || !guardrailLlmConfigured}
-                title={!guardrailLlmConfigured
-                  ? "Configure the Guardrail LLM above first"
-                  : !cfg.enabled
-                    ? "Enable the tool first"
-                    : undefined}
-                onchange={(e) => patchTool(name, { guardrail: e.currentTarget.checked })}
-              />
+              <div
+                class="inline-flex overflow-hidden rounded-md border border-border text-[10px] font-medium"
+                role="group"
+                aria-label="{name} permission policy"
+              >
+                {#each POLICY_SEGMENTS as seg, i (seg.id)}
+                  {@const active = cfg.policy === seg.id}
+                  <button
+                    type="button"
+                    class="px-1.5 py-0.5 transition-colors {i > 0 ? 'border-l border-border' : ''} {active
+                      ? seg.activeClass
+                      : 'text-muted-foreground hover:bg-secondary/80'}"
+                    aria-pressed={active}
+                    disabled={!canEdit}
+                    title={policyTitle(seg.id)}
+                    onclick={() => setPolicy(name, seg.id)}
+                  >
+                    {seg.label}
+                  </button>
+                {/each}
+              </div>
             </td>
           </tr>
           {#if expanded}
             <tr>
-              <td colspan="4" class="bg-muted/50">
+              <td colspan="3" class="bg-muted/50">
                 <div class="p-2">
-                  <div class="mb-2 text-xs font-semibold text-foreground">
-                    <code>{name}</code> config (JSON)
-                  </div>
-                  {#if toolRulesZodSchemas.get(name)}
-                    <ZodJsonEditor
-                      schema={toolRulesZodSchemas.get(name)!}
-                      value={getToolConfigDraft(name)}
-                      onchange={(v) => onToolConfigDraftChange(name, v)}
-                      height={200}
-                      readOnly={!canEdit}
-                    />
-                  {:else}
-                    <CodeEditor
-                      value={getToolConfigDraft(name)}
-                      onchange={(v) => onToolConfigDraftChange(name, v)}
-                      language="json"
-                      height={200}
-                      readOnly={!canEdit}
-                    />
-                    {#if toolConfigErrors[name]}
-                      <div class="mt-2 text-xs text-destructive" role="alert">{toolConfigErrors[name]}</div>
-                    {/if}
-                  {/if}
-                  {#if cfg.guardrail && guardrailLlmConfigured}
-                    <div class="mt-3">
-                      <label class="flex flex-col gap-1 text-xs">
-                        <span class="font-semibold text-foreground">
-                          Guardrail prompt override
-                          <span class="font-normal text-muted-foreground">(leave blank to use global prompt)</span>
-                        </span>
-                        <textarea
-                          class="min-h-[72px] w-full resize-y rounded-lg border border-input bg-background p-2 text-xs"
-                          value={cfg.guardrail_system_prompt}
-                          disabled={!canEdit}
-                          oninput={(e) => patchTool(name, { guardrail_system_prompt: e.currentTarget.value })}
-                          placeholder={guardrailLlm.system_prompt || DEFAULT_GUARDRAIL_PROMPT}
-                          rows={3}
-                          spellcheck={false}
-                        ></textarea>
-                      </label>
-                    </div>
-                  {/if}
-                  <div class="mt-2.5">
-                    <div class="mb-1.5 text-xs font-semibold text-foreground">Agent permissions</div>
-                    <table
-                      class="w-full border-collapse border border-border text-xs [&_td]:border-b [&_td]:border-border [&_td]:px-2 [&_td]:py-1.5 [&_th]:border-b [&_th]:border-border [&_th]:bg-background [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-bold"
-                    >
-                      <thead>
-                        <tr>
-                          <th>Agent ID</th>
-                          <th>Agent name</th>
-                          <th>Enabled</th>
-                          <th>Guardrail</th>
-                          <th>Permissions config</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {#each sortAgents(agents) as agentRow (agentRow.id)}
-                          {@const agentCfg = getToolConfigFromAgent(agentRow, name)}
-                          <tr>
-                            <td><code>{agentRow.id}</code></td>
-                            <td>{agentRow.name || "Unnamed"}</td>
-                            <td>{agentCfg.enabled ? "true" : "false"}</td>
-                            <td>{agentCfg.guardrail ? "true" : "false"}</td>
-                            <td><code>{JSON.stringify(agentCfg.config)}</code></td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ToolRulesEditor
+                    toolName={name}
+                    config={cfg}
+                    rulesSchema={toolRulesZodSchemas.get(name)}
+                    {guardrailLlmConfigured}
+                    globalGuardrailPrompt={guardrailLlm.system_prompt}
+                    readOnly={!canEdit}
+                    rulesEditorHeight={200}
+                    onPatch={(patch) => patchTool(name, patch)}
+                  />
                 </div>
               </td>
             </tr>

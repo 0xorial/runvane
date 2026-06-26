@@ -1,12 +1,25 @@
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import { readGuardrailConfig, type GuardrailConfig } from "./agentGuardrail";
 
+export type ToolPolicy = "off" | "ask" | "allow" | "custom";
+
 export type ToolConfig = {
-  enabled: boolean;
+  policy: ToolPolicy;
   guardrail: boolean;
   guardrail_system_prompt: string;
   config: Record<string, unknown>;
 };
+
+export const TOOL_POLICIES: ReadonlyArray<{ value: ToolPolicy; label: string; hint: string }> = [
+  { value: "off", label: "Off", hint: "Tool unavailable to this agent" },
+  { value: "ask", label: "Ask", hint: "Prompt for approval before each call" },
+  { value: "allow", label: "Allow", hint: "Run without prompting" },
+  { value: "custom", label: "Custom", hint: "Defer to the tool's own permission logic" },
+];
+
+export function toToolPolicy(value: unknown): ToolPolicy {
+  return value === "ask" || value === "allow" || value === "custom" ? value : "off";
+}
 
 export function getToolConfigFromAgent(
   agent: AgentListItemResponse | null | undefined,
@@ -29,7 +42,7 @@ export function getToolConfigFromAgent(
       ? (rec.rules as Record<string, unknown>)
       : {};
   return {
-    enabled: rec.enabled === true,
+    policy: toToolPolicy(rec.policy),
     guardrail: rec.guardrail === true,
     guardrail_system_prompt: typeof rec.guardrail_system_prompt === "string" ? rec.guardrail_system_prompt : "",
     config,
@@ -40,7 +53,7 @@ export function patchToolConfigOnAgent(
   agent: AgentListItemResponse,
   toolName: string,
   patch: {
-    enabled?: boolean;
+    policy?: ToolPolicy;
     guardrail?: boolean;
     guardrail_system_prompt?: string;
     config?: Record<string, unknown>;
@@ -62,8 +75,10 @@ export function patchToolConfigOnAgent(
     currentTool && typeof currentTool === "object" && !Array.isArray(currentTool)
       ? { ...(currentTool as Record<string, unknown>) }
       : {};
-  if (patch.enabled !== undefined) toolRec.enabled = patch.enabled;
+  if (patch.policy !== undefined) toolRec.policy = patch.policy;
   if (patch.guardrail !== undefined) toolRec.guardrail = patch.guardrail;
+  // Drop the legacy enabled flag if a stored config still carries it.
+  delete toolRec.enabled;
   if (patch.guardrail_system_prompt !== undefined) {
     if (patch.guardrail_system_prompt === "") delete toolRec.guardrail_system_prompt;
     else toolRec.guardrail_system_prompt = patch.guardrail_system_prompt;

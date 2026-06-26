@@ -154,7 +154,7 @@ test("RAG: an agent retrieves from a storage via the rag tool in chat", async ({
   const storage = (await createRes.json()) as { id: string };
   expect((await request.post(`${base}/api/rag/storages/${storage.id}/ingest`)).ok()).toBeTruthy();
 
-  // Point the default agent's rag tool at the storage (allowed: always).
+  // Point the default agent's rag tool at the storage (policy: allow).
   const agentId = await defaultAgentId(request);
   const agent = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
     name: string;
@@ -162,7 +162,7 @@ test("RAG: an agent retrieves from a storage via the rag tool in chat", async ({
   };
   const original = agent.default_llm_configuration ?? null;
   const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
-  tools.rag = { enabled: true, rules: { allowed: "always", storages: [storage.id], top_k: 8, strategy: "simple" } };
+  tools.rag = { policy: "allow", rules: { storages: [storage.id], top_k: 8, strategy: "simple" } };
   const nextCfg = { ...(original ?? {}), tools };
 
   try {
@@ -173,9 +173,9 @@ test("RAG: an agent retrieves from a storage via the rag tool in chat", async ({
 
     // Ground-truth: the rag tool is actually enabled on the agent post-PUT.
     const verify = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
-      default_llm_configuration?: { tools?: { rag?: { enabled?: boolean } } };
+      default_llm_configuration?: { tools?: { rag?: { policy?: string } } };
     };
-    expect(verify.default_llm_configuration?.tools?.rag?.enabled).toBe(true);
+    expect(verify.default_llm_configuration?.tools?.rag?.policy).toBe("allow");
 
     await app.chat.gotoNew(agentId);
     await app.chat.userInput.typeMessage(RAG_PROBE_MESSAGE);

@@ -55,7 +55,6 @@ describeLive('conversations tool (integration)', () => {
     ).rejects.toThrow(/allow_other_conversations=false/);
 
     const crossChatRules = {
-      allowed: 'always' as const,
       allow_other_conversations: true,
       max_messages: 500,
     };

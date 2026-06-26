@@ -78,7 +78,7 @@
     const entry = getToolDraftEntry(toolName);
     if (entry.mode === "custom" && entry.custom) {
       return {
-        enabled: entry.custom.enabled !== false,
+        policy: "custom",
         guardrail: entry.custom.guardrail === true,
         guardrail_system_prompt: entry.custom.guardrail_system_prompt ?? "",
         config:
@@ -92,7 +92,7 @@
       Object.keys(fromAgent.config).length > 0
         ? fromAgent.config
         : getToolDefaultConfig(toolCatalog, toolName);
-    return { ...fromAgent, enabled: true, config: rules };
+    return { ...fromAgent, policy: "custom", config: rules };
   });
 
   const guardrailLlm = $derived(
@@ -151,7 +151,7 @@
 
   function toAgentToolConfig(cfg: ToolConfig): AgentToolConfig {
     return {
-      enabled: true,
+      policy: "custom",
       rules: cfg.config,
       guardrail: cfg.guardrail,
       ...(cfg.guardrail_system_prompt.trim() ? { guardrail_system_prompt: cfg.guardrail_system_prompt.trim() } : {}),
@@ -162,7 +162,7 @@
     if (!agent || !workingConfig) return;
     const nextAgent = patchToolConfigOnAgent(agent, toolName, patch);
     const nextCfg = getToolConfigFromAgent(nextAgent, toolName);
-    setToolDraftCustom(toolName, toAgentToolConfig({ ...nextCfg, enabled: true }));
+    setToolDraftCustom(toolName, toAgentToolConfig({ ...nextCfg, policy: "custom" }));
   }
 
   $effect(() => {

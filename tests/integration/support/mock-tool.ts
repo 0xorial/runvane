@@ -1,13 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { z } from 'zod';
 import { zerialize } from 'zodex';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermission,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../../backend/src/tools/base-tool.js';
+import { BaseTool, type ToolRunContext } from '../../../backend/src/tools/base-tool.js';
 import { ToolRegistry } from '../../../backend/src/tools/tool-registry.js';
 import { MOCK_FANOUT_TOOL_NAMES } from '../../../backend/src/llmProviders/providers/stubLlm.helpers.js';
 
@@ -86,15 +80,13 @@ export class MockToolController {
   }
 }
 
-const MockRulesSchema = z.object({
-  allowed: z.enum(['always', 'never', 'ask']).default('ask'),
-});
+const MockRulesSchema = z.object({});
 type MockRules = z.infer<typeof MockRulesSchema>;
 
 /**
  * A controllable tool used by the fan-out integration tests. Behavior (timing,
  * success/failure) is delegated to a shared {@link MockToolController}; the
- * `allowed` rule + `guardrail` flag come from the per-message tool overrides.
+ * `policy` + `guardrail` come from the per-message tool overrides.
  */
 export class MockTool extends BaseTool<Record<string, never>, MockRules> {
   constructor(
@@ -120,18 +112,13 @@ export class MockTool extends BaseTool<Record<string, never>, MockRules> {
     return zerialize(MockRulesSchema);
   }
   getDefaultRules(): MockRules {
-    return { allowed: 'ask' };
+    return {};
   }
   parseParams(): Record<string, never> {
     return {};
   }
   parseRules(raw: unknown): MockRules {
     return MockRulesSchema.parse(raw ?? {});
-  }
-  evaluatePermission(context: ToolPermissionContext<MockRules>): RuleEvaluationResult[] {
-    const allowed = context.agentToolConfig.rules.allowed;
-    const permission: ToolPermission = allowed === 'always' ? 'allow' : allowed === 'never' ? 'forbid' : 'ask_user';
-    return [{ ruleName: 'allowed', permission, detail: `allowed='${allowed}'` }];
   }
   runTool(_params: Record<string, never>, context: ToolRunContext): Promise<unknown> {
     return this.controller.run(this.toolName, context.signal);

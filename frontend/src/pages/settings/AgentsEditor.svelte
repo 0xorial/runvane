@@ -161,7 +161,6 @@
         />
         <AgentToolsSection
           {currentAgent}
-          {agents}
           {toolCatalog}
           {canEdit}
           onAgentChange={setCurrentAgent}

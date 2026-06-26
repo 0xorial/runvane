@@ -16,21 +16,12 @@ export function compileChatToolOverrides(draft: ChatToolDraft): Record<string, A
   const tools: Record<string, AgentToolConfig> = {};
   for (const [toolName, entry] of Object.entries(draft)) {
     if (entry.mode === "inherit") continue;
-    if (entry.mode === "off") {
-      tools[toolName] = { enabled: false };
+    if (entry.mode === "custom") {
+      if (entry.custom) tools[toolName] = entry.custom;
       continue;
     }
-    if (entry.mode === "ask") {
-      tools[toolName] = { enabled: true, rules: { allowed: "ask" }, guardrail: false };
-      continue;
-    }
-    if (entry.mode === "allow") {
-      tools[toolName] = { enabled: true, rules: { allowed: "always" }, guardrail: false };
-      continue;
-    }
-    if (entry.mode === "custom" && entry.custom) {
-      tools[toolName] = entry.custom;
-    }
+    // off | ask | allow map straight to the policy field.
+    tools[toolName] = { policy: entry.mode };
   }
   return Object.keys(tools).length > 0 ? tools : undefined;
 }
@@ -46,32 +37,22 @@ export function compileUserMessageOverrides(draft: ChatToolDraft): UserMessageOv
 }
 
 function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {
-  if (cfg.enabled === false) return { mode: "off" };
-  if (cfg.enabled === true && cfg.rules?.allowed === "always" && cfg.guardrail === false) {
-    return { mode: "allow" };
-  }
-  if (cfg.enabled === true && cfg.rules?.allowed === "ask" && cfg.guardrail === false) {
-    return { mode: "ask" };
-  }
+  const policy = cfg.policy ?? "off";
+  if (policy === "off") return { mode: "off" };
+  // A plain ask/allow with no extra rules or guardrail maps to that segment;
+  // anything richer (custom policy, or extra rules/guardrail) opens the editor.
+  const plain = cfg.guardrail !== true && (cfg.rules == null || Object.keys(cfg.rules).length === 0);
+  if ((policy === "ask" || policy === "allow") && plain) return { mode: policy };
   return { mode: "custom", custom: cfg };
 }
 
-/** Maps agent tool settings to the tri-state segment that best represents them. */
-export function effectiveAgentToolMode(
-  cfg: {
-    enabled: boolean;
-    guardrail: boolean;
-    config: Record<string, unknown>;
-  },
-  catalogDefaultRules: Record<string, unknown> = {},
-): ExplicitToolOverrideMode {
-  if (!cfg.enabled) return "off";
-  const rules = Object.keys(cfg.config).length > 0 ? cfg.config : catalogDefaultRules;
-  const allowed = rules.allowed;
-  if (allowed === "never") return "off";
-  if (allowed === "always" && !cfg.guardrail) return "allow";
-  if (allowed === "ask" && !cfg.guardrail) return "ask";
-  return "custom";
+/** Maps agent tool settings to the segment that represents them. */
+export function effectiveAgentToolMode(cfg: {
+  policy: ExplicitToolOverrideMode;
+  guardrail: boolean;
+  config: Record<string, unknown>;
+}): ExplicitToolOverrideMode {
+  return cfg.policy;
 }
 
 export function explicitModeLabel(mode: ExplicitToolOverrideMode): string {

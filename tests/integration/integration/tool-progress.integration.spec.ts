@@ -18,7 +18,7 @@ describeLive('tool progress (integration)', () => {
       conversationId: 'conv-test',
       agentId: null,
       entries: [],
-      toolRules: { allowed: 'always', working_dir: '', max_timeout_ms: 60_000, max_output_bytes: 100_000 },
+      toolRules: { working_dir: '', max_timeout_ms: 60_000, max_output_bytes: 100_000 },
       signal: AbortSignal.timeout(10_000),
       onProgress: (delta: string) => chunks.push(delta),
     };
@@ -45,7 +45,7 @@ describeLive('tool progress (integration)', () => {
       conversationId: 'conv-test',
       agentId: null,
       entries: [],
-      toolRules: { allowed: 'always', working_dir: '', max_timeout_ms: 60_000, max_output_bytes: 100_000 },
+      toolRules: { working_dir: '', max_timeout_ms: 60_000, max_output_bytes: 100_000 },
       signal: AbortSignal.timeout(10_000),
     };
     const result = (await bash.runTool({ command: 'printf "ok"' }, context)) as { stdout: string; exit_code: number };

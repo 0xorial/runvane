@@ -56,12 +56,14 @@ describeLive('tool fan-out fan-in (integration)', () => {
 
   // --- helpers ---------------------------------------------------------------
 
+  const POLICY_BY_ALLOWED = { always: 'allow', ask: 'ask', never: 'off' } as const;
+
   function toolOverrides(allowed: Allowed, guardrailFor?: string): unknown {
     return {
       tools: Object.fromEntries(
         MOCK_FANOUT_TOOL_NAMES.map((name) => [
           name,
-          { enabled: true, rules: { allowed }, guardrail: name === guardrailFor },
+          { policy: POLICY_BY_ALLOWED[allowed], guardrail: name === guardrailFor },
         ]),
       ),
     };

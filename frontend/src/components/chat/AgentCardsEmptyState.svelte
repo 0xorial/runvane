@@ -54,7 +54,7 @@
     const tools = agent.default_llm_configuration?.tools;
     if (!tools) return [];
     return Object.entries(tools)
-      .filter(([, cfg]) => cfg?.enabled !== false)
+      .filter(([, cfg]) => cfg?.policy != null && cfg.policy !== "off")
       .map(([id]) => id)
       .sort((a, b) => a.localeCompare(b));
   }

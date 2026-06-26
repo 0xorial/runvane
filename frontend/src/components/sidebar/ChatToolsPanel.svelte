@@ -53,10 +53,7 @@
         return {
           name,
           description: String(catalogRow?.description ?? "").trim(),
-          effectiveMode: effectiveAgentToolMode(
-            getToolConfigFromAgent(currentAgent, name),
-            getToolDefaultConfig(catalog, name),
-          ),
+          effectiveMode: effectiveAgentToolMode(getToolConfigFromAgent(currentAgent, name)),
         };
       });
   });
@@ -84,7 +81,7 @@
     const rules =
       Object.keys(agentCfg.config).length > 0 ? agentCfg.config : getToolDefaultConfig(toolCatalog, toolName);
     return {
-      enabled: true as const,
+      policy: "custom" as const,
       rules,
       guardrail: agentCfg.guardrail,
       ...(agentCfg.guardrail_system_prompt.trim()
