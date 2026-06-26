@@ -156,3 +156,47 @@ export async function getConversationEntries(
   const body = (await res.json()) as { entries: TranscriptEntry[] };
   return body.entries;
 }
+
+export type TaskInfo = {
+  id: string;
+  kind: "llm" | "tool";
+  title: string;
+  conversationId: string | null;
+  status: "running" | "cancelling";
+  startedAt: string;
+};
+
+export async function listTasks(request: APIRequestContext): Promise<TaskInfo[]> {
+  const res = await request.get(`${apiBaseUrl()}/api/tasks`);
+  expect(res.ok()).toBeTruthy();
+  const body = (await res.json()) as { tasks: TaskInfo[] };
+  return body.tasks;
+}
+
+/**
+ * Block until the backend reports no in-flight LLM/tool tasks. A test must
+ * never conclude while work is still running: a still-streaming or leaked task
+ * means the UI assertions raced ahead of the backend (the exact shape of flake
+ * we want to catch, not paper over). Resolves once drained; throws after
+ * `timeoutMs`, naming whatever is still pending.
+ */
+export async function waitForNoPendingTasks(
+  request: APIRequestContext,
+  opts: { timeoutMs: number; conversationId?: string },
+): Promise<void> {
+  const deadline = Date.now() + opts.timeoutMs;
+  let pending: TaskInfo[] = [];
+  for (;;) {
+    pending = await listTasks(request);
+    if (opts.conversationId) {
+      pending = pending.filter((t) => t.conversationId === opts.conversationId);
+    }
+    if (pending.length === 0) return;
+    if (Date.now() >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const summary = pending.map((t) => `${t.kind} "${t.title}" [${t.status}]`).join("; ");
+  throw new Error(
+    `Pending backend tasks did not drain within ${opts.timeoutMs}ms: ${summary}`,
+  );
+}
