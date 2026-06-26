@@ -60,10 +60,18 @@
       value={rulesDraft}
       onchange={onRulesChange}
       height={rulesEditorHeight}
+      resizable
       {readOnly}
     />
   {:else}
-    <CodeEditor value={rulesDraft} onchange={onRulesChange} language="json" height={rulesEditorHeight} {readOnly} />
+    <CodeEditor
+      value={rulesDraft}
+      onchange={onRulesChange}
+      language="json"
+      height={rulesEditorHeight}
+      resizable
+      {readOnly}
+    />
     {#if rulesError}
       <div class="text-xs text-destructive" role="alert">{rulesError}</div>
     {/if}

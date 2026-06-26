@@ -29,6 +29,9 @@
   const DEFAULT_HEIGHT = 480;
   const MIN_WIDTH = 400;
   const MIN_HEIGHT = 320;
+  // Initial height of the rules editor. It is independent of the popup size:
+  // resizing the popup does not change it; the editor has its own drag handle.
+  const RULES_EDITOR_INITIAL_HEIGHT = 280;
 
   let {
     search,
@@ -68,8 +71,6 @@
   const agent = $derived((agentsQuery.data ?? []).find((row) => row.id === agentId) ?? null);
   const toolCatalog = $derived(toolsQuery.data ?? []);
   const rulesSchemas = $derived(buildToolRulesZodSchemas(toolCatalog));
-
-  const rulesEditorHeight = $derived(Math.max(200, panelSize.height - 200));
 
   const workingConfig = $derived.by((): ToolConfig | null => {
     void $chatToolDraftRevision;
@@ -216,7 +217,7 @@
         rulesSchema={rulesSchemas.get(toolName)}
         guardrailLlmConfigured={guardrailLlm.provider_id.length > 0 && guardrailLlm.model_name.length > 0}
         globalGuardrailPrompt={guardrailLlm.system_prompt}
-        rulesEditorHeight={rulesEditorHeight}
+        rulesEditorHeight={RULES_EDITOR_INITIAL_HEIGHT}
         {onPatch}
       />
     </div>
