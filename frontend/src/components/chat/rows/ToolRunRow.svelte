@@ -16,14 +16,14 @@
 
   const toolName = $derived(entry.toolId || "tool");
   // Where this tool ran — looked up from the catalog so the row shows whether
-  // the call hit the sandbox tool-host or stayed in the brain.
+  // the call hit the target sandbox or stayed in the harness.
   const toolsQuery = createQuery(() => ({ queryKey: queryKeys.tools, queryFn: getTools }));
   const toolLocation = $derived.by(() => {
     const row = (toolsQuery.data ?? []).find((t) => t.name === toolName);
-    return row?.location === "runtime" || row?.location === "brain" ? row.location : null;
+    return row?.location === "target" || row?.location === "harness" ? row.location : null;
   });
   const locationTitle = $derived(
-    toolLocation === "runtime" ? "Runs in the sandbox tool-host" : "Runs in the brain",
+    toolLocation === "target" ? "Runs in the target sandbox" : "Runs in the harness sandbox",
   );
   const guardrailReason = $derived.by(() => {
     const err = entry.result?.error ?? null;
@@ -101,14 +101,14 @@
         <span class="font-mono font-medium text-foreground">{toolName}</span>
         {#if toolLocation}
           <span
-            class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {toolLocation === 'runtime'
+            class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {toolLocation === 'target'
               ? 'bg-teal-500/15 text-teal-600'
               : 'bg-violet-500/15 text-violet-600'}"
             title={locationTitle}
             data-testid="tool-location"
             data-tool-location={toolLocation}
           >
-            {toolLocation === "runtime" ? "sandbox" : "brain"}
+            {toolLocation === "target" ? "target" : "harness"}
           </span>
         {/if}
         <span class="ml-auto text-[10px] font-medium {entry.state === 'requested' ? 'text-warning' : 'text-muted-foreground'}">

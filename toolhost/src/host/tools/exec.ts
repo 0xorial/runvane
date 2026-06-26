@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { RuntimeTool } from '../server.ts';
+import type { TargetTool } from '../server.ts';
 
 type ExecParams = { command: string; cwd?: string; timeoutMs?: number };
 
@@ -8,7 +8,7 @@ type ExecParams = { command: string; cwd?: string; timeoutMs?: number };
  * the process on cancel (AbortSignal) or timeout, and returns the exit code
  * plus captured output.
  */
-export const execTool: RuntimeTool = {
+export const execTool: TargetTool = {
   name: 'exec',
   aiDescription: 'Run a shell command in the sandbox via `bash -lc`. Streams output; returns exit code and captured stdout/stderr.',
   humanDescription: 'Run a shell command',

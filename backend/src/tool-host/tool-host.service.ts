@@ -21,12 +21,12 @@ import { deployToolHostOverSsh } from './ssh-deploy.js';
 const HOST_ENTRY_RELATIVE = 'toolhost/src/host/main.ts';
 
 /**
- * Connects the brain to tool-hosts and registers their runtime tools as proxies
+ * Connects the harness to tool-hosts and registers their target tools as proxies
  * in the shared ToolRegistry. The catalog is enumerated once from the local
  * host; each conversation's bound environment decides *where* a registered tool
  * actually runs — locally, over ssh, or not at all (`none`). One client per
  * environment is started lazily and reused. Best-effort: the app boots even if
- * no host is reachable, just without runtime tools.
+ * no host is reachable, just without target tools.
  */
 @Injectable()
 export class ToolHostService implements OnModuleInit, OnModuleDestroy, ConversationToolRouter {
@@ -42,7 +42,7 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
   async onModuleInit(): Promise<void> {
     const config = resolveLocalSpawnConfig();
     if (!config) {
-      this.logger.log('tool-host disabled (no host entry found); runtime tools not registered');
+      this.logger.log('tool-host disabled (no host entry found); target tools not registered');
       return;
     }
 
@@ -55,7 +55,7 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
       let registered = 0;
       for (const descriptor of descriptors) {
         try {
-          // Host runtime tools supersede a same-named builtin (one `filesystem`,
+          // Host target tools supersede a same-named builtin (one `filesystem`,
           // env-routed) instead of colliding with it.
           this.tools.register(new HostToolProxy(this, descriptor), { override: true });
           registered += 1;
@@ -63,9 +63,9 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
           this.logger.warn(`skipping host tool ${descriptor.name}: ${(err as Error).message}`);
         }
       }
-      this.logger.log(`tool-host connected via ${config.command}; registered ${registered} runtime tool(s)`);
+      this.logger.log(`tool-host connected via ${config.command}; registered ${registered} target tool(s)`);
     } catch (err) {
-      this.logger.warn(`tool-host unavailable: ${(err as Error).message}; continuing without runtime tools`);
+      this.logger.warn(`tool-host unavailable: ${(err as Error).message}; continuing without target tools`);
       await client.close();
     }
   }
@@ -89,7 +89,7 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
   ): Promise<InvocationResult> {
     const env = await this.resolveEnvironment(conversationId);
     if (env.kind === 'none') {
-      return errorResult('runtime tools are disabled for this conversation (environment: none)');
+      return errorResult('target tools are disabled for this conversation (environment: none)');
     }
     const client = await this.clientForEnvironment(env);
     if (!client) return errorResult(`tool environment "${env.name}" is unavailable`);
@@ -155,7 +155,7 @@ async function resolveSpawnConfig(env: ToolEnvironment): Promise<ToolHostSpawnCo
  */
 async function sshSpawnConfig(ssh: SshEnvironmentConfig): Promise<ToolHostSpawnConfig> {
   const destination = ssh.user ? `${ssh.user}@${ssh.host}` : ssh.host;
-  // accept-new trusts the host key on first contact (these are sandboxes we're
+  // accept-new trusts the host key on first contact (these are target sandboxes we're
   // standing up) but still refuses if a known key later changes. Without it,
   // BatchMode rejects the unknown key and a fresh container never connects.
   const baseArgs = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new'];
@@ -169,7 +169,7 @@ async function sshSpawnConfig(ssh: SshEnvironmentConfig): Promise<ToolHostSpawnC
 /**
  * The local built-in environment: run the in-repo host as a child, or — when
  * RUNVANE_TOOLHOST_SSH is set — point "local" at an external host. Returns null
- * when no host entry is present (so the app boots without runtime tools).
+ * when no host entry is present (so the app boots without target tools).
  */
 function resolveLocalSpawnConfig(): ToolHostSpawnConfig | null {
   const ssh = process.env.RUNVANE_TOOLHOST_SSH?.trim();

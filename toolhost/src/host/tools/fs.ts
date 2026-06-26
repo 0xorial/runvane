@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import type { RuntimeTool } from '../server.ts';
+import type { TargetTool } from '../server.ts';
 
 type FsOperation = 'read_file' | 'write_file' | 'list_dir' | 'stat';
 const OPERATIONS: FsOperation[] = ['read_file', 'write_file', 'list_dir', 'stat'];
@@ -19,7 +19,7 @@ function requireString(o: Record<string, unknown>, key: string): string {
  * A single filesystem tool, dispatched on `operation` — mirrors runvane's
  * `filesystem` builtin instead of fanning out one tool per syscall.
  */
-export const filesystemTool: RuntimeTool = {
+export const filesystemTool: TargetTool = {
   name: 'filesystem',
   aiDescription:
     'Filesystem access in the sandbox, selected by `operation`: ' +

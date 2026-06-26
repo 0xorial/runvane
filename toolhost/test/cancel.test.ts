@@ -2,13 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { linkedChannels } from '../src/transport/inProcess.ts';
 import { ToolHostServer } from '../src/host/server.ts';
-import { defaultRuntimeTools } from '../src/host/tools/index.ts';
+import { defaultTargetTools } from '../src/host/tools/index.ts';
 import { ToolHostClient } from '../src/client/client.ts';
 
 test('cancel: aborting a long exec stops it promptly with error "aborted"', async () => {
-  const { brain, host } = linkedChannels();
-  new ToolHostServer(host, defaultRuntimeTools()).start();
-  const client = new ToolHostClient(brain);
+  const { harness, host } = linkedChannels();
+  new ToolHostServer(host, defaultTargetTools()).start();
+  const client = new ToolHostClient(harness);
   await client.ready();
 
   const controller = new AbortController();
@@ -27,9 +27,9 @@ test('cancel: aborting a long exec stops it promptly with error "aborted"', asyn
 });
 
 test('cancel: a pre-aborted signal never starts the tool', async () => {
-  const { brain, host } = linkedChannels();
-  new ToolHostServer(host, defaultRuntimeTools()).start();
-  const client = new ToolHostClient(brain);
+  const { harness, host } = linkedChannels();
+  new ToolHostServer(host, defaultTargetTools()).start();
+  const client = new ToolHostClient(harness);
   await client.ready();
 
   const controller = new AbortController();

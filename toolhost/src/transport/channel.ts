@@ -1,9 +1,9 @@
-import type { BrainToHost, HostToBrain } from '../protocol/messages.ts';
+import type { HarnessToHost, HostToHarness } from '../protocol/messages.ts';
 
 /**
  * A duplex channel that carries framed messages in both directions. Every
  * transport (in-process, child stdio, ssh) reduces to this — the host server
- * and the brain client are written against it and never against a wire.
+ * and the harness client are written against it and never against a wire.
  */
 
 export type MessageHandler<TIn> = (msg: TIn) => void;
@@ -18,7 +18,7 @@ export interface MessageChannel<TIn, TOut> {
   close(): Promise<void>;
 }
 
-/** The brain sends BrainToHost, receives HostToBrain. */
-export type BrainChannel = MessageChannel<HostToBrain, BrainToHost>;
-/** The host sends HostToBrain, receives BrainToHost. */
-export type HostChannel = MessageChannel<BrainToHost, HostToBrain>;
+/** The harness sends HarnessToHost, receives HostToHarness. */
+export type HarnessChannel = MessageChannel<HostToHarness, HarnessToHost>;
+/** The host sends HostToHarness, receives HarnessToHost. */
+export type HostChannel = MessageChannel<HarnessToHost, HostToHarness>;

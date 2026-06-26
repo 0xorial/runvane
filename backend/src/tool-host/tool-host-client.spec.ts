@@ -23,10 +23,10 @@ suite('ToolHostClient (real toolhost/ host)', () => {
     await client.close();
   });
 
-  it('lists runtime tools from the host', async () => {
+  it('lists target tools from the host', async () => {
     const tools = await client.listTools();
     expect(tools.some((t) => t.name === 'exec')).toBe(true);
-    expect(tools.every((t) => t.runtime === 'runtime')).toBe(true);
+    expect(tools.every((t) => t.location === 'target')).toBe(true);
   });
 
   it('runs a tool with streamed progress', async () => {

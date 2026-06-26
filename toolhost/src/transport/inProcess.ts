@@ -1,28 +1,28 @@
-import type { BrainToHost, HostToBrain } from '../protocol/messages.ts';
-import type { BrainChannel, CloseHandler, HostChannel, MessageHandler } from './channel.ts';
+import type { HarnessToHost, HostToHarness } from '../protocol/messages.ts';
+import type { HarnessChannel, CloseHandler, HostChannel, MessageHandler } from './channel.ts';
 
 /**
- * A linked pair of in-memory channels: the brain runs the host in its own
+ * A linked pair of in-memory channels: the harness runs the host in its own
  * process and they hand messages off directly (no serialization). This is the
  * default "local" instance — `server runs it directly itself`.
  *
  * Delivery is async (queueMicrotask) so behaviour matches a real transport:
  * a `send` never re-enters the sender's stack synchronously.
  */
-export function linkedChannels(): { brain: BrainChannel; host: HostChannel } {
-  let brainHandler: MessageHandler<HostToBrain> | null = null;
-  let hostHandler: MessageHandler<BrainToHost> | null = null;
-  let brainClose: CloseHandler | null = null;
+export function linkedChannels(): { harness: HarnessChannel; host: HostChannel } {
+  let harnessHandler: MessageHandler<HostToHarness> | null = null;
+  let hostHandler: MessageHandler<HarnessToHost> | null = null;
+  let harnessClose: CloseHandler | null = null;
   let hostClose: CloseHandler | null = null;
-  const brainQueue: HostToBrain[] = [];
-  const hostQueue: BrainToHost[] = [];
+  const harnessQueue: HostToHarness[] = [];
+  const hostQueue: HarnessToHost[] = [];
   let closed = false;
 
-  const toBrain = (m: HostToBrain): void => {
-    if (brainHandler) brainHandler(m);
-    else brainQueue.push(m);
+  const toHarness = (m: HostToHarness): void => {
+    if (harnessHandler) harnessHandler(m);
+    else harnessQueue.push(m);
   };
-  const toHost = (m: BrainToHost): void => {
+  const toHost = (m: HarnessToHost): void => {
     if (hostHandler) hostHandler(m);
     else hostQueue.push(m);
   };
@@ -30,21 +30,21 @@ export function linkedChannels(): { brain: BrainChannel; host: HostChannel } {
     if (closed) return;
     closed = true;
     queueMicrotask(() => {
-      brainClose?.(undefined);
+      harnessClose?.(undefined);
       hostClose?.(undefined);
     });
   };
 
-  const brain: BrainChannel = {
+  const harness: HarnessChannel = {
     send(msg) {
       if (!closed) queueMicrotask(() => toHost(msg));
     },
     onMessage(h) {
-      brainHandler = h;
-      while (brainQueue.length) h(brainQueue.shift() as HostToBrain);
+      harnessHandler = h;
+      while (harnessQueue.length) h(harnessQueue.shift() as HostToHarness);
     },
     onClose(h) {
-      brainClose = h;
+      harnessClose = h;
     },
     close() {
       closeBoth();
@@ -54,11 +54,11 @@ export function linkedChannels(): { brain: BrainChannel; host: HostChannel } {
 
   const host: HostChannel = {
     send(msg) {
-      if (!closed) queueMicrotask(() => toBrain(msg));
+      if (!closed) queueMicrotask(() => toHarness(msg));
     },
     onMessage(h) {
       hostHandler = h;
-      while (hostQueue.length) h(hostQueue.shift() as BrainToHost);
+      while (hostQueue.length) h(hostQueue.shift() as HarnessToHost);
     },
     onClose(h) {
       hostClose = h;
@@ -69,5 +69,5 @@ export function linkedChannels(): { brain: BrainChannel; host: HostChannel } {
     },
   };
 
-  return { brain, host };
+  return { harness, host };
 }

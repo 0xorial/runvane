@@ -1,9 +1,9 @@
 import { PROTOCOL_VERSION } from '../protocol/messages.ts';
-import type { BrainToHost, HostToolDescriptor, Invoke } from '../protocol/messages.ts';
+import type { HarnessToHost, HostToolDescriptor, Invoke } from '../protocol/messages.ts';
 import type { HostChannel } from '../transport/channel.ts';
 
-/** Context handed to a runtime tool — mirrors runvane's `ToolRunContext`. */
-export type RuntimeToolContext = {
+/** Context handed to a target tool — mirrors runvane's `ToolRunContext`. */
+export type TargetToolContext = {
   sessionId: string;
   invocationId: string;
   signal: AbortSignal;
@@ -11,7 +11,7 @@ export type RuntimeToolContext = {
   onProgress: (delta: string) => void;
 };
 
-export type RuntimeTool = {
+export type TargetTool = {
   name: string;
   aiDescription: string;
   humanDescription: string;
@@ -19,13 +19,13 @@ export type RuntimeTool = {
   paramsSchema: unknown;
   /** Optional validation/coercion; throw to reject bad params. */
   parseParams?: (raw: unknown) => unknown;
-  run: (params: unknown, ctx: RuntimeToolContext) => Promise<unknown> | unknown;
+  run: (params: unknown, ctx: TargetToolContext) => Promise<unknown> | unknown;
 };
 
-export function describe(tool: RuntimeTool): HostToolDescriptor {
+export function describe(tool: TargetTool): HostToolDescriptor {
   return {
     name: tool.name,
-    runtime: 'runtime',
+    location: 'target',
     aiDescription: tool.aiDescription,
     humanDescription: tool.humanDescription,
     paramsSchema: tool.paramsSchema,
@@ -33,21 +33,21 @@ export function describe(tool: RuntimeTool): HostToolDescriptor {
 }
 
 /**
- * Serves runtime tools over a host channel: lists the catalog, runs
+ * Serves target tools over a host channel: lists the catalog, runs
  * invocations with streamed progress, maps `cancel` onto an AbortController per
  * invocation, and answers pings. Holds no model/LLM state — pure execution.
  */
 export class ToolHostServer {
-  private readonly tools = new Map<string, RuntimeTool>();
+  private readonly tools = new Map<string, TargetTool>();
   private readonly inflight = new Map<string, AbortController>();
   private readonly channel: HostChannel;
 
-  constructor(channel: HostChannel, tools: RuntimeTool[]) {
+  constructor(channel: HostChannel, tools: TargetTool[]) {
     this.channel = channel;
     for (const tool of tools) this.tools.set(tool.name, tool);
   }
 
-  register(tool: RuntimeTool): void {
+  register(tool: TargetTool): void {
     this.tools.set(tool.name, tool);
   }
 
@@ -57,7 +57,7 @@ export class ToolHostServer {
     this.channel.send({ type: 'ready', protocolVersion: PROTOCOL_VERSION });
   }
 
-  private handle(msg: BrainToHost): void {
+  private handle(msg: HarnessToHost): void {
     switch (msg.type) {
       case 'hello':
         return;

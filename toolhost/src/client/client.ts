@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PROTOCOL_VERSION } from '../protocol/messages.ts';
-import type { HostToBrain, HostToolDescriptor, InvocationResult } from '../protocol/messages.ts';
-import type { BrainChannel } from '../transport/channel.ts';
+import type { HostToHarness, HostToolDescriptor, InvocationResult } from '../protocol/messages.ts';
+import type { HarnessChannel } from '../transport/channel.ts';
 import type { InvocationReporter } from './reporter.ts';
 
 export type InvokeOptions = {
@@ -17,13 +17,13 @@ type Pending = {
 };
 
 /**
- * Brain-side client for a tool-host. Correlates invocations by id, streams
+ * Harness-side client for a tool-host. Correlates invocations by id, streams
  * progress to `onProgress`, resolves on `result`, and forwards `AbortSignal`
  * aborts as `cancel`. `invoke()` mirrors runvane's `ToolRunContext` so a host
  * tool can be exposed as a thin BaseTool proxy (see proxy.ts).
  */
 export class ToolHostClient {
-  private readonly channel: BrainChannel;
+  private readonly channel: HarnessChannel;
   private readonly reporter: InvocationReporter | undefined;
   private readonly pendingInvocations = new Map<string, Pending>();
   private readonly pendingToolLists = new Map<string, (tools: HostToolDescriptor[]) => void>();
@@ -33,7 +33,7 @@ export class ToolHostClient {
   private closed = false;
   private closeError: Error | null = null;
 
-  constructor(channel: BrainChannel, reporter?: InvocationReporter) {
+  constructor(channel: HarnessChannel, reporter?: InvocationReporter) {
     this.channel = channel;
     this.reporter = reporter;
     this.channel.onMessage((msg) => this.handle(msg));
@@ -94,7 +94,7 @@ export class ToolHostClient {
     return this.channel.close();
   }
 
-  private handle(msg: HostToBrain): void {
+  private handle(msg: HostToHarness): void {
     switch (msg.type) {
       case 'ready': {
         this.isReady = true;

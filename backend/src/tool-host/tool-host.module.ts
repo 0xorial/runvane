@@ -6,7 +6,7 @@ import { ToolEnvironmentsService } from './tool-environments.service.js';
 import { ToolHostService } from './tool-host.service.js';
 
 /**
- * Stands up the tool-host connection and registers its runtime tools into the
+ * Stands up the tool-host connection and registers its target tools into the
  * (shared, singleton) ToolRegistry exported by ToolsModule, and serves the
  * tool-environment catalog/CRUD that conversations bind to.
  */

@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { BrainToHost, HostToBrain } from '../protocol/messages.ts';
-import type { BrainChannel } from './channel.ts';
+import type { HarnessToHost, HostToHarness } from '../protocol/messages.ts';
+import type { HarnessChannel } from './channel.ts';
 import { spawnChannel } from './childProcess.ts';
 
 export type SshTarget = {
@@ -14,7 +14,7 @@ export type SshTarget = {
   extraSshArgs?: string[];
 };
 
-export type SshConnection = { channel: BrainChannel; child: ChildProcessWithoutNullStreams };
+export type SshConnection = { channel: HarnessChannel; child: ChildProcessWithoutNullStreams };
 
 /**
  * Connect to an external tool-host over ssh. ssh provides the encrypted channel
@@ -32,6 +32,6 @@ export function connectSsh(target: SshTarget): SshConnection {
   if (target.extraSshArgs) args.push(...target.extraSshArgs);
   args.push(destination, remoteCommand);
 
-  const { channel, child } = spawnChannel<HostToBrain, BrainToHost>('ssh', args);
+  const { channel, child } = spawnChannel<HostToHarness, HarnessToHost>('ssh', args);
   return { channel, child };
 }

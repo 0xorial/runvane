@@ -13,8 +13,8 @@ export class ToolRegistry {
 
   /**
    * Register a tool by name. Names are unique, so a collision throws — except
-   * when `override` is set, which lets a tool-host runtime tool supersede a
-   * same-named builtin (e.g. the sandbox `filesystem` replaces the in-brain one
+   * when `override` is set, which lets a tool-host target tool supersede a
+   * same-named builtin (e.g. the target sandbox `filesystem` replaces the in-harness one
    * when a host is connected, falling back to the builtin when it isn't).
    */
   register(tool: BaseTool, options?: { override?: boolean }): void {

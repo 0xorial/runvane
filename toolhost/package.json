@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "Sandboxed tool-host for runvane: runs runtime tools (fs, exec) behind a small wire protocol so the brain can drive them in-process, as a local child, or over ssh.",
+  "description": "Sandboxed tool-host for runvane: runs target tools (fs, exec) behind a small wire protocol so the harness can drive them in-process, as a local child, or over ssh.",
   "engines": {
     "node": ">=22.18"
   },

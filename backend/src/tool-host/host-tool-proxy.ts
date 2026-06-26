@@ -11,7 +11,7 @@ import type { HostToolDescriptor, InvocationResult } from './protocol.js';
 export type RouterInvokeOptions = { signal?: AbortSignal; onProgress?: (delta: string) => void };
 
 /**
- * Routes a runtime tool to the tool-host for a given conversation's environment.
+ * Routes a target tool to the tool-host for a given conversation's environment.
  * Implemented by ToolHostService; the proxy depends only on this interface.
  */
 export interface ConversationToolRouter {
@@ -25,7 +25,7 @@ export interface ConversationToolRouter {
 }
 
 /**
- * Exposes a tool-host runtime tool to the brain as a BaseTool. Execution is
+ * Exposes a tool-host target tool to the harness as a BaseTool. Execution is
  * routed to the conversation's bound environment, so the same registered tool
  * runs locally, over ssh, or is forbidden (environment `none`) depending on the
  * conversation. Because run-tool.service runs `runTool` inside
@@ -40,7 +40,7 @@ export class HostToolProxy extends BaseTool {
   }
 
   getLocation(): ToolLocation {
-    return 'runtime';
+    return 'target';
   }
 
   getName(): string {
@@ -82,13 +82,13 @@ export class HostToolProxy extends BaseTool {
         {
           ruleName: 'tool-environment',
           permission: 'forbid',
-          detail: 'runtime tools are disabled for this conversation (environment: none)',
+          detail: 'target tools are disabled for this conversation (environment: none)',
         },
       ];
     }
-    // Runs in the sandbox, not on the host machine — allow by default; agents
+    // Runs in the target sandbox, not on the host machine — allow by default; agents
     // can still tighten this per-tool via guardrails.
-    return [{ ruleName: 'tool-host', permission: 'allow', detail: `runtime tool (${kind})` }];
+    return [{ ruleName: 'tool-host', permission: 'allow', detail: `target tool (${kind})` }];
   }
 
   async runTool(params: unknown, context: ToolRunContext): Promise<unknown> {

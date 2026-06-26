@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import {
   TOOL_HOST_PROTOCOL_VERSION,
-  type BrainToHost,
-  type HostToBrain,
+  type HarnessToHost,
+  type HostToHarness,
   type HostToolDescriptor,
   type InvocationResult,
 } from './protocol.js';
@@ -26,7 +26,7 @@ type PendingInvocation = {
 type ReadyWaiter = { resolve: () => void; reject: (err: Error) => void };
 
 /**
- * Brain-side client for a tool-host process. Spawns the host, speaks NDJSON
+ * Harness-side client for a tool-host process. Spawns the host, speaks NDJSON
  * over its stdio, correlates invocations by id, streams progress, and forwards
  * AbortSignal aborts as `cancel`. `invoke()` matches runvane's ToolRunContext
  * so a host tool can be exposed as a thin BaseTool proxy.
@@ -118,7 +118,7 @@ export class ToolHostClient {
     }
   }
 
-  private send(msg: BrainToHost): void {
+  private send(msg: HarnessToHost): void {
     if (this.child && !this.closed) this.child.stdin.write(JSON.stringify(msg) + '\n');
   }
 
@@ -130,7 +130,7 @@ export class ToolHostClient {
       this.buffer = this.buffer.slice(nl + 1);
       if (line) {
         try {
-          this.handle(JSON.parse(line) as HostToBrain);
+          this.handle(JSON.parse(line) as HostToHarness);
         } catch {
           /* stray non-JSON line on stdout — ignore */
         }
@@ -139,7 +139,7 @@ export class ToolHostClient {
     }
   }
 
-  private handle(msg: HostToBrain): void {
+  private handle(msg: HostToHarness): void {
     switch (msg.type) {
       case 'ready': {
         this.isReady = true;

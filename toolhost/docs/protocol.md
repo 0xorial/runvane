@@ -1,6 +1,6 @@
 # Tool-host wire protocol (v1)
 
-The brain and a tool-host exchange JSON messages over a **duplex byte stream**.
+The harness and a tool-host exchange JSON messages over a **duplex byte stream**.
 The protocol is transport-agnostic: the same messages flow over an in-process
 channel, a child process's stdio, or an ssh channel.
 
@@ -15,7 +15,7 @@ messages — equivalent, not yet implemented.)
 
 Every message has a `type`. See [`src/protocol/messages.ts`](../src/protocol/messages.ts).
 
-### brain → host
+### harness → host
 
 | type | fields | meaning |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ Every message has a `type`. See [`src/protocol/messages.ts`](../src/protocol/mes
 | `cancel` | `invocationId` | abort an in-flight run (→ `AbortSignal`) |
 | `ping` | `nonce` | liveness / round-trip timing |
 
-### host → brain
+### host → harness
 
 | type | fields | meaning |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ Every message has a `type`. See [`src/protocol/messages.ts`](../src/protocol/mes
 ## Lifecycle
 
 ```
-brain                              host
+harness                            host
   | --------------- hello ------------> |
   | <-------------- ready ------------- |
   | ------------- list_tools ---------> |
@@ -62,24 +62,24 @@ host. The field exists so a host can later isolate per-chat state (separate
 cwd, env, long-lived shells) without a protocol change — start single, go
 per-chat by minting more session ids.
 
-## Tool partition (brain vs runtime)
+## Tool partition (harness vs target)
 
 A tool's **location** decides where it runs and never changes per call:
 
-- `runtime` tools (this host): `exec` and `filesystem` (one tool, dispatched on
-  `operation`: read_file / write_file / list_dir / stat). They touch the sandbox.
-- `brain` tools (never cross the wire): `rag`, `conversations`, `api`.
-  They touch central state. RAG indexes live with the brain and carry a lot of
-  retrieval configuration, so RAG stays a brain tool by design.
+- `target` tools (this host): `exec` and `filesystem` (one tool, dispatched on
+  `operation`: read_file / write_file / list_dir / stat). They touch the target sandbox.
+- `harness` tools (never cross the wire): `rag`, `conversations`, `api`.
+  They touch central state. RAG indexes live with the harness and carry a lot of
+  retrieval configuration, so RAG stays a harness tool by design.
 
-The brain merges its native brain tools with one proxy per host tool (from
+The harness merges its native harness tools with one proxy per host tool (from
 `list_tools`). `TOOL_LOCATION_META` gives the UI an accent + icon so each tool
 row shows where it ran.
 
 ## Monitoring & cancellation
 
 `invoke`/`progress`/`result` map 1:1 onto runvane's `ToolRunContext`
-(`signal` + `onProgress`). The brain runs each host-tool proxy inside
+(`signal` + `onProgress`). The harness runs each host-tool proxy inside
 `taskRegistry.run(...)` exactly as it does local tools, so:
 
 - the run appears in **running-tasks monitoring**, and

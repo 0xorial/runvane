@@ -1,12 +1,12 @@
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { ChildProcess } from 'node:child_process';
-import type { BrainToHost, HostToBrain } from './protocol/messages.ts';
+import type { HarnessToHost, HostToHarness } from './protocol/messages.ts';
 import { ToolHostClient } from './client/client.ts';
 import type { InvocationReporter } from './client/reporter.ts';
 import { ToolHostServer } from './host/server.ts';
-import type { RuntimeTool } from './host/server.ts';
-import { defaultRuntimeTools } from './host/tools/index.ts';
+import type { TargetTool } from './host/server.ts';
+import { defaultTargetTools } from './host/tools/index.ts';
 import { linkedChannels } from './transport/inProcess.ts';
 import { spawnChannel } from './transport/childProcess.ts';
 import { connectSsh } from './transport/ssh.ts';
@@ -18,7 +18,7 @@ import type { SshTarget } from './transport/ssh.ts';
  * externally over ssh. Same client surface for all three.
  */
 export type ToolHostConfig =
-  | { mode: 'in-process'; tools?: RuntimeTool[] }
+  | { mode: 'in-process'; tools?: TargetTool[] }
   | { mode: 'child'; command?: string; args?: string[] }
   | { mode: 'ssh'; ssh: SshTarget };
 
@@ -41,9 +41,9 @@ export function defaultHostEntry(): string {
  */
 export async function connectToolHost(config: ToolHostConfig, reporter?: InvocationReporter): Promise<ToolHostHandle> {
   if (config.mode === 'in-process') {
-    const { brain, host } = linkedChannels();
-    new ToolHostServer(host, config.tools ?? defaultRuntimeTools()).start();
-    const client = new ToolHostClient(brain, reporter);
+    const { harness, host } = linkedChannels();
+    new ToolHostServer(host, config.tools ?? defaultTargetTools()).start();
+    const client = new ToolHostClient(harness, reporter);
     await client.ready();
     return { client, close: () => client.close() };
   }
@@ -51,7 +51,7 @@ export async function connectToolHost(config: ToolHostConfig, reporter?: Invocat
   if (config.mode === 'child') {
     const command = config.command ?? process.execPath;
     const args = config.args ?? [defaultHostEntry()];
-    const { channel, child } = spawnChannel<HostToBrain, BrainToHost>(command, args);
+    const { channel, child } = spawnChannel<HostToHarness, HarnessToHost>(command, args);
     const client = new ToolHostClient(channel, reporter);
     await client.ready();
     return { client, child, close: async () => void (await client.close(), child.kill()) };

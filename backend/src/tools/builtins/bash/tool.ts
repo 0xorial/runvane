@@ -14,7 +14,7 @@ import { runBashCommand, type BashToolResult } from './run-command.js';
 @Injectable()
 export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
   getLocation(): ToolLocation {
-    return 'runtime';
+    return 'target';
   }
 
   getName(): string {

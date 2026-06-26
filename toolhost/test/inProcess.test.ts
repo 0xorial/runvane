@@ -2,14 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { linkedChannels } from '../src/transport/inProcess.ts';
 import { ToolHostServer } from '../src/host/server.ts';
-import { defaultRuntimeTools } from '../src/host/tools/index.ts';
+import { defaultTargetTools } from '../src/host/tools/index.ts';
 import { ToolHostClient } from '../src/client/client.ts';
-import { createRuntimeToolProxies } from '../src/client/proxy.ts';
+import { createTargetToolProxies } from '../src/client/proxy.ts';
 
 function connect(reporter?: ConstructorParameters<typeof ToolHostClient>[1]) {
-  const { brain, host } = linkedChannels();
-  new ToolHostServer(host, defaultRuntimeTools()).start();
-  return new ToolHostClient(brain, reporter);
+  const { harness, host } = linkedChannels();
+  new ToolHostServer(host, defaultTargetTools()).start();
+  return new ToolHostClient(harness, reporter);
 }
 
 test('in-process: ready, list_tools, exec with streamed progress, ping', async () => {
@@ -19,7 +19,7 @@ test('in-process: ready, list_tools, exec with streamed progress, ping', async (
   const tools = await client.listTools();
   assert.ok(tools.some((t) => t.name === 'exec'));
   assert.equal(
-    tools.every((t) => t.runtime === 'runtime'),
+    tools.every((t) => t.location === 'target'),
     true,
   );
 
@@ -55,14 +55,14 @@ test('in-process: invocation lifecycle is reported (task-monitoring hook)', asyn
   await client.close();
 });
 
-test('in-process: runtime tool proxy runs the happy path', async () => {
+test('in-process: target tool proxy runs the happy path', async () => {
   const client = connect();
   await client.ready();
 
-  const proxies = createRuntimeToolProxies(client, await client.listTools());
+  const proxies = createTargetToolProxies(client, await client.listTools());
   const exec = proxies.find((p) => p.name === 'exec');
   assert.ok(exec);
-  assert.equal(exec.location, 'runtime');
+  assert.equal(exec.location, 'target');
 
   const out = await exec.run({ command: 'echo via-proxy' }, { signal: new AbortController().signal });
   assert.match((out as { stdout: string }).stdout, /via-proxy/);

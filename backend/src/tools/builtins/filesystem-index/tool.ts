@@ -34,7 +34,7 @@ async function resolveRoots(allowedRoots: string[]): Promise<string[]> {
 @Injectable()
 export class FilesystemIndexTool extends BaseTool<FilesystemIndexParams, FilesystemIndexRules> {
   getLocation(): ToolLocation {
-    return 'runtime';
+    return 'target';
   }
 
   constructor(private readonly index: FilesystemIndexStore) {

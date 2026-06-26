@@ -1,5 +1,5 @@
 /**
- * The wire contract between the brain (client) and a tool-host (server).
+ * The wire contract between the harness (client) and a tool-host (server).
  *
  * Transport-agnostic: these objects are serialized as NDJSON over whatever
  * duplex byte stream a transport provides (in-process, child stdio, ssh).
@@ -8,11 +8,11 @@
 
 export const PROTOCOL_VERSION = 1;
 
-/** A single tool the host can run. Mirrors the brain's tool descriptor shape. */
+/** A single tool the host can run. Mirrors the harness's tool descriptor shape. */
 export type HostToolDescriptor = {
   name: string;
-  /** Host tools always run in the sandbox. */
-  runtime: 'runtime';
+  /** Host tools always run in the target sandbox. */
+  location: 'target';
   aiDescription: string;
   humanDescription: string;
   /** JSON Schema for the tool params (LLM + validation). */
@@ -27,7 +27,7 @@ export type InvocationResult = {
   timing: { startedAt: string; finishedAt: string; elapsedMs: number };
 };
 
-// ─── brain → host ────────────────────────────────────────────────────────────
+// ─── harness → host ──────────────────────────────────────────────────────────
 
 export type Hello = { type: 'hello'; protocolVersion: number };
 export type ListTools = { type: 'list_tools'; requestId: string };
@@ -41,9 +41,9 @@ export type Invoke = {
 export type Cancel = { type: 'cancel'; invocationId: string };
 export type Ping = { type: 'ping'; nonce: string };
 
-export type BrainToHost = Hello | ListTools | Invoke | Cancel | Ping;
+export type HarnessToHost = Hello | ListTools | Invoke | Cancel | Ping;
 
-// ─── host → brain ────────────────────────────────────────────────────────────
+// ─── host → harness ──────────────────────────────────────────────────────────
 
 export type Ready = { type: 'ready'; protocolVersion: number };
 export type ToolsList = { type: 'tools'; requestId: string; tools: HostToolDescriptor[] };
@@ -52,9 +52,9 @@ export type Result = { type: 'result'; invocationId: string } & InvocationResult
 export type Pong = { type: 'pong'; nonce: string };
 export type HostError = { type: 'error'; invocationId: string | null; message: string };
 
-export type HostToBrain = Ready | ToolsList | Progress | Result | Pong | HostError;
+export type HostToHarness = Ready | ToolsList | Progress | Result | Pong | HostError;
 
-export type AnyMessage = BrainToHost | HostToBrain;
+export type AnyMessage = HarnessToHost | HostToHarness;
 
 /** Narrow an unknown parsed value to a message with a string `type`. */
 export function isMessage(value: unknown): value is { type: string } {

@@ -2,8 +2,8 @@
 
 A sandboxed **tool-host** for [runvane](..), a top-level package alongside
 `backend/` and `frontend/`. It runs runvane's
-*runtime* tools (filesystem, `exec`, …) behind a small, transport-agnostic wire
-protocol, so the **brain** (the main runvane backend — agentic loop, context
+*target* tools (filesystem, `exec`, …) behind a small, transport-agnostic wire
+protocol, so the **harness** (the main runvane backend — agentic loop, context
 engineering, conversation DB, UI) can drive them while they execute somewhere
 isolated.
 
@@ -11,20 +11,21 @@ isolated.
 
 ## Why this split
 
-Today the whole agent runs inside the dev container. Instead, the brain stays
+Today the whole agent runs inside the dev container. Instead, the harness stays
 central (it holds the API key, talks to the LLM, owns transparency/monitoring)
-and each sandbox runs only a thin tool-host the brain drives over a wire. The
-sandbox needs **no LLM egress** and holds **no precious state** — it just
-executes. See [`docs/protocol.md`](docs/protocol.md) for the wire contract.
+and each target sandbox runs only a thin tool-host the harness drives over a
+wire. The target sandbox needs **no LLM egress** and holds **no precious
+state** — it just executes. See [`docs/protocol.md`](docs/protocol.md) for the
+wire contract.
 
 ## Three ways to run a host
 
-The brain talks to a host through a `MessageChannel`. Same client code, three
+The harness talks to a host through a `MessageChannel`. Same client code, three
 transports:
 
 | Mode | Transport | Use |
 | --- | --- | --- |
-| **in-process** | `linkedChannels()` | brain runs the host itself — the default "local" instance, zero serialization overhead |
+| **in-process** | `linkedChannels()` | harness runs the host itself — the default "local" instance, zero serialization overhead |
 | **local child** | `spawnChannel('node', ['src/host/main.ts'])` | host in its own OS process on the same machine |
 | **external** | `connectSsh({ host, user })` | host on another machine/container, secured by ssh/ssl |
 
@@ -56,25 +57,25 @@ const { client } = await connectToolHost({ mode: 'in-process' });
 const result = await client.invoke('exec', { command: 'ls -la' }, { onProgress });
 ```
 
-## Brain tools vs runtime tools
+## Harness tools vs target tools
 
 Every tool has a **location**:
 
-- `runtime` — touches the sandbox's files/processes (`exec`, `filesystem`).
+- `target` — touches the target sandbox's files/processes (`exec`, `filesystem`).
   Lives here, in the host.
-- `brain` — touches central state (`rag`, `conversations`, `api`).
-  Stays in the brain; never crosses the wire. RAG indexes are local to the
-  brain and richly configurable, so RAG is deliberately a brain tool.
+- `harness` — touches central state (`rag`, `conversations`, `api`).
+  Stays in the harness; never crosses the wire. RAG indexes are local to the
+  harness and richly configurable, so RAG is deliberately a harness tool.
 
 The location is surfaced to the UI (`TOOL_LOCATION_META`) so a tool row can
-show with an icon/accent whether the call hit the sandbox or stayed in the
-brain.
+show with an icon/accent whether the call hit the target sandbox or stayed in the
+harness.
 
 ## Monitoring & cancellation
 
 `ToolHostClient.invoke()` takes an `AbortSignal` and an `onProgress` callback —
 the same shape as runvane's `ToolRunContext`. So a host tool is exposed in the
-brain as a thin proxy whose `runTool` delegates over the wire; because
+harness as a thin proxy whose `runTool` delegates over the wire; because
 `run-tool.service` already wraps every `runTool` in `taskRegistry.run(...)`,
 remote tool runs show up in **running-tasks monitoring** and a task-monitor
 cancel aborts the signal → the client sends `cancel` → the host kills the real
@@ -84,5 +85,5 @@ to feed a monitor without routing through the task registry.
 ## Status
 
 Greenfield — protocol + in-process/child/ssh transports + host server with
-`exec`/filesystem runtime tools + brain client. Pure Node stdlib, no runtime
+`exec`/filesystem target tools + harness client. Pure Node stdlib, no runtime
 deps; tests run on Node's built-in runner (`npm test`, Node ≥ 22.18).

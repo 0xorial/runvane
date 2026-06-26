@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { spawnChannel } from '../src/transport/childProcess.ts';
 import { ToolHostClient } from '../src/client/client.ts';
-import type { BrainToHost, HostToBrain } from '../src/protocol/messages.ts';
+import type { HarnessToHost, HostToHarness } from '../src/protocol/messages.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcDir = join(here, '..', 'src');
@@ -25,7 +25,7 @@ test('deploy round-trip: a tar-shipped copy of the source serves the protocol', 
     ]);
     assert.equal(packed.status, 0, packed.stderr?.toString());
 
-    const { channel, child } = spawnChannel<HostToBrain, BrainToHost>(process.execPath, [
+    const { channel, child } = spawnChannel<HostToHarness, HarnessToHost>(process.execPath, [
       '--experimental-strip-types',
       join(dir, 'host', 'main.ts'),
     ]);

@@ -9,12 +9,12 @@ export type ProxyRunContext = {
 };
 
 /**
- * A framework-neutral view of a host tool the brain can register. Adapt it to a
+ * A framework-neutral view of a host tool the harness can register. Adapt it to a
  * runvane BaseTool by forwarding `runTool(params, ctx)` → `run(params, ctx)`;
- * because the brain runs that inside `taskRegistry.run(...)`, the remote run
+ * because the harness runs that inside `taskRegistry.run(...)`, the remote run
  * shows up in monitoring and a task cancel propagates to the host.
  */
-export type BrainToolProxy = {
+export type HarnessToolProxy = {
   name: string;
   location: ToolLocation;
   aiDescription: string;
@@ -23,10 +23,10 @@ export type BrainToolProxy = {
   run: (params: unknown, ctx: ProxyRunContext) => Promise<unknown>;
 };
 
-export function createRuntimeToolProxy(client: ToolHostClient, descriptor: HostToolDescriptor): BrainToolProxy {
+export function createTargetToolProxy(client: ToolHostClient, descriptor: HostToolDescriptor): HarnessToolProxy {
   return {
     name: descriptor.name,
-    location: 'runtime',
+    location: 'target',
     aiDescription: descriptor.aiDescription,
     humanDescription: descriptor.humanDescription,
     paramsSchema: descriptor.paramsSchema,
@@ -38,7 +38,7 @@ export function createRuntimeToolProxy(client: ToolHostClient, descriptor: HostT
       });
       if (!result.ok) {
         const err = new Error(result.error ?? 'tool-host invocation failed');
-        // Let the brain treat cancellation as an abort rather than a tool error.
+        // Let the harness treat cancellation as an abort rather than a tool error.
         if (result.error === 'aborted') err.name = 'AbortError';
         throw err;
       }
@@ -48,6 +48,6 @@ export function createRuntimeToolProxy(client: ToolHostClient, descriptor: HostT
 }
 
 /** Build a proxy per descriptor (typically the result of `client.listTools()`). */
-export function createRuntimeToolProxies(client: ToolHostClient, descriptors: HostToolDescriptor[]): BrainToolProxy[] {
-  return descriptors.map((d) => createRuntimeToolProxy(client, d));
+export function createTargetToolProxies(client: ToolHostClient, descriptors: HostToolDescriptor[]): HarnessToolProxy[] {
+  return descriptors.map((d) => createTargetToolProxy(client, d));
 }

@@ -7,13 +7,13 @@ import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { spawnChannel } from '../src/transport/childProcess.ts';
 import { ToolHostClient } from '../src/client/client.ts';
-import type { BrainToHost, HostToBrain } from '../src/protocol/messages.ts';
+import type { HarnessToHost, HostToHarness } from '../src/protocol/messages.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hostMain = join(here, '..', 'src', 'host', 'main.ts');
 
 test('child process: write then read a file back over stdio', async () => {
-  const { channel, child } = spawnChannel<HostToBrain, BrainToHost>(process.execPath, [hostMain]);
+  const { channel, child } = spawnChannel<HostToHarness, HarnessToHost>(process.execPath, [hostMain]);
   const client = new ToolHostClient(channel);
   await client.ready();
 
@@ -33,7 +33,7 @@ test('child process: write then read a file back over stdio', async () => {
 });
 
 test('child process: a dead host fails outstanding invocations instead of hanging', async () => {
-  const { channel, child } = spawnChannel<HostToBrain, BrainToHost>(process.execPath, [hostMain]);
+  const { channel, child } = spawnChannel<HostToHarness, HarnessToHost>(process.execPath, [hostMain]);
   const client = new ToolHostClient(channel);
   await client.ready();
 

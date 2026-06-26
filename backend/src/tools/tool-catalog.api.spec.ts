@@ -14,7 +14,7 @@ function stubTool(name: string): BaseTool {
     parseRules: (raw) => raw,
     evaluatePermission: () => [{ ruleName: 'allowed', permission: 'ask_user', detail: '' }],
     runTool: async () => ({}),
-    getLocation: () => 'brain',
+    getLocation: () => 'harness',
   };
 }
 
@@ -28,7 +28,7 @@ describe('tool-catalog.api', () => {
       params_schema: { type: 'object' },
       rules_schema: { type: 'object' },
       default_rules: { allowed: 'ask' },
-      location: 'brain',
+      location: 'harness',
     });
   });
 

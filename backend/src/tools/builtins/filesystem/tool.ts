@@ -36,7 +36,7 @@ type ListDirResult = {
 @Injectable()
 export class FilesystemTool extends BaseTool<FilesystemToolParams, FilesystemToolRules> {
   getLocation(): ToolLocation {
-    return 'runtime';
+    return 'target';
   }
 
   getName(): string {

@@ -1,6 +1,6 @@
 <svg viewBox="0 0 680 462" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
 <title>runvane tool-host topology</title>
-<desc>Left: today's model runs the full agent inside each devcontainer, so the api key and untrusted code share a sealed container that still needs LLM egress. Right: the proposed model keeps a central runvane brain that holds the key and talks to the LLM, while each sealed devcontainer runs only a thin tool-host the brain drives with tool-invocation calls and never needs outbound egress.</desc>
+<desc>Left: today's model runs the full agent inside each devcontainer, so the api key and untrusted code share a sealed container that still needs LLM egress. Right: the proposed model keeps a central runvane harness that holds the key and talks to the LLM, while each sealed devcontainer runs only a thin tool-host the harness drives with tool-invocation calls and never needs outbound egress.</desc>
 <style>
   text { fill: #1f2024; }
   .t { font-size: 14px; }
@@ -35,10 +35,10 @@
 <text x="52" y="170" class="ts">devcontainer · sealed</text>
 <g class="c-purple"><rect x="70" y="186" width="210" height="64" rx="6"/><text x="175" y="212" class="th" text-anchor="middle">full agent</text><text x="175" y="232" class="ts" text-anchor="middle">loop · context · tools · key</text></g>
 
-<text x="360" y="28" class="th">your idea — central brain + tool-hosts</text>
+<text x="360" y="28" class="th">your idea — central harness + tool-hosts</text>
 <g class="box"><rect x="450" y="48" width="120" height="34" rx="6"/><text x="510" y="69" class="t" text-anchor="middle">LLM provider</text></g>
 <line class="arr" x1="510" y1="108" x2="510" y2="84" marker-end="url(#arrow)"/>
-<g class="c-purple"><rect x="418" y="108" width="184" height="58" rx="6"/><text x="510" y="132" class="th" text-anchor="middle">runvane brain</text><text x="510" y="151" class="ts" text-anchor="middle">loop · context · db · ui</text></g>
+<g class="c-purple"><rect x="418" y="108" width="184" height="58" rx="6"/><text x="510" y="132" class="th" text-anchor="middle">runvane harness</text><text x="510" y="151" class="ts" text-anchor="middle">loop · context · db · ui</text></g>
 <line class="arr" x1="470" y1="168" x2="436" y2="212" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
 <line class="arr" x1="550" y1="168" x2="584" y2="212" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
 <text x="510" y="194" class="ts" text-anchor="middle">tool-invocation</text>
@@ -50,7 +50,7 @@
 <g class="c-teal"><rect x="534" y="244" width="104" height="50" rx="6"/><text x="586" y="266" class="th" text-anchor="middle">tool-host</text><text x="586" y="283" class="ts" text-anchor="middle">fs · term · exec</text></g>
 
 <g class="c-purple"><rect x="118" y="430" width="14" height="14" rx="3"/></g>
-<text x="140" y="441" class="ts">trusted brain · holds the key</text>
+<text x="140" y="441" class="ts">trusted harness · holds the key</text>
 <g class="c-teal"><rect x="380" y="430" width="14" height="14" rx="3"/></g>
-<text x="402" y="441" class="ts">sealed sandbox · no LLM egress</text>
+<text x="402" y="441" class="ts">target sandbox · no LLM egress</text>
 </svg>
