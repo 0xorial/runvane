@@ -54,6 +54,7 @@
     recentLimit,
     enableTextSearch = false,
     enableMultiSelect = false,
+    enableDeletedView = false,
     dense = true,
   }: {
     onSelect: (id: string) => void;
@@ -69,6 +70,8 @@
     enableTextSearch?: boolean;
     /** Enable per-row selection checkboxes and the multi-select panel (full page only). */
     enableMultiSelect?: boolean;
+    /** Render the active/deleted toggle (full page only — the sidebar shows active only). */
+    enableDeletedView?: boolean;
     /** Compact paddings for the narrow sidebar. */
     dense?: boolean;
   } = $props();
@@ -397,13 +400,16 @@
         Probe: time (tmp)
       </button>
     {/if}
-    <button
-      type="button"
-      class="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground hover:text-foreground"
-      onclick={() => (showDeletedOnly = !showDeletedOnly)}
-    >
-      {showDeletedOnly ? "Show active" : "Show deleted"}
-    </button>
+    {#if enableDeletedView}
+      <button
+        type="button"
+        data-testid="conversations-toggle-deleted"
+        class="w-full rounded-md px-1 py-0.5 text-left text-xs text-muted-foreground hover:text-foreground"
+        onclick={() => (showDeletedOnly = !showDeletedOnly)}
+      >
+        {showDeletedOnly ? "Show active" : "Show deleted"}
+      </button>
+    {/if}
     {#if multiSelectMode}
       <MultiSelectPanel
         {selectedConversationIds}

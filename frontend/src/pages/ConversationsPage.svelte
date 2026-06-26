@@ -118,7 +118,7 @@
     {/if}
 
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border">
-      <ConversationsView {onSelect} enableTextSearch enableMultiSelect dense={false} />
+      <ConversationsView {onSelect} enableTextSearch enableMultiSelect enableDeletedView dense={false} />
     </div>
   </div>
 </section>
