@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 /**
- * A tool sandbox is *where* a conversation's runtime tools execute. Two are
+ * A tool sandbox is *where* a conversation's target tools execute. Two are
  * built in — `local` (the in-repo tool-host the server runs) and `none` (no
- * sandbox; runtime tools are unavailable). Users can add `ssh` sandboxes
+ * sandbox; target tools are unavailable). Users can add `ssh` sandboxes
  * that run the host on another machine. The choice is bound to a conversation.
  */
 
