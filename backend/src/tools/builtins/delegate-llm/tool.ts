@@ -1,10 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import { delegateLlmParamsSchema, parseDelegateLlmParams, type DelegateLlmParams } from './params.js';
 import { DelegateLlmRulesSchema, parseDelegateLlmRules, type DelegateLlmRules } from './rules.js';
@@ -54,11 +49,14 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
 
   getDefaultRules(): DelegateLlmRules {
     return {
-      allowed: 'always',
       allowed_provider_ids: [],
       max_prompt_chars: 50000,
       max_response_chars: 20000,
     };
+  }
+
+  getDefaultPolicy(): ToolPolicy {
+    return 'allow';
   }
 
   parseParams(raw: unknown): DelegateLlmParams {
@@ -67,18 +65,6 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
 
   parseRules(raw: unknown): DelegateLlmRules {
     return parseDelegateLlmRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<DelegateLlmRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [
-      {
-        ruleName: 'allowed',
-        permission,
-        detail: `Rule allowed='${allowedRule}'.`,
-      },
-    ];
   }
 
   async runTool(params: DelegateLlmParams, context: ToolRunContext): Promise<unknown> {

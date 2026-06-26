@@ -157,7 +157,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   private resolveEnabledToolIds(agent: AgentEntity, toolOverrides?: Record<string, AgentToolConfig>): string[] {
     return this.tools
       .list()
-      .filter((tool) => resolveToolConfig(agent, toolOverrides, tool.getName()).enabled === true)
+      .filter((tool) => {
+        const policy = resolveToolConfig(agent, toolOverrides, tool.getName()).policy;
+        return policy != null && policy !== 'off';
+      })
       .map((tool) => tool.getName());
   }
 

@@ -2,6 +2,16 @@ import type { ChatEntry } from '../contracts/chatEntry.js';
 
 export type ToolPermission = 'allow' | 'ask_user' | 'forbid';
 
+/**
+ * Per-agent×tool permission policy, set on the agent↔tool link and resolved
+ * centrally in RunToolService:
+ * - `off`    — tool is unavailable to the agent (not advertised; denied if called)
+ * - `ask`    — prompt the user for approval before each call
+ * - `allow`  — run without prompting
+ * - `custom` — defer to the tool's own {@link BaseTool.evaluatePermission}
+ */
+export type ToolPolicy = 'off' | 'ask' | 'allow' | 'custom';
+
 /** Where a tool executes — `target` tools run in the target sandbox/tool-host; `harness` tools run centrally. */
 export type ToolLocation = 'harness' | 'target';
 
@@ -15,11 +25,7 @@ export type ToolPermissionContext<TRules> = {
   conversationId: string;
   agentId: string | null;
   entries: ChatEntry[];
-  agentToolConfig: {
-    enabled: boolean;
-    policy: ToolPermission;
-    rules: TRules;
-  };
+  rules: TRules;
 };
 
 export type ToolRunContext = {
@@ -48,9 +54,26 @@ export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknow
   abstract parseParams(raw: unknown): TParams;
   abstract parseRules(raw: unknown): TRules;
 
-  abstract evaluatePermission(
-    context: ToolPermissionContext<TRules>,
-  ): Promise<RuleEvaluationResult[]> | RuleEvaluationResult[];
+  /**
+   * The policy applied when an agent first enables this tool. Defaults to the
+   * safe `ask`; override (→ `allow`) for read-only tools that never need a
+   * prompt.
+   */
+  getDefaultPolicy(): ToolPolicy {
+    return 'ask';
+  }
+
+  /**
+   * Dynamic, per-call permission logic. Only consulted when the agent sets this
+   * tool's policy to `custom` — `off`/`ask`/`allow` are resolved centrally in
+   * RunToolService without calling this. The default allows; override only for
+   * tools that need content- or context-dependent decisions.
+   */
+  evaluatePermission(
+    _context: ToolPermissionContext<TRules>,
+  ): Promise<RuleEvaluationResult[]> | RuleEvaluationResult[] {
+    return [{ ruleName: 'default', permission: 'allow', detail: 'No custom permission logic.' }];
+  }
 
   abstract runTool(params: TParams, context: ToolRunContext): Promise<unknown> | unknown;
 

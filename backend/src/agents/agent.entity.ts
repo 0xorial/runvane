@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
 export const AgentToolConfigSchema = z.object({
-  enabled: z.boolean().optional(),
+  /**
+   * Per-agent×tool permission policy. `off` (or absent) means the tool is not
+   * available to this agent; `ask`/`allow`/`custom` make it available with the
+   * corresponding gate. Replaces the former `enabled` flag and per-tool
+   * `rules.allowed`.
+   */
+  policy: z.enum(['off', 'ask', 'allow', 'custom']).optional(),
   rules: z.record(z.string(), z.unknown()).optional(),
   guardrail: z.boolean().optional(),
   guardrail_system_prompt: z.string().optional(),

@@ -1,13 +1,6 @@
 import { z } from 'zod';
 
-export const GetCurrentTimeToolRulesSchema = z
-  .object({
-    allowed: z
-      .enum(['always', 'never', 'ask'])
-      .default('always')
-      .describe('Single permission rule for this tool.'),
-  })
-  .strict();
+export const GetCurrentTimeToolRulesSchema = z.object({}).strict();
 
 export type GetCurrentTimeToolRules = z.infer<typeof GetCurrentTimeToolRulesSchema>;
 

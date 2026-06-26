@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BaseTool, type RuleEvaluationResult, type ToolPermissionContext } from '../../base-tool.js';
+import { BaseTool, type ToolPolicy } from '../../base-tool.js';
 import {
   getCurrentTimeParamsSchema,
   parseGetCurrentTimeToolParams,
@@ -35,7 +35,11 @@ export class GetCurrentTimeTool extends BaseTool<GetCurrentTimeToolParams, GetCu
   }
 
   getDefaultRules(): GetCurrentTimeToolRules {
-    return { allowed: 'always' };
+    return {};
+  }
+
+  getDefaultPolicy(): ToolPolicy {
+    return 'allow';
   }
 
   parseParams(raw: unknown): GetCurrentTimeToolParams {
@@ -44,18 +48,6 @@ export class GetCurrentTimeTool extends BaseTool<GetCurrentTimeToolParams, GetCu
 
   parseRules(raw: unknown): GetCurrentTimeToolRules {
     return parseGetCurrentTimeToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<GetCurrentTimeToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [
-      {
-        ruleName: 'allowed',
-        permission,
-        detail: `Rule allowed='${allowedRule}'.`,
-      },
-    ];
   }
 
   runTool(_params: GetCurrentTimeToolParams): unknown {

@@ -1,11 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolLocation,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolLocation, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import { bashParamsSchema, parseBashToolParams, type BashToolParams } from './params.js';
 import { BashToolRulesSchema, parseBashToolRules, type BashToolRules } from './rules.js';
@@ -44,7 +38,6 @@ export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
 
   getDefaultRules(): BashToolRules {
     return {
-      allowed: 'ask',
       working_dir: '',
       max_timeout_ms: 60000,
       max_output_bytes: 20000,
@@ -57,18 +50,6 @@ export class BashTool extends BaseTool<BashToolParams, BashToolRules> {
 
   parseRules(raw: unknown): BashToolRules {
     return parseBashToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<BashToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [
-      {
-        ruleName: 'allowed',
-        permission,
-        detail: `Rule allowed='${allowedRule}'.`,
-      },
-    ];
   }
 
   async runTool(params: BashToolParams, context: ToolRunContext): Promise<BashToolResult> {

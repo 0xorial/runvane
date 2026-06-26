@@ -8,7 +8,6 @@ import { z } from 'zod';
  */
 export const RagToolRulesSchema = z
   .object({
-    allowed: z.enum(['always', 'never', 'ask']).default('ask'),
     storages: z.array(z.string().min(1)).default([]),
     top_k: z.number().finite().int().min(1).max(50).default(8),
     strategy: z.enum(['simple']).default('simple'),

@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 export const AskAttachmentRulesSchema = z
   .object({
-    allowed: z.enum(['always', 'never', 'ask']).default('always').describe('Permission behavior for this tool.'),
     max_answer_chars: z
       .number()
       .finite()

@@ -2,10 +2,6 @@ import { z } from 'zod';
 
 export const DelegateLlmRulesSchema = z
   .object({
-    allowed: z
-      .enum(['always', 'never', 'ask'])
-      .default('always')
-      .describe('Permission behavior for this tool.'),
     allowed_provider_ids: z
       .array(z.string().min(1))
       .default([])

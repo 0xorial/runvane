@@ -1,10 +1,6 @@
 import { z } from 'zod';
 
-export const ApiToolRulesSchema = z
-  .object({
-    allowed: z.enum(['always', 'never', 'ask']).default('ask'),
-  })
-  .strict();
+export const ApiToolRulesSchema = z.object({}).strict();
 
 export type ApiToolRules = z.infer<typeof ApiToolRulesSchema>;
 

@@ -3,8 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { AgentsService } from '../../../agents/agents.service.js';
 import { ModelPresetsService } from '../../../model-presets/model-presets.service.js';
 import { TaskRegistryService } from '../../../tasks/task-registry.service.js';
-import { BaseTool, type ToolPermissionContext, type ToolRunContext } from '../../base-tool.js';
-import { evaluateApiToolPermission } from './permissions.js';
+import { BaseTool, type ToolRunContext } from '../../base-tool.js';
 import { describeToolCatalog, listToolCatalog } from '../../tool-catalog.api.js';
 import { ToolRegistry } from '../../tool-registry.js';
 import { zerialize } from 'zodex';
@@ -59,7 +58,7 @@ export class ApiTool extends BaseTool<ApiToolParams, ApiToolRules> {
   }
 
   getDefaultRules(): ApiToolRules {
-    return { allowed: 'ask' };
+    return {};
   }
 
   parseParams(raw: unknown): ApiToolParams {
@@ -68,10 +67,6 @@ export class ApiTool extends BaseTool<ApiToolParams, ApiToolRules> {
 
   parseRules(raw: unknown): ApiToolRules {
     return parseApiToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<ApiToolRules>): ReturnType<typeof evaluateApiToolPermission> {
-    return evaluateApiToolPermission(context.agentToolConfig.rules.allowed);
   }
 
   async runTool(params: ApiToolParams, _context: ToolRunContext): Promise<unknown> {

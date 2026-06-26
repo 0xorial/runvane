@@ -9,10 +9,11 @@ function stubTool(name: string): BaseTool {
     getAiDescription: () => `${name} ai`,
     getParamsSchema: () => ({ type: 'object' }),
     getRulesSchema: () => ({ type: 'object' }),
-    getDefaultRules: () => ({ allowed: 'ask' }),
+    getDefaultRules: () => ({}),
+    getDefaultPolicy: () => 'ask',
     parseParams: (raw) => raw,
-    parseRules: (raw) => raw,
-    evaluatePermission: () => [{ ruleName: 'allowed', permission: 'ask_user', detail: '' }],
+    parseRules: (raw) => raw as Record<string, unknown>,
+    evaluatePermission: () => [{ ruleName: 'default', permission: 'allow', detail: '' }],
     runTool: async () => ({}),
     getLocation: () => 'harness',
   };
@@ -27,7 +28,8 @@ describe('tool-catalog.api', () => {
       ai_description: 'filesystem ai',
       params_schema: { type: 'object' },
       rules_schema: { type: 'object' },
-      default_rules: { allowed: 'ask' },
+      default_rules: {},
+      default_policy: 'ask',
       location: 'harness',
     });
   });

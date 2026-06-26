@@ -2,12 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ChatEntry } from '../../../contracts/chatEntry.js';
 import { ChatEntriesRepo } from '../../../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../../../db/repositories/conversations.repo.js';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import {
   assertConversationAccess,
@@ -58,10 +53,13 @@ export class ConversationsTool extends BaseTool<ConversationsToolParams, Convers
 
   getDefaultRules(): ConversationsToolRules {
     return {
-      allowed: 'always',
       allow_other_conversations: false,
       max_messages: 500,
     };
+  }
+
+  getDefaultPolicy(): ToolPolicy {
+    return 'allow';
   }
 
   parseParams(raw: unknown): ConversationsToolParams {
@@ -70,12 +68,6 @@ export class ConversationsTool extends BaseTool<ConversationsToolParams, Convers
 
   parseRules(raw: unknown): ConversationsToolRules {
     return parseConversationsToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<ConversationsToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [{ ruleName: 'allowed', permission, detail: `Rule allowed='${allowedRule}'.` }];
   }
 
   async runTool(params: ConversationsToolParams, context: ToolRunContext): Promise<unknown> {

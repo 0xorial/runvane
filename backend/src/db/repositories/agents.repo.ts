@@ -39,12 +39,39 @@ function asModelReference(providerId: string | null, modelName: string | null): 
   return { provider_id, model_name };
 }
 
+/**
+ * Coerce legacy per-tool config (`{ enabled, rules.allowed }`) to the current
+ * `{ policy }` shape on read, so older stored agents keep working without a SQL
+ * data migration. Idempotent: entries already carrying `policy` only get their
+ * stale `rules.allowed` stripped. The new shape is persisted lazily on next save.
+ */
+function migrateLegacyToolPolicies(config: Record<string, unknown>): void {
+  const tools = config.tools;
+  if (!tools || typeof tools !== 'object' || Array.isArray(tools)) return;
+  for (const entry of Object.values(tools as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const rec = entry as Record<string, unknown>;
+    let allowed: unknown;
+    if (rec.rules && typeof rec.rules === 'object' && !Array.isArray(rec.rules)) {
+      const rules = rec.rules as Record<string, unknown>;
+      allowed = rules.allowed;
+      delete rules.allowed;
+    }
+    if (rec.policy === undefined) {
+      rec.policy =
+        rec.enabled !== true ? 'off' : allowed === 'never' ? 'off' : allowed === 'always' ? 'allow' : 'ask';
+    }
+    delete rec.enabled;
+  }
+}
+
 function parseDefaultConfig(raw: unknown): AgentConfiguration | null {
   if (raw == null) return null;
   const value = typeof raw === 'string' ? (JSON.parse(raw) as unknown) : raw;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('agents: invalid default_llm_configuration_json');
   }
+  migrateLegacyToolPolicies(value as Record<string, unknown>);
   return value as AgentConfiguration;
 }
 

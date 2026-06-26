@@ -1,11 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolRunContext } from '../../base-tool.js';
 import { RetrieverService } from '../../../rag/retrieval/retriever.service.js';
 import { parseRagToolParams, ragToolParamsSchema, type RagToolParams } from './params.js';
 import { parseRagToolRules, RagToolRulesSchema, type RagToolRules } from './rules.js';
@@ -41,7 +36,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
   }
 
   getDefaultRules(): RagToolRules {
-    return { allowed: 'ask', storages: [], top_k: 8, strategy: 'simple' };
+    return { storages: [], top_k: 8, strategy: 'simple' };
   }
 
   parseParams(raw: unknown): RagToolParams {
@@ -50,12 +45,6 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
 
   parseRules(raw: unknown): RagToolRules {
     return parseRagToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<RagToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [{ ruleName: 'allowed', permission, detail: `Rule allowed='${allowedRule}'.` }];
   }
 
   async runTool(params: RagToolParams, context: ToolRunContext): Promise<unknown> {

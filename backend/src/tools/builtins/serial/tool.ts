@@ -1,10 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolRunContext } from '../../base-tool.js';
 import { serialParamsSchema, parseSerialToolParams, type SerialToolParams } from './params.js';
 import { zerialize } from 'zodex';
 import { SerialToolRulesSchema, parseSerialToolRules, type SerialToolRules } from './rules.js';
@@ -44,7 +39,6 @@ export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRul
 
   getDefaultRules(): SerialToolRules {
     return {
-      allowed: 'ask',
       socket_path: '',
       prompt_pattern: '[$#]\\s*$',
       max_timeout_ms: 120000,
@@ -58,19 +52,6 @@ export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRul
 
   parseRules(raw: unknown): SerialToolRules {
     return parseSerialToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<SerialToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission =
-      allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [
-      {
-        ruleName: 'allowed',
-        permission,
-        detail: `Rule allowed='${allowedRule}'.`,
-      },
-    ];
   }
 
   async runTool(params: SerialToolParams, context: ToolRunContext): Promise<unknown> {

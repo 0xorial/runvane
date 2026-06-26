@@ -1,13 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import path from 'node:path';
 import { realpath } from 'node:fs/promises';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolLocation,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolLocation, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import {
   filesystemIndexParamsSchema,
@@ -64,7 +58,7 @@ export class FilesystemIndexTool extends BaseTool<FilesystemIndexParams, Filesys
   }
 
   getDefaultRules(): FilesystemIndexRules {
-    return { allowed: 'ask', allowed_roots: [process.cwd()], max_results: 100 };
+    return { allowed_roots: [process.cwd()], max_results: 100 };
   }
 
   parseParams(raw: unknown): FilesystemIndexParams {
@@ -73,12 +67,6 @@ export class FilesystemIndexTool extends BaseTool<FilesystemIndexParams, Filesys
 
   parseRules(raw: unknown): FilesystemIndexRules {
     return parseFilesystemIndexRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<FilesystemIndexRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [{ ruleName: 'allowed', permission, detail: `Rule allowed='${allowedRule}'.` }];
   }
 
   async runTool(params: FilesystemIndexParams, context: ToolRunContext): Promise<unknown> {

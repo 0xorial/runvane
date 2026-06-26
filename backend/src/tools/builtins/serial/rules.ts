@@ -2,10 +2,6 @@ import { z } from 'zod';
 
 export const SerialToolRulesSchema = z
   .object({
-    allowed: z
-      .enum(['always', 'never', 'ask'])
-      .default('ask')
-      .describe('Permission behavior for this tool.'),
     socket_path: z
       .string()
       .default('')

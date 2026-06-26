@@ -7,7 +7,6 @@ import {
 import type { ConversationsToolRules } from './rules.js';
 
 const baseRules: ConversationsToolRules = {
-  allowed: 'always',
   allow_other_conversations: false,
   max_messages: 500,
 };

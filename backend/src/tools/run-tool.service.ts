@@ -10,7 +10,7 @@ import { TaskRegistryService } from '../tasks/task-registry.service.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
-import { mostPermissivePermission, type ToolPermission } from './base-tool.js';
+import { mostPermissivePermission, type ToolPermission, type ToolPolicy } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
 import type { AgentToolConfig } from '../agents/agent.entity.js';
 import type { GuardrailConfig } from '../contracts/guardrail.js';
@@ -102,28 +102,29 @@ export class RunToolService {
     const agent = await this.agents.get(input.agentId);
     const toolCfg = resolveToolConfig(agent, input.toolOverrides, input.toolName);
 
-    const parsedRules = tool.parseRules(toolCfg.rules ?? tool.getDefaultRules());
+    const rawRules = { ...(toolCfg.rules ?? tool.getDefaultRules()) };
+    // Drop any legacy per-tool `allowed` rule (superseded by policy) so the
+    // tool's strict rules schema doesn't reject older stored configs/overrides.
+    delete (rawRules as Record<string, unknown>).allowed;
+    const parsedRules = tool.parseRules(rawRules);
     const parsedParams = tool.parseParams(input.params);
     const chainTip = chain.getTip();
     if (!chainTip) throw new Error(`runTool: chain tip is unset (conversation=${input.conversationId})`);
     const entries = await this.chatEntries.listChatEntriesFromLeaf(input.conversationId, chainTip);
 
-    // Static, config-level permission gate — the same Off / Ask / Allow the
-    // settings UI surfaces, resolved centrally here so each tool's
-    // evaluatePermission no longer has to translate its own `allowed` rule.
-    // evaluatePermission still runs below for the allow case, so a tool can
-    // keep returning 'ask_user'/'forbid' for dynamic, per-call reasons (e.g.
-    // the api tool, which always asks).
-    const configPermission = this.resolveConfigPermission(toolCfg, parsedRules);
-    if (configPermission === 'forbid') {
-      // "Off": tool disabled or allowed='never'. A forbidden tool is a terminal
+    // Per-agent×tool permission policy — Off / Ask / Allow / Custom, resolved
+    // centrally here. `off` denies, `ask` prompts, `allow` runs, and `custom`
+    // defers to the tool's own evaluatePermission for dynamic, per-call logic.
+    const policy: ToolPolicy = toolCfg.policy ?? 'off';
+    if (policy === 'off') {
+      // "Off": tool unavailable to this agent. A forbidden tool is a terminal
       // (resolved) batch member, so count it toward the fan-in before returning.
       const blocked = await this.recordBlocked({ input, permission: 'forbid', parsedParams, chain });
       this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
       return blocked;
     }
     // Guardrail-flagged calls block with permission='ask_user' even when the
-    // config/rules would allow — user must approve past the guardrail.
+    // policy would allow — the user must approve past the guardrail.
     if (input.guardrailFlagReason && input.approvalGranted !== true) {
       return this.recordBlocked({
         input,
@@ -133,34 +134,30 @@ export class RunToolService {
         guardrailReason: input.guardrailFlagReason,
       });
     }
-    if (configPermission === 'ask_user' && input.approvalGranted !== true) {
-      // "Ask": allowed='ask'. Request approval up front — no need to consult
-      // the tool's own permission check first.
+    if (policy === 'ask' && input.approvalGranted !== true) {
+      // "Ask": request approval up front — no need to consult the tool first.
       return this.recordBlocked({ input, permission: 'ask_user', parsedParams, chain });
     }
 
-    // Config allows (or the user already approved). Let the tool apply any
-    // dynamic, per-call permission logic of its own — it can still escalate to
-    // 'ask_user'/'forbid' here.
-    scope.throwIfAborted();
-    const ruleResults = await tool.evaluatePermission({
-      conversationId: input.conversationId,
-      agentId: input.agentId,
-      entries,
-      agentToolConfig: {
-        enabled: toolCfg.enabled !== false,
-        policy: 'allow',
+    if (policy === 'custom') {
+      // "Custom": defer to the tool's own dynamic permission logic, which can
+      // escalate to 'ask_user'/'forbid' per call.
+      scope.throwIfAborted();
+      const ruleResults = await tool.evaluatePermission({
+        conversationId: input.conversationId,
+        agentId: input.agentId,
+        entries,
         rules: parsedRules,
-      },
-    });
-    const permission = mostPermissivePermission(ruleResults);
-    if (permission === 'forbid') {
-      const blocked = await this.recordBlocked({ input, permission, parsedParams, chain });
-      this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
-      return blocked;
-    }
-    if (permission === 'ask_user' && input.approvalGranted !== true) {
-      return this.recordBlocked({ input, permission, parsedParams, chain });
+      });
+      const permission = mostPermissivePermission(ruleResults);
+      if (permission === 'forbid') {
+        const blocked = await this.recordBlocked({ input, permission, parsedParams, chain });
+        this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
+        return blocked;
+      }
+      if (permission === 'ask_user' && input.approvalGranted !== true) {
+        return this.recordBlocked({ input, permission, parsedParams, chain });
+      }
     }
 
     return this.executeTool({
@@ -173,22 +170,6 @@ export class RunToolService {
       chain,
       llm,
     });
-  }
-
-  /**
-   * The tool's static permission as configured on the agent — the same
-   * Off / Ask / Allow the settings UI surfaces. A tool turned off
-   * (`enabled: false`) or with `allowed: 'never'` is forbidden; `allowed: 'ask'`
-   * requires user approval; anything else (`allowed: 'always'`, or a tool with
-   * no `allowed` rule) returns 'allow' and defers to the tool's own
-   * evaluatePermission.
-   */
-  private resolveConfigPermission(toolCfg: AgentToolConfig, parsedRules: Record<string, unknown>): ToolPermission {
-    if (toolCfg.enabled === false) return 'forbid';
-    const allowed = parsedRules.allowed;
-    if (allowed === 'never') return 'forbid';
-    if (allowed === 'ask') return 'ask_user';
-    return 'allow';
   }
 
   /**
@@ -225,7 +206,11 @@ export class RunToolService {
 
     const agent = await this.agents.get(args.agentId);
     const toolCfg = resolveToolConfig(agent, toolOverrides, entry.toolId);
-    const parsedRules = tool.parseRules(toolCfg.rules ?? tool.getDefaultRules());
+    const rawRules = { ...(toolCfg.rules ?? tool.getDefaultRules()) };
+    // Drop any legacy per-tool `allowed` rule (superseded by policy) so the
+    // tool's strict rules schema doesn't reject older stored configs/overrides.
+    delete (rawRules as Record<string, unknown>).allowed;
+    const parsedRules = tool.parseRules(rawRules);
     const parsedParams = tool.parseParams(rawParams);
 
     const input: RunToolInput = {

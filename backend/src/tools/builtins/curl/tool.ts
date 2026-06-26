@@ -1,10 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import { curlParamsSchema, parseCurlToolParams, type CurlToolParams } from './params.js';
 import { CurlToolRulesSchema, parseCurlToolRules, type CurlToolRules } from './rules.js';
@@ -35,7 +30,6 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
 
   getDefaultRules(): CurlToolRules {
     return {
-      allowed: 'ask',
       allowHttp: false,
       allowedHosts: [],
       blockedHosts: ['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.169.254'],
@@ -50,18 +44,6 @@ export class CurlTool extends BaseTool<CurlToolParams, CurlToolRules> {
 
   parseRules(raw: unknown): CurlToolRules {
     return parseCurlToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<CurlToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [
-      {
-        ruleName: 'allowed',
-        permission,
-        detail: `Rule allowed='${allowedRule}'.`,
-      },
-    ];
   }
 
   async runTool(params: CurlToolParams, context: ToolRunContext): Promise<unknown> {

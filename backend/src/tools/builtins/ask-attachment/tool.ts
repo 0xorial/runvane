@@ -12,12 +12,7 @@ import {
   type LlmRequest,
 } from '../../../llmProviders/types.js';
 import { UploadsService } from '../../../uploads/uploads.service.js';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
 import { askAttachmentParamsSchema, parseAskAttachmentParams, type AskAttachmentParams } from './params.js';
 import { AskAttachmentRulesSchema, parseAskAttachmentRules, type AskAttachmentRules } from './rules.js';
 
@@ -81,10 +76,8 @@ export class AskAttachmentTool extends BaseTool<AskAttachmentParams, AskAttachme
     return parseAskAttachmentRules(raw);
   }
 
-  evaluatePermission(context: ToolPermissionContext<AskAttachmentRules>): RuleEvaluationResult[] {
-    const allowed = context.agentToolConfig.rules.allowed;
-    const permission = allowed === 'always' ? 'allow' : allowed === 'never' ? 'forbid' : 'ask_user';
-    return [{ ruleName: 'allowed', permission, detail: `Rule allowed='${allowed}'.` }];
+  getDefaultPolicy(): ToolPolicy {
+    return 'allow';
   }
 
   async runTool(params: AskAttachmentParams, context: ToolRunContext): Promise<unknown> {

@@ -5,10 +5,6 @@ const DEFAULT_BLOCKED = ['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.16
 
 export const CurlToolRulesSchema = z
   .object({
-    allowed: z
-      .enum(['always', 'never', 'ask'])
-      .default('ask')
-      .describe('Permission behavior for this tool.'),
     allowHttp: z.boolean().default(false).describe('Allow plain HTTP (otherwise HTTPS only).'),
     allowedHosts: HostListSchema.default([]).describe(
       'Optional allowlist. Empty means no allowlist check. Supports exact host or *.example.com.',

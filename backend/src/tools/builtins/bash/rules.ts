@@ -2,10 +2,6 @@ import { z } from 'zod';
 
 export const BashToolRulesSchema = z
   .object({
-    allowed: z
-      .enum(['always', 'never', 'ask'])
-      .default('ask')
-      .describe("Permission behavior for this tool. 'always' auto-allows, 'never' blocks, 'ask' prompts the user."),
     working_dir: z
       .string()
       .default('')

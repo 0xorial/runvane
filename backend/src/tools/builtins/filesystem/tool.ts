@@ -1,13 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import {
-  BaseTool,
-  type RuleEvaluationResult,
-  type ToolLocation,
-  type ToolPermissionContext,
-  type ToolRunContext,
-} from '../../base-tool.js';
+import { BaseTool, type ToolLocation, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import { filesystemParamsSchema, parseFilesystemToolParams, type FilesystemToolParams } from './params.js';
 import { FilesystemToolRulesSchema, parseFilesystemToolRules, type FilesystemToolRules } from './rules.js';
@@ -65,7 +59,6 @@ export class FilesystemTool extends BaseTool<FilesystemToolParams, FilesystemToo
 
   getDefaultRules(): FilesystemToolRules {
     return {
-      allowed: 'ask',
       allowed_roots: [process.cwd()],
       max_read_bytes: 200_000,
       max_list_entries: 500,
@@ -78,18 +71,6 @@ export class FilesystemTool extends BaseTool<FilesystemToolParams, FilesystemToo
 
   parseRules(raw: unknown): FilesystemToolRules {
     return parseFilesystemToolRules(raw);
-  }
-
-  evaluatePermission(context: ToolPermissionContext<FilesystemToolRules>): RuleEvaluationResult[] {
-    const allowedRule = context.agentToolConfig.rules.allowed;
-    const permission = allowedRule === 'always' ? 'allow' : allowedRule === 'never' ? 'forbid' : 'ask_user';
-    return [
-      {
-        ruleName: 'allowed',
-        permission,
-        detail: `Rule allowed='${allowedRule}'.`,
-      },
-    ];
   }
 
   async runTool(params: FilesystemToolParams, context: ToolRunContext): Promise<ReadFileResult | ListDirResult> {
