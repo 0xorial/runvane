@@ -50,6 +50,31 @@ test("new-chat env cards render and bind the sandbox to the conversation", async
   await expect(headerBadge).toContainText("None");
 });
 
+test("new-chat shows a dynamic hint listing the harness-only tools", async ({ app, page, request }) => {
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+
+  // The hint is built from /api/tools metadata: exactly the tools whose
+  // location is "harness", and never the target (sandbox) ones.
+  const toolsRes = await request.get(`${apiBaseUrl()}/api/tools`);
+  expect(toolsRes.ok()).toBeTruthy();
+  const tools = (await toolsRes.json()) as { name: string; location?: string }[];
+  const harness = tools.filter((t) => t.location === "harness").map((t) => t.name);
+  expect(harness.length).toBeGreaterThan(0);
+
+  const hint = page.getByTestId("harness-tools-hint").first();
+  await expect(hint).toBeVisible();
+  const advertised = ((await hint.getAttribute("data-harness-tools")) ?? "").split(",").filter(Boolean);
+  expect(advertised.sort()).toEqual([...harness].sort());
+  for (const t of tools.filter((t) => t.location === "target")) {
+    expect(advertised).not.toContain(t.name);
+  }
+
+  // Hovering surfaces the explanation popup.
+  await hint.hover();
+  await expect(page.getByRole("tooltip")).toContainText(/harness sandbox/i);
+});
+
 test("add-sandbox card opens a dialog that creates and selects a new ssh env", async ({ app, page, request }) => {
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);

@@ -3,6 +3,7 @@
   import { createToolSandbox, deleteToolSandbox, getToolSandboxes } from "@/api/client";
   import type { SshSandboxConfig, ToolSandbox } from "../../../../backend/src/contracts/tool-sandbox";
   import { ghostBtn, ghostDanger } from "./settingsClasses";
+  import HarnessToolsHint from "@/components/chat/HarnessToolsHint.svelte";
 
   let sandboxes = $state<ToolSandbox[]>([]);
   let loading = $state(true);
@@ -78,9 +79,12 @@
 
 <main class="flex min-w-0 flex-col gap-3.5" data-testid="tool-sandboxes-section">
   <div>
-    <h1 class="text-base font-bold text-foreground">Tool sandboxes</h1>
+    <h1 class="flex items-center gap-1.5 text-base font-bold text-foreground">
+      Tool sandboxes
+      <HarnessToolsHint side="bottom" />
+    </h1>
     <p class="text-xs text-muted-foreground">
-      Where a conversation's runtime tools run. <strong>Local</strong> and <strong>None</strong> are
+      Where a conversation's target tools run. <strong>Local</strong> and <strong>None</strong> are
       built in; add ssh hosts to run the tool-host on another machine. Pick one per chat on the
       new-chat screen.
     </p>
