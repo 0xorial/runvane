@@ -62,6 +62,11 @@
     return `/settings/model-pricing${q}`;
   });
 
+  /** Settings link focused on a single model — used by the per-row "set price" action. */
+  function modelPricingHref(modelName: string): string {
+    return `/settings/model-pricing?focus=${encodeURIComponent(modelName)}`;
+  }
+
   const setPricingTitle = $derived.by(() => {
     const m = summary.unpricedModels;
     if (m.length === 0) return "No pricing configured. Click to set it.";
@@ -80,8 +85,8 @@
   function place(): void {
     const r = anchorEl?.getBoundingClientRect();
     if (!r) return;
-    // Rough popover height: header + a row per model + total (+ footer when unpriced).
-    const estHeight = 30 + summary.perModel.length * 20 + 26 + (summary.unpricedModels.length > 0 ? 24 : 0);
+    // Rough popover height: header + a row per model + total row.
+    const estHeight = 30 + summary.perModel.length * 20 + 26;
     const enoughBelow = r.bottom + 6 + estHeight < window.innerHeight;
     placement = enoughBelow ? "bottom" : "top";
     const x = Math.min(Math.max(8, r.left), window.innerWidth - 296);
@@ -173,6 +178,15 @@
           <div class="shrink-0 whitespace-nowrap text-right">
             {#if row.costUsd !== null}
               {preciseUsd(row.costUsd)}
+            {:else if row.modelName}
+              <button
+                type="button"
+                class="border-0 bg-transparent p-0 font-mono text-warning underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-foreground"
+                title={`Set pricing for ${row.modelName}`}
+                onclick={() => navigate(modelPricingHref(row.modelName))}
+              >
+                set price
+              </button>
             {:else}
               <span class="text-warning">no price</span>
             {/if}
@@ -192,16 +206,5 @@
         {/if}
       </span>
     </div>
-    {#if summary.unpricedModels.length > 0}
-      <button
-        type="button"
-        class="mt-1.5 block w-full rounded border-0 bg-transparent p-0 text-left text-[10px] text-muted-foreground/80 underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-foreground"
-        title={setPricingTitle}
-        onclick={() => navigate(pricingHref)}
-      >
-        set pricing for {summary.unpricedModels.length}
-        {summary.unpricedModels.length === 1 ? "model" : "models"} →
-      </button>
-    {/if}
   </div>
 {/if}
