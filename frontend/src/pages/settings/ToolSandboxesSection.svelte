@@ -84,7 +84,7 @@
       <HarnessToolsHint side="bottom" />
     </h1>
     <p class="text-xs text-muted-foreground">
-      Where a conversation's target tools run. <strong>Local</strong> and <strong>None</strong> are
+      Where a conversation's target tools run. <strong>Harness host</strong> and <strong>None</strong> are
       built in; add ssh hosts to run the tool-host on another machine. Pick one per chat on the
       new-chat screen.
     </p>

@@ -20,9 +20,9 @@ test("new-chat env cards render and bind the sandbox to the conversation", async
   const noneCard = page.locator('[data-testid="tool-env-card"][data-env-id="none"]');
   await expect(localCard).toBeVisible();
   await expect(noneCard).toBeVisible();
-  // Local is selected by default and carries the same-host explainer.
+  // The built-in "Harness host" sandbox is selected by default.
   await expect(localCard).toHaveAttribute("aria-pressed", "true");
-  await expect(localCard).toContainText(/same host/i);
+  await expect(localCard).toContainText("Harness host");
 
   // Select None — persists to the URL and flips the selected card.
   await noneCard.click();

@@ -7,5 +7,5 @@ export function toolSandboxDescription(env: ToolSandbox): string {
     const target = `${env.ssh.user ? `${env.ssh.user}@` : ""}${env.ssh.host}${env.ssh.port ? `:${env.ssh.port}` : ""}`;
     return `Tools run over ssh on ${target}.`;
   }
-  return "Tools run on the same host as the harness.";
+  return "Target tools run alongside the app, sharing its files — no separate sandbox.";
 }

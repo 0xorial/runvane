@@ -34,7 +34,7 @@ export const NONE_SANDBOX_ID = 'none';
 export const DEFAULT_TOOL_SANDBOX_ID = LOCAL_SANDBOX_ID;
 
 export const BUILTIN_TOOL_SANDBOXES: ToolSandbox[] = [
-  { id: LOCAL_SANDBOX_ID, name: 'Local', kind: 'local', builtin: true, ssh: null },
+  { id: LOCAL_SANDBOX_ID, name: 'Harness host', kind: 'local', builtin: true, ssh: null },
   { id: NONE_SANDBOX_ID, name: 'None', kind: 'none', builtin: true, ssh: null },
 ];
 
