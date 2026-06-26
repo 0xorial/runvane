@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
+import { BaseTool, type ToolRunContext } from '../../base-tool.js';
 import { zerialize } from 'zodex';
 import { delegateLlmParamsSchema, parseDelegateLlmParams, type DelegateLlmParams } from './params.js';
 import { DelegateLlmRulesSchema, parseDelegateLlmRules, type DelegateLlmRules } from './rules.js';
@@ -53,10 +53,6 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
       max_prompt_chars: 50000,
       max_response_chars: 20000,
     };
-  }
-
-  getDefaultPolicy(): ToolPolicy {
-    return 'allow';
   }
 
   parseParams(raw: unknown): DelegateLlmParams {
