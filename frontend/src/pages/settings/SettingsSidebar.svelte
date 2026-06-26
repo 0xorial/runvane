@@ -10,7 +10,7 @@
     { section: "tools", label: "Tools" },
     { section: "skills", label: "Skills" },
     { section: "rag", label: "RAG" },
-    { section: "tool-environments", label: "Tool Environments" },
+    { section: "tool-sandboxes", label: "Tool Sandboxes" },
     { section: "agents", label: "Agents" },
   ];
 

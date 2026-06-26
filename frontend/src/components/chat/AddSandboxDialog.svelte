@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createToolEnvironment } from "@/api/client";
-  import type { SshEnvironmentConfig, ToolEnvironment } from "../../../../backend/src/contracts/tool-environment";
+  import { createToolSandbox } from "@/api/client";
+  import type { SshSandboxConfig, ToolSandbox } from "../../../../backend/src/contracts/tool-sandbox";
 
   let {
     open,
@@ -9,7 +9,7 @@
   }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onCreated: (env: ToolEnvironment) => void | Promise<void>;
+    onCreated: (env: ToolSandbox) => void | Promise<void>;
   } = $props();
 
   let name = $state("");
@@ -45,14 +45,14 @@
     error = null;
     try {
       const portNum = parseInt(port.trim(), 10);
-      const ssh: SshEnvironmentConfig = {
+      const ssh: SshSandboxConfig = {
         host: host.trim(),
         ...(user.trim() ? { user: user.trim() } : {}),
         ...(Number.isFinite(portNum) && portNum > 0 ? { port: portNum } : {}),
         ...(identityFile.trim() ? { identityFile: identityFile.trim() } : {}),
         ...(remoteCommand.trim() ? { remoteCommand: remoteCommand.trim() } : {}),
       };
-      const created = await createToolEnvironment({ name: name.trim(), ssh });
+      const created = await createToolSandbox({ name: name.trim(), ssh });
       reset();
       onOpenChange(false);
       await onCreated(created);
@@ -73,7 +73,7 @@
       class="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-lg"
       data-testid="add-env-dialog"
     >
-      <h2 id="add-env-title" class="mb-3 text-sm font-medium">New ssh environment</h2>
+      <h2 id="add-env-title" class="mb-3 text-sm font-medium">New ssh sandbox</h2>
 
       {#if error}
         <div class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">{error}</div>
@@ -115,7 +115,7 @@
           disabled={!canSave || saving}
           onclick={() => void submit()}
         >
-          {saving ? "Adding…" : "Add environment"}
+          {saving ? "Adding…" : "Add sandbox"}
         </button>
       </div>
     </div>

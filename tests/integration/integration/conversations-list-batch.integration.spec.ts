@@ -10,7 +10,7 @@ type ListRow = {
   groupPinned: boolean;
   defaultViewLeafEntryId: string | null;
   defaultViewLeafAnchorId: string | null;
-  toolEnvironmentId: string | null;
+  toolSandboxId: string | null;
   forkedFromConversationId: string | null;
   tokenUsageByModel: unknown[];
 };
@@ -78,7 +78,7 @@ describeIntegration('conversations list batch mapping (integration)', () => {
 
     // Bulk fork / tool-env lookups resolve to null for plain conversations.
     expect(groupedRow!.forkedFromConversationId).toBeNull();
-    expect(plainRow!.toolEnvironmentId).toBeNull();
+    expect(plainRow!.toolSandboxId).toBeNull();
 
     // The list path intentionally does NOT walk the branch tree, so the resolved
     // leaf is null here; the stored anchor is also null with no messages.

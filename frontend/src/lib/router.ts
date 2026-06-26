@@ -47,7 +47,7 @@ export function agentIdFromSearch(search: string): string {
   return new URLSearchParams(search).get("agent")?.trim() ?? "";
 }
 
-export function toolEnvironmentIdFromSearch(search: string): string {
+export function toolSandboxIdFromSearch(search: string): string {
   return new URLSearchParams(search).get("env")?.trim() ?? "";
 }
 

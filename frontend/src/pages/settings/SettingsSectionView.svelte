@@ -8,7 +8,7 @@
   import ModelPricingEditor from "./ModelPricingEditor.svelte";
   import ProviderCard from "./ProviderCard.svelte";
   import RagStoragesSection from "./RagStoragesSection.svelte";
-  import ToolEnvironmentsSection from "./ToolEnvironmentsSection.svelte";
+  import ToolSandboxesSection from "./ToolSandboxesSection.svelte";
   import SettingsHeader from "./SettingsHeader.svelte";
   import { buildModelGroups, filterProviders, type SettingsSection } from "./helpers";
   import { ghostBtn, settingsPlaceholderBox } from "./settingsClasses";
@@ -178,8 +178,8 @@
     </div>
   {:else if section === "rag"}
     <RagStoragesSection />
-  {:else if section === "tool-environments"}
-    <ToolEnvironmentsSection />
+  {:else if section === "tool-sandboxes"}
+    <ToolSandboxesSection />
   {:else}
     <div class={settingsPlaceholderBox}>Skills UI placeholder.</div>
   {/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Kind glyph for a tool environment, shared by the new-chat selector cards and
+  // Kind glyph for a tool sandbox, shared by the new-chat selector cards and
   // the chat header badge. `class` controls sizing at each call site.
   let { kind, class: className = "h-4.5 w-4.5" }: { kind: string; class?: string } = $props();
 </script>

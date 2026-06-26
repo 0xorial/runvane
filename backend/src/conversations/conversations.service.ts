@@ -35,8 +35,8 @@ export class ConversationsService {
     };
   }
 
-  async create(input: { title?: string; toolEnvironmentId?: string }): Promise<ConversationRow> {
-    const created = await this.conversations.create({ title: input.title, toolEnvironmentId: input.toolEnvironmentId });
+  async create(input: { title?: string; toolSandboxId?: string }): Promise<ConversationRow> {
+    const created = await this.conversations.create({ title: input.title, toolSandboxId: input.toolSandboxId });
     return this.toApiRow(created);
   }
 
@@ -138,11 +138,11 @@ export class ConversationsService {
    * lives in columns the Prisma client doesn't know about, so it's read here.
    */
   private async toApiRow(entity: ConversationEntity): Promise<ConversationRow> {
-    const [tokenUsageByModel, forkLink, groupPinned, toolEnvironmentId] = await Promise.all([
+    const [tokenUsageByModel, forkLink, groupPinned, toolSandboxId] = await Promise.all([
       this.chatEntries.tokenUsageByModel(entity.id),
       this.conversations.getForkLink(entity.id),
       this.conversations.getGroupPinned(entity.id),
-      this.conversations.getToolEnvironmentId(entity.id),
+      this.conversations.getToolSandboxId(entity.id),
     ]);
     const row = toConversationRow(entity, tokenUsageByModel, groupPinned);
     row.defaultViewLeafAnchorId = entity.defaultViewLeafEntryId;
@@ -150,7 +150,7 @@ export class ConversationsService {
     row.forkedFromConversationId = forkLink.forkedFromConversationId;
     row.forkedFromEntryId = forkLink.forkedFromEntryId;
     row.forkedFromConversationTitle = forkLink.forkedFromConversationTitle;
-    row.toolEnvironmentId = toolEnvironmentId;
+    row.toolSandboxId = toolSandboxId;
     return row;
   }
 
@@ -170,7 +170,7 @@ export class ConversationsService {
       this.chatEntries.tokenUsageByModelByIds(ids),
       this.conversations.getForkLinksByIds(ids),
       this.conversations.getGroupPinnedByIds(ids),
-      this.conversations.getToolEnvironmentIdsByIds(ids),
+      this.conversations.getToolSandboxIdsByIds(ids),
     ]);
     return entities.map((entity) => {
       const row = toConversationRow(
@@ -182,7 +182,7 @@ export class ConversationsService {
       row.forkedFromConversationId = forkLink?.forkedFromConversationId ?? null;
       row.forkedFromEntryId = forkLink?.forkedFromEntryId ?? null;
       row.forkedFromConversationTitle = forkLink?.forkedFromConversationTitle ?? null;
-      row.toolEnvironmentId = toolEnvById.get(entity.id) ?? null;
+      row.toolSandboxId = toolEnvById.get(entity.id) ?? null;
       return row;
     });
   }

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { createToolEnvironment, deleteToolEnvironment, getToolEnvironments } from "@/api/client";
-  import type { SshEnvironmentConfig, ToolEnvironment } from "../../../../backend/src/contracts/tool-environment";
+  import { createToolSandbox, deleteToolSandbox, getToolSandboxes } from "@/api/client";
+  import type { SshSandboxConfig, ToolSandbox } from "../../../../backend/src/contracts/tool-sandbox";
   import { ghostBtn, ghostDanger } from "./settingsClasses";
 
-  let environments = $state<ToolEnvironment[]>([]);
+  let sandboxes = $state<ToolSandbox[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // New ssh environment form.
+  // New ssh sandbox form.
   let name = $state("");
   let host = $state("");
   let user = $state("");
@@ -25,7 +25,7 @@
     loading = true;
     error = null;
     try {
-      environments = await getToolEnvironments();
+      sandboxes = await getToolSandboxes();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -40,14 +40,14 @@
     error = null;
     try {
       const portNum = parseInt(port.trim(), 10);
-      const ssh: SshEnvironmentConfig = {
+      const ssh: SshSandboxConfig = {
         host: host.trim(),
         ...(user.trim() ? { user: user.trim() } : {}),
         ...(Number.isFinite(portNum) && portNum > 0 ? { port: portNum } : {}),
         ...(identityFile.trim() ? { identityFile: identityFile.trim() } : {}),
         ...(remoteCommand.trim() ? { remoteCommand: remoteCommand.trim() } : {}),
       };
-      await createToolEnvironment({ name: name.trim(), ssh });
+      await createToolSandbox({ name: name.trim(), ssh });
       name = "";
       host = "";
       user = "";
@@ -66,7 +66,7 @@
     busyId = id;
     error = null;
     try {
-      await deleteToolEnvironment(id);
+      await deleteToolSandbox(id);
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -76,9 +76,9 @@
   }
 </script>
 
-<main class="flex min-w-0 flex-col gap-3.5" data-testid="tool-environments-section">
+<main class="flex min-w-0 flex-col gap-3.5" data-testid="tool-sandboxes-section">
   <div>
-    <h1 class="text-base font-bold text-foreground">Tool environments</h1>
+    <h1 class="text-base font-bold text-foreground">Tool sandboxes</h1>
     <p class="text-xs text-muted-foreground">
       Where a conversation's runtime tools run. <strong>Local</strong> and <strong>None</strong> are
       built in; add ssh hosts to run the tool-host on another machine. Pick one per chat on the
@@ -93,7 +93,7 @@
   {/if}
 
   <section class="rounded-lg border border-border bg-card p-3">
-    <div class="mb-2 text-[13px] font-bold text-foreground">New ssh environment</div>
+    <div class="mb-2 text-[13px] font-bold text-foreground">New ssh sandbox</div>
     <div class="grid grid-cols-2 gap-2.5">
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Name</span>
@@ -122,7 +122,7 @@
     </div>
     <div class="mt-2.5">
       <button type="button" class="{ghostBtn} border-slate-300" data-testid="tool-env-create" disabled={!canCreate || creating} onclick={create}>
-        {creating ? "Adding…" : "Add environment"}
+        {creating ? "Adding…" : "Add sandbox"}
       </button>
     </div>
   </section>
@@ -131,7 +131,7 @@
     <p class="text-sm text-muted-foreground">Loading…</p>
   {:else}
     <div class="flex flex-col gap-2.5">
-      {#each environments as env (env.id)}
+      {#each sandboxes as env (env.id)}
         <section class="rounded-lg border border-border bg-card p-3" data-testid="tool-env-row" data-env-id={env.id}>
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">

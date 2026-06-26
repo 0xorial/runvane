@@ -1,7 +1,7 @@
-import type { ToolEnvironment } from "../../../backend/src/contracts/tool-environment";
+import type { ToolSandbox } from "../../../backend/src/contracts/tool-sandbox";
 
 /** One-line explainer of where a conversation's runtime tools execute. */
-export function toolEnvironmentDescription(env: ToolEnvironment): string {
+export function toolSandboxDescription(env: ToolSandbox): string {
   if (env.kind === "none") return "No sandbox — runtime tools are disabled for this chat.";
   if (env.kind === "ssh" && env.ssh) {
     const target = `${env.ssh.user ? `${env.ssh.user}@` : ""}${env.ssh.host}${env.ssh.port ? `:${env.ssh.port}` : ""}`;

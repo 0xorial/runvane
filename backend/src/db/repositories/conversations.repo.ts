@@ -82,10 +82,10 @@ export class ConversationsRepo {
       },
     });
     // tool_environment_id is a raw column the generated client doesn't track.
-    if (input.toolEnvironmentId) {
+    if (input.toolSandboxId) {
       await this.prisma.$executeRawUnsafe(
         `UPDATE conversations SET tool_environment_id = ? WHERE id = ?`,
-        input.toolEnvironmentId,
+        input.toolSandboxId,
         id,
       );
     }
@@ -212,7 +212,7 @@ export class ConversationsRepo {
   }
 
   /** tool_environment_id is a raw column the generated client doesn't track. */
-  async getToolEnvironmentId(id: string): Promise<string | null> {
+  async getToolSandboxId(id: string): Promise<string | null> {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT tool_environment_id AS envId FROM conversations WHERE id = ?`,
       id,
@@ -237,7 +237,7 @@ export class ConversationsRepo {
   }
 
   /** Bulk variant for list endpoints: map of conversationId -> tool_environment_id. */
-  async getToolEnvironmentIdsByIds(ids: string[]): Promise<Map<string, string | null>> {
+  async getToolSandboxIdsByIds(ids: string[]): Promise<Map<string, string | null>> {
     const rows = await this.chunkedInQuery<{ id: string; envId: string | null }>(
       ids,
       (placeholders) => `SELECT id, tool_environment_id AS envId FROM conversations WHERE id IN (${placeholders})`,

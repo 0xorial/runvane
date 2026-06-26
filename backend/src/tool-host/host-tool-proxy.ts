@@ -5,17 +5,17 @@ import {
   type ToolPermissionContext,
   type ToolRunContext,
 } from '../tools/base-tool.js';
-import type { ToolEnvironmentKind } from '../contracts/tool-environment.js';
+import type { ToolSandboxKind } from '../contracts/tool-sandbox.js';
 import type { HostToolDescriptor, InvocationResult } from './protocol.js';
 
 export type RouterInvokeOptions = { signal?: AbortSignal; onProgress?: (delta: string) => void };
 
 /**
- * Routes a target tool to the tool-host for a given conversation's environment.
+ * Routes a target tool to the tool-host for a given conversation's sandbox.
  * Implemented by ToolHostService; the proxy depends only on this interface.
  */
 export interface ConversationToolRouter {
-  environmentKindForConversation(conversationId: string): Promise<ToolEnvironmentKind>;
+  sandboxKindForConversation(conversationId: string): Promise<ToolSandboxKind>;
   invokeForConversation(
     conversationId: string,
     toolName: string,
@@ -26,8 +26,8 @@ export interface ConversationToolRouter {
 
 /**
  * Exposes a tool-host target tool to the harness as a BaseTool. Execution is
- * routed to the conversation's bound environment, so the same registered tool
- * runs locally, over ssh, or is forbidden (environment `none`) depending on the
+ * routed to the conversation's bound sandbox, so the same registered tool
+ * runs locally, over ssh, or is forbidden (sandbox `none`) depending on the
  * conversation. Because run-tool.service runs `runTool` inside
  * `taskRegistry.run(...)`, monitoring and cancel propagation come for free.
  */
@@ -76,13 +76,13 @@ export class HostToolProxy extends BaseTool {
   }
 
   async evaluatePermission(context: ToolPermissionContext<Record<string, unknown>>): Promise<RuleEvaluationResult[]> {
-    const kind = await this.router.environmentKindForConversation(context.conversationId);
+    const kind = await this.router.sandboxKindForConversation(context.conversationId);
     if (kind === 'none') {
       return [
         {
-          ruleName: 'tool-environment',
+          ruleName: 'tool-sandbox',
           permission: 'forbid',
-          detail: 'target tools are disabled for this conversation (environment: none)',
+          detail: 'target tools are disabled for this conversation (sandbox: none)',
         },
       ];
     }

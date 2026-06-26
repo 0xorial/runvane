@@ -6,13 +6,13 @@ test.skip(!runE2e, "Set RUN_E2E_TESTS=1 with backend+frontend running");
 
 type EnvRow = { id: string; name: string };
 
-async function listEnvironments(request: import("@playwright/test").APIRequestContext): Promise<EnvRow[]> {
-  const res = await request.get(`${apiBaseUrl()}/api/tool-environments`);
+async function listSandboxes(request: import("@playwright/test").APIRequestContext): Promise<EnvRow[]> {
+  const res = await request.get(`${apiBaseUrl()}/api/tool-sandboxes`);
   expect(res.ok()).toBeTruthy();
-  return ((await res.json()) as { environments: EnvRow[] }).environments;
+  return ((await res.json()) as { sandboxes: EnvRow[] }).sandboxes;
 }
 
-test("new-chat env cards render and bind the environment to the conversation", async ({ app, page, request }) => {
+test("new-chat env cards render and bind the sandbox to the conversation", async ({ app, page, request }) => {
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
 
@@ -40,17 +40,17 @@ test("new-chat env cards render and bind the environment to the conversation", a
 
   const res = await request.get(`${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}`);
   expect(res.ok()).toBeTruthy();
-  const conversation = (await res.json()) as { toolEnvironmentId: string | null };
-  expect(conversation.toolEnvironmentId).toBe("none");
+  const conversation = (await res.json()) as { toolSandboxId: string | null };
+  expect(conversation.toolSandboxId).toBe("none");
 
-  // The chat header surfaces the bound environment next to the title.
+  // The chat header surfaces the bound sandbox next to the title.
   const headerBadge = page.getByTestId("chat-tool-env");
   await expect(headerBadge).toBeVisible();
   await expect(headerBadge).toHaveAttribute("data-env-id", "none");
   await expect(headerBadge).toContainText("None");
 });
 
-test("add-environment card opens a dialog that creates and selects a new ssh env", async ({ app, page, request }) => {
+test("add-sandbox card opens a dialog that creates and selects a new ssh env", async ({ app, page, request }) => {
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
 
@@ -70,16 +70,16 @@ test("add-environment card opens a dialog that creates and selects a new ssh env
   await expect(newCard).toHaveAttribute("aria-pressed", "true");
 
   // Cleanup so the run stays idempotent.
-  const created = (await listEnvironments(request)).find((e) => e.name === "E2E Box");
+  const created = (await listSandboxes(request)).find((e) => e.name === "E2E Box");
   if (created) {
-    const del = await request.delete(`${apiBaseUrl()}/api/tool-environments/${encodeURIComponent(created.id)}`);
+    const del = await request.delete(`${apiBaseUrl()}/api/tool-sandboxes/${encodeURIComponent(created.id)}`);
     expect(del.ok()).toBeTruthy();
   }
 });
 
-test("settings Tool Environments section creates and deletes an ssh env", async ({ page }) => {
-  await page.goto("/settings/tool-environments", { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("tool-environments-section")).toBeVisible();
+test("settings Tool Sandboxes section creates and deletes an ssh env", async ({ page }) => {
+  await page.goto("/settings/tool-sandboxes", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("tool-sandboxes-section")).toBeVisible();
 
   await page.getByTestId("tool-env-name").fill("E2E Settings Box");
   await page.getByTestId("tool-env-host").fill("settings.e2e.local");

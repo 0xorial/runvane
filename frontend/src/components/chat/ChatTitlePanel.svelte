@@ -12,7 +12,7 @@
   import EditableConversationTitle from "./header/EditableConversationTitle.svelte";
   import PanelIconButton from "./header/PanelIconButton.svelte";
   import TaskStatusButton from "./header/TaskStatusButton.svelte";
-  import ChatToolEnvironmentBadge from "./ChatToolEnvironmentBadge.svelte";
+  import ChatToolSandboxBadge from "./ChatToolSandboxBadge.svelte";
 
   let {
     conversationId,
@@ -43,7 +43,7 @@
     enabled: Boolean(conversationId?.trim()),
   }));
 
-  const toolEnvironmentId = $derived(conversationQuery.data?.toolEnvironmentId ?? null);
+  const toolSandboxId = $derived(conversationQuery.data?.toolSandboxId ?? null);
 
   const pricingQuery = createModelCapabilitiesQuery();
   const pricingByModel = $derived(pricingFromCapabilities(pricingQuery.data));
@@ -109,7 +109,7 @@
       <EditableConversationTitle {title} disabled={!conversationId} onCommit={onCommit} />
       <ConversationCostDisplay usageByModel={tokenUsageByModel} {pricingByModel} />
       {#if conversationId && conversationQuery.data}
-        <ChatToolEnvironmentBadge {toolEnvironmentId} />
+        <ChatToolSandboxBadge {toolSandboxId} />
       {/if}
     </div>
   </div>

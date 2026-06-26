@@ -3,17 +3,17 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {
-  DEFAULT_TOOL_ENVIRONMENT_ID,
-  LOCAL_ENVIRONMENT_ID,
-  type SshEnvironmentConfig,
-  type ToolEnvironment,
-  type ToolEnvironmentKind,
-} from '../contracts/tool-environment.js';
+  DEFAULT_TOOL_SANDBOX_ID,
+  LOCAL_SANDBOX_ID,
+  type SshSandboxConfig,
+  type ToolSandbox,
+  type ToolSandboxKind,
+} from '../contracts/tool-sandbox.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { HostToolProxy, type ConversationToolRouter, type RouterInvokeOptions } from './host-tool-proxy.js';
 import type { InvocationResult } from './protocol.js';
-import { ToolEnvironmentsService } from './tool-environments.service.js';
+import { ToolSandboxesService } from './tool-sandboxes.service.js';
 import { ToolHostClient, type ToolHostSpawnConfig } from './tool-host-client.js';
 import { deployToolHostOverSsh } from './ssh-deploy.js';
 
@@ -23,9 +23,9 @@ const HOST_ENTRY_RELATIVE = 'toolhost/src/host/main.ts';
 /**
  * Connects the harness to tool-hosts and registers their target tools as proxies
  * in the shared ToolRegistry. The catalog is enumerated once from the local
- * host; each conversation's bound environment decides *where* a registered tool
+ * host; each conversation's bound sandbox decides *where* a registered tool
  * actually runs — locally, over ssh, or not at all (`none`). One client per
- * environment is started lazily and reused. Best-effort: the app boots even if
+ * sandbox is started lazily and reused. Best-effort: the app boots even if
  * no host is reachable, just without target tools.
  */
 @Injectable()
@@ -36,7 +36,7 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
   constructor(
     private readonly tools: ToolRegistry,
     private readonly conversations: ConversationsRepo,
-    private readonly environments: ToolEnvironmentsService,
+    private readonly sandboxes: ToolSandboxesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -51,13 +51,18 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
       client.start();
       await client.ready();
       const descriptors = await client.listTools();
-      this.clients.set(LOCAL_ENVIRONMENT_ID, client);
+      this.clients.set(LOCAL_SANDBOX_ID, client);
       let registered = 0;
       for (const descriptor of descriptors) {
+        // A host proxy carries no rules/permission schema, so it must never
+        // shadow a safety-bearing builtin (e.g. `filesystem`). If a builtin
+        // already owns the name, keep the builtin and skip the proxy.
+        if (this.tools.get(descriptor.name)) {
+          this.logger.warn(`host tool ${descriptor.name} shadows builtin; keeping builtin`);
+          continue;
+        }
         try {
-          // Host target tools supersede a same-named builtin (one `filesystem`,
-          // env-routed) instead of colliding with it.
-          this.tools.register(new HostToolProxy(this, descriptor), { override: true });
+          this.tools.register(new HostToolProxy(this, descriptor));
           registered += 1;
         } catch (err) {
           this.logger.warn(`skipping host tool ${descriptor.name}: ${(err as Error).message}`);
@@ -77,8 +82,8 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
 
   // ─── ConversationToolRouter ──────────────────────────────────────────────
 
-  async environmentKindForConversation(conversationId: string): Promise<ToolEnvironmentKind> {
-    return (await this.resolveEnvironment(conversationId)).kind;
+  async sandboxKindForConversation(conversationId: string): Promise<ToolSandboxKind> {
+    return (await this.resolveSandbox(conversationId)).kind;
   }
 
   async invokeForConversation(
@@ -87,24 +92,24 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
     params: unknown,
     opts: RouterInvokeOptions,
   ): Promise<InvocationResult> {
-    const env = await this.resolveEnvironment(conversationId);
+    const env = await this.resolveSandbox(conversationId);
     if (env.kind === 'none') {
-      return errorResult('target tools are disabled for this conversation (environment: none)');
+      return errorResult('target tools are disabled for this conversation (sandbox: none)');
     }
-    const client = await this.clientForEnvironment(env);
-    if (!client) return errorResult(`tool environment "${env.name}" is unavailable`);
+    const client = await this.clientForSandbox(env);
+    if (!client) return errorResult(`tool sandbox "${env.name}" is unavailable`);
     return client.invoke(toolName, params, opts);
   }
 
   // ─── internals ───────────────────────────────────────────────────────────
 
-  private async resolveEnvironment(conversationId: string): Promise<ToolEnvironment> {
-    const envId = conversationId ? await this.conversations.getToolEnvironmentId(conversationId) : null;
-    return this.environments.getOrDefault(envId ?? DEFAULT_TOOL_ENVIRONMENT_ID);
+  private async resolveSandbox(conversationId: string): Promise<ToolSandbox> {
+    const envId = conversationId ? await this.conversations.getToolSandboxId(conversationId) : null;
+    return this.sandboxes.getOrDefault(envId ?? DEFAULT_TOOL_SANDBOX_ID);
   }
 
-  /** The connected client for an environment, started + cached on first use. */
-  private async clientForEnvironment(env: ToolEnvironment): Promise<ToolHostClient | null> {
+  /** The connected client for an sandbox, started + cached on first use. */
+  private async clientForSandbox(env: ToolSandbox): Promise<ToolHostClient | null> {
     const existing = this.clients.get(env.id);
     if (existing) return existing;
 
@@ -116,7 +121,7 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
     try {
       config = await resolveSpawnConfig(env);
     } catch (err) {
-      this.logger.warn(`tool environment "${env.name}" deploy failed: ${(err as Error).message}`);
+      this.logger.warn(`tool sandbox "${env.name}" deploy failed: ${(err as Error).message}`);
       return null;
     }
     if (!config) return null;
@@ -126,10 +131,10 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
       client.start();
       await client.ready();
       this.clients.set(env.id, client);
-      this.logger.log(`tool environment "${env.name}" connected via ${config.command}`);
+      this.logger.log(`tool sandbox "${env.name}" connected via ${config.command}`);
       return client;
     } catch (err) {
-      this.logger.warn(`tool environment "${env.name}" failed to connect: ${(err as Error).message}`);
+      this.logger.warn(`tool sandbox "${env.name}" failed to connect: ${(err as Error).message}`);
       await client.close();
       return null;
     }
@@ -141,7 +146,7 @@ function errorResult(message: string): InvocationResult {
   return { ok: false, output: null, error: message, timing: { startedAt: now, finishedAt: now, elapsedMs: 0 } };
 }
 
-async function resolveSpawnConfig(env: ToolEnvironment): Promise<ToolHostSpawnConfig | null> {
+async function resolveSpawnConfig(env: ToolSandbox): Promise<ToolHostSpawnConfig | null> {
   if (env.kind === 'none') return null;
   if (env.kind === 'ssh' && env.ssh) return sshSpawnConfig(env.ssh);
   return resolveLocalSpawnConfig();
@@ -153,7 +158,7 @@ async function resolveSpawnConfig(env: ToolEnvironment): Promise<ToolHostSpawnCo
  * node — so a bare container works with no preinstall. A `remoteCommand` opts
  * out: the remote is assumed to already expose a host on its PATH.
  */
-async function sshSpawnConfig(ssh: SshEnvironmentConfig): Promise<ToolHostSpawnConfig> {
+async function sshSpawnConfig(ssh: SshSandboxConfig): Promise<ToolHostSpawnConfig> {
   const destination = ssh.user ? `${ssh.user}@${ssh.host}` : ssh.host;
   // accept-new trusts the host key on first contact (these are target sandboxes we're
   // standing up) but still refuses if a known key later changes. Without it,
@@ -167,7 +172,7 @@ async function sshSpawnConfig(ssh: SshEnvironmentConfig): Promise<ToolHostSpawnC
 }
 
 /**
- * The local built-in environment: run the in-repo host as a child, or — when
+ * The local built-in sandbox: run the in-repo host as a child, or — when
  * RUNVANE_TOOLHOST_SSH is set — point "local" at an external host. Returns null
  * when no host entry is present (so the app boots without target tools).
  */

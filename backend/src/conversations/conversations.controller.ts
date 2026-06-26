@@ -94,7 +94,7 @@ export class ConversationsController {
   @Post()
   @ValidateResponse(ConversationRowSchema)
   async create(@Body() body: CreateConversationDto) {
-    const created = await this.conversations.create({ title: body.title, toolEnvironmentId: body.toolEnvironmentId });
+    const created = await this.conversations.create({ title: body.title, toolSandboxId: body.toolSandboxId });
     const entity = await this.conversationsRepo.get(created.id);
     if (entity) {
       this.hub.publish(created.id, {

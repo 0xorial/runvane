@@ -9,7 +9,7 @@
     "model-pricing": "Model Pricing",
     agents: "Agents",
     tools: "Tools",
-    "tool-environments": "Tool Environments",
+    "tool-sandboxes": "Tool Sandboxes",
     skills: "Skills",
     rag: "RAG",
   };

@@ -42,8 +42,8 @@ import {
 } from "../../../backend/src/contracts/settings";
 import type { ToolCatalogItemResponse } from "../../../backend/src/contracts/system";
 import { validateGetToolsResponse } from "../../../backend/src/contracts/system";
-import type { SshEnvironmentConfig, ToolEnvironment } from "../../../backend/src/contracts/tool-environment";
-import { validateListToolEnvironmentsResponse } from "../../../backend/src/contracts/tool-environment";
+import type { SshSandboxConfig, ToolSandbox } from "../../../backend/src/contracts/tool-sandbox";
+import { validateListToolSandboxesResponse } from "../../../backend/src/contracts/tool-sandbox";
 import type { UploadFileResponse } from "../../../backend/src/contracts/uploads";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import { validateUploadFileResponse } from "../../../backend/src/contracts/uploads";
@@ -172,7 +172,7 @@ export async function getConversationDefaultViewLeafEntryId(conversationId: stri
   return raw.length > 0 ? raw : null;
 }
 
-export function createConversation(body: { title?: string; toolEnvironmentId?: string } = {}): Promise<ConversationRow> {
+export function createConversation(body: { title?: string; toolSandboxId?: string } = {}): Promise<ConversationRow> {
   return sendJson("/api/conversations", "POST", body).then(validatePostConversationsResponse);
 }
 
@@ -532,16 +532,16 @@ export function getTools(): Promise<ToolCatalogItemResponse[]> {
   return getJson("/api/tools").then(validateGetToolsResponse);
 }
 
-export function getToolEnvironments(): Promise<ToolEnvironment[]> {
-  return getJson("/api/tool-environments").then((data) => validateListToolEnvironmentsResponse(data).environments);
+export function getToolSandboxes(): Promise<ToolSandbox[]> {
+  return getJson("/api/tool-sandboxes").then((data) => validateListToolSandboxesResponse(data).sandboxes);
 }
 
-export function createToolEnvironment(body: { name: string; ssh: SshEnvironmentConfig }): Promise<ToolEnvironment> {
-  return sendJson("/api/tool-environments", "POST", body) as Promise<ToolEnvironment>;
+export function createToolSandbox(body: { name: string; ssh: SshSandboxConfig }): Promise<ToolSandbox> {
+  return sendJson("/api/tool-sandboxes", "POST", body) as Promise<ToolSandbox>;
 }
 
-export function deleteToolEnvironment(id: string): Promise<void> {
-  return deleteJson(`/api/tool-environments/${encodeURIComponent(id)}`).then(() => undefined);
+export function deleteToolSandbox(id: string): Promise<void> {
+  return deleteJson(`/api/tool-sandboxes/${encodeURIComponent(id)}`).then(() => undefined);
 }
 
 export function getAgentById(agentId: string): Promise<AgentListItemResponse> {

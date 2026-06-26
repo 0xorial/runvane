@@ -99,6 +99,6 @@ export function mergeSseConversation(
     forkedFromEntryId: previous?.forkedFromEntryId ?? null,
     forkedFromConversationTitle: previous?.forkedFromConversationTitle ?? null,
     // Also not on the SSE row; preserve the cached value (REST refetch corrects).
-    toolEnvironmentId: previous?.toolEnvironmentId ?? null,
+    toolSandboxId: previous?.toolSandboxId ?? null,
   };
 }

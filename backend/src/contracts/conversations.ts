@@ -45,8 +45,8 @@ export const ConversationRowSchema = z.object({
   forkedFromEntryId: z.string().nullable(),
   /** Live title of the source conversation, for the "forked from" link (null if gone). */
   forkedFromConversationTitle: z.string().nullable(),
-  /** Tool environment bound to this conversation (where runtime tools run); null = default. */
-  toolEnvironmentId: z.string().nullable(),
+  /** Tool sandbox bound to this conversation (where runtime tools run); null = default. */
+  toolSandboxId: z.string().nullable(),
   tokenUsageByModel: z.array(ConversationTokenUsageByModelSchema),
 });
 export type ConversationRow = z.infer<typeof ConversationRowSchema>;
@@ -74,7 +74,7 @@ export type GetConversationsResponse = z.infer<typeof GetConversationsResponseSc
 
 export const CreateConversationRequestSchema = z.object({
   title: z.string().min(1).optional(),
-  toolEnvironmentId: z.string().min(1).optional(),
+  toolSandboxId: z.string().min(1).optional(),
 });
 export type CreateConversationRequest = z.infer<typeof CreateConversationRequestSchema>;
 

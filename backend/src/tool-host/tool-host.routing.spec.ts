@@ -4,7 +4,7 @@ import process from 'node:process';
 import type { AppSettingsRepo } from '../db/repositories/app-settings.repo.js';
 import type { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
-import { ToolEnvironmentsService } from './tool-environments.service.js';
+import { ToolSandboxesService } from './tool-sandboxes.service.js';
 import { ToolHostService } from './tool-host.service.js';
 
 const HOST_ENTRY = process.env.RUNVANE_TOOLHOST_HOST_ENTRY || path.resolve(process.cwd(), '../toolhost/src/host/main.ts');
@@ -19,10 +19,10 @@ function fakeSettings(): AppSettingsRepo {
 }
 
 function fakeConversations(envById: Record<string, string | null>): ConversationsRepo {
-  return { getToolEnvironmentId: async (id: string) => envById[id] ?? null } as unknown as ConversationsRepo;
+  return { getToolSandboxId: async (id: string) => envById[id] ?? null } as unknown as ConversationsRepo;
 }
 
-suite('ToolHostService routing by conversation environment', () => {
+suite('ToolHostService routing by conversation sandbox', () => {
   jest.setTimeout(15000);
   let svc: ToolHostService;
 
@@ -30,7 +30,7 @@ suite('ToolHostService routing by conversation environment', () => {
     svc = new ToolHostService(
       new ToolRegistry([]),
       fakeConversations({ 'c-local': 'local', 'c-none': 'none' }),
-      new ToolEnvironmentsService(fakeSettings()),
+      new ToolSandboxesService(fakeSettings()),
     );
     await svc.onModuleInit();
   });
@@ -46,13 +46,13 @@ suite('ToolHostService routing by conversation environment', () => {
   });
 
   it('reports none as kind "none" and blocks invocation', async () => {
-    expect(await svc.environmentKindForConversation('c-none')).toBe('none');
+    expect(await svc.sandboxKindForConversation('c-none')).toBe('none');
     const result = await svc.invokeForConversation('c-none', 'exec', { command: 'echo nope' }, {});
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/disabled/);
   });
 
-  it('defaults an unknown conversation to the local environment', async () => {
-    expect(await svc.environmentKindForConversation('c-missing')).toBe('local');
+  it('defaults an unknown conversation to the local sandbox', async () => {
+    expect(await svc.sandboxKindForConversation('c-missing')).toBe('local');
   });
 });

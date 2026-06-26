@@ -1,34 +1,34 @@
 <script lang="ts">
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
-  import type { ToolEnvironment } from "../../../../backend/src/contracts/tool-environment";
+  import type { ToolSandbox } from "../../../../backend/src/contracts/tool-sandbox";
   import AgentIcon from "@/components/ui/AgentIcon.svelte";
   import { createAgentsQuery } from "@/hooks/queries/referenceData";
   import { getAgentColor } from "@/pages/settings/agentColors";
   import { getAgentLlm } from "@/pages/settings/agentLlm";
   import { sortAgents } from "@/pages/settings/helpers";
-  import { replacePath, pathname as pathnameStore, toolEnvironmentIdFromSearch } from "@/lib/router";
+  import { replacePath, pathname as pathnameStore, toolSandboxIdFromSearch } from "@/lib/router";
   import { createQuery } from "@tanstack/svelte-query";
-  import { getToolEnvironments } from "@/api/client";
+  import { getToolSandboxes } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
   import { queryClient } from "@/lib/queryClient";
-  import AddEnvironmentDialog from "./AddEnvironmentDialog.svelte";
-  import ToolEnvironmentIcon from "./ToolEnvironmentIcon.svelte";
-  import { toolEnvironmentDescription } from "@/lib/toolEnvironment";
+  import AddSandboxDialog from "./AddSandboxDialog.svelte";
+  import ToolSandboxIcon from "./ToolSandboxIcon.svelte";
+  import { toolSandboxDescription } from "@/lib/toolSandbox";
 
   let { selectedAgentId }: { selectedAgentId: string } = $props();
 
   const agentsQuery = createAgentsQuery();
   const agents = $derived(sortAgents(agentsQuery.data ?? []));
 
-  // Tool environment for the new conversation, persisted in the URL (?env=) so
+  // Tool sandbox for the new conversation, persisted in the URL (?env=) so
   // ChatComposer reads it when it creates the conversation.
-  const envQuery = createQuery(() => ({ queryKey: queryKeys.toolEnvironments, queryFn: getToolEnvironments }));
-  const environments = $derived(envQuery.data ?? []);
+  const envQuery = createQuery(() => ({ queryKey: queryKeys.toolSandboxes, queryFn: getToolSandboxes }));
+  const sandboxes = $derived(envQuery.data ?? []);
   let selectedEnvId = $state("local");
   $effect(() => {
     const path = $pathnameStore;
     const q = path.indexOf("?");
-    const fromUrl = toolEnvironmentIdFromSearch(q >= 0 ? path.slice(q + 1) : "") || "local";
+    const fromUrl = toolSandboxIdFromSearch(q >= 0 ? path.slice(q + 1) : "") || "local";
     if (fromUrl !== selectedEnvId) selectedEnvId = fromUrl;
   });
 
@@ -44,8 +44,8 @@
   }
 
   let addOpen = $state(false);
-  async function onEnvCreated(env: ToolEnvironment): Promise<void> {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.toolEnvironments });
+  async function onEnvCreated(env: ToolSandbox): Promise<void> {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.toolSandboxes });
     selectEnv(env.id);
   }
 
@@ -73,11 +73,11 @@
 {#if agents.length > 0}
   <div class="flex h-full w-full items-center justify-center px-4 py-8">
     <div class="w-full max-w-3xl">
-      {#if environments.length > 1}
+      {#if sandboxes.length > 1}
         <div class="mb-4">
-          <div class="mb-1.5 text-xs font-medium text-muted-foreground">Tool environment</div>
+          <div class="mb-1.5 text-xs font-medium text-muted-foreground">Tool sandbox</div>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {#each environments as env (env.id)}
+            {#each sandboxes as env (env.id)}
               {@const selected = selectedEnvId === env.id}
               <div
                 role="button"
@@ -97,11 +97,11 @@
                   : ''}"
               >
                 <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/60 text-foreground">
-                  <ToolEnvironmentIcon kind={env.kind} />
+                  <ToolSandboxIcon kind={env.kind} />
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-sm font-medium text-foreground">{env.name}</span>
-                  <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{toolEnvironmentDescription(env)}</span>
+                  <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{toolSandboxDescription(env)}</span>
                 </span>
               </div>
             {/each}
@@ -114,7 +114,7 @@
               <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary/40 text-muted-foreground">
                 <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
               </span>
-              <span class="text-sm font-medium text-muted-foreground">Add environment</span>
+              <span class="text-sm font-medium text-muted-foreground">Add sandbox</span>
             </button>
           </div>
         </div>
@@ -185,5 +185,5 @@
       </div>
     </div>
   </div>
-  <AddEnvironmentDialog open={addOpen} onOpenChange={(o) => (addOpen = o)} onCreated={onEnvCreated} />
+  <AddSandboxDialog open={addOpen} onOpenChange={(o) => (addOpen = o)} onCreated={onEnvCreated} />
 {/if}

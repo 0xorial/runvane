@@ -14,7 +14,7 @@ export const SETTINGS_SECTIONS = [
   "tools",
   "skills",
   "rag",
-  "tool-environments",
+  "tool-sandboxes",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
