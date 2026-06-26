@@ -60,7 +60,11 @@ export class ConversationProcessorService {
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
     if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
     const agentId = anchorUser.agentId;
-    const llm = await this.resolveLlmRef({ agentId });
+    const llm = await this.resolveLlmRef({
+      explicitProviderId: anchorUser.llm?.providerId,
+      explicitModel: anchorUser.llm?.model,
+      agentId,
+    });
     const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.approveAndRun(
@@ -79,7 +83,11 @@ export class ConversationProcessorService {
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
     if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
     const agentId = anchorUser.agentId;
-    const llm = await this.resolveLlmRef({ agentId });
+    const llm = await this.resolveLlmRef({
+      explicitProviderId: anchorUser.llm?.providerId,
+      explicitModel: anchorUser.llm?.model,
+      agentId,
+    });
     const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.denyToolInvocation(

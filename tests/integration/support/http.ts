@@ -20,6 +20,7 @@ export type ChatEntryRow = {
   title?: string;
   toolId?: string;
   state?: string;
+  llm?: { providerId: string; model: string };
 };
 
 export type AgentRow = {
@@ -71,6 +72,7 @@ export async function postConversationMessage(
     parentId?: string | null;
     clientRequestId?: string;
     overrides?: unknown;
+    llm?: { providerId: string; model: string };
   },
 ): Promise<void> {
   const res = await fetch(`${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
@@ -84,6 +86,7 @@ export async function postConversationMessage(
       ...(options?.clientRequestId ? { clientRequestId: options.clientRequestId } : {}),
       ...(options?.parentId !== undefined ? { parentId: options.parentId } : {}),
       ...(options?.overrides !== undefined ? { overrides: options.overrides } : {}),
+      ...(options?.llm !== undefined ? { llm: options.llm } : {}),
     }),
   });
   if (!res.ok) {

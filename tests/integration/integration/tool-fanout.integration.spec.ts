@@ -67,10 +67,15 @@ describeLive('tool fan-out fan-in (integration)', () => {
     };
   }
 
-  async function startFanout(agentId: string, overrides: unknown): Promise<string> {
+  async function startFanout(
+    agentId: string,
+    overrides: unknown,
+    llm?: { providerId: string; model: string },
+  ): Promise<string> {
     const conversationId = await createConversation(baseUrl);
     await postConversationMessage(baseUrl, conversationId, agentId, `${MOCK_FANOUT_MARKER} run the mock tools`, {
       overrides,
+      ...(llm ? { llm } : {}),
     });
     return conversationId;
   }
@@ -289,6 +294,51 @@ describeLive('tool fan-out fan-in (integration)', () => {
       for (const name of MOCK_FANOUT_TOOL_NAMES) {
         if (name !== order[denyIndex]) expect(findTool(entries, name)?.state).toBe('done');
       }
+    }, 60_000);
+  });
+
+  // --- scenario 6: the post-tool planner keeps the message's model ----------
+
+  // Planner-model resolution follows last-user-message > agent > system. After a
+  // tool call the continuation must still honor the model chosen on the message,
+  // not silently fall back to the agent/system default. The seed's default agent
+  // AND the system default both resolve to model `stub`, so an explicit
+  // `stub-model` on the message is a distinct override: EVERY planner on the path
+  // — the initial fan-out and the continuation after the tools settle — must run
+  // under `stub-model`. (Regression guard: approve/deny used to resolve from the
+  // agent id alone, so the continuation reverted to `stub`.)
+  describe('continuation planner honors the last user message model', () => {
+    const EXPLICIT = { providerId: 'stub', model: 'stub-model' };
+
+    const plannerModels = (entries: ChatEntryRow[]): string[] =>
+      entries
+        .filter((e) => e.type === 'thought-prepare' && e.title === PLANNER_TITLE)
+        .map((e) => e.llm?.model ?? '');
+
+    it('every approved → continuation keeps the message model, not the agent default', async () => {
+      const conversationId = await startFanout(defaultAgentId, toolOverrides('ask'), EXPLICIT);
+
+      const ids: Record<string, string> = {};
+      for (const name of MOCK_FANOUT_TOOL_NAMES) ids[name] = (await waitRequested(conversationId, name)).id;
+      for (const name of MOCK_FANOUT_TOOL_NAMES) await approveAndComplete(conversationId, name, ids[name]);
+
+      const entries = await waitFinalAnswer(conversationId);
+      expect(plannerModels(entries)).toEqual(['stub-model', 'stub-model']);
+    }, 60_000);
+
+    it('one denied → continuation keeps the message model, not the agent default', async () => {
+      const conversationId = await startFanout(defaultAgentId, toolOverrides('ask'), EXPLICIT);
+
+      const ids: Record<string, string> = {};
+      for (const name of MOCK_FANOUT_TOOL_NAMES) ids[name] = (await waitRequested(conversationId, name)).id;
+
+      await denyToolInvocation(baseUrl, conversationId, ids[TOOL_A]);
+      await waitToolState(conversationId, TOOL_A, 'denied');
+      await approveAndComplete(conversationId, TOOL_B, ids[TOOL_B]);
+      await approveAndComplete(conversationId, TOOL_C, ids[TOOL_C]);
+
+      const entries = await waitFinalAnswer(conversationId);
+      expect(plannerModels(entries)).toEqual(['stub-model', 'stub-model']);
     }, 60_000);
   });
 });
