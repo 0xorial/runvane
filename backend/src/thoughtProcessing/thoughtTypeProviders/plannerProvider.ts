@@ -128,7 +128,12 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const parsed = parsePlannerCompletion(completion, (raw) =>
       this.logger.warn(`planner JSON parse failed — treating reply as plain text (${raw.length} chars)`),
     );
-    const requestedToolCalls = parsed.toolRequests.filter((t) => input.enabledToolIds.includes(t.toolName));
+    // Route every call to a *real* tool through RunToolService — including tools
+    // the agent set to `off` (not in `enabledToolIds`, so never advertised in the
+    // prompt). RunToolService denies an `off` tool with a visible forbid error
+    // rather than the call being silently dropped. Only names that match no
+    // registered tool are ignored.
+    const requestedToolCalls = parsed.toolRequests.filter((t) => this.tools.get(t.toolName) != null);
     const assistantText = parsed.assistantOutput.trim();
     const action = requestedToolCalls.length > 0 ? 'tool_call' : 'final_answer';
     const parseResult = toPlannerParseResult(parsed);
