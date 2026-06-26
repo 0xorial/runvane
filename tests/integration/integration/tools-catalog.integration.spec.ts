@@ -15,12 +15,12 @@ describeLive('tools catalog (integration)', () => {
     await shutdownSharedTestApp();
   });
 
-  it('lists planned builtin tools including rag_search and filesystem', async () => {
+  it('lists planned builtin tools including rag and filesystem', async () => {
     const res = await fetch(`${baseUrl}/api/tools`);
     if (!res.ok) throw new Error(`GET /api/tools failed: ${res.status}`);
     const tools = (await res.json()) as Array<{ name: string }>;
     const names = tools.map((tool) => tool.name);
-    expect(names).toContain('rag_search');
+    expect(names).toContain('rag');
     expect(names).toContain('api');
     expect(names).toContain('conversations');
     expect(names).toContain('filesystem_index');

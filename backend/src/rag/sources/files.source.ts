@@ -4,7 +4,7 @@ import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { EntitySource, SourceItem } from './entity-source.js';
 
-/** Same text-candidate policy as the legacy rag_search / filesystem tools. */
+/** Same text-candidate policy as the filesystem tool. */
 const TEXT_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md', '.txt', '.sql',
   '.css', '.html', '.yaml', '.yml',

@@ -6,7 +6,6 @@ import { ApiTool } from './builtins/api/tool.js';
 import { BashTool } from './builtins/bash/tool.js';
 import { ConversationsTool } from './builtins/conversations/tool.js';
 import { CurlTool } from './builtins/curl/tool.js';
-import { RagSearchTool } from './builtins/rag-search/tool.js';
 import { RagTool } from './builtins/rag/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
@@ -29,7 +28,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     FilesystemTool,
     FilesystemIndexStore,
     FilesystemIndexTool,
-    RagSearchTool,
     RagTool,
     ApiTool,
     ConversationsTool,
@@ -46,7 +44,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         BashTool,
         FilesystemTool,
         FilesystemIndexTool,
-        RagSearchTool,
         RagTool,
         ApiTool,
         ConversationsTool,

@@ -25,7 +25,7 @@ export const DEFAULT_TOOL_LOCATIONS: Record<string, ToolLocation> = {
   exec: 'runtime',
   filesystem: 'runtime',
   filesystem_index: 'runtime',
-  rag_search: 'brain',
+  rag: 'brain',
   conversations: 'brain',
   api: 'brain',
 };

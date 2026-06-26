@@ -68,7 +68,7 @@ A tool's **location** decides where it runs and never changes per call:
 
 - `runtime` tools (this host): `exec` and `filesystem` (one tool, dispatched on
   `operation`: read_file / write_file / list_dir / stat). They touch the sandbox.
-- `brain` tools (never cross the wire): `rag_search`, `conversations`, `api`.
+- `brain` tools (never cross the wire): `rag`, `conversations`, `api`.
   They touch central state. RAG indexes live with the brain and carry a lot of
   retrieval configuration, so RAG stays a brain tool by design.
 

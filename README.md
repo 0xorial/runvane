@@ -26,7 +26,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - token and cost visibility
 - configurable model/tool behavior
 - message steering (abort in-flight runs and redirect)
-- RAG search tool (`rag_search`)
+- RAG tool (`rag`) — semantic retrieval over configured storages
 - api tool (backend introspection: tools, agents, presets, tasks)
 - conversations tool (read chat history and conversation metadata)
 - filesystem tools (`filesystem`, `filesystem_index`)
