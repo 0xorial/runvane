@@ -88,3 +88,96 @@ export function hasUnpricedUsage(
 ): boolean {
   return unpricedModelsWithUsage(usageRows, pricingByModel).length > 0;
 }
+
+/** Tokens that count toward a model's displayed total (cached prompt is a subset of prompt). */
+function displayedTotalTokens(usage: TokenUsageByModelRow): number {
+  return (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0);
+}
+
+/** One model's contribution to a conversation, with its estimated cost (null when unpriced). */
+export type ModelCostRow = {
+  modelName: string;
+  promptTokens: number;
+  cachedPromptTokens: number;
+  completionTokens: number;
+  /** Prompt + completion; cached prompt is already included in `promptTokens`. */
+  totalTokens: number;
+  /** Estimated USD for this model alone, or null when it has no pricing entry. */
+  costUsd: number | null;
+};
+
+/**
+ * Whole-conversation cost classification. The single source of truth shared by every
+ * place that renders a conversation's price, so the sidebar and the title can never
+ * disagree again:
+ *  - `empty`    — no model consumed any tokens; there is nothing to price.
+ *  - `unpriced` — tokens were used but NO used model has pricing → prompt to "set pricing".
+ *  - `partial`  — some used models are priced and some are not; `knownCostUsd` is a lower
+ *                 bound (render it as e.g. `$>0.11`).
+ *  - `priced`   — every used model is priced; `knownCostUsd` is exact.
+ */
+export type ConversationCostState = "empty" | "unpriced" | "partial" | "priced";
+
+export type ConversationCostSummary = {
+  state: ConversationCostState;
+  /** Sum of the priced models' costs. Exact when `priced`, a lower bound when `partial`, 0 otherwise. */
+  knownCostUsd: number;
+  /** Total prompt+completion tokens across every used model (priced or not). */
+  totalTokens: number;
+  /** Distinct used models that lack pricing, in first-appearance order (blank names dropped). */
+  unpricedModels: string[];
+  /** Per-model rows for models that actually consumed tokens, in first-appearance order. */
+  perModel: ModelCostRow[];
+};
+
+/**
+ * Classify a conversation's cost from its per-model token usage and the cached pricing map.
+ * Pure: callers pass token usage (provided externally) and pricing (read from frontend cache).
+ */
+export function summarizeConversationCost(
+  usageRows: TokenUsageByModelRow[],
+  pricingByModel: Map<string, ModelPricing>,
+): ConversationCostSummary {
+  const perModel: ModelCostRow[] = [];
+  const unpricedSeen = new Set<string>();
+  const unpricedModels: string[] = [];
+  let totalTokens = 0;
+  let pricedCount = 0;
+  let unpricedCount = 0;
+
+  for (const usage of usageRows) {
+    if (displayedTotalTokens(usage) === 0) continue;
+    const name = String(usage.modelName || "").trim();
+    const prices = name ? pricingByModel.get(name) : undefined;
+    const rowTotal = displayedTotalTokens(usage);
+    totalTokens += rowTotal;
+    if (prices) {
+      pricedCount += 1;
+    } else {
+      unpricedCount += 1;
+      if (name && !unpricedSeen.has(name)) {
+        unpricedSeen.add(name);
+        unpricedModels.push(name);
+      }
+    }
+    perModel.push({
+      modelName: name,
+      promptTokens: usage.promptTokens ?? 0,
+      cachedPromptTokens: usage.cachedPromptTokens ?? 0,
+      completionTokens: usage.completionTokens ?? 0,
+      totalTokens: rowTotal,
+      costUsd: prices ? estimateConversationCostUsd([usage], pricingByModel) : null,
+    });
+  }
+
+  // Authoritative known total (single rounding pass) rather than re-summing the per-model rows.
+  const knownCostUsd = estimateConversationCostUsd(usageRows, pricingByModel);
+
+  let state: ConversationCostState;
+  if (perModel.length === 0) state = "empty";
+  else if (pricedCount === 0) state = "unpriced";
+  else if (unpricedCount > 0) state = "partial";
+  else state = "priced";
+
+  return { state, knownCostUsd, totalTokens, unpricedModels, perModel };
+}

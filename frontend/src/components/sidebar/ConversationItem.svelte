@@ -1,10 +1,9 @@
 <script lang="ts">
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
-  import { TokenUsageMapper } from "../../../../backend/src/contracts/token-usage";
-  import LlmMetaBadge from "@/components/chat/LlmMetaBadge.svelte";
+  import ConversationCostDisplay from "@/components/chat/ConversationCostDisplay.svelte";
   import Icon from "@/components/ui/Icon.svelte";
   import { toggleConversationSelected } from "@/lib/conversationMultiSelect.svelte";
-  import { estimateConversationCostUsd, type ModelPricing } from "@/lib/costEstimation";
+  import { type ModelPricing } from "@/lib/costEstimation";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import ConversationRowMenu from "./ConversationRowMenu.svelte";
   import NewGroupDialog from "./NewGroupDialog.svelte";
@@ -54,10 +53,6 @@
   );
   const stamp = $derived(formatRelativeChatTime(timestampIso));
   const stampExact = $derived(formatExactChatTime(timestampIso));
-  const usage = $derived(TokenUsageMapper.fromConversationTotals(conversation));
-  const estimatedCostUsd = $derived(
-    estimateConversationCostUsd(conversation.tokenUsageByModel ?? [], pricingByModel),
-  );
 
   async function submitNewGroupDialog(): Promise<void> {
     const groupName = newGroupName.trim();
@@ -110,10 +105,9 @@
     {#if stamp}
       <span class="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
     {/if}
-    <LlmMetaBadge
-      {usage}
-      showTokenBreakdown
-      {estimatedCostUsd}
+    <ConversationCostDisplay
+      usageByModel={conversation.tokenUsageByModel ?? []}
+      {pricingByModel}
       class="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
     />
   </button>
