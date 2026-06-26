@@ -126,16 +126,26 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       parentId: string | null;
       status?: ThoughtStepStatus;
       llm?: LlmRef;
+      llmRequest?: string;
+      /**
+       * Thought-type-specific payload fields that the mapper *requires* to be
+       * present for this `thoughtType` (e.g. `attachmentId` for
+       * `summarize_attachment`). These MUST be written in the initial insert:
+       * a snapshot read landing between insert and a later merge would
+       * otherwise see a typed-but-incomplete entry and fail to deserialize.
+       */
+      extra?: Record<string, unknown>;
     },
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
       thoughtId: input.thoughtId,
       thoughtType: input.thoughtType,
-      llmRequest: '',
+      llmRequest: input.llmRequest ?? '',
       llmResponse: '',
       thoughtMs: null,
       decision: null,
       status: input.status ?? 'running',
+      ...(input.extra ?? {}),
     };
     if (input.llm) payload.llm = input.llm;
     const row = await this.appendEntry(conversationId, {

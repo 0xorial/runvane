@@ -80,6 +80,12 @@ export class ReasonStep {
     input: TInput,
     requestDisplay: string,
   ): Promise<string> {
+    // Write the full payload (incl. any thoughtType-required `extra` fields such
+    // as `attachmentId`) in the initial insert. Splitting this into append +
+    // merge opened a window where a /stream snapshot could read a
+    // `summarize_attachment` entry before its `attachmentId` landed and fail
+    // deserialization, killing the SSE connection.
+    const extra = provider.streamEntryExtraPayload?.(input);
     const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         thoughtType: provider.thoughtType,
@@ -87,13 +93,10 @@ export class ReasonStep {
         parentId,
         status: 'running',
         llm: ctx.llm,
+        llmRequest: requestDisplay,
+        extra: extra ?? undefined,
       }),
     );
-    const extra = provider.streamEntryExtraPayload?.(input);
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, created.id, {
-      llmRequest: requestDisplay,
-      ...(extra ?? {}),
-    });
     await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
     return created.id;
   }
