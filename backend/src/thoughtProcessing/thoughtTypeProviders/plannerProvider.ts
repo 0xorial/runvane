@@ -13,7 +13,7 @@ import {
   publishConversationUpdated,
   publishStreamFieldDelta,
 } from '../../sse/sse-helpers.js';
-import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
+import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmToolSpec } from '../../llmProviders/types.js';
 import { resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
@@ -109,14 +109,34 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     return describeToolChange(previousEnabled, currentEnabled);
   };
 
-  runPrepare = (input: PlannerInput): LlmRequest => ({
-    messages: buildPlannerMessages({
-      systemPrompt: input.systemPrompt,
-      entries: input.entries,
-      tools: this.describeToolsForPlanner(input.enabledToolIds),
-      ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
-    }),
-  });
+  runPrepare = (input: PlannerInput): LlmRequest => {
+    const toolSpecs = this.buildToolSpecs(input.enabledToolIds);
+    return {
+      messages: buildPlannerMessages({
+        systemPrompt: input.systemPrompt,
+        entries: input.entries,
+        tools: this.describeToolsForPlanner(input.enabledToolIds),
+        ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
+      }),
+      // Declare the enabled tools natively. We render prior tool calls as native
+      // tool_call/tool_result blocks in history, and Anthropic (via OpenRouter)
+      // requires the matching tools to be declared or it returns an empty turn
+      // on the post-tool continuation.
+      ...(toolSpecs.length > 0 ? { tools: toolSpecs } : {}),
+    };
+  };
+
+  // Native tool specs for the request (name + description + JSON-Schema params),
+  // so history tool_call blocks are anchored to a declared tool.
+  private buildToolSpecs(enabledToolIds: string[]): LlmToolSpec[] {
+    const specs: LlmToolSpec[] = [];
+    for (const name of enabledToolIds) {
+      const tool = this.tools.get(name);
+      if (!tool) continue;
+      specs.push({ name, description: tool.getAiDescription(), paramsSchema: tool.getParamsSchema() });
+    }
+    return specs;
+  }
 
   // Enrich the bare enabled-tool names with each tool's model-facing
   // description and dispatch operations, so the planner can select tools (and
