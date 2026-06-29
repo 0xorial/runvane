@@ -51,6 +51,7 @@
     groups,
     placeholder = "Select model",
     searchPlaceholder = "Search model",
+    header,
     footer,
     disabled = false,
     buttonClass = "",
@@ -62,6 +63,8 @@
     groups: ModelGroup[];
     placeholder?: string;
     searchPlaceholder?: string;
+    /** Rendered at the top of the (portaled) panel, above the search input. */
+    header?: Snippet;
     footer?: Snippet;
     disabled?: boolean;
     buttonClass?: string;
@@ -183,6 +186,11 @@
       style:min-width="{popupLayout.minWidth}px"
       role="listbox"
     >
+      {#if header}
+        <div class="border-b border-border p-2.5">
+          {@render header()}
+        </div>
+      {/if}
       <div class="border-b border-border p-2.5">
         <input
           bind:this={searchInput}
