@@ -426,8 +426,8 @@
     {#if onShowAll || (hiddenByLimit > 0 && !normalizedFilter)}
       <div class="flex shrink-0 items-center gap-2 px-2.5 pt-1.5">
         {#if hiddenByLimit > 0 && !normalizedFilter}
-          <span class="text-[10px] text-muted-foreground">
-            Showing latest {recentLimit} of {total}
+          <span class="text-[10px] text-muted-foreground" title="Showing {filteredConversations.length} of {total} conversations">
+            {filteredConversations.length}/{total}
           </span>
         {/if}
         {#if onShowAll}
