@@ -6,6 +6,7 @@
   import { notifyError } from "@/utils/toast";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
+  import Icon from "@/components/ui/Icon.svelte";
 
   let { entry, conversationId }: { entry: ToolInvocationEntry; conversationId: string } = $props();
 
@@ -52,9 +53,11 @@
   const borderClass = $derived(
     entry.state === "requested"
       ? "border-warning/40 bg-warning/5"
-      : entry.state === "denied"
-        ? "border-muted-foreground/20 bg-secondary/30"
-        : "bg-secondary/50",
+      : entry.state === "running"
+        ? "border-primary/30 bg-primary/5"
+        : entry.state === "denied"
+          ? "border-muted-foreground/20 bg-secondary/30"
+          : "bg-secondary/50",
   );
 
   async function onApproveClick(): Promise<void> {
@@ -97,7 +100,11 @@
         onclick={() => (toggled = !expanded)}
       >
         <RowIcon name="chevron" class="h-3 w-3 shrink-0 text-muted-foreground {expanded ? 'rotate-90' : ''}" />
-        <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />
+        {#if entry.state === "running"}
+          <Icon name="loader" class="h-3 w-3 shrink-0 animate-spin text-primary" />
+        {:else}
+          <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />
+        {/if}
         <span class="font-mono font-medium text-foreground">{toolName}</span>
         {#if toolLocation}
           <span
@@ -111,7 +118,13 @@
             {toolLocation === "target" ? "target" : "harness"}
           </span>
         {/if}
-        <span class="ml-auto text-[10px] font-medium {entry.state === 'requested' ? 'text-warning' : 'text-muted-foreground'}">
+        <span
+          class="ml-auto text-[10px] font-medium {entry.state === 'requested'
+            ? 'text-warning'
+            : entry.state === 'running'
+              ? 'text-primary'
+              : 'text-muted-foreground'}"
+        >
           {statusLabel}
         </span>
       </button>
