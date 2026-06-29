@@ -1,0 +1,23 @@
+# One front door for the enabler. No TLS / no IP allowlist here on purpose:
+# the security boundary is the SSH tunnel you use to reach this port (or a
+# Caddy `tls internal` + `remote_ip` block if you expose it directly — see README).
+#
+#   /          -> SearXNG          (search)
+#   /steel/*   -> Steel API        (scrape, sessions, actions)
+#   /cdp/*     -> Steel CDP/viewer (raw DevTools; prefer hitting :9223 directly)
+#
+# Note: Steel's bundled UI/session-viewer uses absolute asset paths, so for the
+# human-takeover viewer hit Steel directly on :3000 (/ui) and :9223, not via /steel.
+:8080 {
+	handle_path /steel* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle_path /cdp* {
+		reverse_proxy 127.0.0.1:9223
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8888
+	}
+}

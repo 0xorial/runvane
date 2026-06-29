@@ -1,0 +1,41 @@
+name: ai-browsing-enabler
+
+# Reference wiring for the laptop test. The clever bit: the enabler is on an
+# `internal` network with NO direct internet. The exit-node is the ONLY service
+# with outbound access. So if search/browse works at all, it provably went
+# through the SSH SOCKS tunnel — you get a real egress-routing test even though
+# both containers share the same host IP locally.
+
+services:
+  exit-node:
+    build: ./exit-node
+    restart: unless-stopped
+    volumes:
+      - ./keys/tunnel.pub:/run/secrets/tunnel_authorized_key:ro
+    networks:
+      - egress      # private link the enabler tunnels over
+      - internet    # the only path to the outside world
+
+  enabler:
+    build: ./enabler
+    restart: unless-stopped
+    depends_on:
+      - exit-node
+    environment:
+      EXIT_HOST: exit-node
+      EXIT_USER: tunnel
+      EXIT_PORT: "22"
+    volumes:
+      - ./keys/tunnel:/keys/tunnel:ro
+    ports:
+      - "8080:8080"   # Caddy front: SearXNG (/), Steel (/steel), CDP (/cdp)
+      - "3000:3000"   # Steel API + UI (/ui) — hit directly for the takeover viewer
+      - "9223:9223"   # Steel CDP / live session
+    networks:
+      - egress        # NO `internet` here on purpose
+
+networks:
+  egress:
+    internal: true
+  internet:
+    driver: bridge

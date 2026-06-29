@@ -1,0 +1,28 @@
+# Minimal overlay on SearXNG defaults (use_default_settings: true merges the rest).
+use_default_settings: true
+
+general:
+  instance_name: "exit-node search"
+  debug: false
+
+server:
+  bind_address: "127.0.0.1"   # Caddy reverse-proxies to it; never exposed directly
+  port: 8888
+  secret_key: "CHANGE_ME"     # entrypoint generates a random one on first boot
+  limiter: false
+  public_instance: false
+
+search:
+  # JSON is required for any programmatic/LLM consumer (the default is html-only,
+  # which returns 403 for ?format=json). This was the gotcha in the old runbook.
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 10.0
+  # All upstream search-engine traffic egresses through the exit node's SOCKS
+  # proxy (socks5h:// = resolve DNS at the exit node, no local DNS leak).
+  proxies:
+    all://:
+      - socks5h://127.0.0.1:1080

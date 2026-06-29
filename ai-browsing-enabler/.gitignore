@@ -1,0 +1,6 @@
+# SSH keypair for the egress tunnel — never commit.
+keys/tunnel
+keys/tunnel.pub
+
+# Steel local cache/logs if bind-mounted.
+enabler/.cache/
