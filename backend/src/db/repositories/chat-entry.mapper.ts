@@ -7,7 +7,13 @@ import type {
   ThoughtStreamEntry,
   ThoughtType,
 } from '../../contracts/chatEntry.js';
-import { ChatAttachmentSchema, ThoughtTypeSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
+import {
+  ChatAttachmentSchema,
+  LlmDecisionSchema,
+  PlannerParseResultSchema,
+  ThoughtTypeSchema,
+  ToolEnvelopeSchema,
+} from '../../contracts/chatEntry.js';
 import { ProviderCostBreakdownSchema } from '../../contracts/provider-cost.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { UserMessageOverridesSchema } from '../../contracts/user-message-overrides.js';
@@ -163,6 +169,16 @@ function mapStream(base: ChatEntryBase, payload: Record<string, unknown>, ctx: s
   if (payload.provider_cost !== undefined) stream.provider_cost = requireFiniteNumber(payload, 'provider_cost', ctx);
   if (payload.provider_cost_breakdown !== undefined) {
     stream.provider_cost_breakdown = ProviderCostBreakdownSchema.parse(payload.provider_cost_breakdown);
+  }
+  // Planner extras (persisted by persistStreamEntryDecision): the parsed output
+  // — which carries the assembled `assistant_output` — and the resolved decision.
+  if (payload.parseResult != null) {
+    const parsed = PlannerParseResultSchema.safeParse(payload.parseResult);
+    if (parsed.success) stream.parseResult = parsed.data;
+  }
+  if (payload.decision != null) {
+    const parsed = LlmDecisionSchema.safeParse(payload.decision);
+    if (parsed.success) stream.decision = parsed.data;
   }
   // summarize_attachment carries the persisted summary + source-file metadata.
   if (stream.thoughtType === 'summarize_attachment') {

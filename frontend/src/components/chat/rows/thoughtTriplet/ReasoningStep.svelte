@@ -25,6 +25,12 @@
 
   const response = $derived(String(stream.llmResponse || "").trim());
   const thinking = $derived(String(stream.thinkingText || "").trim());
+  // The clean assistant text the backend assembled from this planner reply
+  // (parsed.assistant_output), as opposed to the raw provider response.
+  const assembled = $derived.by(() => {
+    const pr = stream.thoughtType === "planner" ? stream.parseResult : null;
+    return pr && pr.status === "ok" ? String(pr.parsed.assistant_output ?? "").trim() : "";
+  });
 
   let isEditing = $state(false);
   let isSaving = $state(false);
@@ -189,6 +195,7 @@
     </div>
   {:else}
     {#if thinking}<ReadOnlySection label="Thinking" value={thinking} />{/if}
+    {#if assembled}<ReadOnlySection label="Assembled response" value={assembled} />{/if}
     <ReadOnlySection label="Raw response" value={response} />
   {/if}
   {#if stream.status === "failed" || stream.status === "cancelled"}
