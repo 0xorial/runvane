@@ -5,7 +5,29 @@ export type BuildPlannerMessagesInput = {
   systemPrompt: string;
   entries: ChatEntry[];
   toolIds: string[];
+  /** Optional context note injected when the user changed this turn's tools. */
+  toolChangeNote?: string;
 };
+
+/**
+ * Build the planner's "tools changed" note by diffing the previous turn's
+ * available tools against this turn's. Returns undefined when the effective
+ * sets are equal — so a flip-and-back (off then on) produces no note.
+ */
+export function describeToolChange(
+  previousEnabled: readonly string[],
+  currentEnabled: readonly string[],
+): string | undefined {
+  const prevSet = new Set(previousEnabled);
+  const curSet = new Set(currentEnabled);
+  const added = currentEnabled.filter((name) => !prevSet.has(name));
+  const removed = previousEnabled.filter((name) => !curSet.has(name));
+  if (added.length === 0 && removed.length === 0) return undefined;
+  const parts: string[] = [];
+  if (added.length) parts.push(`Newly available: ${added.join(', ')}.`);
+  if (removed.length) parts.push(`No longer available: ${removed.join(', ')}.`);
+  return `[The user changed this conversation's tools for this turn] ${parts.join(' ')}`;
+}
 
 /**
  * Index of `summarize_attachment` thought-stream entries (which carry the
@@ -145,5 +167,8 @@ export function buildPlannerMessages(input: BuildPlannerMessagesInput): LlmMessa
   for (const entry of input.entries) {
     for (const m of entryToMessages(entry, summaries)) messages.push(m);
   }
+  // Surface a mid-conversation tool change as a fresh system note after the
+  // latest turn — the model otherwise silently receives a different tool list.
+  if (input.toolChangeNote) messages.push(textMessage('system', input.toolChangeNote));
   return messages;
 }

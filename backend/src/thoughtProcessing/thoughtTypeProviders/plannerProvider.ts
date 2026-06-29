@@ -18,7 +18,7 @@ import { resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
-import { buildPlannerMessages } from '../lib/plannerPrompt.js';
+import { buildPlannerMessages, describeToolChange } from '../lib/plannerPrompt.js';
 import {
   extractAssistantOutputFromJsonLike,
   parsePlannerCompletion,
@@ -35,6 +35,8 @@ export type PlannerInput = {
   enabledToolIds: string[];
   entries: ChatEntry[];
   toolOverrides?: Record<string, AgentToolConfig>;
+  /** Set when this turn's available tools differ from the previous user turn. */
+  toolChangeNote?: string;
 };
 
 type StreamState = {
@@ -74,14 +76,37 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const agent = await this.agents.get(agentId);
     if (!agent) throw new Error(`planner agent not found: ${agentId}`);
     const toolOverrides = anchorUserMessage.overrides?.tools;
+    const enabledToolIds = this.resolveEnabledToolIds(agent, toolOverrides);
+    const toolChangeNote = await this.computeToolChangeNote(entries, agent, enabledToolIds);
     return {
       conversationId,
       agentId,
       systemPrompt: agent.system_prompt ?? '',
-      enabledToolIds: this.resolveEnabledToolIds(agent, toolOverrides),
+      enabledToolIds,
       entries,
       ...(toolOverrides ? { toolOverrides } : {}),
+      ...(toolChangeNote ? { toolChangeNote } : {}),
     };
+  };
+
+  /**
+   * Compare this turn's available tools with the previous user turn's; if they
+   * differ, return a note for the planner. Diffs the *effective* enabled set, so
+   * a flip-and-back (off then on) nets to no change and produces no note.
+   */
+  private computeToolChangeNote = async (
+    entries: ChatEntry[],
+    currentAgent: AgentEntity,
+    currentEnabled: string[],
+  ): Promise<string | undefined> => {
+    const userIdxs = entries.flatMap((entry, i) => (entry.type === 'user-message' ? [i] : []));
+    if (userIdxs.length < 2) return undefined; // no previous turn to compare against
+    const prev = entries[userIdxs[userIdxs.length - 2]!];
+    if (prev.type !== 'user-message') return undefined;
+    const prevAgent = prev.agentId === currentAgent.id ? currentAgent : await this.agents.get(prev.agentId);
+    if (!prevAgent) return undefined;
+    const previousEnabled = this.resolveEnabledToolIds(prevAgent, prev.overrides?.tools);
+    return describeToolChange(previousEnabled, currentEnabled);
   };
 
   runPrepare = (input: PlannerInput): LlmRequest => ({
@@ -89,6 +114,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       systemPrompt: input.systemPrompt,
       entries: input.entries,
       toolIds: input.enabledToolIds,
+      ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
     }),
   });
 
