@@ -22,6 +22,22 @@ export const FilesystemToolRulesSchema = z
       .max(5000)
       .default(500)
       .describe('Hard cap on entries returned by list_dir.'),
+    max_grep_results: z
+      .number()
+      .finite()
+      .int()
+      .min(1)
+      .max(2000)
+      .default(200)
+      .describe('Hard cap on hits returned by grep.'),
+    max_grep_file_bytes: z
+      .number()
+      .finite()
+      .int()
+      .min(1024)
+      .max(20_000_000)
+      .default(2_000_000)
+      .describe('Skip files larger than this when scanning with grep.'),
   })
   .strict();
 
