@@ -1,9 +1,11 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
+  import { Pane, PaneGroup } from "paneforge";
   import { getConversationConfig } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
   import { navigate } from "@/lib/router";
   import { DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG } from "../../../../backend/src/contracts/conversation-config";
+  import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import ChatToolsPanel from "./ChatToolsPanel.svelte";
   import ConversationsView from "./ConversationsView.svelte";
 
@@ -39,7 +41,13 @@
     <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
 
-  <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
-
-  <ChatToolsPanel {search} />
+  <PaneGroup direction="vertical" autoSaveId="sidebar-conversations-tools-layout" class="min-h-0 flex-1">
+    <Pane defaultSize={60} minSize={20} class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
+    </Pane>
+    <ResizablePaneHandle withHandle direction="vertical" />
+    <Pane defaultSize={40} minSize={10} class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <ChatToolsPanel {search} />
+    </Pane>
+  </PaneGroup>
 </aside>
