@@ -69,9 +69,9 @@
   data-conversation-row
   data-conversation-id={conversation.id}
   data-active="false"
-  class="group/row flex w-full shrink-0 items-stretch overflow-hidden rounded-md text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground {nested
+  class="group/row flex shrink-0 items-stretch overflow-hidden rounded-md text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground {nested
     ? 'ml-3'
-    : ''}"
+    : 'w-full'}"
 >
   {#if enableMultiSelect}
     <div class="flex w-6 shrink-0 items-center justify-center">
