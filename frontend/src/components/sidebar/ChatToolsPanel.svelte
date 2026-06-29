@@ -53,6 +53,7 @@
         return {
           name,
           description: String(catalogRow?.description ?? "").trim(),
+          location: catalogRow?.location === "target" ? "target" : "harness",
           effectiveMode: effectiveAgentToolMode(getToolConfigFromAgent(currentAgent, name)),
         };
       });
@@ -63,6 +64,27 @@
     if (!query) return toolRows;
     return toolRows.filter((row) => row.name.toLowerCase().includes(query));
   });
+
+  // Split the chat tools by where they run: harness tools run centrally no matter
+  // the conversation's tool sandbox; target tools run in the selected sandbox.
+  const TOOL_GROUPS = [
+    {
+      key: "harness" as const,
+      label: "Harness",
+      hint: "Run centrally in the harness — always, regardless of the conversation's tool sandbox.",
+    },
+    {
+      key: "target" as const,
+      label: "Target sandbox",
+      hint: "Run in the conversation's selected tool sandbox (local or remote).",
+    },
+  ];
+  const groupedToolRows = $derived.by(() =>
+    TOOL_GROUPS.map((group) => ({
+      ...group,
+      rows: filteredToolRows.filter((row) => row.location === group.key),
+    })).filter((group) => group.rows.length > 0),
+  );
 
   function clearToolFilter(): void {
     toolFilter = "";
@@ -149,32 +171,54 @@
     {:else if filteredToolRows.length === 0}
       <p class="px-1 py-2 text-[11px] text-muted-foreground">No matching tools.</p>
     {:else}
-      <ul class="space-y-1.5">
-        {#each filteredToolRows as row (row.name)}
-          <li class="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
-            <div class="flex min-w-0 flex-1 items-center gap-1">
-              <div class="min-w-0 truncate font-mono text-[11px] text-foreground" title={row.name}>{row.name}</div>
-              {#if row.description}
-                <HintTooltip content={row.description} side="top">
-                  <button
-                    type="button"
-                    class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold leading-none text-muted-foreground ring-1 ring-border hover:bg-secondary/60 hover:text-foreground"
-                    aria-label={row.description}
-                  >
-                    ?
-                  </button>
-                </HintTooltip>
-              {/if}
+      <div class="space-y-2.5">
+        {#each groupedToolRows as group (group.key)}
+          <div data-testid="chat-tools-group" data-group={group.key}>
+            <div class="flex items-center gap-1 px-1 pb-1">
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70"
+                >{group.label}</span
+              >
+              <HintTooltip content={group.hint} side="top">
+                <button
+                  type="button"
+                  class="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full text-[8px] font-bold leading-none text-muted-foreground/70 ring-1 ring-border hover:bg-secondary/60 hover:text-foreground"
+                  aria-label={group.hint}
+                >
+                  ?
+                </button>
+              </HintTooltip>
             </div>
-            <ToolTriStateControl
-              toolName={row.name}
-              effectiveMode={row.effectiveMode}
-              agentCustomSeed={customSeedForTool(row.name)}
-              {search}
-            />
-          </li>
+            <ul class="space-y-1.5">
+              {#each group.rows as row (row.name)}
+                <li class="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
+                  <div class="flex min-w-0 flex-1 items-center gap-1">
+                    <div class="min-w-0 truncate font-mono text-[11px] text-foreground" title={row.name}>
+                      {row.name}
+                    </div>
+                    {#if row.description}
+                      <HintTooltip content={row.description} side="top">
+                        <button
+                          type="button"
+                          class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold leading-none text-muted-foreground ring-1 ring-border hover:bg-secondary/60 hover:text-foreground"
+                          aria-label={row.description}
+                        >
+                          ?
+                        </button>
+                      </HintTooltip>
+                    {/if}
+                  </div>
+                  <ToolTriStateControl
+                    toolName={row.name}
+                    effectiveMode={row.effectiveMode}
+                    agentCustomSeed={customSeedForTool(row.name)}
+                    {search}
+                  />
+                </li>
+              {/each}
+            </ul>
+          </div>
         {/each}
-      </ul>
+      </div>
     {/if}
   </div>
 </section>
