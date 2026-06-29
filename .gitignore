@@ -10,6 +10,10 @@ dist/
 
 .DS_Store
 
+# Local editor/agent settings and TS incremental build caches
+.claude/settings.local.json
+*.tsbuildinfo
+
 backend/data/
 backend/.rag/
 .rag/
