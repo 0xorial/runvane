@@ -1,13 +1,45 @@
 import type { ChatEntry, ThoughtStreamEntry } from '../../contracts/chatEntry.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 
+/** What the planner is told about a single available tool. */
+export type PlannerToolInfo = {
+  name: string;
+  /** The tool's model-facing description (getAiDescription). */
+  description: string;
+  /** For dispatch tools: the values of the `operation` param. Empty otherwise. */
+  operations: string[];
+};
+
 export type BuildPlannerMessagesInput = {
   systemPrompt: string;
   entries: ChatEntry[];
-  toolIds: string[];
+  tools: PlannerToolInfo[];
   /** Optional context note injected when the user changed this turn's tools. */
   toolChangeNote?: string;
 };
+
+/**
+ * Pull the dispatch `operation` enum out of a tool's JSON-Schema params, so the
+ * planner can see what a single-dispatch tool (e.g. filesystem → read_file /
+ * grep / stat) actually does rather than inferring it from the name. Returns
+ * [] for tools without an `operation` enum.
+ */
+export function extractToolOperations(paramsSchema: unknown): string[] {
+  if (!paramsSchema || typeof paramsSchema !== 'object') return [];
+  const props = (paramsSchema as { properties?: unknown }).properties;
+  if (!props || typeof props !== 'object') return [];
+  const op = (props as Record<string, unknown>).operation;
+  if (!op || typeof op !== 'object') return [];
+  const enumVals = (op as { enum?: unknown }).enum;
+  if (!Array.isArray(enumVals)) return [];
+  return enumVals.filter((v): v is string => typeof v === 'string');
+}
+
+function formatToolLine(tool: PlannerToolInfo): string {
+  const desc = tool.description.replace(/\s+/g, ' ').trim();
+  const ops = tool.operations.length > 0 ? ` Operations: ${tool.operations.join(', ')}.` : '';
+  return desc ? `- ${tool.name} — ${desc}${ops}` : `- ${tool.name}${ops}`;
+}
 
 /**
  * Build the planner's "tools changed" note by diffing the previous turn's
@@ -46,10 +78,16 @@ function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, ThoughtStre
   return out;
 }
 
-function plannerSystemContent(agentSystemPrompt: string, toolIds: string[]): string {
+function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[]): string {
   const parts: string[] = [];
   if (agentSystemPrompt.trim().length > 0) parts.push(agentSystemPrompt.trim());
-  parts.push(toolIds.length > 0 ? `Tools: ${toolIds.join(', ')}` : 'Tools: (none)');
+  parts.push(
+    tools.length > 0
+      ? `Tools (a separate agent fills each call's JSON args from your natural-language request):\n${tools
+          .map(formatToolLine)
+          .join('\n')}`
+      : 'Tools: (none)',
+  );
   parts.push(
     'Reply with one JSON object (preferred — it is the only format that lets you set assistant_output and followup explicitly):\n' +
       '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string}], "followup": "finalize"|"continue"}\n' +
@@ -163,7 +201,7 @@ function entryToMessages(
 
 export function buildPlannerMessages(input: BuildPlannerMessagesInput): LlmMessage[] {
   const summaries = indexAttachmentSummaries(input.entries);
-  const messages: LlmMessage[] = [textMessage('system', plannerSystemContent(input.systemPrompt, input.toolIds))];
+  const messages: LlmMessage[] = [textMessage('system', plannerSystemContent(input.systemPrompt, input.tools))];
   for (const entry of input.entries) {
     for (const m of entryToMessages(entry, summaries)) messages.push(m);
   }

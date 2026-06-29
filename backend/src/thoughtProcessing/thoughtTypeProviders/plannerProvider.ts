@@ -18,7 +18,7 @@ import { resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
-import { buildPlannerMessages, describeToolChange } from '../lib/plannerPrompt.js';
+import { buildPlannerMessages, describeToolChange, extractToolOperations, type PlannerToolInfo } from '../lib/plannerPrompt.js';
 import {
   extractAssistantOutputFromJsonLike,
   parsePlannerCompletion,
@@ -113,10 +113,24 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     messages: buildPlannerMessages({
       systemPrompt: input.systemPrompt,
       entries: input.entries,
-      toolIds: input.enabledToolIds,
+      tools: this.describeToolsForPlanner(input.enabledToolIds),
       ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
     }),
   });
+
+  // Enrich the bare enabled-tool names with each tool's model-facing
+  // description and dispatch operations, so the planner can select tools (and
+  // operations) deliberately rather than guessing from the name alone.
+  private describeToolsForPlanner(enabledToolIds: string[]): PlannerToolInfo[] {
+    return enabledToolIds.map((name) => {
+      const tool = this.tools.get(name);
+      return {
+        name,
+        description: tool?.getAiDescription() ?? '',
+        operations: tool ? extractToolOperations(tool.getParamsSchema()) : [],
+      };
+    });
+  }
 
   onLlmEvent = (input: PlannerInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
     if (!ctx.streamEntryId) return;
