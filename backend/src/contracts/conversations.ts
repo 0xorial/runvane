@@ -138,6 +138,10 @@ export const ReprocessContextRequestSchema = z.object({
   // present, it replaces the context (the edit-the-prompt flow).
   editedRequestText: z.string().min(1).optional(),
   llm: LlmRefSchema.optional(),
+  // Whether an `llm` override propagates to downstream thoughts (the post-tool
+  // planner continuation). Default true = like a user-message model override.
+  // False = "just this call" — only this thought runs on the override.
+  applyDownstream: z.boolean().optional(),
 });
 export type ReprocessContextRequest = z.infer<typeof ReprocessContextRequestSchema>;
 

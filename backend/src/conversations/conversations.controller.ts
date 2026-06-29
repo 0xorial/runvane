@@ -481,6 +481,7 @@ export class ConversationsController {
         sourceEntryId: entryId,
         ...(body.editedRequestText ? { editedRequestText: body.editedRequestText } : {}),
         ...(body.llm ? { llm: body.llm } : {}),
+        ...(body.applyDownstream !== undefined ? { applyDownstream: body.applyDownstream } : {}),
       });
       return {
         conversationId,

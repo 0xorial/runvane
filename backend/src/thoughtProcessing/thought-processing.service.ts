@@ -151,6 +151,14 @@ export class ThoughtProcessingService {
       sourceEntryId: string;
       editedRequestText?: string;
       llm?: LlmRef;
+      /**
+       * Whether an `llm` override propagates to downstream thoughts (the
+       * post-tool planner continuation). Default true = behaves like a
+       * user-message model override. False = "just this call": only this
+       * thought runs on the override; the continuation reverts to the
+       * thought's inherited model.
+       */
+      applyDownstream?: boolean;
     },
     scope: LifecycleScope,
     chain: ChatChain,
@@ -188,6 +196,12 @@ export class ThoughtProcessingService {
     chain.setTip(branch.parentId);
 
     const ctx = this.createContext(args.conversationId, chain, llm);
+    // "Just this call": this thought runs on the override `llm`, but the
+    // downstream continuation reverts to the thought's inherited model. When
+    // applyDownstream (default), downstreamLlm stays equal to `llm`.
+    if (args.applyDownstream === false && branch.llm) {
+      ctx.downstreamLlm = branch.llm;
+    }
     ctx.prepareEntryId = await this.appendCompletedPrepareEntry(ctx, provider, display, branch.inputJson);
     ctx.streamEntryId = await this.appendRunningStreamEntry(ctx, provider, display);
     const plannerEntryId = ctx.streamEntryId;
@@ -247,6 +261,8 @@ export class ThoughtProcessingService {
       thoughtId: opts.thoughtId ?? crypto.randomUUID(),
       conversationId,
       llm,
+      // Defaults to `llm`; reprocess can override it for "just this call".
+      downstreamLlm: llm,
       prepareEntryId: null,
       streamEntryId: null,
       thoughtActionEntryId: null,

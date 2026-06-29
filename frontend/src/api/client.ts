@@ -394,6 +394,9 @@ export async function reprocessThoughtContext(
      *  thought's stored context instead of round-tripping it. */
     editedRequestText?: string;
     llm?: LlmRef;
+    /** Whether an `llm` override threads to downstream thoughts (default true,
+     *  like a user-message override). False = "just this call". */
+    applyDownstream?: boolean;
   },
 ): Promise<
   PostAcceptedResult<{ conversationId: string; plannerEntryId: string; leafEntryId: string; queuedToolCalls: number }>

@@ -13,7 +13,16 @@ export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEn
 export type ThoughtContext = {
   thoughtId: string;
   conversationId: string;
+  /** Model for THIS thought's own LLM call. */
   llm: LlmRef;
+  /**
+   * Model that downstream thoughts (tool-param resolution, the post-tool
+   * planner continuation, …) should use. Equals `llm` for every normal flow;
+   * differs only for a "try model — just this call" reprocess, where this
+   * thought runs on an override model but the continuation reverts to the
+   * inherited one.
+   */
+  downstreamLlm: LlmRef;
   prepareEntryId: string | null;
   streamEntryId: string | null;
   thoughtActionEntryId: string | null;

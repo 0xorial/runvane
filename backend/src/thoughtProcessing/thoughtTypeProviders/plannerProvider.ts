@@ -254,7 +254,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       conversationId: toolParamsInput.conversationId,
       scope,
       chain: ctx.chain,
-      llm: ctx.llm,
+      // Tool-param resolution + the post-tool planner continuation run on the
+      // downstream model, which equals ctx.llm except for a "just this call"
+      // model override.
+      llm: ctx.downstreamLlm,
       input: toolParamsInput,
     });
   }

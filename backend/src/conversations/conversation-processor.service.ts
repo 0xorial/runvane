@@ -238,6 +238,7 @@ export class ConversationProcessorService {
     sourceEntryId: string;
     editedRequestText?: string;
     llm?: LlmRef;
+    applyDownstream?: boolean;
   }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     const { scope, chain } = await this.beginRun(args.conversationId);
     try {

@@ -26,6 +26,9 @@
 
   let pickerOpen = $state(false);
   let isRebranching = $state(false);
+  // Scope of the model override: true (default) threads it through the whole
+  // turn like a user-message override; false runs only this one LLM call on it.
+  let applyDownstream = $state(true);
 
   const requestText = $derived((prepareEntry.requestText ?? stream?.llmRequest ?? "").trim());
   const canRebranch = $derived(requestText.length > 0 && !isRebranching);
@@ -41,6 +44,7 @@
       // thought's stored context — no need to round-trip the whole thing.
       const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
         llm: { providerId: pid, model: modelName },
+        applyDownstream,
       });
       await session.setActiveLeaf(result.data.leafEntryId);
     } catch (error) {
@@ -71,7 +75,27 @@
     </button>
   </HintTooltip>
   {#if pickerOpen}
-    <div class="absolute right-0 top-full z-20 mt-1 w-56" role="presentation" onclick={(e) => e.stopPropagation()}>
+    <div class="absolute right-0 top-full z-20 mt-1 w-56 space-y-1.5" role="presentation" onclick={(e) => e.stopPropagation()}>
+      <div class="flex rounded-md border border-border/70 p-0.5 text-[10px]">
+        <button
+          type="button"
+          data-testid="try-model-scope-downstream"
+          class="flex-1 rounded px-1.5 py-1 transition-colors {applyDownstream ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+          title="The chosen model threads through the rest of this turn, like setting it on the user message."
+          onclick={() => (applyDownstream = true)}
+        >
+          Override downstream
+        </button>
+        <button
+          type="button"
+          data-testid="try-model-scope-single"
+          class="flex-1 rounded px-1.5 py-1 transition-colors {applyDownstream ? 'text-muted-foreground hover:text-foreground' : 'bg-secondary font-medium text-foreground'}"
+          title="Only this single LLM call uses the chosen model; the continuation reverts to the inherited model."
+          onclick={() => (applyDownstream = false)}
+        >
+          Just this call
+        </button>
+      </div>
       <ModelDropdown
         value=""
         placeholder="Choose model…"
