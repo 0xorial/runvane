@@ -14,6 +14,8 @@ import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
 import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
 import { SerialConnectionManager } from './builtins/serial/connection.js';
+import { WebSearchTool } from './builtins/web-search/tool.js';
+import { WebBrowseTool } from './builtins/web-browse/tool.js';
 import { TOOL_TOKEN, ToolRegistry } from './tool-registry.js';
 import { DatabaseModule } from '../db/database.module.js';
 import { RagModule } from '../rag/rag.module.js';
@@ -35,6 +37,8 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     AskAttachmentTool,
     SerialConnectionManager,
     SerialTerminalTool,
+    WebSearchTool,
+    WebBrowseTool,
     {
       provide: TOOL_TOKEN,
       useFactory: (...tools) => tools,
@@ -50,6 +54,8 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         DelegateLlmTool,
         AskAttachmentTool,
         SerialTerminalTool,
+        WebSearchTool,
+        WebBrowseTool,
       ],
     },
     ToolRegistry,

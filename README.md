@@ -30,6 +30,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - api tool (backend introspection: tools, agents, presets, tasks)
 - conversations tool (read chat history and conversation metadata)
 - filesystem tools (`filesystem`, `filesystem_index`)
+- web tools (`web_search`, `web_browse`) — search the web and read pages as markdown via a self-hosted SearXNG + Steel backend (see [`ai-browsing-enabler/`](ai-browsing-enabler/)), with browser egress routed through an SSH exit node
 - import chat history from OpenAI, Gemini, Claude, and Grok (`POST /api/import/auto` auto-detects format)
 - attachment summary mode with `ask_attachment` subagent for follow-up questions on full file content
 
