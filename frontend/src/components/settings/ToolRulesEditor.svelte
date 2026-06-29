@@ -61,6 +61,7 @@
       onchange={onRulesChange}
       height={rulesEditorHeight}
       resizable
+      showInsertDefaults
       {readOnly}
     />
   {:else}

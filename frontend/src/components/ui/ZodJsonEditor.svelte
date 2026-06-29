@@ -21,7 +21,8 @@
     onEscapeShortcut,
     resizable = false,
     minHeight = 120,
-    maxHeight = 800,
+    maxHeight = 1400,
+    showInsertDefaults = false,
   }: {
     schema: z.ZodType;
     value: string;
@@ -35,6 +36,7 @@
     resizable?: boolean;
     minHeight?: number;
     maxHeight?: number;
+    showInsertDefaults?: boolean;
   } = $props();
 
   const jsonSchema = $derived.by((): JsonSchemaNode | undefined => {
@@ -85,7 +87,7 @@
 </script>
 
 <div class="space-y-1.5">
-  {#if !readOnly && jsonSchema}
+  {#if !readOnly && showInsertDefaults && jsonSchema}
     <div class="flex justify-end">
       <button
         type="button"

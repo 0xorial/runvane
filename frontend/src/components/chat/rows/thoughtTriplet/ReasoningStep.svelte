@@ -150,7 +150,8 @@
           schema={AgenticPlannerOutputSchema}
           value={editedResponse}
           onchange={(v: string) => (editedResponse = v)}
-          height={260}
+          height={440}
+          resizable
           onSubmitShortcut={() => void applyEdit()}
           onEscapeShortcut={cancelEditIfUnchanged}
         />
@@ -159,7 +160,8 @@
           value={editedResponse}
           onchange={(v: string) => (editedResponse = v)}
           language="json"
-          height={260}
+          height={440}
+          resizable
           onSubmitShortcut={() => void applyEdit()}
           onEscapeShortcut={cancelEditIfUnchanged}
         />

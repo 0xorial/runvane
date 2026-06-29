@@ -13,7 +13,7 @@
     onEscapeShortcut,
     resizable = false,
     minHeight = 120,
-    maxHeight = 800,
+    maxHeight = 1400,
   }: {
     value: string;
     onchange?: (value: string) => void;

@@ -114,7 +114,8 @@
         value={editedPrompt}
         onchange={(v: string) => (editedPrompt = v)}
         onValidityChange={(v: boolean) => (promptValid = v)}
-        height={260}
+        height={440}
+        resizable
         onSubmitShortcut={() => void applyEdit()}
         onEscapeShortcut={cancelEditIfUnchanged}
       />
