@@ -16,7 +16,7 @@ binaries leak back onto the share).
 
 ## Files
 
-- `Dockerfile.dev` / `dev-entry.sh` — the image and rv-dev's entrypoint (`npm ci` into the shadow volumes, then `npm run start:dev` + vite).
+- `Dockerfile.dev` / `dev-entry.sh` — the image and rv-dev's entrypoint (`npm ci` into the shadow volumes, then `nest start --watch` + vite). The image installs **`procps`**, which `nest start --watch` needs to restart cleanly (see the caveat below).
 - `dev-entry-stable.sh` — rv-stable's entrypoint: builds (`nest build` + `vite build`) then serves `node dist/main` + `vite preview`. Mounted in at run time.
 - `rv-up.sh` — bring up / recreate both containers (idempotent: builds image, creates the pinned worktree, seeds the dev DB if missing).
 - `rv-db-sync.sh` — refresh the dev DB from the stable DB (online `sqlite3 .backup` + `prisma migrate deploy`).
@@ -50,5 +50,14 @@ scripts/dind/rv-stable-update.sh <commit>  # -> a specific ref
   `rv-db-sync.sh` exports the paths.
 - **Separate DBs** were chosen over a shared file to avoid two-writer
   `SQLITE_BUSY`/virtiofs-locking issues; `rv-db-sync.sh` is the bridge between them.
+- **`procps` is required in the image.** `@nestjs/cli`'s `--watch` restart kills
+  the previous app via `tree-kill`, which shells out to `ps -A -o pid,ppid` to find
+  the node process behind nest's `sh -c node …` wrapper. The slim base ships no
+  `ps`; without it tree-kill kills only the wrapper, the node app **orphans holding
+  the backend port**, and every reload hits **EADDRINUSE** while stale code keeps
+  serving. `Dockerfile.dev` installs `procps` to fix this — **rebuild the image**
+  (not just `docker restart`) after pulling this change so it survives a recreate.
+  (This is the real cause of the symptom an earlier `tsc --watch` + `node --watch`
+  split-loop was working around; that workaround has been removed.)
 - This is dev tooling specific to the in-container dind, not a production deploy
   (see `deploy.md` for ops hardening).

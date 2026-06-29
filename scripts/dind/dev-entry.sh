@@ -29,37 +29,23 @@ install_deps() {
 install_deps backend prisma_gen
 install_deps frontend true
 
-echo "=== launching backend :$BACKEND_PORT (tsc --watch + node --watch) + frontend :$FRONTEND_PORT (vite) ==="
+echo "=== launching backend :$BACKEND_PORT (nest start --watch) + frontend :$FRONTEND_PORT (vite) ==="
 
-# Backend hot-reload, deliberately split into compile + run.
-#
-# We do NOT use `nest start --watch`: on each rebuild its restart spawns the server
-# via an intermediate `sh -c "node dist/main"` and signals only that shell, so the
-# node process is orphaned to PID 1, keeps holding :$BACKEND_PORT, and every later
-# rebuild dies with EADDRINUSE while the stale (old-code) server keeps serving —
-# i.e. code changes silently never take effect. Instead:
-#   1) one clean `nest build` up front (deleteOutDir is safe with no watcher
-#      running, same as rv-stable) so a complete, fresh dist exists before anything
-#      tries to run it;
-#   2) `tsc --watch` for incremental recompiles — unlike `nest build`, it does NOT
-#      delete dist, so the running entrypoint never vanishes mid-flight (which would
-#      wedge node --watch on the virtiofs share);
-#   3) `node --watch` runs dist/main.js as a DIRECT child and restarts it itself, so
-#      SIGTERM reaches node and :$BACKEND_PORT is released cleanly between reloads.
-( cd backend && npm run build )
-
-( cd backend && exec npx tsc -p tsconfig.build.json --watch --preserveWatchOutput ) &
-back_build=$!
-
+# Standard NestJS watch. On each rebuild @nestjs/cli kills the previous app via
+# tree-kill and only respawns after it has exited, so :$BACKEND_PORT is released
+# cleanly between reloads. tree-kill needs `ps` to find the app behind nest's
+# `sh -c node …` wrapper — provided by procps in Dockerfile.dev. (Without `ps`
+# it kills only the wrapper and the app orphans on the port → EADDRINUSE; that
+# missing-`ps` bug, not nest itself, was the reason for the old split-loop here.)
 ( cd backend && PORT="$BACKEND_PORT" FRONTEND_ORIGIN="$FRONTEND_ORIGIN" \
-    exec node --watch --enable-source-maps dist/main.js ) &
+    exec npx nest start --watch ) &
 back=$!
 
 ( cd frontend && FRONTEND_PORT="$FRONTEND_PORT" VITE_API_BASE_URL="$VITE_API_BASE_URL" \
     exec npx vite --host 0.0.0.0 --port "$FRONTEND_PORT" ) &
 front=$!
 
-shutdown() { kill "$back" "$back_build" "$front" 2>/dev/null || true; }
+shutdown() { kill "$back" "$front" 2>/dev/null || true; }
 trap shutdown TERM INT EXIT
 
 # If either server exits, take the whole container down so it's an obvious failure.
