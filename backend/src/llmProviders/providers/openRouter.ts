@@ -262,7 +262,10 @@ export class OpenRouterProvider implements LlmProvider {
             cause: e,
           });
         }
-        if (!acc.hasContent()) throw new Error('llm returned empty response');
+        // An empty completion (e.g. Anthropic end_turn with no content/tool
+        // calls) is a valid, if unhelpful, outcome — not a transport error.
+        // Return it so callers finalize gracefully instead of failing the turn.
+        if (!acc.hasContent()) this.logger.warn('llm returned empty completion — finalizing as no-op');
         return acc.finalize();
       }
 
@@ -298,7 +301,8 @@ export class OpenRouterProvider implements LlmProvider {
         }
       }
       if (buffer) handleDataLine(buffer.replace(/\r$/, ''));
-      if (!acc.hasContent()) throw new Error('llm returned empty streamed response');
+      // See note above: an empty streamed completion is non-fatal.
+      if (!acc.hasContent()) this.logger.warn('llm returned empty streamed completion — finalizing as no-op');
       return acc.finalize();
     } catch (error) {
       if (isAbortError(error) || signal?.aborted) {
