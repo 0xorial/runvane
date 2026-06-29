@@ -114,6 +114,8 @@ const ThoughtStreamEntryBaseSchema = ChatEntryBaseSchema.extend({
   llmRequest: z.string(),
   llm: LlmRefSchema.optional(),
   llmResponse: z.string().optional(),
+  // The full response text, de-chunked (raw view shows the provider chunks).
+  assembledResponse: z.string().optional(),
   thinkingText: z.string().optional(),
   thoughtMs: z.number().nullable().optional(),
   decision: LlmDecisionSchema.nullable().optional(),

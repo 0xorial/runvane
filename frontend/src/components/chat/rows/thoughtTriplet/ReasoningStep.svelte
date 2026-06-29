@@ -25,12 +25,9 @@
 
   const response = $derived(String(stream.llmResponse || "").trim());
   const thinking = $derived(String(stream.thinkingText || "").trim());
-  // The clean assistant text the backend assembled from this planner reply
-  // (parsed.assistant_output), as opposed to the raw provider response.
-  const assembled = $derived.by(() => {
-    const pr = stream.thoughtType === "planner" ? stream.parseResult : null;
-    return pr && pr.status === "ok" ? String(pr.parsed.assistant_output ?? "").trim() : "";
-  });
+  // The full response text, de-chunked — the same content as the raw view but
+  // reassembled from the provider's streamed chunks. Hidden when identical to raw.
+  const assembled = $derived(String(stream.assembledResponse || "").trim());
 
   let isEditing = $state(false);
   let isSaving = $state(false);
