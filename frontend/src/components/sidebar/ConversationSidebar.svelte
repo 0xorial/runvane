@@ -6,6 +6,7 @@
   import { DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG } from "../../../../backend/src/contracts/conversation-config";
   import ChatToolsPanel from "./ChatToolsPanel.svelte";
   import ConversationsView from "./ConversationsView.svelte";
+  import { Pane, PaneGroup, PaneResizer } from "paneforge";
 
   let {
     onNewChat,
@@ -39,7 +40,22 @@
     <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
 
-  <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
-
-  <ChatToolsPanel {search} />
+  <PaneGroup direction="vertical" autoSaveId="sidebar-conversations-tools-split" class="min-h-0 flex-1">
+    <Pane defaultSize={60} minSize={20} class="min-h-0 overflow-hidden">
+      <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
+    </Pane>
+    <PaneResizer
+      class="relative flex h-px shrink-0 items-center justify-center bg-border transition-colors after:absolute after:inset-x-0 after:top-1/2 after:h-1 after:-translate-y-1/2 hover:bg-primary/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1"
+    >
+      <div class="z-10 flex h-3 w-4 items-center justify-center rounded-sm border bg-border">
+        <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="9" r="1" /><circle cx="5" cy="9" r="1" /><circle cx="19" cy="9" r="1" />
+          <circle cx="12" cy="15" r="1" /><circle cx="5" cy="15" r="1" /><circle cx="19" cy="15" r="1" />
+        </svg>
+      </div>
+    </PaneResizer>
+    <Pane defaultSize={40} minSize={15} class="min-h-0 overflow-hidden">
+      <ChatToolsPanel {search} />
+    </Pane>
+  </PaneGroup>
 </aside>
