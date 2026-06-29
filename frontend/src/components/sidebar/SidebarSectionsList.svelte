@@ -69,6 +69,7 @@
       groupId={section.groupId}
       groupName={section.groupName}
       rowCount={section.totalCount}
+      shownCount={section.rows.length}
       latestTimestampIso={section.latestTimestampIso}
       {collapsed}
       onToggle={toggleGroup}

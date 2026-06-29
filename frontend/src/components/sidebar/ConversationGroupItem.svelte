@@ -7,6 +7,7 @@
     groupId,
     groupName,
     rowCount,
+    shownCount,
     latestTimestampIso = "",
     collapsed,
     onToggle,
@@ -15,11 +16,17 @@
     groupId: string;
     groupName: string;
     rowCount: number;
+    /** Rows actually rendered for this group (≤ rowCount under the recent-N window). */
+    shownCount: number;
     latestTimestampIso?: string;
     collapsed: boolean;
     onToggle: (groupId: string) => void;
     children: Snippet;
   } = $props();
+
+  // Mirror the sidebar's shown/total counter; collapse to a single number when
+  // the whole group is on screen.
+  const countLabel = $derived(shownCount < rowCount ? `${shownCount}/${rowCount}` : String(rowCount));
 
   const stamp = $derived(formatRelativeChatTime(latestTimestampIso));
   const stampExact = $derived(formatExactChatTime(latestTimestampIso));
@@ -50,7 +57,10 @@
         {/if}
       </span>
     </span>
-    <span class="ml-2 shrink-0 self-start pt-0.5 text-[10px] text-muted-foreground">{rowCount}</span>
+    <span
+      class="ml-2 shrink-0 self-start pt-0.5 text-[10px] text-muted-foreground"
+      title="Showing {shownCount} of {rowCount} conversations"
+    >{countLabel}</span>
   </button>
   {#if !collapsed}
     <div class="mt-0.5 flex flex-col gap-0.5">
