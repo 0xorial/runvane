@@ -5,14 +5,14 @@ const agent = {
   id: 'a1',
   default_llm_configuration: {
     tools: {
-      bash: { policy: 'ask', rules: { working_dir: '/tmp' }, guardrail: true },
+      exec: { policy: 'ask', rules: { working_dir: '/tmp' }, guardrail: true },
     },
   },
 } as unknown as AgentEntity;
 
 describe('resolveToolConfig', () => {
   it('returns agent config when no override', () => {
-    expect(resolveToolConfig(agent, undefined, 'bash')).toEqual({
+    expect(resolveToolConfig(agent, undefined, 'exec')).toEqual({
       policy: 'ask',
       rules: { working_dir: '/tmp' },
       guardrail: true,
@@ -21,7 +21,7 @@ describe('resolveToolConfig', () => {
 
   it('shallow-merges override onto agent config', () => {
     expect(
-      resolveToolConfig(agent, { bash: { policy: 'off' } }, 'bash'),
+      resolveToolConfig(agent, { exec: { policy: 'off' } }, 'exec'),
     ).toEqual({
       policy: 'off',
       rules: { working_dir: '/tmp' },
@@ -31,7 +31,7 @@ describe('resolveToolConfig', () => {
 
   it('merges rules objects', () => {
     expect(
-      resolveToolConfig(agent, { bash: { rules: { working_dir: '/other' } } }, 'bash'),
+      resolveToolConfig(agent, { exec: { rules: { working_dir: '/other' } } }, 'exec'),
     ).toEqual({
       policy: 'ask',
       rules: { working_dir: '/other' },
