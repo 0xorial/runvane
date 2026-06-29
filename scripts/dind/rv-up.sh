@@ -21,17 +21,36 @@ docker image inspect runvane-dev >/dev/null 2>&1 || docker build -t runvane-dev 
 # 3. Seed the dev DB from stable on first bring-up (rv-db-sync.sh refreshes later).
 [ -f "$DEV_DB" ] || { echo "seeding $DEV_DB from stable"; sqlite3 "$STABLE_DB" ".backup '$DEV_DB'"; }
 
+# Web tools (web_search/web_browse) reach the ai-browsing-enabler. In the dind,
+# `localhost` is rv-dev itself, so point them at the enabler container and (below)
+# join its network so the name resolves. Override either env to use a different
+# deployment; if the enabler isn't running the tools fail with a clear ECONNREFUSED/
+# ENOTFOUND naming this endpoint (no more "fetch failed").
+ENABLER_NET=ai-browsing-enabler_egress
+WEB_SEARCH_ENDPOINT="${RUNVANE_WEB_SEARCH_ENDPOINT:-http://ai-browsing-enabler-enabler-1:8080}"
+WEB_BROWSE_ENDPOINT="${RUNVANE_WEB_BROWSE_ENDPOINT:-http://ai-browsing-enabler-enabler-1:3000}"
+
 # 4. rv-dev — hot-reload, its own DB.
 docker rm -f rv-dev >/dev/null 2>&1 || true
 docker run -d --name rv-dev -p 52200:52200 -p 52201:52201 \
   -e BACKEND_PORT=52200 -e FRONTEND_PORT=52201 \
   -e FRONTEND_ORIGIN=http://localhost:52201 -e VITE_API_BASE_URL=http://localhost:52200 \
   -e DATABASE_URL="file:$DEV_DB" \
+  -e RUNVANE_WEB_SEARCH_ENDPOINT="$WEB_SEARCH_ENDPOINT" \
+  -e RUNVANE_WEB_BROWSE_ENDPOINT="$WEB_BROWSE_ENDPOINT" \
   -v /workspace:/workspace \
   -v rv-backend-nm:/workspace/backend/node_modules \
   -v rv-frontend-nm:/workspace/frontend/node_modules \
   -v "$HERE/dev-entry.sh":/usr/local/bin/dev-entry.sh \
   runvane-dev
+
+# Join the enabler's network (if it's up) so the endpoint hostnames resolve.
+if docker network inspect "$ENABLER_NET" >/dev/null 2>&1; then
+  docker network connect "$ENABLER_NET" rv-dev 2>/dev/null || true
+  echo "wired rv-dev -> $ENABLER_NET (web_search/web_browse)"
+else
+  echo "note: enabler network $ENABLER_NET not found; web tools will error until it is up"
+fi
 
 # 5. rv-stable — pinned snapshot, real DB, built artifacts (entry mounted from this repo).
 docker rm -f rv-stable >/dev/null 2>&1 || true

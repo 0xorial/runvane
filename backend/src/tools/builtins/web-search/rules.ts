@@ -5,8 +5,10 @@ export const WebSearchRulesSchema = z
     endpoint: z
       .string()
       .min(1)
-      .default('http://localhost:8080')
-      .describe('Base URL of the search service (SearXNG JSON API, e.g. the ai-browsing-enabler).'),
+      .default(process.env.RUNVANE_WEB_SEARCH_ENDPOINT?.trim() || 'http://localhost:8080')
+      .describe(
+        'Base URL of the search service (SearXNG JSON API, e.g. the ai-browsing-enabler). Default overridable via RUNVANE_WEB_SEARCH_ENDPOINT.',
+      ),
     maxResults: z
       .number()
       .finite()

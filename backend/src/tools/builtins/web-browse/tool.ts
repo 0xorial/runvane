@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
 import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
+import { describeFetchFailure } from '../../fetch-failure.js';
 import { parseWebBrowseParams, webBrowseParamsSchema, type WebBrowseParams } from './params.js';
 import { WebBrowseRulesSchema, parseWebBrowseRules, type WebBrowseRules } from './rules.js';
 
@@ -83,7 +84,7 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
       const body = (await response.json().catch(() => ({}))) as ScrapeResponse;
       if (!response.ok) {
         const reason = body.message ?? body.error ?? `${response.status} ${response.statusText}`;
-        throw new Error(`web_browse: ${reason}`);
+        throw new Error(`web_browse: ${params.url} via ${endpoint.toString()} failed — ${reason}`);
       }
       const raw = body.content?.[params.format] ?? '';
       const truncated = raw.length > rules.maxResponseBytes;
@@ -101,9 +102,14 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
     } catch (error) {
       if (context.signal.aborted) context.signal.throwIfAborted();
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`web_browse: request timed out after ${rules.timeoutMs}ms`);
+        throw new Error(`web_browse: ${params.url} via ${endpoint.toString()} timed out after ${rules.timeoutMs}ms`);
       }
-      throw error;
+      // Already-formatted errors pass through; wrap raw fetch failures with the
+      // target URL, the endpoint, and the real cause (not "fetch failed").
+      if (error instanceof Error && error.message.startsWith('web_browse:')) throw error;
+      throw new Error(
+        `web_browse: ${params.url} via ${endpoint.toString()} failed — ${describeFetchFailure(error)}`,
+      );
     } finally {
       clearTimeout(timer);
       context.signal.removeEventListener('abort', onParentAbort);

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
 import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
+import { describeFetchFailure } from '../../fetch-failure.js';
 import { parseWebSearchParams, webSearchParamsSchema, type WebSearchParams } from './params.js';
 import { WebSearchRulesSchema, parseWebSearchRules, type WebSearchRules } from './rules.js';
 
@@ -78,7 +79,10 @@ export class WebSearchTool extends BaseTool<WebSearchParams, WebSearchRules> {
         headers: { accept: 'application/json' },
       });
       if (!response.ok) {
-        throw new Error(`web_search: search service returned ${response.status} ${response.statusText}`);
+        const snippet = (await response.text().catch(() => '')).trim().slice(0, 300);
+        throw new Error(
+          `web_search: GET ${url.toString()} returned ${response.status} ${response.statusText}${snippet ? ` — ${snippet}` : ''}`,
+        );
       }
       const body = (await response.json()) as SearxResponse;
       const results = (body.results ?? []).slice(0, limit).map((r) => ({
@@ -98,9 +102,12 @@ export class WebSearchTool extends BaseTool<WebSearchParams, WebSearchRules> {
       // A steering/user cancel must surface as an AbortError, not a timeout.
       if (context.signal.aborted) context.signal.throwIfAborted();
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`web_search: request timed out after ${rules.timeoutMs}ms`);
+        throw new Error(`web_search: GET ${url.toString()} timed out after ${rules.timeoutMs}ms`);
       }
-      throw error;
+      // Already-formatted (e.g. non-2xx) errors pass through; wrap raw fetch
+      // failures with the URL attempted and the real cause (not "fetch failed").
+      if (error instanceof Error && error.message.startsWith('web_search:')) throw error;
+      throw new Error(`web_search: GET ${url.toString()} failed — ${describeFetchFailure(error)}`);
     } finally {
       clearTimeout(timer);
       context.signal.removeEventListener('abort', onParentAbort);

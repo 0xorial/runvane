@@ -5,13 +5,15 @@ export const WebBrowseRulesSchema = z
     endpoint: z
       .string()
       .min(1)
-      .default('http://localhost:3000')
-      .describe('Base URL of the browse service (Steel API, e.g. the ai-browsing-enabler).'),
+      .default(process.env.RUNVANE_WEB_BROWSE_ENDPOINT?.trim() || 'http://localhost:3000')
+      .describe(
+        'Base URL of the browse service (Steel API, e.g. the ai-browsing-enabler). Default overridable via RUNVANE_WEB_BROWSE_ENDPOINT.',
+      ),
     proxyUrl: z
       .string()
-      .default('socks5://127.0.0.1:1080')
+      .default(process.env.RUNVANE_WEB_BROWSE_PROXY?.trim() ?? 'socks5://127.0.0.1:1080')
       .describe(
-        'Proxy the headless browser egresses through (the exit-node SOCKS tunnel). Empty string disables it.',
+        'Proxy the headless browser egresses through (the exit-node SOCKS tunnel). Empty string disables it. Default overridable via RUNVANE_WEB_BROWSE_PROXY.',
       ),
     maxResponseBytes: z
       .number()
