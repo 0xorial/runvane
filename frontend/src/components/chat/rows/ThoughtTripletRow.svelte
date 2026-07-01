@@ -7,6 +7,7 @@
   import { getChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
   import { resolveStreamTokenBreakdown, streamTotalTokens } from "@/lib/providerCost";
   import { formatTokenCount } from "@/utils/formatTokenCount";
+  import { estimateTokenCount } from "@/utils/estimateTokenCount";
   import BranchSelector from "../BranchSelector.svelte";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
@@ -83,6 +84,13 @@
     const status = displayStatus(streamEntry.status ?? "running");
     const tokens = resolveStreamTokenBreakdown(streamEntry);
     const totalTokens = streamTotalTokens(streamEntry);
+    const isRunning = (streamEntry.status ?? "running") === "running";
+    // While streaming, the provider hasn't reported usage yet, so approximate the
+    // generated-token count from the text streamed so far (thinking + response).
+    const estimatedTokens = estimateTokenCount(
+      streamEntry.thinkingText,
+      streamEntry.assembledResponse || streamEntry.llmResponse,
+    );
     const durationLabel = streamEntry.thoughtMs != null ? `${Math.round(streamEntry.thoughtMs)}ms` : "";
     const pricing = pricingByModel.get(model);
     const showModel = !isAgentDefaultLlm(streamEntry.llm, thoughtAgent);
@@ -98,6 +106,8 @@
       cachedTokens: tokens.cached,
       completionTokens: tokens.output,
       totalTokens,
+      isRunning,
+      estimatedTokens,
       durationLabel,
       pricing,
       showModel,
@@ -152,6 +162,8 @@
                 >
                   {#snippet children()}{formatTokenCount(reasonMeta.totalTokens)}{/snippet}
                 </TokenTooltip>
+              {:else if reasonMeta.isRunning && reasonMeta.estimatedTokens > 0}
+                <span title="Approximate, estimated from streamed text">~{formatTokenCount(reasonMeta.estimatedTokens)}</span>
               {/if}
               {#if reasonMeta.durationLabel}<span>{reasonMeta.durationLabel}</span>{/if}
               {#if reasonMeta.showModel || expanded === "reasoning"}<span>{reasonMeta.provider}/{reasonMeta.model}</span>{/if}
