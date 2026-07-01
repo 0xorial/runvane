@@ -26,7 +26,6 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "npm run test:backend-e2e --prefix ../tests",
     "test:integration": "node ../scripts/run-integration.mjs",
     "test:integration:live": "INTEGRATION_LIVE_LLM=1 node ../scripts/run-integration.mjs",
     "dev:stub": "LLM_TEST_STUB=1 node ../dev-ports/with-ports.mjs --cwd . -- nest start --watch",

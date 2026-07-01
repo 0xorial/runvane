@@ -9,7 +9,6 @@
     "test:e2e:live": "RUN_E2E_TESTS=1 E2E_LIVE_LLM=1 playwright test",
     "test:integration": "node ../scripts/run-integration.mjs",
     "test:integration:live": "INTEGRATION_LIVE_LLM=1 node ../scripts/run-integration.mjs",
-    "test:backend-e2e": "node ../backend/node_modules/jest/bin/jest.js --config jest.backend-e2e.json --forceExit",
     "test:metrics": "node metrics/cli.mjs report",
     "test:metrics:fragile": "node metrics/cli.mjs fragile"
   },
