@@ -24,6 +24,27 @@ import { RagModule } from './rag/rag.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 import { TestHarnessModule } from './test-harness/test-harness.module.js';
 
+// Honor LOG_LEVEL so a failing test run always has real backend logs (pino-http
+// logs every request: method, url, status, responseTime). Default test to
+// 'silent' only so unit-test output stays clean; the e2e/integration harness
+// sets LOG_LEVEL to turn logging on. In test the backend runs in-process and
+// the destination is process.stdout, so the harness tee
+// (scripts/test-diagnostics.mjs) captures the logs into the run's log file.
+function pinoHttpOptions(nodeEnv: RunvaneRuntimeConfig['nodeEnv']) {
+  return {
+    level: process.env.LOG_LEVEL ?? (nodeEnv === 'test' ? 'silent' : 'info'),
+    transport: nodeEnv === 'development' ? { target: 'pino-pretty' } : undefined,
+    serializers: {
+      req(req: { id?: unknown; method?: string; url?: string }) {
+        return { id: req.id, method: req.method, url: req.url };
+      },
+      res(res: { statusCode?: number }) {
+        return { statusCode: res.statusCode };
+      },
+    },
+  };
+}
+
 @Module({})
 export class AppModule {
   static register(runtime: RunvaneRuntimeConfig): DynamicModule {
@@ -40,22 +61,10 @@ export class AppModule {
           // backend runs in-process, so the destination is process.stdout — the
           // harness tee (scripts/test-diagnostics.mjs) captures that into the log
           // file, whereas pino's default direct-to-fd write would bypass it.
-          pinoHttp: [
-            {
-              level: process.env.LOG_LEVEL ?? (runtime.nodeEnv === 'test' ? 'silent' : 'info'),
-              transport:
-                runtime.nodeEnv === 'development' ? { target: 'pino-pretty' } : undefined,
-              serializers: {
-                req(req) {
-                  return { id: req.id, method: req.method, url: req.url };
-                },
-                res(res) {
-                  return { statusCode: res.statusCode };
-                },
-              },
-            },
-            ...(runtime.nodeEnv === 'test' ? [process.stdout] : []),
-          ],
+          pinoHttp:
+            runtime.nodeEnv === 'test'
+              ? [pinoHttpOptions(runtime.nodeEnv), process.stdout]
+              : pinoHttpOptions(runtime.nodeEnv),
         }),
         DatabaseModule,
         HealthModule,

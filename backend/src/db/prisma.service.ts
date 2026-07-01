@@ -45,20 +45,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
-   * Pin SQLite to a single connection. SQLite has one writer, and Prisma runs
-   * each connection's calls on a bounded blocking-thread pool. Under concurrent
-   * interactive transactions the waiters' `BEGIN IMMEDIATE` synchronously
-   * busy-wait for the write lock, each pinning a thread; the lock holder's
-   * `COMMIT` then can't get a thread to run, so it can't release the lock — a
-   * pool deadlock that only breaks when a waiter hits the 5s transaction timeout
-   * (P1008 / "database is locked"). One connection removes the concurrency that
-   * causes it. No-op for non-file URLs or when the caller already set the param.
+   * Optional SQLite pool-size override (RUNVANE_SQLITE_CONN_LIMIT), used by the
+   * DB diagnostics workflow to reproduce/rule out concurrency effects. Unset =
+   * Prisma's default pool. NOTE: interactive transactions are banned on the
+   * chat-entries write path (see chat-entries-base.repo.ts) because concurrent
+   * itx deadlock inside the query engine (prisma/prisma#11750); batch
+   * transactions are safe with the full pool.
    */
   private static sqliteUrlWithSingleConnection(url: string): string {
-    if (!url.startsWith('file:') || /[?&]connection_limit=/.test(url)) return url;
-    // Configurable for the pool-size investigation; 'none' = Prisma default pool.
-    const lim = process.env.RUNVANE_SQLITE_CONN_LIMIT ?? '1';
-    if (lim === 'none') return url;
+    const lim = process.env.RUNVANE_SQLITE_CONN_LIMIT;
+    if (!lim || !url.startsWith('file:') || /[?&]connection_limit=/.test(url)) return url;
     return `${url}${url.includes('?') ? '&' : '?'}connection_limit=${lim}`;
   }
 

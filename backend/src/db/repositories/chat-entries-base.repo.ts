@@ -19,16 +19,20 @@ type AppendedRow = {
   seq: number;
 };
 
-/** Bump the global stream cursor inside `tx` and return its new value (the seq). */
-async function bumpCursor(tx: { $queryRawUnsafe: (sql: string) => Promise<unknown> }): Promise<number> {
-  const rows = (await tx.$queryRawUnsafe(
-    `UPDATE stream_cursor SET value = value + 1 WHERE id = 0 RETURNING value`,
-  )) as Array<{ value: number }>;
-  return Number(rows[0]?.value ?? 0);
-}
+const BUMP_CURSOR_SQL = `UPDATE stream_cursor SET value = value + 1 WHERE id = 0 RETURNING value`;
 
-/** Minimal txn surface for an entry-mutating statement run via `mutateEntry`. */
-type EntryWriteTx = { $executeRawUnsafe: (sql: string, ...args: unknown[]) => Promise<unknown> };
+/**
+ * All writes here use Prisma's BATCH transaction (`$transaction([...])`), never
+ * the interactive callback form. A batch executes as one engine-side request
+ * wrapped in BEGIN/COMMIT — atomic, held only for the statements' own duration.
+ * Interactive transactions stay open across engine↔JS round-trips and are
+ * subject to a known engine deadlock under concurrency (prisma/prisma#11750,
+ * prisma-engines#2811): the commit's internal read-lock queues behind another
+ * transaction's start write-lock while everyone else waits on the SQLite write
+ * lock the stuck commit holds — freezing the engine for the 5s busy_timeout.
+ * Do not reintroduce `$transaction(async (tx) => …)` on these paths.
+ */
+type SqlStatement = { sql: string; args: readonly unknown[] };
 
 export class ChatEntriesBaseRepo {
   /**
@@ -62,45 +66,45 @@ export class ChatEntriesBaseRepo {
     const createdAt = new Date().toISOString();
     const parentId = input.parentId;
     const payloadJson = JSON.stringify(input.payload);
-    const result = await this.withAppendLock(conversationId, () =>
-      this.prisma.$transaction(async (tx) => {
-        const idxRows = (await tx.$queryRawUnsafe(
-          `SELECT COALESCE(MAX(conversation_index), -1) + 1 AS idx
-           FROM chat_entries
-           WHERE conversation_id = ?`,
-          conversationId,
-        )) as Array<{ idx: number }>;
-        const conversationIndex = Number(idxRows[0]?.idx ?? 0);
-
-        await tx.$executeRawUnsafe(
+    // One atomic batch: the index is computed by a scalar subquery inside the
+    // INSERT itself, and the cursor bump rides the same txn — its value is this
+    // mutation's seq and the snapshot watermark, born from the commit, so
+    // publish (which carries it) can't precede the write.
+    const [insertedRows, , cursorRows] = await this.withAppendLock(conversationId, () =>
+      this.prisma.$transaction([
+        this.prisma.$queryRawUnsafe(
           `INSERT INTO chat_entries (
              id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (
+             ?, ?,
+             (SELECT COALESCE(MAX(conversation_index), -1) + 1 FROM chat_entries WHERE conversation_id = ?),
+             ?, ?, ?, ?
+           ) RETURNING conversation_index`,
           id,
           conversationId,
-          conversationIndex,
+          conversationId,
           parentId,
           input.type,
           payloadJson,
           createdAt,
-        );
-        await tx.$executeRawUnsafe(
+        ),
+        this.prisma.$executeRawUnsafe(
           `UPDATE conversations
            SET last_message_at = ?, updated_at = ?
            WHERE id = ?`,
           createdAt,
           createdAt,
           conversationId,
-        );
-        // Bump the cursor in the SAME txn: its value is this mutation's seq and
-        // the snapshot watermark — born from the commit, so publish (which
-        // carries it) can't precede the write.
-        const seq = await bumpCursor(tx);
-        return { id, conversationIndex, createdAt, parentId, seq };
-      }),
+        ),
+        this.prisma.$queryRawUnsafe(BUMP_CURSOR_SQL),
+      ]),
     );
-    this.cursor.note(result.seq);
-    return result;
+    const conversationIndex = Number(
+      (insertedRows as Array<{ conversation_index: number }>)[0]?.conversation_index ?? 0,
+    );
+    const seq = Number((cursorRows as Array<{ value: number }>)[0]?.value ?? 0);
+    this.cursor.note(seq);
+    return { id, conversationIndex, createdAt, parentId, seq };
   }
 
   /**
@@ -188,20 +192,18 @@ export class ChatEntriesBaseRepo {
    * write can interleave the two reads). This is the stream's first frame.
    */
   async snapshot(conversationId: string): Promise<{ entries: ChatEntry[]; seq: number }> {
-    return this.prisma.$transaction(async (tx) => {
-      const curRows = (await tx.$queryRawUnsafe(
-        `SELECT value FROM stream_cursor WHERE id = 0`,
-      )) as Array<{ value: number }>;
-      const seq = Number(curRows[0]?.value ?? 0);
-      const rows = (await tx.$queryRawUnsafe(
+    const [curRows, rows] = (await this.prisma.$transaction([
+      this.prisma.$queryRawUnsafe(`SELECT value FROM stream_cursor WHERE id = 0`),
+      this.prisma.$queryRawUnsafe(
         `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
          FROM chat_entries
          WHERE conversation_id = ?
          ORDER BY conversation_index ASC`,
         conversationId,
-      )) as ChatEntryDbRow[];
-      return { entries: rows.map(rowToChatEntry), seq };
-    });
+      ),
+    ])) as [Array<{ value: number }>, ChatEntryDbRow[]];
+    const seq = Number(curRows[0]?.value ?? 0);
+    return { entries: rows.map(rowToChatEntry), seq };
   }
 
   private async fetchAllRows(conversationId: string): Promise<ChatEntryDbRow[]> {
@@ -287,11 +289,13 @@ export class ChatEntriesBaseRepo {
    * reparent of its successor would otherwise capture the transient fork and
    * never receive the reparent — freezing it into a spurious sibling branch.
    */
-  protected async mutateEntry(fn: (tx: EntryWriteTx) => Promise<unknown>): Promise<number> {
-    const seq = await this.prisma.$transaction(async (tx) => {
-      await fn(tx);
-      return bumpCursor(tx);
-    });
+  protected async mutateEntry(...statements: SqlStatement[]): Promise<number> {
+    const results = await this.prisma.$transaction([
+      ...statements.map((s) => this.prisma.$executeRawUnsafe(s.sql, ...s.args)),
+      this.prisma.$queryRawUnsafe(BUMP_CURSOR_SQL),
+    ]);
+    const cursorRows = results[results.length - 1] as Array<{ value: number }>;
+    const seq = Number(cursorRows[0]?.value ?? 0);
     this.cursor.note(seq);
     return seq;
   }
@@ -305,14 +309,10 @@ export class ChatEntriesBaseRepo {
     if (!row) throw new Error(`chat entry not found: ${entryId}`);
     const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     Object.assign(payload, patch);
-    return this.mutateEntry((tx) =>
-      tx.$executeRawUnsafe(
-        `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
-        JSON.stringify(payload),
-        conversationId,
-        entryId,
-      ),
-    );
+    return this.mutateEntry({
+      sql: `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
+      args: [JSON.stringify(payload), conversationId, entryId],
+    });
   }
 
   async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {
@@ -326,14 +326,10 @@ export class ChatEntriesBaseRepo {
    * reparenting the intervening entry onto the new one.
    */
   async updateChatEntryParent(conversationId: string, entryId: string, newParentId: string | null): Promise<void> {
-    await this.mutateEntry((tx) =>
-      tx.$executeRawUnsafe(
-        `UPDATE chat_entries SET parent_id = ? WHERE conversation_id = ? AND id = ?`,
-        newParentId,
-        conversationId,
-        entryId,
-      ),
-    );
+    await this.mutateEntry({
+      sql: `UPDATE chat_entries SET parent_id = ? WHERE conversation_id = ? AND id = ?`,
+      args: [newParentId, conversationId, entryId],
+    });
   }
 
   /**
@@ -359,94 +355,87 @@ export class ChatEntriesBaseRepo {
     rootEntryId: string,
     targetConversationId: string,
   ): Promise<{ rootEntryId: string; forkParentEntryId: string | null; movedCount: number }> {
-    const result = await this.withAppendLock(sourceConversationId, () =>
-      this.prisma.$transaction(async (tx) => {
-        const rootRows = (await tx.$queryRawUnsafe(
-          `SELECT parent_id AS parentId FROM chat_entries WHERE conversation_id = ? AND id = ? LIMIT 1`,
-          sourceConversationId,
-          rootEntryId,
-        )) as Array<{ parentId: string | null }>;
-        if (rootRows.length === 0) {
-          throw new Error(`entry not found in conversation: ${rootEntryId}`);
-        }
-        const forkParentEntryId = rootRows[0]?.parentId ?? null;
+    const result = await this.withAppendLock(sourceConversationId, async () => {
+      // Reads first: the per-conversation append lock serializes them against
+      // every other mutation of this conversation, so the plan computed here is
+      // still valid when the write batch below runs.
+      const rootRows = (await this.prisma.$queryRawUnsafe(
+        `SELECT parent_id AS parentId FROM chat_entries WHERE conversation_id = ? AND id = ? LIMIT 1`,
+        sourceConversationId,
+        rootEntryId,
+      )) as Array<{ parentId: string | null }>;
+      if (rootRows.length === 0) {
+        throw new Error(`entry not found in conversation: ${rootEntryId}`);
+      }
+      const forkParentEntryId = rootRows[0]?.parentId ?? null;
 
-        const anchorRows = (await tx.$queryRawUnsafe(
-          `SELECT default_view_leaf_entry_id AS anchor FROM conversations WHERE id = ?`,
-          sourceConversationId,
-        )) as Array<{ anchor: string | null }>;
-        const sourceAnchor = anchorRows[0]?.anchor ?? null;
+      const anchorRows = (await this.prisma.$queryRawUnsafe(
+        `SELECT default_view_leaf_entry_id AS anchor FROM conversations WHERE id = ?`,
+        sourceConversationId,
+      )) as Array<{ anchor: string | null }>;
+      const sourceAnchor = anchorRows[0]?.anchor ?? null;
 
-        const subtreeRows = (await tx.$queryRawUnsafe(
-          `WITH RECURSIVE sub(id) AS (
-             SELECT id FROM chat_entries WHERE conversation_id = ? AND id = ?
-             UNION ALL
-             SELECT e.id FROM chat_entries e JOIN sub ON e.parent_id = sub.id
-             WHERE e.conversation_id = ?
-           )
-           SELECT e.id FROM chat_entries e JOIN sub ON sub.id = e.id
+      const subtreeRows = (await this.prisma.$queryRawUnsafe(
+        `WITH RECURSIVE sub(id) AS (
+           SELECT id FROM chat_entries WHERE conversation_id = ? AND id = ?
+           UNION ALL
+           SELECT e.id FROM chat_entries e JOIN sub ON e.parent_id = sub.id
            WHERE e.conversation_id = ?
-           ORDER BY e.conversation_index ASC`,
-          sourceConversationId,
-          rootEntryId,
-          sourceConversationId,
-          sourceConversationId,
-        )) as Array<{ id: string }>;
-        const movedIds = subtreeRows.map((r) => r.id);
-        const movedSet = new Set(movedIds);
+         )
+         SELECT e.id FROM chat_entries e JOIN sub ON sub.id = e.id
+         WHERE e.conversation_id = ?
+         ORDER BY e.conversation_index ASC`,
+        sourceConversationId,
+        rootEntryId,
+        sourceConversationId,
+        sourceConversationId,
+      )) as Array<{ id: string }>;
+      const movedIds = subtreeRows.map((r) => r.id);
+      const movedSet = new Set(movedIds);
 
-        let index = 0;
-        for (const id of movedIds) {
-          await tx.$executeRawUnsafe(
-            `UPDATE chat_entries SET conversation_id = ?, conversation_index = ? WHERE conversation_id = ? AND id = ?`,
-            targetConversationId,
-            index,
-            sourceConversationId,
-            id,
-          );
-          index += 1;
-        }
-        await tx.$executeRawUnsafe(
-          `UPDATE chat_entries SET parent_id = NULL WHERE conversation_id = ? AND id = ?`,
-          targetConversationId,
-          rootEntryId,
-        );
-
-        const now = new Date().toISOString();
+      const now = new Date().toISOString();
+      const targetAnchor = sourceAnchor && movedSet.has(sourceAnchor) ? sourceAnchor : rootEntryId;
+      const statements: SqlStatement[] = [
+        ...movedIds.map((id, index) => ({
+          sql: `UPDATE chat_entries SET conversation_id = ?, conversation_index = ? WHERE conversation_id = ? AND id = ?`,
+          args: [targetConversationId, index, sourceConversationId, id] as const,
+        })),
+        {
+          sql: `UPDATE chat_entries SET parent_id = NULL WHERE conversation_id = ? AND id = ?`,
+          args: [targetConversationId, rootEntryId] as const,
+        },
         // Target: record provenance, anchor on the viewed branch if it moved.
-        const targetAnchor = sourceAnchor && movedSet.has(sourceAnchor) ? sourceAnchor : rootEntryId;
-        await tx.$executeRawUnsafe(
-          `UPDATE conversations
+        {
+          sql: `UPDATE conversations
            SET forked_from_conversation_id = ?, forked_from_entry_id = ?,
                default_view_leaf_entry_id = ?, last_message_at = ?, updated_at = ?
            WHERE id = ?`,
-          sourceConversationId,
-          forkParentEntryId,
-          targetAnchor,
-          now,
-          now,
-          targetConversationId,
-        );
+          args: [sourceConversationId, forkParentEntryId, targetAnchor, now, now, targetConversationId] as const,
+        },
         // Source: drop a dangling anchor back to the detach point; always bump updated_at.
-        if (sourceAnchor && movedSet.has(sourceAnchor)) {
-          await tx.$executeRawUnsafe(
-            `UPDATE conversations SET default_view_leaf_entry_id = ?, updated_at = ? WHERE id = ?`,
-            forkParentEntryId,
-            now,
-            sourceConversationId,
-          );
-        } else {
-          await tx.$executeRawUnsafe(
-            `UPDATE conversations SET updated_at = ? WHERE id = ?`,
-            now,
-            sourceConversationId,
-          );
-        }
-
-        const seq = await bumpCursor(tx);
-        return { forkParentEntryId, movedCount: movedIds.length, seq };
-      }),
-    );
+        sourceAnchor && movedSet.has(sourceAnchor)
+          ? {
+              sql: `UPDATE conversations SET default_view_leaf_entry_id = ?, updated_at = ? WHERE id = ?`,
+              args: [forkParentEntryId, now, sourceConversationId] as const,
+            }
+          : {
+              sql: `UPDATE conversations SET updated_at = ? WHERE id = ?`,
+              args: [now, sourceConversationId] as const,
+            },
+      ];
+      // One atomic write batch, cursor bump included, so the SSE watermark
+      // advances with the move and a fresh snapshot reflects it.
+      const results = await this.prisma.$transaction([
+        ...statements.map((s) => this.prisma.$executeRawUnsafe(s.sql, ...s.args)),
+        this.prisma.$queryRawUnsafe(BUMP_CURSOR_SQL),
+      ]);
+      const cursorRows = results[results.length - 1] as Array<{ value: number }>;
+      return {
+        forkParentEntryId,
+        movedCount: movedIds.length,
+        seq: Number(cursorRows[0]?.value ?? 0),
+      };
+    });
     this.cursor.note(result.seq);
     return {
       rootEntryId,

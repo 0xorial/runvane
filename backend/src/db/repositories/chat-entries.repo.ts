@@ -242,14 +242,10 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     if (patch.action !== undefined) payload.action = patch.action;
     if (patch.toolName !== undefined) payload.toolName = patch.toolName;
     if (patch.error !== undefined) payload.error = patch.error;
-    await this.mutateEntry((tx) =>
-      tx.$executeRawUnsafe(
-        `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ? AND type = 'thought-action'`,
-        JSON.stringify(payload),
-        conversationId,
-        entryId,
-      ),
-    );
+    await this.mutateEntry({
+      sql: `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ? AND type = 'thought-action'`,
+      args: [JSON.stringify(payload), conversationId, entryId],
+    });
   }
 
   async appendToolInvocation(
@@ -299,16 +295,12 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       input.id,
     )) as Array<{ present: number }>;
     if (existing.length === 0) throw new Error(`assistant-message not found: ${input.id}`);
-    await this.mutateEntry((tx) =>
-      tx.$executeRawUnsafe(
-        `UPDATE chat_entries
+    await this.mutateEntry({
+      sql: `UPDATE chat_entries
          SET payload_json = ?
          WHERE conversation_id = ? AND id = ? AND type = 'assistant-message'`,
-        JSON.stringify({ text: input.text }),
-        conversationId,
-        input.id,
-      ),
-    );
+      args: [JSON.stringify({ text: input.text }), conversationId, input.id],
+    });
   }
 
   /**
