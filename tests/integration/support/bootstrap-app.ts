@@ -21,7 +21,18 @@ function integrationLlm(): LlmRuntime {
 export async function createTestApp(): Promise<TestApp> {
   process.env.NODE_ENV ??= 'test';
   process.env.FRONTEND_ORIGIN ??= 'http://localhost:52201';
-  process.env.DATABASE_URL ??= 'file:./backend.sqlite';
+
+  // Refuse to run against anything but an isolated, disposable DB under .e2e/.
+  // No default fallback: an unset (or ambient rv-dev/rv-stable) DATABASE_URL
+  // used to silently open a real DB and let tests write into it. Run via
+  // `npm run test:integration`, which builds .e2e/integration.sqlite first.
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl || !databaseUrl.includes('/.e2e/')) {
+    throw new Error(
+      `createTestApp: refusing to run against DATABASE_URL=${databaseUrl ?? '<unset>'}. ` +
+        'Integration tests require an isolated DB under .e2e/ — run `npm run test:integration`.',
+    );
+  }
 
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [
