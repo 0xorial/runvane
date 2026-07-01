@@ -4,6 +4,8 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import { navigate } from "@/lib/router";
   import { DEFAULT_CONVERSATION_CATEGORIZATION_CONFIG } from "../../../../backend/src/contracts/conversation-config";
+  import { Pane, PaneGroup } from "paneforge";
+  import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import ChatToolsPanel from "./ChatToolsPanel.svelte";
   import ConversationsView from "./ConversationsView.svelte";
 
@@ -39,7 +41,13 @@
     <span class="text-sm font-semibold tracking-tight text-foreground">Runvane</span>
   </div>
 
-  <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
-
-  <ChatToolsPanel {search} />
+  <PaneGroup direction="vertical" autoSaveId="sidebar-conversation-tools-layout" class="min-h-0 min-w-0 flex-1">
+    <Pane minSize={20} class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <ConversationsView {onSelect} {onNewChat} onShowAll={openAllConversations} showProbe recentLimit={recentLimit} />
+    </Pane>
+    <ResizablePaneHandle withHandle direction="vertical" />
+    <Pane defaultSize={36} minSize={15} maxSize={75} class="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <ChatToolsPanel {search} />
+    </Pane>
+  </PaneGroup>
 </aside>

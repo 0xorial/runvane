@@ -114,7 +114,7 @@
 </script>
 
 <section
-  class="flex min-h-[8rem] max-h-[40%] shrink-0 grow-0 basis-[40%] flex-col border-t border-sidebar-border bg-sidebar"
+  class="flex h-full min-h-0 min-w-0 flex-1 flex-col border-t border-sidebar-border bg-sidebar"
   data-testid="chat-tools-panel"
   aria-label="Chat tools"
 >
