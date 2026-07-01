@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { e2eDatabaseUrl, prepareE2eDatabase } from "./e2e-db.mjs";
@@ -14,7 +13,7 @@ export const frontendPort = backendPort + frontendPortOffset;
 export const backendOrigin = `http://127.0.0.1:${backendPort}`;
 export const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 
-/** @type {{ backend: import('../backend/dist/bootstrap.js').RunvaneAppHandle | null; frontend: import('vite').ViteDevServer | null; llmMode: string | null }} */
+/** @type {{ backend: import('../backend/src/bootstrap.js').RunvaneAppHandle | null; frontend: import('vite').ViteDevServer | null; llmMode: string | null }} */
 const running = { backend: null, frontend: null, llmMode: null };
 
 /** In-process stub LLM control when harness runs with `llm.mode === 'stub'`. */
@@ -55,11 +54,9 @@ async function frontendOk() {
 }
 
 async function loadBackendBootstrap() {
-  const bootstrapPath = path.join(repoRoot, "backend/dist/bootstrap.js");
-  if (!existsSync(bootstrapPath)) {
-    throw new Error("e2e-servers: run `cd backend && npm run build` first");
-  }
-  return import(pathToFileURL(bootstrapPath).href);
+  // Load the backend from TS source (backend/src), never from dist.
+  const { loadBackendModule } = await import("./backend-src.mjs");
+  return loadBackendModule("bootstrap.ts");
 }
 
 async function loadFrontendDevServer() {
@@ -84,16 +81,11 @@ function resolveDatabaseUrl() {
 /**
  * @param {object} [opts]
  * @param {boolean} [opts.freshDb]
- * @param {import('../backend/dist/runtime/runtime.config.js').LlmRuntime} [opts.llm]
+ * @param {import('../backend/src/runtime/runtime.config.js').LlmRuntime} [opts.llm]
  */
 export async function ensureE2eServers({ freshDb = false, llm = { mode: "stub" } } = {}) {
   if (!freshDb && running.backend && running.frontend && (await healthOk()) && (await frontendOk())) {
     return;
-  }
-
-  const backendMain = path.join(repoRoot, "backend/dist/main.js");
-  if (!existsSync(backendMain)) {
-    throw new Error("e2e-servers: run `cd backend && npm run build` first");
   }
 
   const databaseUrl = resolveDatabaseUrl();

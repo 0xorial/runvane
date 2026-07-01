@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -13,14 +12,9 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, "..");
 const testsDir = path.join(repoRoot, "tests");
-const backendDir = path.join(repoRoot, "backend");
-const backendMain = path.join(backendDir, "dist/main.js");
 
-if (!existsSync(backendMain)) {
-  const build = spawnSync("npm", ["run", "build"], { cwd: backendDir, stdio: "inherit" });
-  if (build.status !== 0) process.exit(build.status ?? 1);
-}
-
+// The backend runs from TS source (see e2e-servers.mjs -> backend-src.mjs); no
+// dist build step — dist is only for actually distributing the app.
 const freshDb = process.env.E2E_FRESH_DB !== "0";
 await stopE2eServers();
 await ensureE2eServers({ freshDb });
