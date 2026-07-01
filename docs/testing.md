@@ -66,6 +66,20 @@ reintroduce the callback form there (see the comment in
 WAL + `busy_timeout=5000`; `RUNVANE_SQLITE_CONN_LIMIT` exists as a diagnostics-only
 pool override.
 
+## Zero-tolerance log gate
+
+A run that passes every spec but leaves **any exception or warning in its log fails
+anyway** (exit 1, with the offending lines printed). Enforced by
+`enforceCleanExit()` in `scripts/test-diagnostics.mjs`, which scans every teed line
+for: uncaught exceptions / unhandled rejections, browser page errors and console
+errors/warnings, backend pino `error`/`fatal` lines, svelte compiler warnings, Node
+`ExperimentalWarning`/`DeprecationWarning`, and `TypeError`/`ReferenceError`/etc.
+
+Third-party noise that genuinely can't be fixed must be allowlisted **explicitly,
+with a reason**, in `ALLOWLIST` in the same file (currently only Node's
+`ExperimentalWarning` for `node:sqlite`, a deliberate rag-store dependency). Never
+allowlist our own code's warnings — fix them at the source.
+
 ## Test-quality rules
 
 - **No unstable tests.** A test that fails intermittently, or asserts environment-

@@ -36,8 +36,11 @@
   }
 </script>
 
+<!-- Hover/focus passthrough wrapper: the interactivity (tooltip) is decorative;
+     the wrapped children keep their own semantics. -->
 <span
   bind:this={anchor}
+  role="presentation"
   class="relative inline-flex"
   onmouseenter={show}
   onmouseleave={hide}

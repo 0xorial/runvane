@@ -28,16 +28,49 @@ export function installTestDiagnostics(suite) {
     latest.write(chunk);
   };
 
+  // Zero-tolerance gate: a run is dirty if its log contains any exception or
+  // warning, even when every spec passed. The runner calls enforceCleanExit()
+  // and turns a "green but dirty" run into a failure. Third-party noise we
+  // can't fix must be allowlisted here EXPLICITLY, with a reason.
+  const PROBLEM_PATTERNS = [
+    /UNCAUGHT_EXCEPTION|UNHANDLED_REJECTION/, //   diagnostics' own crash reports
+    /\[browser (pageerror|console\.(error|warning)|requestfailed)\]/, // frontend
+    /"level":(50|60)/, //                          pino error/fatal from the backend
+    /\[vite-plugin-svelte\]/, //                   svelte compiler warnings
+    /\b(ExperimentalWarning|DeprecationWarning)\b/, // Node runtime warnings
+    /\b(TypeError|ReferenceError|RangeError|SyntaxError):/,
+  ];
+  const ALLOWLIST = [
+    // node:sqlite is a deliberate dependency (rag-store.ts); Node 22 flags it.
+    /ExperimentalWarning: SQLite is an experimental feature/,
+  ];
+  const problems = [];
+  let lineBuf = "";
+  const scan = (chunk) => {
+    lineBuf += chunk.toString();
+    let nl;
+    while ((nl = lineBuf.indexOf("\n")) !== -1) {
+      const line = lineBuf.slice(0, nl);
+      lineBuf = lineBuf.slice(nl + 1);
+      if (!PROBLEM_PATTERNS.some((p) => p.test(line))) continue;
+      if (ALLOWLIST.some((p) => p.test(line))) continue;
+      if (problems.length < 50) problems.push(line.slice(0, 300));
+      else if (problems.length === 50) problems.push("… (more problems truncated)");
+    }
+  };
+
   // Tee the harness + in-process-backend console output to the log files. The
   // Playwright child is piped through here by the caller, so specs land too.
   const origOut = process.stdout.write.bind(process.stdout);
   const origErr = process.stderr.write.bind(process.stderr);
   process.stdout.write = (chunk, ...rest) => {
     toFile(chunk);
+    scan(chunk);
     return origOut(chunk, ...rest);
   };
   process.stderr.write = (chunk, ...rest) => {
     toFile(chunk);
+    scan(chunk);
     return origErr(chunk, ...rest);
   };
 
@@ -84,6 +117,21 @@ export function installTestDiagnostics(suite) {
   });
   process.on("exit", (code) => log(`exit code=${code} — full log: ${logPath}`));
 
+  /**
+   * Call with the child's exit code. Exits the process: non-zero passes through;
+   * zero becomes 1 when the log contained any exception/warning (printed here).
+   */
+  const enforceCleanExit = (childCode) => {
+    if (lineBuf) scan("\n"); // flush a trailing partial line
+    if (childCode === 0 && problems.length > 0) {
+      log(`RUN DIRTY: ${problems.length} exception/warning line(s) in an otherwise green run:`);
+      for (const p of problems) origErr(`  ✗ ${p}\n`);
+      log(`failing the run — fix the cause or allowlist third-party noise in test-diagnostics.mjs`);
+      process.exit(1);
+    }
+    process.exit(childCode ?? 1);
+  };
+
   log(`diagnostics armed for '${suite}' → ${latestPath}`);
-  return { logPath, latestPath, log };
+  return { logPath, latestPath, log, enforceCleanExit };
 }

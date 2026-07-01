@@ -72,6 +72,8 @@
     onOpenChange?: (open: boolean) => void;
   } = $props();
 
+  // Capturing only the prop's initial value is the intent (it seeds local state).
+  // svelte-ignore state_referenced_locally
   let open = $state(initialOpen);
   let query = $state("");
   let searchInput = $state<HTMLInputElement | null>(null);

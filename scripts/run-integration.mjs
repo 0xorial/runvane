@@ -46,5 +46,6 @@ child.stderr.on("data", (chunk) => process.stderr.write(chunk));
 child.on("exit", (code, signal) => {
   diag.log(`jest exited code=${code} signal=${signal}`);
   if (signal) process.kill(process.pid, signal);
-  process.exit(code ?? 1);
+  // Green-but-dirty runs (any exception/warning in the log) fail here.
+  diag.enforceCleanExit(code);
 });
