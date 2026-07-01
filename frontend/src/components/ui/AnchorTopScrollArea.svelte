@@ -128,6 +128,21 @@
     observer.observe(content);
     return () => observer.disconnect();
   });
+
+  // The reserved spacer is sized against the viewport's own height (see
+  // calculateAnchorScrollPlan), so it goes stale if the viewport resizes after
+  // the align loop has already finished (e.g. toggling a side panel, resizing
+  // the window) — recompute it whenever that happens.
+  $effect(() => {
+    const scroll = scrollEl;
+    if (!scroll) return;
+
+    const observer = new ResizeObserver(() => {
+      if (lastAnchorId) alignOnce(lastAnchorId);
+    });
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  });
 </script>
 
 <div bind:this={scrollEl} class={className} data-testid={testId} onscroll={handleScroll}>
