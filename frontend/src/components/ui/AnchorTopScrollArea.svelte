@@ -27,6 +27,18 @@
   const animRafRef = { current: null as number | null };
   let tries = 0;
 
+  const BOTTOM_STICK_THRESHOLD_PX = 8;
+  let stickToBottom = $state(true);
+
+  function isScrolledToBottom(scroll: HTMLElement): boolean {
+    return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= BOTTOM_STICK_THRESHOLD_PX;
+  }
+
+  function handleScroll(): void {
+    if (!scrollEl) return;
+    stickToBottom = isScrolledToBottom(scrollEl);
+  }
+
   function cancelAlignRaf(): void {
     if (rafRef != null) cancelAnimationFrame(rafRef);
     rafRef = null;
@@ -104,9 +116,21 @@
     scheduleAlign(topAnchorEntryId);
     return cancelAlignRaf;
   });
+
+  $effect(() => {
+    const scroll = scrollEl;
+    const content = contentEl;
+    if (!scroll || !content) return;
+
+    const observer = new ResizeObserver(() => {
+      if (stickToBottom) scroll.scrollTop = scroll.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  });
 </script>
 
-<div bind:this={scrollEl} class={className} data-testid={testId}>
+<div bind:this={scrollEl} class={className} data-testid={testId} onscroll={handleScroll}>
   <div bind:this={contentEl} class="relative flex min-h-full flex-col gap-0">
     {@render children()}
   </div>
