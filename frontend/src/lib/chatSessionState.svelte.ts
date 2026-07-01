@@ -126,12 +126,42 @@ export function createChatSessionState(getConversationId: () => string | null) {
     const nextStore = getChatSessionStore(boundCid);
     store = nextStore;
     releaseLive = retainChatSessionLive();
+
+    let cancelled = false;
+    // The tool-override draft and the `?agent=` param (which drive the chat
+    // tools panel + composer agent selector) are both seeded from the
+    // conversation's last user message — which only exists once the entries
+    // snapshot has populated the active path. That snapshot arrives over SSE,
+    // a source independent of the getConversation() metadata fetch below, so a
+    // seed run straight after the metadata resolves races the snapshot: if
+    // metadata wins, the path is still empty, the seed no-ops, and the panels
+    // stay stuck on the previously-viewed conversation's agent/overrides.
+    // Seed exactly once, when the path is first non-empty, driven by whichever
+    // source gets there. The one-shot guard also stops a later reconnect
+    // re-snapshot from clobbering a manual agent pick.
+    let seededFromEntries = false;
+    const seedWhenEntriesReady = (): void => {
+      if (seededFromEntries || cancelled) return;
+      if (nextStore.getActivePathRows().length === 0) return;
+      seededFromEntries = true;
+      seedToolDraftFromStore(nextStore);
+    };
+
     rowUnsub = nextStore.subscribeRows(bumpRows);
-    pathUnsub = nextStore.subscribeActivePath(bumpPath);
+    pathUnsub = nextStore.subscribeActivePath(() => {
+      bumpPath();
+      seedWhenEntriesReady();
+    });
     pendingUnsub = nextStore.subscribePending(bumpRows);
 
     isSessionLoading = nextStore.getAllRows().length === 0;
-    let cancelled = false;
+    // Clear the previous conversation's draft up front so its custom rules don't
+    // linger while this one's entries load; seedWhenEntriesReady restores this
+    // conversation's overrides + agent once they arrive.
+    resetChatToolDraft();
+    // Cached store (revisiting a conversation): entries are already present, so
+    // seed synchronously — the snapshot subscription won't re-fire for it.
+    seedWhenEntriesReady();
 
     // Per-conversation live stream: its first frame is the entries snapshot
     // (seeds the store + baselines the watermark), then live mutations. The
@@ -149,7 +179,8 @@ export function createChatSessionState(getConversationId: () => string | null) {
         if (!nextStore.hasViewAnchor() && conversation.defaultViewLeafAnchorId) {
           nextStore.setViewAnchor(conversation.defaultViewLeafAnchorId);
         }
-        seedToolDraftFromStore(nextStore);
+        // The anchor may have just resolved the path against already-loaded rows.
+        seedWhenEntriesReady();
       } catch (err) {
         console.error("[chatSession] Failed to load conversation metadata:", err);
       } finally {
