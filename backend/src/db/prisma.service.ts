@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { performance } from 'node:perf_hooks';
 
@@ -21,7 +21,12 @@ const at = (): number => Math.round(performance.now() - CLOCK0);
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  private readonly diag = new Logger('DbDiag');
+  // Write straight to stdout, NOT through Nest's Logger: the diagnostics are
+  // harness-facing (captured by scripts/test-diagnostics.mjs' tee), and the jest
+  // TestingModule silences the Nest logger, which would swallow them.
+  private readonly diag = {
+    warn: (msg: string) => process.stdout.write(`[DbDiag] ${msg}\n`),
+  };
   private txSeq = 0;
   private txOpen = 0;
 
@@ -80,6 +85,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       $metrics: { json: () => Promise<{ gauges: { key: string; value: number }[]; counters: { key: string; value: number }[] }> };
     };
     const sampler = setInterval(() => {
+      // $metrics only exists while the schema enables the "metrics" preview
+      // feature; don't let the sampler crash the process if it's removed.
+      if (typeof metricsClient.$metrics?.json !== 'function') return;
       metricsClient.$metrics
         .json()
         .then((m) => {

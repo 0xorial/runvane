@@ -78,7 +78,10 @@ an LLM provider — an API key (OpenAI / OpenRouter), or point it at a local
 Dev ports are allocated per project in [`dev-ports/registry.json`](dev-ports/registry.json)
 (100 ports per base); change the base there if they collide.
 
-Tests: `npm run test:e2e`, `npm run test:integration`, and `cd backend && npm test` for unit specs.
+Tests: `npm test` runs everything (unit → integration → e2e); each layer also has its own
+script (`test:unit`, `test:integration`, `test:e2e`). Every run writes a full log
+(requests, SQL/transaction timings, browser errors, crash stacks) to `.e2e/logs/` —
+see [docs/testing.md](docs/testing.md).
 
 ## Roadmap
 

@@ -6,9 +6,11 @@ import { integrationDatabaseUrl, prepareIntegrationDatabase } from "./e2e-db.mjs
 import { installTestDiagnostics } from "./test-diagnostics.mjs";
 
 // Always write a durable log to .e2e/logs/integration-latest.log, with backend
-// request logging on (LOG_LEVEL) so a failing run always leaves real logs.
+// request logging (LOG_LEVEL) and deep DB instrumentation (RUNVANE_DB_DIAG) on
+// so a failing run always leaves real logs. See docs/testing.md.
 const diag = installTestDiagnostics("integration");
 process.env.LOG_LEVEL ??= "info";
+process.env.RUNVANE_DB_DIAG ??= "1";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, "..");
