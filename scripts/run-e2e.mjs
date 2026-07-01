@@ -8,6 +8,19 @@ import {
   frontendOrigin,
   stopE2eServers,
 } from "./e2e-servers.mjs";
+import { installTestDiagnostics } from "./test-diagnostics.mjs";
+
+// Always write a durable log (harness + in-process backend + browser errors)
+// to .e2e/logs/e2e-latest.log. Must run before anything else can throw.
+const diag = installTestDiagnostics("e2e");
+
+// Turn on backend request logging (pino) unless the caller overrides it — a
+// failing run must always leave real logs behind. Set before the backend loads.
+process.env.LOG_LEVEL ??= "info";
+// Deep DB instrumentation (per-statement + per-transaction timing/concurrency).
+// Feature-flagged; on for test runs, overridable. RUNVANE_DB_DIAG_ALL=1 for
+// every statement instead of only slow ones.
+process.env.RUNVANE_DB_DIAG ??= "1";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, "..");
@@ -32,13 +45,18 @@ const env = {
 
 const playwrightArgs = ["playwright", "test", ...process.argv.slice(2)];
 
+// Pipe (don't inherit) so Playwright + browser output flows through the teed
+// stdout/stderr and lands in the log file too.
 const child = spawn("npx", playwrightArgs, {
   cwd: testsDir,
   env,
-  stdio: "inherit",
+  stdio: ["inherit", "pipe", "pipe"],
 });
+child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+child.stderr.on("data", (chunk) => process.stderr.write(chunk));
 
 child.on("exit", (code, signal) => {
+  diag.log(`playwright exited code=${code} signal=${signal}`);
   if (signal) process.kill(process.pid, signal);
   process.exit(code ?? 1);
 });

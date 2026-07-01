@@ -4,7 +4,10 @@ import { expect, test } from "./fixtures";
 const runE2e = process.env.RUN_E2E_TESTS === "1";
 test.skip(!runE2e, "Set RUN_E2E_TESTS=1 with backend+frontend running");
 
-test("bottom spacer is recalculated when the viewport resizes", async ({ app, request }) => {
+test("top-anchor spacer is recomputed (not left stale) when the viewport resizes", async ({
+  app,
+  request,
+}) => {
   await app.page.setViewportSize({ width: 1280, height: 900 });
   await app.chat.gotoNew(await defaultAgentId(request));
   await app.chat.userInput.typeMessage(USER_MSG_HELLO);
@@ -19,17 +22,24 @@ test("bottom spacer is recalculated when the viewport resizes", async ({ app, re
     await app.chat.userInput.send();
     await app.chat.transcript.waitForAssistantMessageCount(i + 2);
   }
-  // Let the align loop (triggered by sending the last message) settle so the
-  // spacer reflects a stable position.
-  await app.page.waitForTimeout(600);
 
   const container = app.chat.transcript.container;
   const spacerHeight = () =>
     container.evaluate((el) => (el.lastElementChild as HTMLElement).getBoundingClientRect().height);
 
-  const before = await spacerHeight();
-  expect(before).toBeGreaterThan(0);
+  // With content overflowing, the reserved spacer is driven by the viewport
+  // height. The feature under test recomputes it on resize instead of leaving it
+  // stale, so growing the viewport grows the spacer and shrinking it back shrinks
+  // it. Assert only the DIRECTION of change — the exact pixel delta depends on
+  // font/row metrics and would make this environment-fragile. `expect.poll` waits
+  // for the resize-triggered recompute to settle (no fixed timeout).
+  await expect.poll(spacerHeight).toBeGreaterThan(0);
+  const atShort = await spacerHeight();
 
   await app.page.setViewportSize({ width: 1280, height: 1300 });
-  await expect.poll(spacerHeight).toBeGreaterThan(before + 300);
+  await expect.poll(spacerHeight).toBeGreaterThan(atShort);
+  const atTall = await spacerHeight();
+
+  await app.page.setViewportSize({ width: 1280, height: 900 });
+  await expect.poll(spacerHeight).toBeLessThan(atTall);
 });

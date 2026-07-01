@@ -33,19 +33,29 @@ export class AppModule {
       imports: [
         RuntimeModule.forRoot(runtime),
         LoggerModule.forRoot({
-          pinoHttp: {
-            transport:
-              runtime.nodeEnv === 'development' ? { target: 'pino-pretty' } : undefined,
-            ...(runtime.nodeEnv === 'test' ? { level: 'silent' as const } : {}),
-            serializers: {
-              req(req) {
-                return { id: req.id, method: req.method, url: req.url };
-              },
-              res(res) {
-                return { statusCode: res.statusCode };
+          // Honor LOG_LEVEL so a failing test run always has real backend logs
+          // (pino-http logs every request: method, url, status, responseTime).
+          // Default test to 'silent' only so unit-test output stays clean; the
+          // e2e/integration harness sets LOG_LEVEL to turn logging on. In test the
+          // backend runs in-process, so the destination is process.stdout — the
+          // harness tee (scripts/test-diagnostics.mjs) captures that into the log
+          // file, whereas pino's default direct-to-fd write would bypass it.
+          pinoHttp: [
+            {
+              level: process.env.LOG_LEVEL ?? (runtime.nodeEnv === 'test' ? 'silent' : 'info'),
+              transport:
+                runtime.nodeEnv === 'development' ? { target: 'pino-pretty' } : undefined,
+              serializers: {
+                req(req) {
+                  return { id: req.id, method: req.method, url: req.url };
+                },
+                res(res) {
+                  return { statusCode: res.statusCode };
+                },
               },
             },
-          },
+            ...(runtime.nodeEnv === 'test' ? [process.stdout] : []),
+          ],
         }),
         DatabaseModule,
         HealthModule,

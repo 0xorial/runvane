@@ -10,6 +10,28 @@ const TASK_DRAIN_TIMEOUT_MS = Number(
 
 export const test = base.extend<{ app: RunvaneApp; drainPendingTasks: void }>({
   app: async ({ page }, use) => {
+    // Surface browser-side failures into the run log (see scripts/test-diagnostics.mjs).
+    // The harness only sees the backend; frontend errors live in the page.
+    const title = test.info().title;
+    page.on("pageerror", (err) => {
+      console.error(`[browser pageerror] «${title}» ${err.message}\n${err.stack ?? ""}`);
+    });
+    page.on("console", (msg) => {
+      const type = msg.type();
+      if (type === "error" || type === "warning") {
+        console.error(`[browser console.${type}] «${title}» ${msg.text()}`);
+      }
+    });
+    page.on("requestfailed", (req) => {
+      // SSE streams and external assets abort on every navigation/unload — normal
+      // teardown, not a failure. Only log genuine request failures.
+      const url = req.url();
+      const errorText = req.failure()?.errorText ?? "?";
+      const isStreamAbort = /\/stream(\?|$)/.test(url) && errorText === "net::ERR_ABORTED";
+      const isExternalAbort = !url.includes("127.0.0.1") && errorText === "net::ERR_ABORTED";
+      if (isStreamAbort || isExternalAbort) return;
+      console.error(`[browser requestfailed] «${title}» ${req.method()} ${url} — ${errorText}`);
+    });
     await use(new RunvaneApp(page));
   },
 
