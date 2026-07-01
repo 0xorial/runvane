@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ContextInjectionService } from '../context-injection/context-injection.service.js';
 import { DatabaseModule } from '../db/database.module.js';
 import { DecisionStep } from '../thoughtProcessing/steps/decisionStep.js';
 import { PrepareStep } from '../thoughtProcessing/steps/prepareStep.js';
@@ -38,6 +39,7 @@ import { ConversationsService } from './conversations.service.js';
     SummarizeAttachmentThoughtTypeProvider,
     GuardrailThoughtTypeProvider,
     RunToolService,
+    ContextInjectionService,
   ],
 })
 export class ConversationsModule {}

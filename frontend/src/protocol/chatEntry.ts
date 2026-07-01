@@ -6,6 +6,7 @@ export type {
   ChatAttachment,
   ChatEntry,
   CheckpointSummaryEntry,
+  ContextInjectionEntry,
   LlmDecision,
   LlmDecisionTool,
   LlmDecisionUserResponse,
@@ -17,6 +18,15 @@ export type {
   ToolState,
   UserMessageEntry,
 } from "../../../backend/src/contracts/chatEntry.js";
+
+export type {
+  AgentPreinjectConfig,
+  PreinjectedFileRecord,
+  PreinjectFileStatus,
+  PreinjectFileType,
+  PreinjectMode,
+} from "../../../backend/src/contracts/preinject.js";
+export { PREINJECT_FILE_TYPES } from "../../../backend/src/contracts/preinject.js";
 
 export function isPlannerThinkingEntry(e: ChatEntry): e is ThoughtStreamEntry {
   return e.type === "thought_stream" && e.thoughtType === "planner";

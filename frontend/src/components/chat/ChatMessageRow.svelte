@@ -7,6 +7,7 @@
   import ThoughtTripletRow from "./rows/ThoughtTripletRow.svelte";
   import ToolRunRow from "./rows/ToolRunRow.svelte";
   import CheckpointSummaryRow from "./rows/CheckpointSummaryRow.svelte";
+  import ContextInjectionRow from "./rows/ContextInjectionRow.svelte";
   import UserMessageRow from "./rows/UserMessageRow.svelte";
 
   let {
@@ -49,5 +50,7 @@
     <ToolRunRow {entry} {conversationId} />
   {:else if entry.type === "checkpoint-summary"}
     <CheckpointSummaryRow {entry} />
+  {:else if entry.type === "context-injection"}
+    <ContextInjectionRow {entry} />
   {/if}
 {/if}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AgentPreinjectConfigSchema } from '../contracts/preinject.js';
 
 export const AgentToolConfigSchema = z.object({
   /**
@@ -27,6 +28,8 @@ export const AgentConfigurationSchema = z.object({
   model_settings: z.record(z.string(), z.unknown()).optional(),
   tools: z.record(z.string(), AgentToolConfigSchema).optional(),
   guardrail: AgentGuardrailConfigSchema.optional(),
+  /** Absent means 'none' — no context-file preinjection (no behavior change). */
+  preinject: AgentPreinjectConfigSchema.optional(),
 });
 
 export const AgentModelReferenceSchema = z.object({

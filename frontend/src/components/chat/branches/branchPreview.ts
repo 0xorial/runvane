@@ -29,6 +29,12 @@ export function entryPreview(entry: ChatEntry): string {
     const head = entry.summaryText.trim().split(/\s+/).slice(0, 12).join(" ");
     return head ? `Summary: ${head}…` : "Summary";
   }
+  if (entry.type === "context-injection") {
+    const injectedCount = entry.files.filter((f) => f.status === "injected").length;
+    return injectedCount > 0
+      ? `Preinjected ${injectedCount} file${injectedCount === 1 ? "" : "s"}`
+      : "No context files found";
+  }
   if (entry.type === "thought_stream" && entry.thoughtType === "summarize_attachment") {
     const name = String(entry.filename ?? "").trim();
     const status = displayStatus(String(entry.status || "running").trim());
@@ -50,6 +56,7 @@ export function entryIconName(
   if (entry.type === "assistant-message") return "bot";
   if (entry.type === "tool-invocation") return "wrench";
   if (entry.type === "thought-prepare") return "file";
+  if (entry.type === "context-injection") return "file";
   if (isThoughtStreamEntry(entry)) return "sparkles";
   if (entry.type === "thought-action") {
     const toolName = String(entry.toolName || "").trim();

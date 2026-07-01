@@ -188,6 +188,13 @@ function entryToMessages(
       // branch and are naturally absent from this chain, so the planner
       // sees just this condensed paragraph in their place.
       return [textMessage('system', `[Earlier in this conversation, summarized]\n${entry.summaryText}`)];
+    case 'context-injection':
+      // Empty when the scan found nothing to inject (mode 'none', or no
+      // candidate files matched); the entry is still persisted for the audit
+      // trail (`files`), just with no message to contribute here.
+      return entry.content.trim().length > 0
+        ? [textMessage('system', `[Project context files]\n${entry.content}`)]
+        : [];
     case 'thought-prepare':
     case 'thought-action':
     case 'thought_stream':

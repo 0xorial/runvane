@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ProviderCostBreakdownSchema } from './provider-cost.js';
 import { LlmRefSchema } from './llm.js';
 import { UserMessageOverridesSchema } from './user-message-overrides.js';
+import { PreinjectedFileRecordSchema } from './preinject.js';
 
 // ---- Primitives ----
 
@@ -230,6 +231,23 @@ export const CheckpointSummaryEntrySchema = ChatEntryBaseSchema.extend({
 });
 export type CheckpointSummaryEntry = z.infer<typeof CheckpointSummaryEntrySchema>;
 
+/**
+ * Persisted, once-per-conversation record of the pre-planner context-file
+ * scan (see context-injection.service.ts). `files` lists every candidate
+ * file the scan discovered on disk, each tagged with whether it was folded
+ * into `content` (`injected`) or left out (`skipped` — category not
+ * selected, unreadable, or binary). Appended as a thought-less chain step
+ * (see ChatChain) right after the first user-message, before the planner
+ * thought starts, so `content` is already part of the immutable entry DAG
+ * the planner reads from — no separate re-scan on reprocess.
+ */
+export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
+  type: z.literal('context-injection'),
+  files: z.array(PreinjectedFileRecordSchema),
+  content: z.string(),
+});
+export type ContextInjectionEntry = z.infer<typeof ContextInjectionEntrySchema>;
+
 // ---- Union ----
 
 export const ChatEntrySchema = z.discriminatedUnion('type', [
@@ -240,5 +258,6 @@ export const ChatEntrySchema = z.discriminatedUnion('type', [
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,
   CheckpointSummaryEntrySchema,
+  ContextInjectionEntrySchema,
 ]);
 export type ChatEntry = z.infer<typeof ChatEntrySchema>;

@@ -114,6 +114,11 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
       case 'checkpoint-summary':
         lines.push(`<earlier-summary>\n${e.summaryText}\n</earlier-summary>`);
         break;
+      case 'context-injection': {
+        const injected = e.files.filter((f) => f.status === 'injected').map((f) => f.path);
+        if (injected.length > 0) lines.push(`<context-files injected="${injected.join(', ')}" />`);
+        break;
+      }
       case 'thought_stream':
         // The summarize-attachment stream carries the persisted summary text —
         // fold it in as the user-visible attachment summary. Other thought

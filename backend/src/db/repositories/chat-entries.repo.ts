@@ -10,6 +10,7 @@ import type {
 import type { UserMessageOverrides } from '../../contracts/user-message-overrides.js';
 import type { LlmRef } from '../../contracts/llm.js';
 import type { ThoughtType } from '../../contracts/chatEntry.js';
+import type { PreinjectedFileRecord } from '../../contracts/preinject.js';
 import { PrismaService } from '../prisma.service.js';
 import { StreamCursorService } from '../stream-cursor.service.js';
 import type { ThoughtStepStatus } from './chat-entries.types.js';
@@ -180,6 +181,22 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       payload,
     });
     return row;
+  }
+
+  async appendContextInjection(
+    conversationId: string,
+    input: {
+      parentId: string | null;
+      files: PreinjectedFileRecord[];
+      content: string;
+    },
+  ): Promise<{ id: string }> {
+    const row = await this.appendEntry(conversationId, {
+      type: 'context-injection',
+      parentId: input.parentId,
+      payload: { files: input.files, content: input.content },
+    });
+    return { id: row.id };
   }
 
   async appendThoughtActionEntry(

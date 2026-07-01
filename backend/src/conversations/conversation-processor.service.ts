@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
+import { ContextInjectionService } from '../context-injection/context-injection.service.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
@@ -53,6 +54,7 @@ export class ConversationProcessorService {
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
     private readonly categorizer: ConversationCategorizerService,
+    private readonly contextInjection: ContextInjectionService,
   ) {}
 
   async approveToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
@@ -453,6 +455,12 @@ export class ConversationProcessorService {
         });
 
         const isFirstMessage = existingMessages.length === 0;
+        // Awaited (unlike the fire-and-forget thoughts below): the planner's
+        // first `buildInputFromConversation` read must already see this entry
+        // in the chain, and there's no LLM call here to run concurrently with.
+        if (isFirstMessage) {
+          await this.injectContextFiles(conversationId, body.agentId, chain);
+        }
         const categorize = isFirstMessage && (await this.categorizer.shouldCategorize(conversationId));
         this.startThoughts({
           conversationId,
@@ -502,6 +510,33 @@ export class ConversationProcessorService {
     if (!scope) return;
     scope.abort();
     await scope.whenFinished();
+  }
+
+  /**
+   * Scan the workspace for the agent's configured context files (once per
+   * conversation — gated by the caller on `isFirstMessage`) and, if any were
+   * discovered, append a `context-injection` entry to the chain before the
+   * planner thought starts. Best-effort: a scan failure is logged and
+   * swallowed rather than failing the user's message.
+   */
+  private async injectContextFiles(conversationId: string, agentId: string, chain: ChatChain): Promise<void> {
+    try {
+      const agent = await this.agents.get(agentId);
+      const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined);
+      if (!result) return;
+      const created = await chain.append(null, (parentId) =>
+        this.chatEntries.appendContextInjection(conversationId, {
+          parentId,
+          files: result.files,
+          content: result.content,
+        }),
+      );
+      await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+    } catch (err) {
+      this.logger.warn(
+        `context-injection scan failed for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**

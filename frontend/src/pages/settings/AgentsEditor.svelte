@@ -7,9 +7,11 @@
   import AgentGuardrailSettings from "./AgentGuardrailSettings.svelte";
   import AgentIconPicker from "./AgentIconPicker.svelte";
   import AgentLlmSettings from "./AgentLlmSettings.svelte";
+  import AgentPreinjectSettings from "./AgentPreinjectSettings.svelte";
   import AgentToolsSection from "./AgentToolsSection.svelte";
   import { readGuardrailConfig } from "./agentGuardrail";
   import { patchGuardrailOnAgent } from "./agentTools";
+  import { readPreinjectConfig, patchPreinjectOnAgent } from "./agentPreinject";
   import { sortAgents, type ModelGroup } from "./helpers";
   import { chipActive, chipBase, chipText, ghostBtn, ghostDanger, loadError, loadHint, settingsPlaceholderBox } from "./settingsClasses";
 
@@ -164,6 +166,11 @@
           {toolCatalog}
           {canEdit}
           onAgentChange={setCurrentAgent}
+        />
+        <AgentPreinjectSettings
+          config={readPreinjectConfig(currentAgent.default_llm_configuration as Record<string, unknown>)}
+          {canEdit}
+          onchange={(patch) => setCurrentAgent(patchPreinjectOnAgent(currentAgent, patch))}
         />
       {/if}
     {/if}

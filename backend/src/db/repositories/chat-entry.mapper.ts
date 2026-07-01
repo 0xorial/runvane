@@ -3,11 +3,13 @@ import type {
   ChatEntry,
   ChatEntryBase,
   CheckpointSummaryEntry,
+  ContextInjectionEntry,
   ThoughtStepStatus,
   ThoughtStreamEntry,
   ThoughtType,
 } from '../../contracts/chatEntry.js';
 import { ChatAttachmentSchema, ThoughtTypeSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
+import { PreinjectedFileRecordSchema } from '../../contracts/preinject.js';
 import { ProviderCostBreakdownSchema } from '../../contracts/provider-cost.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { UserMessageOverridesSchema } from '../../contracts/user-message-overrides.js';
@@ -44,6 +46,8 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
       return mapToolInvocation(base, payload, ctx);
     case 'checkpoint-summary':
       return mapCheckpointSummary(base, payload, ctx);
+    case 'context-injection':
+      return mapContextInjection(base, payload, ctx);
     default:
       throw new Error(`${ctx}: unknown chat entry type`);
   }
@@ -60,6 +64,17 @@ const CheckpointSummaryPayloadSchema = z.object({
 function mapCheckpointSummary(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): CheckpointSummaryEntry {
   const p = CheckpointSummaryPayloadSchema.parse(payload);
   return { ...base, type: 'checkpoint-summary', ...p };
+}
+
+const ContextInjectionPayloadSchema = z.object({
+  files: z.array(PreinjectedFileRecordSchema),
+  content: z.string(),
+});
+
+function mapContextInjection(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ContextInjectionEntry {
+  const p = ContextInjectionPayloadSchema.safeParse(payload);
+  if (!p.success) throw new Error(`${ctx}: ${p.error.message}`);
+  return { ...base, type: 'context-injection', ...p.data };
 }
 
 function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
