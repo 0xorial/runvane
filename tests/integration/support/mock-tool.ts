@@ -88,7 +88,7 @@ type MockRules = z.infer<typeof MockRulesSchema>;
  * success/failure) is delegated to a shared {@link MockToolController}; the
  * `policy` + `guardrail` come from the per-message tool overrides.
  */
-export class MockTool extends BaseTool<Record<string, never>, MockRules> {
+export class MockTool extends BaseTool<Record<string, unknown>, MockRules> {
   constructor(
     private readonly toolName: string,
     private readonly controller: MockToolController,
@@ -114,13 +114,15 @@ export class MockTool extends BaseTool<Record<string, never>, MockRules> {
   getDefaultRules(): MockRules {
     return {};
   }
-  parseParams(): Record<string, never> {
-    return {};
+  // Passes the raw params through as-is (no schema constraints) so tests can
+  // inspect exactly what the resolver — or a bypass of it — produced.
+  parseParams(raw: unknown): Record<string, unknown> {
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   }
   parseRules(raw: unknown): MockRules {
     return MockRulesSchema.parse(raw ?? {});
   }
-  runTool(_params: Record<string, never>, context: ToolRunContext): Promise<unknown> {
+  runTool(_params: Record<string, unknown>, context: ToolRunContext): Promise<unknown> {
     return this.controller.run(this.toolName, context.signal);
   }
 }

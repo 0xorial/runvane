@@ -7,6 +7,12 @@ export type ToolConfig = {
   policy: ToolPolicy;
   guardrail: boolean;
   guardrail_system_prompt: string;
+  /**
+   * Whether calling this tool goes through the separate "resolve tool
+   * parameters" LLM step. Defaults to `true`. Overridden for every tool when
+   * the agent-level flag (`getAgentSeparateParamsResolution`) is non-null.
+   */
+  separate_params_resolution: boolean;
   config: Record<string, unknown>;
 };
 
@@ -45,6 +51,7 @@ export function getToolConfigFromAgent(
     policy: toToolPolicy(rec.policy),
     guardrail: rec.guardrail === true,
     guardrail_system_prompt: typeof rec.guardrail_system_prompt === "string" ? rec.guardrail_system_prompt : "",
+    separate_params_resolution: rec.separate_params_resolution !== false,
     config,
   };
 }
@@ -56,6 +63,7 @@ export function patchToolConfigOnAgent(
     policy?: ToolPolicy;
     guardrail?: boolean;
     guardrail_system_prompt?: string;
+    separate_params_resolution?: boolean;
     config?: Record<string, unknown>;
   },
 ): AgentListItemResponse {
@@ -83,6 +91,11 @@ export function patchToolConfigOnAgent(
     if (patch.guardrail_system_prompt === "") delete toolRec.guardrail_system_prompt;
     else toolRec.guardrail_system_prompt = patch.guardrail_system_prompt;
   }
+  if (patch.separate_params_resolution !== undefined) {
+    // true is the default — store only the false override, keeping the JSON blob lean.
+    if (patch.separate_params_resolution) delete toolRec.separate_params_resolution;
+    else toolRec.separate_params_resolution = false;
+  }
   if (patch.config !== undefined) toolRec.rules = patch.config;
   tools[toolName] = toolRec;
   nextCfg.tools = tools;
@@ -102,6 +115,39 @@ export function patchGuardrailOnAgent(
       guardrail: { ...currentGuardrail, ...patch },
     },
   };
+}
+
+/**
+ * Agent-wide override for `separate_params_resolution`, forcing every tool's
+ * own flag either way. `null` (the default) means "no override — defer to
+ * each tool's individual flag".
+ */
+export function getAgentSeparateParamsResolution(agent: AgentListItemResponse | null | undefined): boolean | null {
+  const cfg =
+    agent?.default_llm_configuration &&
+    typeof agent.default_llm_configuration === "object" &&
+    !Array.isArray(agent.default_llm_configuration)
+      ? (agent.default_llm_configuration as Record<string, unknown>)
+      : {};
+  return cfg.separate_params_resolution === true || cfg.separate_params_resolution === false
+    ? cfg.separate_params_resolution
+    : null;
+}
+
+export function patchAgentSeparateParamsResolution(
+  agent: AgentListItemResponse,
+  value: boolean | null,
+): AgentListItemResponse {
+  const currentCfg =
+    agent.default_llm_configuration &&
+    typeof agent.default_llm_configuration === "object" &&
+    !Array.isArray(agent.default_llm_configuration)
+      ? (agent.default_llm_configuration as Record<string, unknown>)
+      : {};
+  const nextCfg: Record<string, unknown> = { ...currentCfg };
+  if (value === null) delete nextCfg.separate_params_resolution;
+  else nextCfg.separate_params_resolution = value;
+  return { ...agent, default_llm_configuration: nextCfg };
 }
 
 export function getToolDefaultConfig(

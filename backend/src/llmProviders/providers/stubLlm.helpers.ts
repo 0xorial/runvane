@@ -285,6 +285,43 @@ export function stubMockFanoutFinalize(): string {
   });
 }
 
+/**
+ * Drives the separate-params-resolution integration test: a user message
+ * containing NO_PARAMS_RESOLUTION_MARKER makes the planner call one mock tool
+ * with an already-structured JSON tool request — the shape a native
+ * tool-call's flattened args would take — then finalize once its result comes
+ * back. The tool-params resolver's default reply for an unrecognized tool is
+ * always `{}` (see `pickStubReply` below), so comparing the resulting
+ * tool-invocation's `parameters` against NO_PARAMS_RESOLUTION_TOOL_REQUEST vs
+ * `{}` proves whether the resolver ran at all.
+ */
+export const NO_PARAMS_RESOLUTION_MARKER = '__no_params_resolution__';
+export const NO_PARAMS_RESOLUTION_TOOL = MOCK_FANOUT_TOOL_NAMES[0];
+export const NO_PARAMS_RESOLUTION_TOOL_REQUEST = JSON.stringify({ probe: 'direct-from-planner' });
+export const STUB_NO_PARAMS_RESOLUTION_REPLY = 'No-params-resolution probe complete.';
+
+export function stubIsNoParamsResolutionConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(NO_PARAMS_RESOLUTION_MARKER);
+}
+
+export function stubNoParamsResolutionFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Call the mock tool with pre-structured JSON args.',
+    assistant_output: 'Running the mock tool.',
+    tool_requests: [{ tool_name: NO_PARAMS_RESOLUTION_TOOL, tool_request: NO_PARAMS_RESOLUTION_TOOL_REQUEST }],
+    followup: 'continue',
+  });
+}
+
+export function stubNoParamsResolutionFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Mock tool settled; summarize.',
+    assistant_output: STUB_NO_PARAMS_RESOLUTION_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
@@ -305,6 +342,9 @@ export function pickStubReply(request: LlmRequest): string {
   if (stubIsPlannerRequest(request)) {
     if (stubIsMockFanoutConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubMockFanoutFinalize() : stubMockFanoutFirstRound();
+    }
+    if (stubIsNoParamsResolutionConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubNoParamsResolutionFinalize() : stubNoParamsResolutionFirstRound();
     }
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();

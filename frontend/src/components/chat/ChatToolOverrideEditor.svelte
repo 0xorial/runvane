@@ -17,6 +17,7 @@
   } from "@/lib/chatToolDraft.svelte";
   import { readGuardrailConfig } from "@/pages/settings/agentGuardrail";
   import {
+    getAgentSeparateParamsResolution,
     getToolConfigFromAgent,
     getToolDefaultConfig,
     patchToolConfigOnAgent,
@@ -81,6 +82,7 @@
         policy: "custom",
         guardrail: entry.custom.guardrail === true,
         guardrail_system_prompt: entry.custom.guardrail_system_prompt ?? "",
+        separate_params_resolution: entry.custom.separate_params_resolution !== false,
         config:
           entry.custom.rules && typeof entry.custom.rules === "object" && !Array.isArray(entry.custom.rules)
             ? (entry.custom.rules as Record<string, unknown>)
@@ -98,6 +100,7 @@
   const guardrailLlm = $derived(
     agent ? readGuardrailConfig(agent.default_llm_configuration as Record<string, unknown>) : null,
   );
+  const agentSeparateParamsResolution = $derived(getAgentSeparateParamsResolution(agent));
 
   function placeNearAnchor(rect: DOMRect, width: number, height: number): { left: number; top: number } {
     let left = rect.right + POPUP_GAP;
@@ -155,6 +158,7 @@
       rules: cfg.config,
       guardrail: cfg.guardrail,
       ...(cfg.guardrail_system_prompt.trim() ? { guardrail_system_prompt: cfg.guardrail_system_prompt.trim() } : {}),
+      ...(cfg.separate_params_resolution ? {} : { separate_params_resolution: false }),
     };
   }
 
@@ -217,6 +221,7 @@
         rulesSchema={rulesSchemas.get(toolName)}
         guardrailLlmConfigured={guardrailLlm.provider_id.length > 0 && guardrailLlm.model_name.length > 0}
         globalGuardrailPrompt={guardrailLlm.system_prompt}
+        {agentSeparateParamsResolution}
         rulesEditorHeight={RULES_EDITOR_INITIAL_HEIGHT}
         {onPatch}
       />

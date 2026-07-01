@@ -10,6 +10,7 @@
     rulesSchema,
     guardrailLlmConfigured,
     globalGuardrailPrompt = "",
+    agentSeparateParamsResolution = null,
     readOnly = false,
     rulesEditorHeight = 180,
     onPatch,
@@ -19,11 +20,14 @@
     rulesSchema?: import("zod").ZodType;
     guardrailLlmConfigured: boolean;
     globalGuardrailPrompt?: string;
+    /** Agent-level override; non-null forces every tool's checkbox and disables it here. */
+    agentSeparateParamsResolution?: boolean | null;
     readOnly?: boolean;
     rulesEditorHeight?: number;
     onPatch: (patch: {
       guardrail?: boolean;
       guardrail_system_prompt?: string;
+      separate_params_resolution?: boolean;
       config?: Record<string, unknown>;
     }) => void;
   } = $props();
@@ -100,4 +104,19 @@
       ></textarea>
     </label>
   {/if}
+  <label
+    class="inline-flex items-center gap-2 text-xs text-muted-foreground"
+    title="When off, the tool runs with the planner's own request parsed directly as its parameters, skipping the separate parameter-resolution model call."
+  >
+    <input
+      type="checkbox"
+      checked={agentSeparateParamsResolution ?? config.separate_params_resolution}
+      disabled={readOnly || agentSeparateParamsResolution !== null}
+      onchange={(e) => onPatch({ separate_params_resolution: e.currentTarget.checked })}
+    />
+    Separate params resolution
+    {#if agentSeparateParamsResolution !== null}
+      <span class="text-[10px]">(forced {agentSeparateParamsResolution ? "on" : "off"} by the agent)</span>
+    {/if}
+  </label>
 </div>

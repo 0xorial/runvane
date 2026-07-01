@@ -14,7 +14,7 @@ import {
   publishStreamFieldDelta,
 } from '../../sse/sse-helpers.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmToolSpec } from '../../llmProviders/types.js';
-import { resolveToolConfig } from '../../tools/resolve-tool-config.js';
+import { resolveSeparateParamsResolution, resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
@@ -269,16 +269,35 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
         system_prompt: toolPromptOverride || basePrompt,
       };
     }
-    this.thoughtProcessing.startThought({
+    const separateParamsResolution = resolveSeparateParamsResolution(
+      args.agent,
+      args.input.toolOverrides,
+      args.requested.toolName,
+    );
+    if (separateParamsResolution) {
+      this.thoughtProcessing.startThought({
+        provider: this.toolParamsProvider,
+        conversationId: toolParamsInput.conversationId,
+        scope,
+        chain: ctx.chain,
+        // Tool-param resolution + the post-tool planner continuation run on the
+        // downstream model, which equals ctx.llm except for a "just this call"
+        // model override.
+        llm: ctx.downstreamLlm,
+        input: toolParamsInput,
+      });
+      return;
+    }
+    // separate_params_resolution is off for this tool: skip the extra LLM call
+    // and parse the planner's own tool request directly as the params JSON.
+    this.thoughtProcessing.startThoughtWithoutLlm({
       provider: this.toolParamsProvider,
       conversationId: toolParamsInput.conversationId,
       scope,
       chain: ctx.chain,
-      // Tool-param resolution + the post-tool planner continuation run on the
-      // downstream model, which equals ctx.llm except for a "just this call"
-      // model override.
       llm: ctx.downstreamLlm,
       input: toolParamsInput,
+      responseText: args.requested.toolRequest,
     });
   }
 

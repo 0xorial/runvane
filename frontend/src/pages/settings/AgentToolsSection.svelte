@@ -4,8 +4,10 @@
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
   import { readGuardrailConfig } from "./agentGuardrail";
   import {
+    getAgentSeparateParamsResolution,
     getToolConfigFromAgent,
     getToolDefaultConfig,
+    patchAgentSeparateParamsResolution,
     patchToolConfigOnAgent,
     TOOL_POLICIES,
     type ToolConfig,
@@ -32,6 +34,7 @@
     guardrailLlm.provider_id.length > 0 && guardrailLlm.model_name.length > 0,
   );
   const toolRulesZodSchemas = $derived(buildToolRulesZodSchemas(toolCatalog));
+  const agentSeparateParamsResolution = $derived(getAgentSeparateParamsResolution(currentAgent));
 
   // Segment colours mirror the chat-sidebar tool control for visual parity.
   const POLICY_SEGMENTS: { id: ToolPolicy; label: string; activeClass: string }[] = [
@@ -40,6 +43,17 @@
     { id: "allow", label: "Allow", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
     { id: "custom", label: "Custom", activeClass: "bg-emerald-500/25 font-semibold text-emerald-800 dark:text-emerald-200" },
   ];
+
+  const PARAMS_RESOLUTION_SEGMENTS: { id: boolean | null; label: string; activeClass: string }[] = [
+    { id: null, label: "Per-tool", activeClass: "bg-muted font-semibold text-foreground" },
+    { id: true, label: "Always", activeClass: "bg-sky-500/25 font-semibold text-sky-800 dark:text-sky-200" },
+    { id: false, label: "Never", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
+  ];
+
+  function setAgentSeparateParamsResolution(value: boolean | null): void {
+    if (!canEdit) return;
+    onAgentChange(patchAgentSeparateParamsResolution(currentAgent, value));
+  }
 
   function getToolConfig(toolName: string): ToolConfig {
     return getToolConfigFromAgent(currentAgent, toolName);
@@ -75,7 +89,35 @@
 </script>
 
 <div class="mt-3.5">
-  <div class="mb-2 text-[13px] font-bold text-foreground">Tools</div>
+  <div class="mb-2 flex items-center justify-between gap-2">
+    <div class="text-[13px] font-bold text-foreground">Tools</div>
+    <div
+      class="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+      title="Overrides every tool's own 'Separate params resolution' setting. Per-tool defers to each tool's individual flag."
+    >
+      Params resolution
+      <div
+        class="inline-flex overflow-hidden rounded-md border border-border text-[10px] font-medium"
+        role="group"
+        aria-label="Agent-wide params resolution override"
+      >
+        {#each PARAMS_RESOLUTION_SEGMENTS as seg, i (String(seg.id))}
+          {@const active = agentSeparateParamsResolution === seg.id}
+          <button
+            type="button"
+            class="px-1.5 py-0.5 transition-colors {i > 0 ? 'border-l border-border' : ''} {active
+              ? seg.activeClass
+              : 'text-muted-foreground hover:bg-secondary/80'}"
+            aria-pressed={active}
+            disabled={!canEdit}
+            onclick={() => setAgentSeparateParamsResolution(seg.id)}
+          >
+            {seg.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
   <table
     class="w-full border-collapse overflow-hidden rounded-[10px] border border-border text-xs [&_td]:border-b [&_td]:border-border [&_td]:px-2.5 [&_td]:py-2 [&_td]:align-top [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:px-2.5 [&_th]:py-2 [&_th]:text-left [&_th]:font-bold [&_th]:text-muted-foreground"
   >
@@ -154,6 +196,7 @@
                     rulesSchema={toolRulesZodSchemas.get(name)}
                     {guardrailLlmConfigured}
                     globalGuardrailPrompt={guardrailLlm.system_prompt}
+                    {agentSeparateParamsResolution}
                     readOnly={!canEdit}
                     rulesEditorHeight={200}
                     onPatch={(patch) => patchTool(name, patch)}

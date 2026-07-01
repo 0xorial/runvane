@@ -12,6 +12,15 @@ export const AgentToolConfigSchema = z.object({
   rules: z.record(z.string(), z.unknown()).optional(),
   guardrail: z.boolean().optional(),
   guardrail_system_prompt: z.string().optional(),
+  /**
+   * Whether a call to this tool goes through a separate "resolve tool
+   * parameters" LLM call that turns the planner's free-text tool request into
+   * structured JSON args. Defaults to `true` (existing behavior); `false`
+   * parses the planner's tool request directly as the params JSON, skipping
+   * the extra round-trip. Overridden agent-wide by
+   * `AgentConfiguration.separate_params_resolution` when that is non-null.
+   */
+  separate_params_resolution: z.boolean().optional(),
 });
 
 export const AgentGuardrailConfigSchema = z.object({
@@ -30,6 +39,13 @@ export const AgentConfigurationSchema = z.object({
   guardrail: AgentGuardrailConfigSchema.optional(),
   /** Absent means 'none' — no context-file preinjection (no behavior change). */
   preinject: AgentPreinjectConfigSchema.optional(),
+  /**
+   * Agent-wide override for every tool's `separate_params_resolution`.
+   * `null`/absent defers to each tool's own flag (or the default); `true`/
+   * `false` forces that behavior for all of this agent's tools regardless of
+   * their individual setting.
+   */
+  separate_params_resolution: z.boolean().nullable().optional(),
 });
 
 export const AgentModelReferenceSchema = z.object({
