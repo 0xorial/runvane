@@ -87,7 +87,14 @@ describe('stubLlm.helpers', () => {
           parts: [
             {
               kind: 'text',
-              text: 'Tools: ask_attachment, get_current_time\n\nReply with one JSON object, no markedown, no prose:',
+              // Mirror the real plannerPrompt.ts tools header (one tool per line
+              // under a `Tools (…):` header) so this fixture actually exercises
+              // the same matcher path the integration/e2e specs hit.
+              text:
+                "Tools (a separate agent fills each call's JSON args from your natural-language request):\n" +
+                '- get_current_time — Returns current server time.\n' +
+                '- ask_attachment — Ask a focused question about one attachment. Use this when an <attachment_summary> block does not contain the detail you need.\n\n' +
+                'Reply with one JSON object, no markedown, no prose:',
             },
           ],
         },

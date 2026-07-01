@@ -134,11 +134,20 @@ export function stubPlannerUserTurnCount(request: LlmRequest): number {
 }
 
 export function stubPlannerHasAttachmentSummary(request: LlmRequest): boolean {
-  return stubRequestText(request).includes('<attachment_summary');
+  // Match a REAL summary block (`<attachment_summary id="…" …>`), not the bare
+  // `<attachment_summary>` mention inside the ask_attachment tool description —
+  // that description is injected into every planner prompt, so a substring test
+  // for `<attachment_summary` false-positives on plain conversations (e.g. the
+  // probe), shadowing the probe/tool paths and hanging those specs.
+  return /<attachment_summary\s+id=/.test(stubRequestText(request));
 }
 
 export function stubPlannerListsAskAttachment(request: LlmRequest): boolean {
-  return /Tools:.*ask_attachment/.test(stubRequestText(request));
+  // The real planner prompt lists tools one-per-line as `- <name> — <desc>`
+  // under a `Tools (…):` header (no colon-immediately-after, and the name is on
+  // its own line), so the old `/Tools:.*ask_attachment/` never matched the
+  // actual prompt. Match the tool-list entry itself instead.
+  return /(^|\n)- ask_attachment\b/.test(stubRequestText(request));
 }
 
 export function stubHasAskAttachmentToolResult(request: LlmRequest): boolean {
