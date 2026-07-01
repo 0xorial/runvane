@@ -1,4 +1,5 @@
 import { getConversation, setConversationDefaultViewLeaf } from "@/api/client";
+import { get } from "svelte/store";
 import {
   getChatSessionPending,
   getChatSessionStore,
@@ -7,6 +8,7 @@ import {
   subscribeConversationStream,
 } from "@/lib/chatSessionRegistry";
 import { resetChatToolDraft, seedChatToolDraftFromUserMessage } from "@/lib/chatToolDraft.svelte";
+import { pathname, replacePath } from "@/lib/router";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import type { LlmRef } from "../../../backend/src/contracts/llm";
 import type { ChatAttachment } from "@/protocol/chatEntry";
@@ -37,10 +39,28 @@ export type AppendOptimisticUserMessageInput = {
   attachments?: ChatAttachment[];
 };
 
+// Keep the `?agent=` URL param (which drives the chat tools panel and the
+// composer's agent selector) in sync with the agent this conversation/branch
+// was actually last used with — otherwise switching conversations leaves
+// those panels showing whatever agent happened to be selected before.
+function syncAgentIdFromLastUser(entry: UserMessageEntry | null): void {
+  const agentId = entry?.agentId?.trim();
+  if (!agentId) return;
+  const path = get(pathname);
+  const q = path.indexOf("?");
+  const pathOnly = q >= 0 ? path.slice(0, q) : path;
+  const params = new URLSearchParams(q >= 0 ? path.slice(q) : "");
+  if (params.get("agent") === agentId) return;
+  params.set("agent", agentId);
+  replacePath(`${pathOnly}?${params.toString()}`);
+}
+
 function seedToolDraftFromStore(activeStore: ChatSessionStore): void {
   const path = activeStore.getActivePathRows().map((row$) => row$.get());
   const lastUser = [...path].reverse().find((entry) => entry.type === "user-message");
-  seedChatToolDraftFromUserMessage(lastUser?.type === "user-message" ? lastUser : null);
+  const lastUserEntry = lastUser?.type === "user-message" ? lastUser : null;
+  seedChatToolDraftFromUserMessage(lastUserEntry);
+  syncAgentIdFromLastUser(lastUserEntry);
 }
 
 function buildOptimisticUserEntry(
