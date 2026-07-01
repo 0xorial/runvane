@@ -295,14 +295,19 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   }
 
   /**
-   * Re-sum the stored conversation token counters straight from the streamed
+   * Re-sum the stored conversation token/cost counters straight from the streamed
    * LLM entries, mirroring exactly what `addTokenUsage` accumulated during the
-   * run (raw `promptTokens` / `cachedPromptTokens` / `completionTokens`). Used
-   * after a split moves entries between conversations so both totals stay truthful.
+   * run (raw `promptTokens` / `cachedPromptTokens` / `completionTokens` /
+   * `provider_cost`). Used after a split moves entries between conversations so
+   * both totals stay truthful.
    */
-  async rawTokenTotals(
-    conversationId: string,
-  ): Promise<{ promptTokens: number; cachedPromptTokens: number; completionTokens: number }> {
+  async rawTokenTotals(conversationId: string): Promise<{
+    promptTokens: number;
+    cachedPromptTokens: number;
+    completionTokens: number;
+    costUsd: number;
+    costPartial: boolean;
+  }> {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT payload_json
        FROM chat_entries
@@ -312,6 +317,8 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     let promptTokens = 0;
     let cachedPromptTokens = 0;
     let completionTokens = 0;
+    let costUsd = 0;
+    let costPartial = false;
     for (const row of rows) {
       let payload: Record<string, unknown>;
       try {
@@ -325,8 +332,15 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       if (typeof p === 'number' && Number.isFinite(p)) promptTokens += Math.trunc(p);
       if (typeof c === 'number' && Number.isFinite(c)) cachedPromptTokens += Math.trunc(c);
       if (typeof comp === 'number' && Number.isFinite(comp)) completionTokens += Math.trunc(comp);
+      const cost = payload.provider_cost;
+      const isBillableTurn = (typeof p === 'number' && p > 0) || (typeof comp === 'number' && comp > 0);
+      if (typeof cost === 'number' && Number.isFinite(cost)) {
+        costUsd += cost;
+      } else if (isBillableTurn) {
+        costPartial = true;
+      }
     }
-    return { promptTokens, cachedPromptTokens, completionTokens };
+    return { promptTokens, cachedPromptTokens, completionTokens, costUsd, costPartial };
   }
 
   async tokenUsageByModel(conversationId: string): Promise<ConversationRow['tokenUsageByModel']> {

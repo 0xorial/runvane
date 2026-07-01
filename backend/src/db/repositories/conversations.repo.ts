@@ -187,14 +187,24 @@ export class ConversationsRepo {
 
   async addTokenUsage(
     id: string,
-    tokens: { promptTokens: number; cachedPromptTokens: number; completionTokens: number },
+    tokens: {
+      promptTokens: number;
+      cachedPromptTokens: number;
+      completionTokens: number;
+      /** Provider-reported cost for this turn (e.g. OpenRouter's `usage.cost`), if it reported one. */
+      costUsd?: number;
+    },
   ): Promise<ConversationEntity> {
+    const isBillableTurn = tokens.promptTokens > 0 || tokens.completionTokens > 0;
+    const hasCost = typeof tokens.costUsd === 'number' && Number.isFinite(tokens.costUsd);
     return this.prisma.conversation.update({
       where: { id },
       data: {
         promptTokensTotal: { increment: tokens.promptTokens },
         cachedPromptTokensTotal: { increment: tokens.cachedPromptTokens },
         completionTokensTotal: { increment: tokens.completionTokens },
+        ...(hasCost ? { providerCostTotal: { increment: tokens.costUsd } } : {}),
+        ...(!hasCost && isBillableTurn ? { providerCostPartial: true } : {}),
       },
     });
   }
@@ -202,15 +212,24 @@ export class ConversationsRepo {
   /** Overwrite the stored token counters (used after a split moves entries away). */
   async setTokenTotals(
     id: string,
-    tokens: { promptTokens: number; cachedPromptTokens: number; completionTokens: number },
+    tokens: {
+      promptTokens: number;
+      cachedPromptTokens: number;
+      completionTokens: number;
+      costUsd: number;
+      costPartial: boolean;
+    },
   ): Promise<void> {
     await this.prisma.$executeRawUnsafe(
       `UPDATE conversations
-       SET prompt_tokens_total = ?, cached_prompt_tokens_total = ?, completion_tokens_total = ?
+       SET prompt_tokens_total = ?, cached_prompt_tokens_total = ?, completion_tokens_total = ?,
+           provider_cost_total = ?, provider_cost_partial = ?
        WHERE id = ?`,
       Math.max(0, Math.trunc(tokens.promptTokens)),
       Math.max(0, Math.trunc(tokens.cachedPromptTokens)),
       Math.max(0, Math.trunc(tokens.completionTokens)),
+      Math.max(0, tokens.costUsd),
+      tokens.costPartial ? 1 : 0,
       id,
     );
   }

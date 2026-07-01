@@ -30,6 +30,8 @@ export const ConversationSseRowSchema = z.object({
   promptTokensTotal: z.number(),
   cachedPromptTokensTotal: z.number(),
   completionTokensTotal: z.number(),
+  providerCostTotal: z.number(),
+  providerCostPartial: z.boolean(),
   /** User's branch anchor (stored on conversation); client resolves to live tip. */
   defaultViewLeafAnchorId: z.string().nullable(),
   tokenUsageByModel: z.array(

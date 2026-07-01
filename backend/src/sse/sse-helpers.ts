@@ -29,6 +29,8 @@ export function toConversationSseRow(
     promptTokensTotal: entity.promptTokensTotal,
     cachedPromptTokensTotal: entity.cachedPromptTokensTotal,
     completionTokensTotal: entity.completionTokensTotal,
+    providerCostTotal: entity.providerCostTotal,
+    providerCostPartial: entity.providerCostPartial,
     defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
     tokenUsageByModel,
   };

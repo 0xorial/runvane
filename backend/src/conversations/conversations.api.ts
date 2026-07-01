@@ -25,6 +25,8 @@ export function toConversationRow(
     promptTokensTotal: entity.promptTokensTotal,
     cachedPromptTokensTotal: entity.cachedPromptTokensTotal,
     completionTokensTotal: entity.completionTokensTotal,
+    providerCostTotal: entity.providerCostTotal,
+    providerCostPartial: entity.providerCostPartial,
     defaultViewLeafAnchorId: entity.defaultViewLeafEntryId,
     defaultViewLeafEntryId: null,
     // Fork provenance lives in columns the generated Prisma client doesn't know

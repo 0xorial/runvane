@@ -85,9 +85,9 @@ export class StubLlmProvider implements LlmProvider, StubLlmControl {
     const text = queued?.text ?? pickStubReply(request);
     const streamMs = queued?.streamMs ?? (instant ? undefined : this.defaultStreamMs);
     if (streamMs === undefined) {
-      return instantStubText(text, onEvent);
+      return instantStubText(text, onEvent, queued?.costUsd);
     }
-    return streamStubText(text, streamMs, onEvent, signal);
+    return streamStubText(text, streamMs, onEvent, signal, queued?.costUsd);
   }
 
   async embedTexts(

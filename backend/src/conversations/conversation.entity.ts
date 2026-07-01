@@ -11,6 +11,8 @@ export const ConversationEntitySchema = z.object({
   promptTokensTotal: z.number(),
   cachedPromptTokensTotal: z.number(),
   completionTokensTotal: z.number(),
+  providerCostTotal: z.number(),
+  providerCostPartial: z.boolean(),
   defaultViewLeafEntryId: z.string().nullable(),
 });
 export type ConversationEntity = z.infer<typeof ConversationEntitySchema>;

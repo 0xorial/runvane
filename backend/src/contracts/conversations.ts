@@ -35,6 +35,10 @@ export const ConversationRowSchema = z.object({
   promptTokensTotal: z.number(),
   cachedPromptTokensTotal: z.number(),
   completionTokensTotal: z.number(),
+  /** Sum of provider-reported costs (e.g. OpenRouter's `usage.cost`) across turns that reported one. */
+  providerCostTotal: z.number(),
+  /** True when some billable turn's provider didn't report a cost, so `providerCostTotal` is a lower bound. */
+  providerCostPartial: z.boolean(),
   /** Stored branch anchor; walk descendants to resolve the live view tip. */
   defaultViewLeafAnchorId: z.string().nullable(),
   /** Resolved live tip of the anchored branch (API convenience). */

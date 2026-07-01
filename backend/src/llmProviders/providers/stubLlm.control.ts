@@ -2,6 +2,8 @@ export type StubQueuedResponse = {
   text: string;
   /** Per-token stream delay (ms). Omit for instant (title/tool) or provider default. */
   streamMs?: number;
+  /** Simulate a provider that reports cost directly in its response (e.g. OpenRouter's `usage.cost`). */
+  costUsd?: number;
 };
 
 export type StubModelScript = {

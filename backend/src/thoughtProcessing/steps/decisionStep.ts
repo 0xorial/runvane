@@ -69,6 +69,7 @@ export class DecisionStep {
       promptTokens,
       cachedPromptTokens: cachedPromptTokens ?? 0,
       completionTokens,
+      costUsd: completion.usage.costUsd,
     });
     await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, ctx.conversationId);
   }

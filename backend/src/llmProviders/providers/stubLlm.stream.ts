@@ -10,6 +10,7 @@ export async function streamStubText(
   delayMs: number,
   onEvent: (event: LlmStreamEvent) => void,
   signal?: AbortSignal,
+  costUsd?: number,
 ): Promise<LlmCompletion> {
   let acc = '';
   for (const token of tokenizeStubStream(text)) {
@@ -22,16 +23,20 @@ export async function streamStubText(
   return {
     parts: [{ kind: 'text', text: acc }],
     finishReason: 'stop',
-    usage: { promptTokens: 1, completionTokens: acc.length },
+    usage: { promptTokens: 1, completionTokens: acc.length, ...(costUsd !== undefined ? { costUsd } : {}) },
   };
 }
 
-export function instantStubText(text: string, onEvent: (event: LlmStreamEvent) => void): LlmCompletion {
+export function instantStubText(
+  text: string,
+  onEvent: (event: LlmStreamEvent) => void,
+  costUsd?: number,
+): LlmCompletion {
   onEvent({ type: 'text_delta', delta: text });
   onEvent({ type: 'finish', reason: 'stop' });
   return {
     parts: [{ kind: 'text', text }],
     finishReason: 'stop',
-    usage: { promptTokens: 1, completionTokens: text.length },
+    usage: { promptTokens: 1, completionTokens: text.length, ...(costUsd !== undefined ? { costUsd } : {}) },
   };
 }
