@@ -76,6 +76,11 @@ export function installTestDiagnostics(suite) {
     log(`UNCAUGHT_EXCEPTION code=${err?.code} msg=${err?.message}`);
     log(`  worst-recent-loop-lag: ${worstRecentLag()}`);
     if (err?.stack) toFile(`${err.stack}\n`);
+    // An uncaught exception means the harness state is broken (e.g. a server
+    // failed to start). Exit loudly — swallowing it turns a crash into an
+    // infinite hang with only the metrics sampler still ticking.
+    log(`aborting run (uncaught exception)`);
+    process.exit(1);
   });
   process.on("exit", (code) => log(`exit code=${code} — full log: ${logPath}`));
 
