@@ -4,8 +4,10 @@ import { DatabaseModule } from '../db/database.module.js';
 import { EmbeddingsService } from './embeddings/embeddings.service.js';
 import { GRAPH_BUILDERS } from './graph/graph-builder.js';
 import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
+import { IngestRunner } from './ingestion/ingest-runner.service.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
 import { LlmGraphBuilder } from './graph/llm-graph-builder.js';
+import { RagWatchService } from './watch/rag-watch.service.js';
 import { RagController } from './rag.controller.js';
 import { RetrieverService } from './retrieval/retriever.service.js';
 import { ENTITY_SOURCES } from './sources/entity-source.js';
@@ -45,8 +47,10 @@ import { RAG_DATA_DIR, StorageRegistry } from './store/storage-registry.service.
     },
     GraphBuilderRegistry,
     IngestionService,
+    IngestRunner,
+    RagWatchService,
     RetrieverService,
   ],
-  exports: [StorageRegistry, RetrieverService, IngestionService, EntitySourceRegistry, GraphBuilderRegistry],
+  exports: [StorageRegistry, RetrieverService, IngestionService, IngestRunner, EntitySourceRegistry, GraphBuilderRegistry],
 })
 export class RagModule {}

@@ -49,12 +49,21 @@ export class TaskRegistryService {
     return n;
   }
 
+  /** Update a task's live progress line and publish the change. */
+  setProgress(id: string, progress: string): void {
+    const rec = this.tasks.get(id);
+    if (!rec) return;
+    rec.progress = progress;
+    this.bus.next({ type: TaskSseType.UPSERT, task: toInfo(rec) });
+  }
+
   async run<T>(
     spec: {
       kind: TaskInfo['kind'];
       title: string;
       conversationId?: string | null;
       parentSignal?: AbortSignal;
+      meta?: Record<string, string>;
     },
     fn: (signal: AbortSignal, taskId: string) => Promise<T>,
   ): Promise<T> {
@@ -68,6 +77,8 @@ export class TaskRegistryService {
       conversationId: spec.conversationId ?? null,
       status: 'running',
       startedAt: new Date().toISOString(),
+      progress: null,
+      meta: spec.meta ?? {},
       controller,
     };
     this.tasks.set(id, rec);

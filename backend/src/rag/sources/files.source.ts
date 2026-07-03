@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { watch as fsWatch } from 'node:fs';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { EntitySource, SourceItem } from './entity-source.js';
@@ -46,6 +47,26 @@ async function safeRealpath(p: string): Promise<string> {
 export class FilesEntitySource implements EntitySource {
   readonly type = 'files';
   readonly label = 'Files';
+  private readonly logger = new Logger(FilesEntitySource.name);
+
+  /** Recursive fs.watch on each root (Node ≥20 supports recursive on Linux).
+   *  Non-persistent so watchers never hold the process open; a root that
+   *  doesn't exist (yet) is skipped with a warning. */
+  watch(rawParams: Record<string, unknown>, onChange: () => void, signal: AbortSignal): void {
+    const params = parseParams(rawParams);
+    for (const root of params.roots) {
+      try {
+        const watcher = fsWatch(path.resolve(root), { recursive: true, persistent: false, signal }, () =>
+          onChange(),
+        );
+        watcher.on('error', (error) => {
+          this.logger.warn(`files watch on '${root}' errored: ${String(error)}`);
+        });
+      } catch (error) {
+        this.logger.warn(`files watch on '${root}' not started: ${String(error)}`);
+      }
+    }
+  }
 
   async *enumerate(rawParams: Record<string, unknown>, signal?: AbortSignal): AsyncIterable<SourceItem> {
     const params = parseParams(rawParams);

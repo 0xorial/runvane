@@ -18,6 +18,8 @@ export type StorageManifest = {
    *  at creation (the graph must be built consistently across ingests).
    *  Null = no graph layer for this storage. */
   graph?: { builder: string; params: Record<string, unknown> } | null;
+  /** Auto-ingest on source changes (needs a source with watch support). */
+  watch?: boolean;
   createdAt: string;
   lastIngestedAt: string | null;
 };

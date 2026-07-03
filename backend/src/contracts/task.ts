@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const TaskKindSchema = z.enum(['llm', 'tool']);
+export const TaskKindSchema = z.enum(['llm', 'tool', 'ingest']);
 export type TaskKind = z.infer<typeof TaskKindSchema>;
 
 export const TaskStatusSchema = z.enum(['running', 'cancelling']);
@@ -13,6 +13,10 @@ export const TaskInfoSchema = z.object({
   conversationId: z.string().nullable(),
   status: TaskStatusSchema,
   startedAt: z.string(),
+  /** Live one-line progress ("+3 ~1 =40"), updated via UPSERT events. */
+  progress: z.string().nullable(),
+  /** Small string tags for consumers to key on (e.g. { storageId }). */
+  meta: z.record(z.string(), z.string()),
 });
 export type TaskInfo = z.infer<typeof TaskInfoSchema>;
 

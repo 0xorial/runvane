@@ -8,6 +8,7 @@
     getRagStorages,
     ingestRagStorage,
     queryRagStorage,
+    updateRagStorage,
     type CreateRagStorageInput,
     type EntitySourceInfo,
     type GraphBuilderInfo,
@@ -16,6 +17,10 @@
     type RagQueryHit,
     type RagStorageInfo,
   } from "@/api/ragClient";
+  import { cancelTask } from "@/api/client";
+  import { ensureTasksStream, getTasksSnapshot } from "@/lib/tasksStore.svelte";
+  import type { TaskInfo } from "../../../../backend/src/contracts/task";
+  import Icon from "@/components/ui/Icon.svelte";
   import { ghostBtn } from "./settingsClasses";
 
   let storages = $state<RagStorageInfo[]>([]);
@@ -34,6 +39,7 @@
   let graphBuilder = $state("");
   let graphProviderId = $state("");
   let graphModel = $state("");
+  let watchNew = $state(false);
   let creating = $state(false);
 
   // Per-storage transient UI state.
@@ -76,7 +82,30 @@
     }
   }
 
-  onMount(load);
+  onMount(() => {
+    ensureTasksStream();
+    void load();
+  });
+
+  // Live indexing state per storage, straight off the tasks SSE stream — so
+  // manual, watch-triggered, and even other-tab ingests all show up here.
+  const indexingTasks = $derived.by(() => {
+    const byStorage = new Map<string, TaskInfo>();
+    for (const task of getTasksSnapshot()) {
+      const storageId = task.kind === "ingest" ? task.meta.storageId : undefined;
+      if (storageId) byStorage.set(storageId, task);
+    }
+    return byStorage;
+  });
+
+  // When an ingest task for a listed storage finishes, refresh counts/meta.
+  let prevIndexing = new Set<string>();
+  $effect(() => {
+    const ids = new Set(indexingTasks.keys());
+    const someFinished = [...prevIndexing].some((id) => !ids.has(id));
+    prevIndexing = ids;
+    if (someFinished) void load();
+  });
 
   async function create(): Promise<void> {
     if (!canCreate) return;
@@ -102,11 +131,13 @@
                   : {},
             }
           : null,
+        watch: watchNew,
       };
       await createRagStorage(input);
       name = "";
       rootsText = "";
       graphBuilder = "";
+      watchNew = false;
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -156,6 +187,25 @@
     } finally {
       busyId = null;
     }
+  }
+
+  async function toggleWatch(storage: RagStorageInfo): Promise<void> {
+    busyId = storage.id;
+    error = null;
+    try {
+      await updateRagStorage(storage.id, { watch: !storage.watch });
+      await load();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busyId = null;
+    }
+  }
+
+  function cancelIndexing(taskId: string): void {
+    void cancelTask(taskId).catch((e) => {
+      error = e instanceof Error ? e.message : String(e);
+    });
   }
 </script>
 
@@ -214,6 +264,11 @@
           {/each}
         </select>
       </label>
+      <label class="flex items-center gap-1.5 self-end pb-1.5 text-xs text-foreground">
+        <input type="checkbox" data-testid="rag-watch" bind:checked={watchNew} />
+        <span class="font-semibold">Watch sources</span>
+        <span class="text-muted-foreground">(auto-index on change)</span>
+      </label>
       {#if graphBuilder === "llm"}
         <div class="grid grid-cols-2 gap-2.5">
           <label class="flex flex-col gap-1 text-xs">
@@ -242,10 +297,19 @@
   {:else}
     <div class="flex flex-col gap-2.5">
       {#each storages as storage (storage.id)}
+        {@const indexing = indexingTasks.get(storage.id)}
         <section class="rounded-lg border border-border bg-card p-3" data-testid="rag-storage" data-storage-name={storage.name}>
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <div class="text-sm font-bold text-foreground" data-testid="rag-storage-name">{storage.name}</div>
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-bold text-foreground" data-testid="rag-storage-name">{storage.name}</div>
+                {#if storage.watch}
+                  <span
+                    class="rounded bg-teal-500/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-teal-600"
+                    title="Auto-indexes when the source changes"
+                    data-testid="rag-watch-badge">watching</span>
+                {/if}
+              </div>
               <div class="text-xs text-muted-foreground" data-testid="rag-storage-meta">
                 <code>{storage.entitySource}</code> · {storage.embeddingProviderId}/{storage.embeddingModel}
                 {#if storage.embeddingDim}· {storage.embeddingDim}d{/if}
@@ -256,14 +320,44 @@
               <div class="mt-0.5 text-[11px] text-muted-foreground">id: <code>{storage.id}</code></div>
             </div>
             <div class="flex shrink-0 gap-2">
-              <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-ingest" disabled={busyId === storage.id} onclick={() => ingest(storage.id)}>
-                {busyId === storage.id ? "Working…" : "Ingest"}
+              <button
+                type="button"
+                class="{ghostBtn} border-slate-300"
+                data-testid="rag-watch-toggle"
+                title={storage.watch ? "Stop watching sources" : "Auto-index when sources change"}
+                disabled={busyId === storage.id}
+                onclick={() => toggleWatch(storage)}
+              >
+                {storage.watch ? "Unwatch" : "Watch"}
               </button>
-              <button type="button" class="{ghostBtn} border-destructive/40 text-destructive" data-testid="rag-delete" disabled={busyId === storage.id} onclick={() => remove(storage.id)}>
+              <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-ingest" disabled={busyId === storage.id || !!indexing} onclick={() => ingest(storage.id)}>
+                {indexing ? "Indexing…" : busyId === storage.id ? "Working…" : "Ingest"}
+              </button>
+              <button type="button" class="{ghostBtn} border-destructive/40 text-destructive" data-testid="rag-delete" disabled={busyId === storage.id || !!indexing} onclick={() => remove(storage.id)}>
                 Delete
               </button>
             </div>
           </div>
+
+          {#if indexing}
+            <div
+              class="mt-2 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs text-primary"
+              data-testid="rag-indexing"
+            >
+              <Icon name="loader" class="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.2} />
+              <span class="font-medium">Indexing{indexing.meta.trigger === "watch" ? " (source changed)" : ""}…</span>
+              {#if indexing.progress}
+                <span class="tabular-nums text-primary/80" data-testid="rag-indexing-progress">{indexing.progress}</span>
+              {/if}
+              <button
+                type="button"
+                class="ml-auto rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                onclick={() => cancelIndexing(indexing.id)}
+              >
+                {indexing.status === "cancelling" ? "Cancelling…" : "Cancel"}
+              </button>
+            </div>
+          {/if}
 
           {#if ingestResults[storage.id]}
             {@const r = ingestResults[storage.id]}

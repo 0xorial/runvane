@@ -30,6 +30,7 @@ export type CreateRagStorageInput = {
   chunkSize?: number;
   chunkOverlap?: number;
   graph?: StorageGraphConfig | null;
+  watch?: boolean;
 };
 
 export function getRagSources(): Promise<EntitySourceInfo[]> {
@@ -46,6 +47,10 @@ export function getRagStorages(): Promise<RagStorageInfo[]> {
 
 export function createRagStorage(input: CreateRagStorageInput): Promise<RagStorageInfo> {
   return sendJson("/api/rag/storages", "POST", input) as Promise<RagStorageInfo>;
+}
+
+export function updateRagStorage(id: string, patch: { watch: boolean }): Promise<RagStorageInfo> {
+  return sendJson(`/api/rag/storages/${encodeURIComponent(id)}`, "PATCH", patch) as Promise<RagStorageInfo>;
 }
 
 export function deleteRagStorage(id: string): Promise<{ ok: boolean }> {

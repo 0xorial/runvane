@@ -41,7 +41,12 @@ function storageCard(page: Page, name: string) {
 }
 
 /** Fill the create form and submit; returns the new storage's card locator. */
-async function createStorage(page: Page, name: string, roots: string, opts: { graph?: boolean } = {}) {
+async function createStorage(
+  page: Page,
+  name: string,
+  roots: string,
+  opts: { graph?: boolean; watch?: boolean } = {},
+) {
   await page.getByTestId("rag-name").fill(name);
   await page.getByTestId("rag-provider").fill("stub");
   await page.getByTestId("rag-model").fill("stub-embed");
@@ -51,6 +56,7 @@ async function createStorage(page: Page, name: string, roots: string, opts: { gr
     await page.getByTestId("rag-graph-provider").fill("stub");
     await page.getByTestId("rag-graph-model").fill("stub-graph");
   }
+  if (opts.watch) await page.getByTestId("rag-watch").check();
   await page.getByTestId("rag-create").click();
   const card = storageCard(page, name);
   await expect(card).toBeVisible({ timeout: 10_000 });
@@ -192,6 +198,61 @@ test("RAG graph: ingest extracts a graph; graph strategy pulls connected docs + 
 
     await card.getByTestId("rag-delete").click();
     await expect(card).toHaveCount(0, { timeout: 10_000 });
+  } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG watch: a watched storage auto-indexes on source changes, no Ingest click", async ({ app }) => {
+  const docs = await makeDocs({ "db.md": DB_DOC });
+  const name = `e2e-watch-${Date.now()}`;
+  try {
+    await app.page.goto("/settings/rag");
+    const card = await createStorage(app.page, name, docs, { watch: true });
+    await expect(card.getByTestId("rag-watch-badge")).toBeVisible();
+
+    // Starting a watcher catches up immediately: the initial index runs on
+    // its own (visible in counts once the ingest task finishes).
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("1 chunks / 1 sources", {
+      timeout: 15_000,
+    });
+
+    // A new file under the watched root triggers a debounced re-index.
+    await writeFile(path.join(docs, "cooking.md"), COOK_DOC);
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("2 chunks / 2 sources", {
+      timeout: 15_000,
+    });
+
+    // Unwatch: badge clears and the toggle flips.
+    await card.getByTestId("rag-watch-toggle").click();
+    await expect(card.getByTestId("rag-watch-badge")).toHaveCount(0, { timeout: 10_000 });
+
+    await card.getByTestId("rag-delete").click();
+    await expect(card).toHaveCount(0, { timeout: 10_000 });
+  } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG: the storage card shows live indexing state while a slow ingest runs", async ({ app }) => {
+  // The delay marker slows the stub's graph-extraction reply, keeping the
+  // ingest task alive long enough to observe the live state.
+  const docs = await makeDocs({ "slow.md": `__stub_delay:2000__ ${GRAPH_DOC_A}` });
+  const name = `e2e-livestate-${Date.now()}`;
+  try {
+    await app.page.goto("/settings/rag");
+    const card = await createStorage(app.page, name, docs, { graph: true });
+
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-indexing")).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByTestId("rag-ingest")).toBeDisabled();
+
+    // The task finishes: live block clears, result + counts land.
+    await expect(card.getByTestId("rag-indexing")).toHaveCount(0, { timeout: 15_000 });
+    await expect(card.getByTestId("rag-ingest-result")).toContainText("+1 added");
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("1 chunks");
+
+    await card.getByTestId("rag-delete").click();
   } finally {
     await rm(docs, { recursive: true, force: true });
   }

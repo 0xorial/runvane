@@ -20,9 +20,18 @@ export const CreateStorageSchema = z
     chunkSize: z.number().finite().int().min(1).max(100_000).optional(),
     chunkOverlap: z.number().finite().int().min(0).max(100_000).optional(),
     graph: StorageGraphSchema.nullish(),
+    watch: z.boolean().default(false),
   })
   .strict();
 export type CreateStorageBody = z.infer<typeof CreateStorageSchema>;
+
+/** Body for updating a storage's mutable settings. */
+export const UpdateStorageSchema = z
+  .object({
+    watch: z.boolean(),
+  })
+  .strict();
+export type UpdateStorageBody = z.infer<typeof UpdateStorageSchema>;
 
 /** Body for a debug similarity query against one or more storages. */
 export const RagDebugQuerySchema = z
@@ -87,6 +96,7 @@ export type RagStorageInfo = {
   chunkSize: number;
   chunkOverlap: number;
   graph: StorageGraphConfig | null;
+  watch: boolean;
   createdAt: string;
   lastIngestedAt: string | null;
   counts: { chunks: number; sources: number; nodes: number; edges: number };

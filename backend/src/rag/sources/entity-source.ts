@@ -22,6 +22,14 @@ export interface EntitySource {
   readonly label: string;
   /** Stream current items for the given source params. */
   enumerate(params: Record<string, unknown>, signal?: AbortSignal): AsyncIterable<SourceItem>;
+  /**
+   * Optional: subscribe to change notifications for the given params, calling
+   * `onChange` on any potentially relevant change (the caller debounces and
+   * re-ingests; false positives are cheap thanks to hash-skipping). Watching
+   * is best-effort: log-and-continue on errors, stop when `signal` aborts,
+   * and never hold the process open.
+   */
+  watch?(params: Record<string, unknown>, onChange: () => void, signal: AbortSignal): void;
 }
 
 /** DI token: the array of available entity sources. */

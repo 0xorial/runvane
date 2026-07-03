@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
 import { BaseTool, type ToolRunContext } from '../../base-tool.js';
 import { RetrieverService } from '../../../rag/retrieval/retriever.service.js';
+import { StorageRegistry } from '../../../rag/store/storage-registry.service.js';
 import { parseRagToolParams, ragToolParamsSchema, type RagToolParams } from './params.js';
 import { parseRagToolRules, RagToolRulesSchema, type RagToolRules } from './rules.js';
 
 @Injectable()
 export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
-  constructor(private readonly retriever: RetrieverService) {
+  constructor(
+    private readonly retriever: RetrieverService,
+    private readonly storages: StorageRegistry,
+  ) {
     super();
   }
 
@@ -65,8 +69,16 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
       rules.strategy === 'graph'
         ? await this.retriever.retrieveGraph({ ...retrieveInput, maxHops: rules.max_hops })
         : { hits: await this.retriever.retrieve(retrieveInput), graph: null };
+    // Full retrieval trace so a user can drill into what ran from the tool row.
+    const searched = rules.storages.map(
+      (id) => this.storages.getManifest(id)?.name ?? `${id} (missing)`,
+    );
     return {
       query: params.query,
+      strategy: rules.strategy,
+      ...(rules.strategy === 'graph' ? { max_hops: rules.max_hops } : {}),
+      storages: searched,
+      top_k: topK,
       count: hits.length,
       hits: hits.map((hit) => ({
         storage: hit.storageName,

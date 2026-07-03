@@ -17,6 +17,7 @@
   function dotClass(task: TaskInfo): string {
     if (task.status === "cancelling") return "bg-amber-500";
     if (task.kind === "tool") return "bg-sky-500";
+    if (task.kind === "ingest") return "bg-violet-500";
     return "bg-emerald-500";
   }
 </script>
@@ -32,6 +33,9 @@
           <span class="block truncate text-xs text-foreground">{task.title}</span>
           <span class="block text-[10px] text-muted-foreground">
             {task.kind} · {elapsed(task.startedAt)}
+            {#if task.progress}
+              <span> · </span><span class="tabular-nums">{task.progress}</span>
+            {/if}
             {#if cancelling}
               <span> · </span><span class="text-amber-600 dark:text-amber-400">cancelling…</span>
             {/if}
