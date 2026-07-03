@@ -28,7 +28,9 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 - message steering (abort in-flight runs and redirect)
 - RAG tool (`rag`) — semantic retrieval over configured storages, with an optional
   knowledge-graph layer (pluggable graph builders; `graph` strategy walks entity
-  relations to pull in connected-but-lexically-far chunks)
+  relations to pull in connected-but-lexically-far chunks); storages can watch
+  their sources and re-index on change, with live progress in the running-tasks
+  panel
 - api tool (backend introspection: tools, agents, presets, tasks)
 - conversations tool (read chat history and conversation metadata)
 - filesystem tools (`filesystem`, `filesystem_index`)
