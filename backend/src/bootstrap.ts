@@ -89,7 +89,7 @@ export async function createRunvaneApp(config: RunvaneBootConfig): Promise<Runva
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableCors({
     origin: corsOriginsFor(config.frontendOrigin),
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   app.useGlobalPipes(new ZodValidationPipe());
