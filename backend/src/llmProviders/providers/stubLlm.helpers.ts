@@ -233,6 +233,42 @@ export function stubProbeTimePlannerFinalize(): string {
   });
 }
 
+/**
+ * Graph-extraction stub: matched on the llm graph builder's system prompt.
+ * The reply is derived deterministically from wiki-style annotations in the
+ * document itself, so tests control the graph from their fixture files:
+ *   `[[Name]]`                 → an entity (mentioned in that chunk)
+ *   `[[A]] --relation--> [[B]]` → an edge
+ */
+export function stubIsGraphExtractionRequest(blob: string): boolean {
+  return /You extract a knowledge graph/i.test(blob);
+}
+
+export function stubGraphExtractionReply(blob: string): string {
+  const parts = blob.split(/\[chunk (\d+)\]/);
+  const chunks: Array<{ index: number; text: string }> = [];
+  for (let i = 1; i + 1 < parts.length; i += 2) {
+    chunks.push({ index: Number(parts[i]), text: parts[i + 1] ?? '' });
+  }
+  const entityChunks = new Map<string, Set<number>>();
+  const relations: Array<{ source: string; target: string; relation: string }> = [];
+  for (const { index, text } of chunks) {
+    for (const match of text.matchAll(/\[\[([^\]]+)\]\]/g)) {
+      const name = match[1]!.trim();
+      const set = entityChunks.get(name) ?? new Set<number>();
+      set.add(index);
+      entityChunks.set(name, set);
+    }
+    for (const match of text.matchAll(/\[\[([^\]]+)\]\]\s*--([^->]+)-->\s*\[\[([^\]]+)\]\]/g)) {
+      relations.push({ source: match[1]!.trim(), relation: match[2]!.trim(), target: match[3]!.trim() });
+    }
+  }
+  return JSON.stringify({
+    entities: [...entityChunks].map(([name, set]) => ({ name, chunks: [...set].sort((a, b) => a - b) })),
+    relations,
+  });
+}
+
 /** Drives the rag-tool e2e: a user message containing RAG_PROBE_MARKER makes
  *  the planner call the `rag` tool once, then finalize. */
 export function stubIsRagProbeConversation(request: LlmRequest): boolean {
@@ -343,6 +379,7 @@ export function pickStubReply(request: LlmRequest): string {
     }
     return '{}';
   }
+  if (stubIsGraphExtractionRequest(blob)) return stubGraphExtractionReply(blob);
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;

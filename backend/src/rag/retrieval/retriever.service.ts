@@ -38,10 +38,12 @@ const MAX_CONTEXT_RELATIONS = 40;
  * - 'graph': vector seeds, then walk the storage's knowledge graph from the
  *   entities those seeds mention (≤ maxHops), pull in chunks that mention the
  *   discovered entities, and surface the traversed entities/relations as
- *   context. Graph-found chunks get reserved slots in the top-k budget —
- *   by construction they score below the seeds, so a plain score merge would
+ *   context. Graph-found chunks are additive — up to ceil(topK/2) rows on top
+ *   of the vector top-k. By construction they score below the seeds (else
+ *   they'd *be* seeds), so folding them into one score-merged top-k would
  *   always drop exactly the connected-but-lexically-far chunks the graph
- *   exists to find.
+ *   exists to find; and stealing seed slots instead would hide the user's
+ *   best direct matches.
  */
 @Injectable()
 export class RetrieverService {
@@ -152,10 +154,7 @@ export class RetrieverService {
 
     seeds.sort((a, b) => b.score - a.score);
     graphOnly.sort((a, b) => b.score - a.score);
-    const reserved = Math.min(graphOnly.length, Math.max(1, Math.floor(topK / 4)));
-    const seedTake = Math.min(seeds.length, topK - reserved);
-    const graphTake = Math.min(graphOnly.length, topK - seedTake);
-    const hits = [...seeds.slice(0, seedTake), ...graphOnly.slice(0, graphTake)].sort(
+    const hits = [...seeds.slice(0, topK), ...graphOnly.slice(0, Math.ceil(topK / 2))].sort(
       (a, b) => b.score - a.score,
     );
 

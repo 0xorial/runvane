@@ -3,13 +3,16 @@
   import {
     createRagStorage,
     deleteRagStorage,
+    getRagGraphBuilders,
     getRagSources,
     getRagStorages,
     ingestRagStorage,
     queryRagStorage,
     type CreateRagStorageInput,
     type EntitySourceInfo,
+    type GraphBuilderInfo,
     type IngestResult,
+    type RagGraphContext,
     type RagQueryHit,
     type RagStorageInfo,
   } from "@/api/ragClient";
@@ -17,6 +20,7 @@
 
   let storages = $state<RagStorageInfo[]>([]);
   let sources = $state<EntitySourceInfo[]>([]);
+  let graphBuilders = $state<GraphBuilderInfo[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -26,19 +30,27 @@
   let providerId = $state("openai");
   let model = $state("text-embedding-3-small");
   let rootsText = $state("");
+  // "" = no graph layer; otherwise a builder type from graphBuilders.
+  let graphBuilder = $state("");
+  let graphProviderId = $state("");
+  let graphModel = $state("");
   let creating = $state(false);
 
   // Per-storage transient UI state.
   let busyId = $state<string | null>(null);
   let ingestResults = $state<Record<string, IngestResult>>({});
   let queryText = $state<Record<string, string>>({});
+  let queryTopK = $state<Record<string, number>>({});
+  let queryUseGraph = $state<Record<string, boolean>>({});
   let queryHits = $state<Record<string, RagQueryHit[]>>({});
+  let queryGraphs = $state<Record<string, RagGraphContext | null>>({});
 
   const canCreate = $derived(
     name.trim().length > 0 &&
       providerId.trim().length > 0 &&
       model.trim().length > 0 &&
-      (entitySource !== "files" || rootsText.trim().length > 0),
+      (entitySource !== "files" || rootsText.trim().length > 0) &&
+      (graphBuilder !== "llm" || (graphProviderId.trim().length > 0 && graphModel.trim().length > 0)),
   );
 
   const inputClass =
@@ -48,9 +60,14 @@
     loading = true;
     error = null;
     try {
-      const [nextStorages, nextSources] = await Promise.all([getRagStorages(), getRagSources()]);
+      const [nextStorages, nextSources, nextBuilders] = await Promise.all([
+        getRagStorages(),
+        getRagSources(),
+        getRagGraphBuilders(),
+      ]);
       storages = nextStorages;
       sources = nextSources;
+      graphBuilders = nextBuilders;
       if (!sources.some((s) => s.type === entitySource) && sources[0]) entitySource = sources[0].type;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -76,10 +93,20 @@
         embeddingProviderId: providerId.trim(),
         embeddingModel: model.trim(),
         sourceParams,
+        graph: graphBuilder
+          ? {
+              builder: graphBuilder,
+              params:
+                graphBuilder === "llm"
+                  ? { providerId: graphProviderId.trim(), model: graphModel.trim() }
+                  : {},
+            }
+          : null,
       };
       await createRagStorage(input);
       name = "";
       rootsText = "";
+      graphBuilder = "";
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -107,7 +134,10 @@
     busyId = id;
     error = null;
     try {
-      queryHits = { ...queryHits, [id]: await queryRagStorage(id, q, 8) };
+      const topK = Math.min(Math.max(queryTopK[id] ?? 8, 1), 50);
+      const result = await queryRagStorage(id, q, topK, queryUseGraph[id] ? "graph" : "simple");
+      queryHits = { ...queryHits, [id]: result.hits };
+      queryGraphs = { ...queryGraphs, [id]: result.graph };
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -175,6 +205,27 @@
             placeholder={"/workspace/docs\n/workspace/backend/src"}></textarea>
         </label>
       {/if}
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-foreground">Knowledge graph</span>
+        <select class={inputClass} data-testid="rag-graph-builder" bind:value={graphBuilder}>
+          <option value="">None</option>
+          {#each graphBuilders as b (b.type)}
+            <option value={b.type}>{b.label}</option>
+          {/each}
+        </select>
+      </label>
+      {#if graphBuilder === "llm"}
+        <div class="grid grid-cols-2 gap-2.5">
+          <label class="flex flex-col gap-1 text-xs">
+            <span class="font-semibold text-foreground">Extraction provider id</span>
+            <input class={inputClass} data-testid="rag-graph-provider" bind:value={graphProviderId} placeholder="openai / lmstudio" />
+          </label>
+          <label class="flex flex-col gap-1 text-xs">
+            <span class="font-semibold text-foreground">Extraction model</span>
+            <input class={inputClass} data-testid="rag-graph-model" bind:value={graphModel} placeholder="gpt-4o-mini" />
+          </label>
+        </div>
+      {/if}
     </div>
     <div class="mt-2.5">
       <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-create" disabled={!canCreate || creating} onclick={create}>
@@ -199,6 +250,7 @@
                 <code>{storage.entitySource}</code> · {storage.embeddingProviderId}/{storage.embeddingModel}
                 {#if storage.embeddingDim}· {storage.embeddingDim}d{/if}
                 · {storage.counts.chunks} chunks / {storage.counts.sources} sources
+                {#if storage.graph}· graph ({storage.graph.builder}): {storage.counts.nodes} nodes / {storage.counts.edges} edges{/if}
                 {#if storage.lastIngestedAt}· ingested {new Date(storage.lastIngestedAt).toLocaleString()}{:else}· never ingested{/if}
               </div>
               <div class="mt-0.5 text-[11px] text-muted-foreground">id: <code>{storage.id}</code></div>
@@ -217,10 +269,12 @@
             {@const r = ingestResults[storage.id]}
             <div class="mt-2 text-xs text-muted-foreground" data-testid="rag-ingest-result">
               Ingest: +{r.added} added · {r.updated} updated · {r.skipped} skipped · {r.removed} removed
+              {#if r.graph}· graph: {r.graph.nodes} nodes / {r.graph.edges} edges{#if r.graph.failedSources > 0}
+                  · {r.graph.failedSources} extraction failures{/if}{/if}
             </div>
           {/if}
 
-          <div class="mt-2.5 flex gap-2">
+          <div class="mt-2.5 flex items-center gap-2">
             <input
               class={inputClass}
               data-testid="rag-query"
@@ -229,6 +283,24 @@
               oninput={(e) => (queryText = { ...queryText, [storage.id]: e.currentTarget.value })}
               onkeydown={(e) => e.key === "Enter" && runQuery(storage.id)}
             />
+            <input
+              class="{inputClass} w-14 shrink-0"
+              type="number"
+              min="1"
+              max="50"
+              title="top k"
+              data-testid="rag-query-topk"
+              value={queryTopK[storage.id] ?? 8}
+              oninput={(e) => (queryTopK = { ...queryTopK, [storage.id]: Number(e.currentTarget.value) })}
+            />
+            {#if storage.graph}
+              <label class="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                <input type="checkbox" data-testid="rag-query-graph"
+                  checked={queryUseGraph[storage.id] ?? false}
+                  onchange={(e) => (queryUseGraph = { ...queryUseGraph, [storage.id]: e.currentTarget.checked })} />
+                graph
+              </label>
+            {/if}
             <button type="button" class="{ghostBtn} border-slate-300 shrink-0" data-testid="rag-test" disabled={busyId === storage.id} onclick={() => runQuery(storage.id)}>
               Test
             </button>
@@ -240,15 +312,35 @@
             {:else}
               <ol class="mt-2 flex flex-col gap-1.5">
                 {#each queryHits[storage.id] as hit, i (i)}
-                  <li class="rounded-md border border-border bg-muted/40 p-2 text-xs" data-testid="rag-hit">
+                  <li class="rounded-md border border-border bg-muted/40 p-2 text-xs" data-testid="rag-hit" data-hit-origin={hit.origin}>
                     <div class="mb-0.5 flex justify-between gap-2 text-muted-foreground">
                       <code class="truncate" data-testid="rag-hit-source">{String(hit.metadata.relativePath ?? hit.sourceId)}</code>
-                      <span class="shrink-0">{hit.score.toFixed(4)}</span>
+                      <span class="flex shrink-0 items-center gap-1.5">
+                        {#if hit.origin === "graph"}
+                          <span class="rounded bg-primary/15 px-1 font-semibold text-primary" data-testid="rag-hit-origin">graph</span>
+                        {/if}
+                        {hit.score.toFixed(4)}
+                      </span>
                     </div>
                     <div class="line-clamp-3 whitespace-pre-wrap text-foreground">{hit.text}</div>
                   </li>
                 {/each}
               </ol>
+            {/if}
+            {#if queryGraphs[storage.id]}
+              {@const g = queryGraphs[storage.id]!}
+              <div class="mt-2 rounded-md border border-border bg-muted/40 p-2 text-xs" data-testid="rag-graph-context">
+                <div class="mb-1 font-semibold text-foreground">Graph context</div>
+                <ul class="flex flex-col gap-0.5 text-muted-foreground">
+                  {#each g.relations as rel, i (i)}
+                    <li data-testid="rag-graph-relation">
+                      <span class="text-foreground">{rel.source}</span> —{rel.relation}→
+                      <span class="text-foreground">{rel.target}</span>
+                      {#if rel.description}<span> · {rel.description}</span>{/if}
+                    </li>
+                  {/each}
+                </ul>
+              </div>
             {/if}
           {/if}
         </section>

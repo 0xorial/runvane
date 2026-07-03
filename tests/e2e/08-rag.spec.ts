@@ -25,16 +25,32 @@ async function makeDocs(files: Record<string, string>): Promise<string> {
   return dir;
 }
 
+/**
+ * Graph fixtures: the stub extractor derives the knowledge graph from
+ * `[[Entity]]` / `[[A]] --rel--> [[B]]` annotations in the docs themselves.
+ * The B doc shares no query tokens with the A doc's topic, so only the graph
+ * walk (Alpha Service → Beta Queue → its mentions) can surface it.
+ */
+const GRAPH_DOC_A =
+  "The [[Alpha Service]] --publishes to--> [[Beta Queue]]. The alpha service handles ingress traffic and publishes work units.";
+const GRAPH_DOC_B =
+  "The [[Beta Queue]] --drains into--> [[Gamma Store]]. Consumers pull batches and persist them overnight.";
+
 function storageCard(page: Page, name: string) {
   return page.locator(`[data-testid="rag-storage"][data-storage-name="${name}"]`);
 }
 
 /** Fill the create form and submit; returns the new storage's card locator. */
-async function createStorage(page: Page, name: string, roots: string) {
+async function createStorage(page: Page, name: string, roots: string, opts: { graph?: boolean } = {}) {
   await page.getByTestId("rag-name").fill(name);
   await page.getByTestId("rag-provider").fill("stub");
   await page.getByTestId("rag-model").fill("stub-embed");
   await page.getByTestId("rag-roots").fill(roots);
+  if (opts.graph) {
+    await page.getByTestId("rag-graph-builder").selectOption("llm");
+    await page.getByTestId("rag-graph-provider").fill("stub");
+    await page.getByTestId("rag-graph-model").fill("stub-graph");
+  }
   await page.getByTestId("rag-create").click();
   const card = storageCard(page, name);
   await expect(card).toBeVisible({ timeout: 10_000 });
@@ -132,6 +148,115 @@ test("RAG: a storage and its counts persist across a page reload", async ({ app 
 
     await reloaded.getByTestId("rag-delete").click();
   } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG graph: ingest extracts a graph; graph strategy pulls connected docs + context", async ({ app }) => {
+  const docs = await makeDocs({ "graph-a.md": GRAPH_DOC_A, "graph-b.md": GRAPH_DOC_B });
+  const name = `e2e-graph-${Date.now()}`;
+  try {
+    await app.page.goto("/settings/rag");
+    await expect(app.page.getByTestId("rag-section")).toBeVisible();
+    const card = await createStorage(app.page, name, docs, { graph: true });
+
+    // Extraction runs during ingest: 3 entities, 2 relations across the docs.
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-ingest-result")).toContainText("+2 added", { timeout: 10_000 });
+    await expect(card.getByTestId("rag-ingest-result")).toContainText("graph: 3 nodes / 2 edges");
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("graph (llm): 3 nodes / 2 edges");
+
+    // topK=1 keeps the vector seed set to the lexically-matching doc alone, so
+    // any second hit can only come from the graph walk.
+    await card.getByTestId("rag-query").fill("alpha service ingress traffic");
+    await card.getByTestId("rag-query-topk").fill("1");
+    await card.getByTestId("rag-test").click();
+    await expect(card.getByTestId("rag-hit").first().getByTestId("rag-hit-source")).toHaveText("graph-a.md", {
+      timeout: 10_000,
+    });
+    await expect(card.locator('[data-testid="rag-hit"][data-hit-origin="graph"]')).toHaveCount(0);
+
+    // Graph strategy: same query also surfaces graph-b.md via Beta Queue,
+    // marked as a graph hit, with the traversed relations shown.
+    await card.getByTestId("rag-query-graph").check();
+    await card.getByTestId("rag-test").click();
+    const graphHit = card.locator('[data-testid="rag-hit"][data-hit-origin="graph"]');
+    await expect(graphHit).toHaveCount(1, { timeout: 10_000 });
+    await expect(graphHit.getByTestId("rag-hit-source")).toHaveText("graph-b.md");
+    await expect(card.getByTestId("rag-graph-context")).toBeVisible();
+    const relations = card.getByTestId("rag-graph-relation");
+    await expect(relations).toHaveCount(2);
+    await expect(card.getByTestId("rag-graph-context")).toContainText("Alpha Service");
+    await expect(card.getByTestId("rag-graph-context")).toContainText("publishes to");
+    await expect(card.getByTestId("rag-graph-context")).toContainText("Gamma Store");
+
+    await card.getByTestId("rag-delete").click();
+    await expect(card).toHaveCount(0, { timeout: 10_000 });
+  } finally {
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG graph: the rag tool uses the graph strategy in chat", async ({ app, request }) => {
+  const base = apiBaseUrl();
+  // The probe's stub query is 'database migration prisma'; annotate the DB doc
+  // so the graph links it to a second doc the query alone would never rank.
+  const docs = await makeDocs({
+    "db.md": "[[Prisma]] --migrates--> [[SQLite Schema]]. " + DB_DOC,
+    "ops.md": "The [[SQLite Schema]] --is backed up by--> [[Nightly Job]]. Cron dumps run at 03:00.",
+  });
+
+  const createRes = await request.post(`${base}/api/rag/storages`, {
+    data: {
+      name: `e2e-graph-chat-${Date.now()}`,
+      entitySource: "files",
+      embeddingProviderId: "stub",
+      embeddingModel: "stub-embed",
+      sourceParams: { roots: [docs] },
+      graph: { builder: "llm", params: { providerId: "stub", model: "stub-graph" } },
+    },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const storage = (await createRes.json()) as { id: string };
+  const ingest = (await (await request.post(`${base}/api/rag/storages/${storage.id}/ingest`)).json()) as {
+    graph: { nodes: number; edges: number; failedSources: number } | null;
+  };
+  expect(ingest.graph).toEqual({ nodes: 3, edges: 2, failedSources: 0 });
+
+  const agentId = await defaultAgentId(request);
+  const agent = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
+    name: string;
+    default_llm_configuration: Record<string, unknown> | null;
+  };
+  const original = agent.default_llm_configuration ?? null;
+  const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
+  tools.rag = {
+    policy: "allow",
+    rules: { storages: [storage.id], top_k: 8, strategy: "graph", max_hops: 1 },
+  };
+  const nextCfg = { ...(original ?? {}), tools };
+
+  try {
+    expect(
+      (
+        await request.put(`${base}/api/agents/${agentId}`, {
+          data: { name: agent.name, default_llm_configuration: nextCfg },
+        })
+      ).ok(),
+    ).toBeTruthy();
+
+    await app.chat.gotoNew(agentId);
+    await app.chat.userInput.typeMessage(RAG_PROBE_MESSAGE);
+    await app.chat.userInput.send();
+
+    await app.chat.transcript.waitForToolState("done");
+    await expect(app.chat.transcript.toolRow()).toContainText("rag");
+    await expect(app.chat.transcript.assistantMessage).toContainText("Prisma migration", { timeout: 15_000 });
+  } finally {
+    await request.put(`${base}/api/agents/${agentId}`, {
+      data: { name: agent.name, default_llm_configuration: original },
+    });
+    await request.delete(`${base}/api/rag/storages/${storage.id}`);
     await rm(docs, { recursive: true, force: true });
   }
 });

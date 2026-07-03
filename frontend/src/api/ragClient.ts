@@ -1,11 +1,25 @@
 // RAG API calls. Reuses the shared fetch helpers from client.ts (no edits to
 // that file) so this stays isolated from the rest of the API surface.
 import { getJson, sendJson, deleteJson } from "./client";
-import type { RagStorageInfo, RagQueryHit, IngestResult } from "../../../backend/src/rag/contracts/rag";
+import type {
+  RagStorageInfo,
+  RagQueryHit,
+  RagRetrieveResult,
+  IngestResult,
+  StorageGraphConfig,
+} from "../../../backend/src/rag/contracts/rag";
 
-export type { RagStorageInfo, RagQueryHit, IngestResult } from "../../../backend/src/rag/contracts/rag";
+export type {
+  RagStorageInfo,
+  RagQueryHit,
+  RagGraphContext,
+  RagRetrieveResult,
+  IngestResult,
+  StorageGraphConfig,
+} from "../../../backend/src/rag/contracts/rag";
 
 export type EntitySourceInfo = { type: string; label: string };
+export type GraphBuilderInfo = { type: string; label: string };
 
 export type CreateRagStorageInput = {
   name: string;
@@ -15,10 +29,15 @@ export type CreateRagStorageInput = {
   sourceParams: Record<string, unknown>;
   chunkSize?: number;
   chunkOverlap?: number;
+  graph?: StorageGraphConfig | null;
 };
 
 export function getRagSources(): Promise<EntitySourceInfo[]> {
   return getJson("/api/rag/sources") as Promise<EntitySourceInfo[]>;
+}
+
+export function getRagGraphBuilders(): Promise<GraphBuilderInfo[]> {
+  return getJson("/api/rag/graph-builders") as Promise<GraphBuilderInfo[]>;
 }
 
 export function getRagStorages(): Promise<RagStorageInfo[]> {
@@ -37,6 +56,15 @@ export function ingestRagStorage(id: string): Promise<IngestResult> {
   return sendJson(`/api/rag/storages/${encodeURIComponent(id)}/ingest`, "POST", {}) as Promise<IngestResult>;
 }
 
-export function queryRagStorage(id: string, query: string, topK = 8): Promise<RagQueryHit[]> {
-  return sendJson(`/api/rag/storages/${encodeURIComponent(id)}/query`, "POST", { query, topK }) as Promise<RagQueryHit[]>;
+export function queryRagStorage(
+  id: string,
+  query: string,
+  topK = 8,
+  strategy: "simple" | "graph" = "simple",
+): Promise<RagRetrieveResult> {
+  return sendJson(`/api/rag/storages/${encodeURIComponent(id)}/query`, "POST", {
+    query,
+    topK,
+    strategy,
+  }) as Promise<RagRetrieveResult>;
 }

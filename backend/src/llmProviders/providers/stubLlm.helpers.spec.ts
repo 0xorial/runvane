@@ -158,4 +158,35 @@ describe('stubLlm.helpers', () => {
     };
     expect(pickStubReply(request)).toBe('{}');
   });
+
+  it('graph extraction reply reads [[entity]] and [[A]] --rel--> [[B]] annotations per chunk', () => {
+    const request: LlmRequest = {
+      messages: [
+        { role: 'system', parts: [{ kind: 'text', text: 'You extract a knowledge graph from a document.' }] },
+        {
+          role: 'user',
+          parts: [
+            {
+              kind: 'text',
+              text:
+                'Document: a.md\n\n' +
+                '[chunk 0]\nThe [[Alpha Service]] --publishes to--> [[Beta Queue]] on every request.\n\n' +
+                '[chunk 1]\nMore about the [[Beta Queue]] internals.',
+            },
+          ],
+        },
+      ],
+    };
+    const reply = JSON.parse(pickStubReply(request)) as {
+      entities: Array<{ name: string; chunks: number[] }>;
+      relations: Array<{ source: string; relation: string; target: string }>;
+    };
+    expect(reply.entities).toEqual([
+      { name: 'Alpha Service', chunks: [0] },
+      { name: 'Beta Queue', chunks: [0, 1] },
+    ]);
+    expect(reply.relations).toEqual([
+      { source: 'Alpha Service', relation: 'publishes to', target: 'Beta Queue' },
+    ]);
+  });
 });
