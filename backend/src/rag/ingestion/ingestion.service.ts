@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { chunkText } from '../chunker.js';
+import { chunkText, type TextChunk } from '../chunker.js';
 import { EmbeddingsService } from '../embeddings/embeddings.service.js';
 import { EntitySourceRegistry } from '../sources/entity-source.registry.js';
+import { GraphBuilderRegistry } from '../graph/graph-builder.registry.js';
 import { StorageRegistry } from '../store/storage-registry.service.js';
+import type { GraphBuilder } from '../graph/graph-builder.js';
 import type { IngestResult } from '../contracts/rag.js';
+import type { SourceGraphInput } from '../store/rag-store.types.js';
 
 export type IngestProgress = {
   sourceId: string;
@@ -22,6 +25,11 @@ export type IngestOptions = {
  * chunk → embed → upsert by content hash. Unchanged items are skipped and
  * items that disappeared from the source are pruned, so re-ingest is cheap
  * and idempotent.
+ *
+ * When the storage has a graph layer configured, each changed item also runs
+ * through its GraphBuilder in the same pass. A failed extraction stores the
+ * chunks but an empty graph and flags the item (`graph_ok = 0`), so the next
+ * ingest retries it instead of hash-skipping a half-ingested item.
  */
 @Injectable()
 export class IngestionService {
@@ -31,6 +39,7 @@ export class IngestionService {
     private readonly storages: StorageRegistry,
     private readonly sources: EntitySourceRegistry,
     private readonly embeddings: EmbeddingsService,
+    private readonly graphBuilders: GraphBuilderRegistry,
   ) {}
 
   async ingest(storageId: string, options: IngestOptions = {}): Promise<IngestResult> {
@@ -40,11 +49,18 @@ export class IngestionService {
     if (!manifest) throw new Error(`ingest: storage '${storageId}' has no manifest`);
     const source = this.sources.get(manifest.entitySource);
     if (!source) throw new Error(`ingest: unknown entity source '${manifest.entitySource}'`);
+    const graphConfig = manifest.graph ?? null;
+    let graphBuilder: GraphBuilder | null = null;
+    if (graphConfig) {
+      graphBuilder = this.graphBuilders.get(graphConfig.builder);
+      if (!graphBuilder) throw new Error(`ingest: unknown graph builder '${graphConfig.builder}'`);
+    }
 
     let added = 0;
     let updated = 0;
     let skipped = 0;
     let removed = 0;
+    let graphFailed = 0;
     let dim = manifest.embeddingDim;
     const present = new Set<string>();
 
@@ -52,15 +68,15 @@ export class IngestionService {
       options.signal?.throwIfAborted();
       present.add(item.sourceId);
 
-      const existingHash = store.getSourceHash(source.type, item.sourceId);
-      if (existingHash === item.contentHash) {
+      const existing = store.getSourceState(source.type, item.sourceId);
+      if (existing?.contentHash === item.contentHash && (!graphBuilder || existing.graphOk)) {
         skipped += 1;
         continue;
       }
 
       const chunks = chunkText(item.text, { chunkSize: manifest.chunkSize, overlap: manifest.chunkOverlap });
       if (chunks.length === 0) {
-        if (existingHash !== null) store.deleteSource(source.type, item.sourceId);
+        if (existing !== null) store.deleteSource(source.type, item.sourceId);
         continue;
       }
 
@@ -87,7 +103,33 @@ export class IngestionService {
         })),
       );
 
-      if (existingHash === null) added += 1;
+      if (graphBuilder && graphConfig) {
+        try {
+          const graph = await graphBuilder.extract(
+            { item, chunks, params: graphConfig.params },
+            options.signal,
+          );
+          store.replaceSourceGraph(
+            { sourceType: source.type, sourceId: item.sourceId },
+            backfillMentions(graph, chunks),
+          );
+        } catch (error) {
+          options.signal?.throwIfAborted();
+          // Keep the chunks, clear this item's graph (stale mentions would
+          // point at replaced chunk indexes), and flag it for retry.
+          store.replaceSourceGraph(
+            { sourceType: source.type, sourceId: item.sourceId },
+            { nodes: [], edges: [], mentions: [] },
+          );
+          store.setSourceGraphStatus(source.type, item.sourceId, false);
+          graphFailed += 1;
+          this.logger.warn(
+            `ingest ${storageId}: graph extraction failed for '${item.sourceId}': ${String(error)}`,
+          );
+        }
+      }
+
+      if (existing === null) added += 1;
       else updated += 1;
       options.onProgress?.({ sourceId: item.sourceId, added, updated, skipped });
     }
@@ -105,7 +147,9 @@ export class IngestionService {
     });
     const counts = store.counts();
     this.logger.log(
-      `ingest ${storageId}: +${added} ~${updated} =${skipped} -${removed} (${counts.chunks} chunks)`,
+      `ingest ${storageId}: +${added} ~${updated} =${skipped} -${removed} (${counts.chunks} chunks` +
+        (graphConfig ? `, ${counts.nodes} nodes / ${counts.edges} edges, ${graphFailed} graph failures` : '') +
+        `)`,
     );
     return {
       storageId,
@@ -116,6 +160,33 @@ export class IngestionService {
       totalChunks: counts.chunks,
       totalSources: counts.sources,
       embeddingDim: dim,
+      graph: graphConfig ? { nodes: counts.nodes, edges: counts.edges, failedSources: graphFailed } : null,
     };
   }
+}
+
+/**
+ * Ensure every node has chunk provenance: nodes the builder gave no `mentions`
+ * entry get one for each chunk whose text contains the node name
+ * (case-insensitive). Builders without chunk-level output thus still support
+ * mention-based graph expansion wherever a name literally appears.
+ */
+export function backfillMentions(graph: SourceGraphInput, chunks: TextChunk[]): SourceGraphInput {
+  const covered = new Set(graph.mentions.map((m) => m.node.trim().toLowerCase()));
+  const names = new Set<string>();
+  for (const node of graph.nodes) names.add(node.name);
+  for (const edge of graph.edges) {
+    names.add(edge.source);
+    names.add(edge.target);
+  }
+
+  const extra: SourceGraphInput['mentions'] = [];
+  for (const name of names) {
+    const needle = name.trim().toLowerCase();
+    if (!needle || covered.has(needle)) continue;
+    for (const chunk of chunks) {
+      if (chunk.text.toLowerCase().includes(needle)) extra.push({ node: name, chunkIndex: chunk.index });
+    }
+  }
+  return extra.length === 0 ? graph : { ...graph, mentions: [...graph.mentions, ...extra] };
 }

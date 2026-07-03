@@ -21,6 +21,7 @@ export type CreateStorageInput = {
   sourceParams?: Record<string, unknown>;
   chunkSize?: number;
   chunkOverlap?: number;
+  graph?: { builder: string; params: Record<string, unknown> } | null;
 };
 
 /**
@@ -82,6 +83,7 @@ export class StorageRegistry implements OnModuleDestroy {
       sourceParams: input.sourceParams ?? {},
       chunkSize: input.chunkSize ?? DEFAULT_CHUNK_SIZE,
       chunkOverlap: input.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP,
+      graph: input.graph ?? null,
       createdAt: new Date().toISOString(),
       lastIngestedAt: null,
     };
@@ -108,7 +110,8 @@ export class StorageRegistry implements OnModuleDestroy {
     const store = this.open(id);
     const manifest = store?.getManifest();
     if (!store || !manifest) return null;
-    return { ...manifest, counts: store.counts() };
+    // Pre-graph manifests have no `graph` key; normalize to null for the API.
+    return { ...manifest, graph: manifest.graph ?? null, counts: store.counts() };
   }
 
   listInfos(): RagStorageInfo[] {

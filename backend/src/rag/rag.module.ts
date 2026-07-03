@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import path from 'node:path';
 import { DatabaseModule } from '../db/database.module.js';
 import { EmbeddingsService } from './embeddings/embeddings.service.js';
+import { GRAPH_BUILDERS } from './graph/graph-builder.js';
+import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
+import { LlmGraphBuilder } from './graph/llm-graph-builder.js';
 import { RagController } from './rag.controller.js';
 import { RetrieverService } from './retrieval/retriever.service.js';
 import { ENTITY_SOURCES } from './sources/entity-source.js';
@@ -12,9 +15,10 @@ import { RAG_DATA_DIR, StorageRegistry } from './store/storage-registry.service.
 
 /**
  * The RAG subsystem. `LlmProviderRegistry` is a global provider, so only the
- * DatabaseModule (for provider settings) needs importing. Entity sources are
- * registered as an array — adding conversations/facts later is a one-line
- * change to the ENTITY_SOURCES factory.
+ * DatabaseModule (for provider settings) needs importing. Entity sources and
+ * graph builders are registered as arrays — adding conversations/facts
+ * sources or an external graph engine later is a one-line change to the
+ * respective factory.
  */
 @Module({
   imports: [DatabaseModule],
@@ -33,9 +37,16 @@ import { RAG_DATA_DIR, StorageRegistry } from './store/storage-registry.service.
       inject: [FilesEntitySource],
     },
     EntitySourceRegistry,
+    LlmGraphBuilder,
+    {
+      provide: GRAPH_BUILDERS,
+      useFactory: (llm: LlmGraphBuilder) => [llm],
+      inject: [LlmGraphBuilder],
+    },
+    GraphBuilderRegistry,
     IngestionService,
     RetrieverService,
   ],
-  exports: [StorageRegistry, RetrieverService, IngestionService, EntitySourceRegistry],
+  exports: [StorageRegistry, RetrieverService, IngestionService, EntitySourceRegistry, GraphBuilderRegistry],
 })
 export class RagModule {}

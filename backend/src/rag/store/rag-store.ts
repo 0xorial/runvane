@@ -2,7 +2,17 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { bufferToFloat32, dot, float32ToBuffer, l2normalize } from '../vector.js';
-import type { ChunkInput, StorageManifest, StoreCounts, StoredChunkHit } from './rag-store.types.js';
+import type {
+  ChunkInput,
+  ChunkRef,
+  SourceGraphInput,
+  StorageManifest,
+  StoreCounts,
+  StoredChunk,
+  StoredChunkHit,
+  StoredGraphEdge,
+  StoredGraphNode,
+} from './rag-store.types.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -15,6 +25,7 @@ CREATE TABLE IF NOT EXISTS sources (
   content_hash TEXT NOT NULL,
   chunk_count  INTEGER NOT NULL,
   updated_at   TEXT NOT NULL,
+  graph_ok     INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (source_type, source_id)
 );
 CREATE TABLE IF NOT EXISTS chunks (
@@ -27,7 +38,39 @@ CREATE TABLE IF NOT EXISTS chunks (
   embedding     BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_type, source_id);
+CREATE TABLE IF NOT EXISTS graph_nodes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  key         TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS graph_edges (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_node INTEGER NOT NULL,
+  target_node INTEGER NOT NULL,
+  relation    TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  source_type TEXT NOT NULL,
+  source_id   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_provenance ON graph_edges(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_node);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_node);
+CREATE TABLE IF NOT EXISTS graph_mentions (
+  node_id     INTEGER NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id   TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  PRIMARY KEY (node_id, source_type, source_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_graph_mentions_provenance ON graph_mentions(source_type, source_id);
 `;
+
+/** Case/whitespace-insensitive identity for node deduplication. */
+export function nodeKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 function safeParseObject(json: string): Record<string, unknown> {
   try {
@@ -52,6 +95,12 @@ export class RagStore {
     mkdirSync(path.dirname(filePath), { recursive: true });
     this.db = new DatabaseSync(filePath);
     this.db.exec(SCHEMA);
+    // Storages created before the graph layer lack this column; CREATE TABLE
+    // IF NOT EXISTS won't add it, so patch it in additively.
+    const sourceCols = this.db.prepare(`PRAGMA table_info(sources)`).all() as Array<{ name: string }>;
+    if (!sourceCols.some((c) => c.name === 'graph_ok')) {
+      this.db.exec(`ALTER TABLE sources ADD COLUMN graph_ok INTEGER NOT NULL DEFAULT 1`);
+    }
   }
 
   close(): void {
@@ -75,10 +124,23 @@ export class RagStore {
 
   /** Content hash recorded for a source item, or null if never ingested. */
   getSourceHash(sourceType: string, sourceId: string): string | null {
+    return this.getSourceState(sourceType, sourceId)?.contentHash ?? null;
+  }
+
+  /** Hash + graph status for a source item; graphOk=false means the last
+   *  graph extraction failed and the item should be re-ingested. */
+  getSourceState(sourceType: string, sourceId: string): { contentHash: string; graphOk: boolean } | null {
     const row = this.db
-      .prepare(`SELECT content_hash FROM sources WHERE source_type = ? AND source_id = ?`)
-      .get(sourceType, sourceId) as { content_hash?: string } | undefined;
-    return row?.content_hash ?? null;
+      .prepare(`SELECT content_hash, graph_ok FROM sources WHERE source_type = ? AND source_id = ?`)
+      .get(sourceType, sourceId) as { content_hash?: string; graph_ok?: number } | undefined;
+    if (!row?.content_hash) return null;
+    return { contentHash: row.content_hash, graphOk: Number(row.graph_ok ?? 1) !== 0 };
+  }
+
+  setSourceGraphStatus(sourceType: string, sourceId: string, ok: boolean): void {
+    this.db
+      .prepare(`UPDATE sources SET graph_ok = ? WHERE source_type = ? AND source_id = ?`)
+      .run(ok ? 1 : 0, sourceType, sourceId);
   }
 
   /** Source ids currently indexed for a type (used to prune deleted items). */
@@ -130,12 +192,14 @@ export class RagStore {
     }
   }
 
-  /** Drop a source item and all its chunks. */
+  /** Drop a source item and all its chunks + graph rows (pruning orphan nodes). */
   deleteSource(sourceType: string, sourceId: string): void {
     this.db.exec('BEGIN');
     try {
       this.db.prepare(`DELETE FROM chunks WHERE source_type = ? AND source_id = ?`).run(sourceType, sourceId);
       this.db.prepare(`DELETE FROM sources WHERE source_type = ? AND source_id = ?`).run(sourceType, sourceId);
+      this.deleteSourceGraphRows(sourceType, sourceId);
+      this.pruneOrphanNodes();
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -144,9 +208,192 @@ export class RagStore {
   }
 
   counts(): StoreCounts {
-    const chunks = this.db.prepare(`SELECT COUNT(*) AS n FROM chunks`).get() as { n: number };
-    const sources = this.db.prepare(`SELECT COUNT(*) AS n FROM sources`).get() as { n: number };
-    return { chunks: Number(chunks.n), sources: Number(sources.n) };
+    const count = (table: string): number => {
+      const row = this.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+      return Number(row.n);
+    };
+    return {
+      chunks: count('chunks'),
+      sources: count('sources'),
+      nodes: count('graph_nodes'),
+      edges: count('graph_edges'),
+    };
+  }
+
+  /**
+   * Replace one source item's contribution to the knowledge graph. Nodes are
+   * global (deduplicated by `nodeKey`) and merged on conflict — the longer
+   * description wins, an empty type never overwrites a set one. Edges and
+   * mentions carry per-source provenance so a re-ingest of one item replaces
+   * exactly its own rows; nodes left without any mention or edge are pruned.
+   */
+  replaceSourceGraph(ref: { sourceType: string; sourceId: string }, graph: SourceGraphInput): void {
+    const upsertNode = this.db.prepare(
+      `INSERT INTO graph_nodes(key, name, type, description) VALUES(?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         type        = CASE WHEN excluded.type <> '' THEN excluded.type ELSE graph_nodes.type END,
+         description = CASE WHEN length(excluded.description) > length(graph_nodes.description)
+                            THEN excluded.description ELSE graph_nodes.description END`,
+    );
+    const nodeIdByKey = this.db.prepare(`SELECT id FROM graph_nodes WHERE key = ?`);
+    const insEdge = this.db.prepare(
+      `INSERT INTO graph_edges(source_node, target_node, relation, description, source_type, source_id)
+       VALUES(?, ?, ?, ?, ?, ?)`,
+    );
+    const insMention = this.db.prepare(
+      `INSERT OR IGNORE INTO graph_mentions(node_id, source_type, source_id, chunk_index)
+       VALUES(?, ?, ?, ?)`,
+    );
+
+    this.db.exec('BEGIN');
+    try {
+      this.deleteSourceGraphRows(ref.sourceType, ref.sourceId);
+
+      const idFor = (name: string, type = '', description = ''): number | null => {
+        const key = nodeKey(name);
+        if (!key) return null;
+        upsertNode.run(key, name.trim(), type.trim(), description.trim());
+        const row = nodeIdByKey.get(key) as { id: number } | undefined;
+        return row ? Number(row.id) : null;
+      };
+
+      for (const node of graph.nodes) idFor(node.name, node.type ?? '', node.description ?? '');
+
+      const seenEdges = new Set<string>();
+      for (const edge of graph.edges) {
+        const sourceId = idFor(edge.source);
+        const targetId = idFor(edge.target);
+        const relation = edge.relation.trim();
+        if (sourceId === null || targetId === null || !relation || sourceId === targetId) continue;
+        const dedup = `${sourceId}|${targetId}|${relation.toLowerCase()}`;
+        if (seenEdges.has(dedup)) continue;
+        seenEdges.add(dedup);
+        insEdge.run(sourceId, targetId, relation, (edge.description ?? '').trim(), ref.sourceType, ref.sourceId);
+      }
+
+      for (const mention of graph.mentions) {
+        const nodeId = idFor(mention.node);
+        if (nodeId === null || !Number.isInteger(mention.chunkIndex) || mention.chunkIndex < 0) continue;
+        insMention.run(nodeId, ref.sourceType, ref.sourceId, mention.chunkIndex);
+      }
+
+      this.pruneOrphanNodes();
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  /** Nodes mentioned in any of the given chunks (seed lookup for graph retrieval). */
+  nodesMentionedIn(refs: ChunkRef[]): StoredGraphNode[] {
+    const out = new Map<number, StoredGraphNode>();
+    const stmt = this.db.prepare(
+      `SELECT n.id, n.name, n.type, n.description
+       FROM graph_mentions m JOIN graph_nodes n ON n.id = m.node_id
+       WHERE m.source_type = ? AND m.source_id = ? AND m.chunk_index = ?`,
+    );
+    for (const ref of refs) {
+      for (const raw of stmt.all(ref.sourceType, ref.sourceId, ref.chunkIndex)) {
+        const row = raw as { id: number; name: string; type: string; description: string };
+        out.set(Number(row.id), { ...row, id: Number(row.id) });
+      }
+    }
+    return [...out.values()];
+  }
+
+  /** All edges touching any of the given nodes, with node names joined in. */
+  edgesTouching(nodeIds: number[]): StoredGraphEdge[] {
+    if (nodeIds.length === 0) return [];
+    const marks = nodeIds.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(
+        `SELECT e.source_node, e.target_node, e.relation, e.description,
+                a.name AS source_name, b.name AS target_name
+         FROM graph_edges e
+         JOIN graph_nodes a ON a.id = e.source_node
+         JOIN graph_nodes b ON b.id = e.target_node
+         WHERE e.source_node IN (${marks}) OR e.target_node IN (${marks})`,
+      )
+      .all(...nodeIds, ...nodeIds) as Array<{
+      source_node: number;
+      target_node: number;
+      relation: string;
+      description: string;
+      source_name: string;
+      target_name: string;
+    }>;
+    return rows.map((r) => ({
+      sourceNodeId: Number(r.source_node),
+      targetNodeId: Number(r.target_node),
+      sourceName: r.source_name,
+      targetName: r.target_name,
+      relation: r.relation,
+      description: r.description,
+    }));
+  }
+
+  getNodes(nodeIds: number[]): StoredGraphNode[] {
+    if (nodeIds.length === 0) return [];
+    const marks = nodeIds.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(`SELECT id, name, type, description FROM graph_nodes WHERE id IN (${marks})`)
+      .all(...nodeIds) as Array<{ id: number; name: string; type: string; description: string }>;
+    return rows.map((r) => ({ ...r, id: Number(r.id) }));
+  }
+
+  /** Chunk refs mentioning any of the given nodes. */
+  mentionRefs(nodeIds: number[]): ChunkRef[] {
+    if (nodeIds.length === 0) return [];
+    const marks = nodeIds.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT source_type, source_id, chunk_index
+         FROM graph_mentions WHERE node_id IN (${marks})`,
+      )
+      .all(...nodeIds) as Array<{ source_type: string; source_id: string; chunk_index: number }>;
+    return rows.map((r) => ({
+      sourceType: r.source_type,
+      sourceId: r.source_id,
+      chunkIndex: Number(r.chunk_index),
+    }));
+  }
+
+  /** Fetch full chunk rows (embedding included) by ref; missing refs are skipped. */
+  getChunks(refs: ChunkRef[]): StoredChunk[] {
+    const stmt = this.db.prepare(
+      `SELECT text, metadata_json, embedding FROM chunks
+       WHERE source_type = ? AND source_id = ? AND chunk_index = ?`,
+    );
+    const out: StoredChunk[] = [];
+    for (const ref of refs) {
+      const row = stmt.get(ref.sourceType, ref.sourceId, ref.chunkIndex) as
+        | { text: string; metadata_json: string; embedding: Uint8Array }
+        | undefined;
+      if (!row) continue;
+      out.push({
+        ...ref,
+        text: row.text,
+        metadata: safeParseObject(row.metadata_json),
+        embedding: bufferToFloat32(row.embedding),
+      });
+    }
+    return out;
+  }
+
+  private deleteSourceGraphRows(sourceType: string, sourceId: string): void {
+    this.db.prepare(`DELETE FROM graph_edges WHERE source_type = ? AND source_id = ?`).run(sourceType, sourceId);
+    this.db.prepare(`DELETE FROM graph_mentions WHERE source_type = ? AND source_id = ?`).run(sourceType, sourceId);
+  }
+
+  /** Drop nodes no mention or edge references anymore. Caller owns the transaction. */
+  private pruneOrphanNodes(): void {
+    this.db.exec(
+      `DELETE FROM graph_nodes WHERE
+         id NOT IN (SELECT node_id FROM graph_mentions)
+         AND id NOT IN (SELECT source_node FROM graph_edges)
+         AND id NOT IN (SELECT target_node FROM graph_edges)`,
+    );
   }
 
   /**

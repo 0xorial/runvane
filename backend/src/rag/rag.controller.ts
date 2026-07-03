@@ -12,6 +12,7 @@ import { createZodDto } from 'nestjs-zod';
 import { CreateStorageSchema, RagDebugQuerySchema } from './contracts/rag.js';
 import { EmbeddingsService } from './embeddings/embeddings.service.js';
 import { EntitySourceRegistry } from './sources/entity-source.registry.js';
+import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
 import { RetrieverService } from './retrieval/retriever.service.js';
 import { StorageRegistry } from './store/storage-registry.service.js';
@@ -32,12 +33,19 @@ export class RagController {
     private readonly ingestion: IngestionService,
     private readonly retriever: RetrieverService,
     private readonly embeddings: EmbeddingsService,
+    private readonly graphBuilders: GraphBuilderRegistry,
   ) {}
 
   /** Available RAGable entity types (files, later conversations/facts). */
   @Get('sources')
   listSources() {
     return this.sources.list();
+  }
+
+  /** Available knowledge-graph builders (llm, later external engines). */
+  @Get('graph-builders')
+  listGraphBuilders() {
+    return this.graphBuilders.list();
   }
 
   @Get('storages')
@@ -55,6 +63,18 @@ export class RagController {
         `provider '${body.embeddingProviderId}' does not support embeddings`,
       );
     }
+    const graph = body.graph ?? null;
+    if (graph) {
+      const builder = this.graphBuilders.get(graph.builder);
+      if (!builder) throw new BadRequestException(`unknown graph builder '${graph.builder}'`);
+      try {
+        builder.validateParams?.(graph.params);
+      } catch (error) {
+        throw new BadRequestException(
+          `graph builder '${graph.builder}': ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     const manifest = this.storages.create({
       name: body.name,
       entitySource: body.entitySource,
@@ -63,6 +83,7 @@ export class RagController {
       sourceParams: body.sourceParams,
       chunkSize: body.chunkSize,
       chunkOverlap: body.chunkOverlap,
+      graph,
     });
     return this.storages.info(manifest.id);
   }
@@ -81,11 +102,16 @@ export class RagController {
     return this.ingestion.ingest(id);
   }
 
-  /** Debug similarity query (UI "test query"); defaults to this storage. */
+  /** Debug query (UI "test query"); defaults to this storage. Returns
+   *  `{ hits, graph }` — graph is null for the 'simple' strategy. */
   @Post('storages/:id/query')
   async query(@Param('id') id: string, @Body() body: RagDebugQueryDto) {
     if (!this.storages.getManifest(id)) throw new NotFoundException(`storage '${id}' not found`);
     const storageIds = body.storageIds && body.storageIds.length > 0 ? body.storageIds : [id];
-    return this.retriever.retrieve({ storageIds, query: body.query, topK: body.topK });
+    const input = { storageIds, query: body.query, topK: body.topK };
+    if (body.strategy === 'graph') {
+      return this.retriever.retrieveGraph({ ...input, maxHops: body.maxHops });
+    }
+    return { hits: await this.retriever.retrieve(input), graph: null };
   }
 }

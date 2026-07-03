@@ -19,7 +19,9 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
     return (
       'Semantic retrieval over the agent\'s configured RAG storages. Returns the most relevant ' +
       'indexed text chunks with their source and similarity score. Prefer this over keyword search ' +
-      'when you need meaning-based recall rather than an exact substring.'
+      'when you need meaning-based recall rather than an exact substring. When the agent\'s strategy ' +
+      'is "graph", results may add chunks connected via the knowledge graph (origin "graph") plus ' +
+      'a graph block listing the entities and relations that linked them.'
     );
   }
 
@@ -36,7 +38,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
   }
 
   getDefaultRules(): RagToolRules {
-    return { storages: [], top_k: 8, strategy: 'simple' };
+    return { storages: [], top_k: 8, strategy: 'simple', max_hops: 1 };
   }
 
   parseParams(raw: unknown): RagToolParams {
@@ -53,12 +55,16 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
       return { query: params.query, count: 0, hits: [], note: 'No RAG storages configured for this agent.' };
     }
     const topK = Math.min(params.top_k ?? rules.top_k, rules.top_k);
-    const hits = await this.retriever.retrieve({
+    const retrieveInput = {
       storageIds: rules.storages,
       query: params.query,
       topK,
       signal: context.signal,
-    });
+    };
+    const { hits, graph } =
+      rules.strategy === 'graph'
+        ? await this.retriever.retrieveGraph({ ...retrieveInput, maxHops: rules.max_hops })
+        : { hits: await this.retriever.retrieve(retrieveInput), graph: null };
     return {
       query: params.query,
       count: hits.length,
@@ -66,8 +72,19 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
         storage: hit.storageName,
         source: typeof hit.metadata.relativePath === 'string' ? hit.metadata.relativePath : hit.sourceId,
         score: Number(hit.score.toFixed(4)),
+        origin: hit.origin,
         text: hit.text,
       })),
+      ...(graph
+        ? {
+            graph: {
+              entities: graph.entities,
+              relations: graph.relations.map(
+                (r) => `${r.source} —${r.relation}→ ${r.target}` + (r.description ? ` (${r.description})` : ''),
+              ),
+            },
+          }
+        : {}),
     };
   }
 }
