@@ -104,11 +104,17 @@ describeLive('conversation provider cost aggregation (integration)', () => {
     // Per-model rollup (feeds the cost popover): the stub model's row carries
     // the reported sum, and is flagged incomplete because turn 2 reported
     // nothing — the UI must show the reported amount, never "set price".
-    const row = (
-      (await getConversation(baseUrl, conversationId)) as unknown as {
+    const listRes = await fetch(`${baseUrl}/api/conversations`);
+    if (!listRes.ok) throw new Error(`GET conversations failed: ${listRes.status}`);
+    const list = (await listRes.json()) as {
+      conversations: Array<{
+        id: string;
         tokenUsageByModel: Array<{ modelName: string; providerCostUsd: number | null; providerCostComplete: boolean }>;
-      }
-    ).tokenUsageByModel.find((r) => r.modelName === STUB_MODEL);
+      }>;
+    };
+    const row = list.conversations
+      .find((c) => c.id === conversationId)
+      ?.tokenUsageByModel.find((r) => r.modelName === STUB_MODEL);
     expect(row).toBeDefined();
     expect(row!.providerCostUsd).toBeCloseTo(0.01234, 8);
     expect(row!.providerCostComplete).toBe(false);
