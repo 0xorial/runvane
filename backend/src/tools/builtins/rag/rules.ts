@@ -15,6 +15,10 @@ export const RagToolRulesSchema = z
     top_k: z.number().finite().int().min(1).max(50).default(8),
     strategy: z.enum(['simple', 'graph']).default('simple'),
     max_hops: z.number().finite().int().min(1).max(3).default(1),
+    /** Lets the agent grow its own index from chat (`add_source`). Off by
+     *  default: indexing a path both reads it and persists its content into
+     *  the storage, so it needs an explicit per-agent opt-in. */
+    allow_source_changes: z.boolean().default(false),
   })
   .strict();
 

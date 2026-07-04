@@ -270,22 +270,59 @@ export function stubGraphExtractionReply(blob: string): string {
 }
 
 /**
- * Suggest-roots stub: recommends every scanned directory whose relative path
- * contains "docs" (reason "documentation") and rejects the rest, so e2e
- * fixtures control the verdicts through directory naming alone.
+ * Drives the rag source-management e2e: a user message with
+ * RAG_SOURCES_MARKER plus `base=<dir> storage=<name>` makes the planner
+ * (1) explore the base via rag suggest_sources, (2) add `<base>/docs` via
+ * rag add_source, then (3) finalize. Tool params are emitted as structured
+ * JSON in the tool_request; the params-resolution stub echoes them through.
  */
-export function stubIsSuggestRootsRequest(blob: string): boolean {
-  return /review directory scan results/i.test(blob);
+export const RAG_SOURCES_MARKER = '__rag_sources_probe__';
+export const STUB_RAG_SOURCES_REPLY = 'Explored the base and indexed the docs folder into the storage.';
+
+export function stubIsRagSourcesConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(RAG_SOURCES_MARKER);
 }
 
-export function stubSuggestRootsReply(blob: string): string {
-  const rows: Array<{ relative: string; recommend: boolean; reason: string }> = [];
-  for (const match of blob.matchAll(/- relative "([^"]+)":/g)) {
-    const relative = match[1]!;
-    const recommend = relative.includes('docs');
-    rows.push({ relative, recommend, reason: recommend ? 'documentation' : 'not documentation' });
+function stubCountToolResults(request: LlmRequest): number {
+  return request.messages
+    .flatMap((message) => message.parts)
+    .filter((part) => part.kind === 'tool_result').length;
+}
+
+export function stubRagSourcesPlanner(request: LlmRequest): string {
+  const text = stubUserText(request);
+  const base = text.match(/base=(\S+)/)?.[1] ?? '';
+  const storage = text.match(/storage=(\S+)/)?.[1] ?? '';
+  const results = stubCountToolResults(request);
+  if (results === 0) {
+    return JSON.stringify({
+      assistant_thinking: 'Explore the base directory before picking sources.',
+      assistant_output: 'Let me look at what that folder contains.',
+      tool_requests: [
+        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'suggest_sources', base }) },
+      ],
+      followup: 'continue',
+    });
   }
-  return JSON.stringify(rows);
+  if (results === 1) {
+    return JSON.stringify({
+      assistant_thinking: 'The docs candidate is documentation; add it to the storage.',
+      assistant_output: 'Indexing the docs folder.',
+      tool_requests: [
+        {
+          tool_name: 'rag',
+          tool_request: JSON.stringify({ operation: 'add_source', storage, roots: [`${base}/docs`] }),
+        },
+      ],
+      followup: 'continue',
+    });
+  }
+  return JSON.stringify({
+    assistant_thinking: 'Source added and indexing started.',
+    assistant_output: STUB_RAG_SOURCES_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
 }
 
 /** Drives the rag-tool e2e: a user message containing RAG_PROBE_MARKER makes
@@ -394,12 +431,24 @@ export function pickStubReply(request: LlmRequest): string {
   if (stubIsToolParamsRequest(blob)) {
     if (stubIsAskAttachmentToolParamsRequest(blob)) return stubAskAttachmentParamsReply(blob);
     if (/Produce JSON args for tool "rag"/.test(blob)) {
+      // Structured tool_requests (the source-management flow) pass through
+      // verbatim; free-text requests fall back to the canonical probe query.
+      const tail = blob.split('Planner request:')[1] ?? '';
+      const start = tail.indexOf('{');
+      const end = tail.lastIndexOf('}');
+      if (start !== -1 && end > start) {
+        try {
+          const parsed = JSON.parse(tail.slice(start, end + 1)) as Record<string, unknown>;
+          if (typeof parsed.operation === 'string') return JSON.stringify(parsed);
+        } catch {
+          /* fall through to the default query params */
+        }
+      }
       return JSON.stringify({ query: 'database migration prisma' });
     }
     return '{}';
   }
   if (stubIsGraphExtractionRequest(blob)) return stubGraphExtractionReply(blob);
-  if (stubIsSuggestRootsRequest(blob)) return stubSuggestRootsReply(blob);
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;
@@ -415,6 +464,7 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
+    if (stubIsRagSourcesConversation(request)) return stubRagSourcesPlanner(request);
     if (stubIsRagProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubRagPlannerFinalize() : stubRagPlannerFirstRound();
     }

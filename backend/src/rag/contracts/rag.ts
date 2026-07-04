@@ -33,14 +33,6 @@ export const UpdateStorageSchema = z
   .strict();
 export type UpdateStorageBody = z.infer<typeof UpdateStorageSchema>;
 
-/** Body for asking the backend to explore a base dir and suggest storage roots. */
-export const SuggestRootsSchema = z
-  .object({
-    base: z.string().min(1),
-  })
-  .strict();
-export type SuggestRootsBody = z.infer<typeof SuggestRootsSchema>;
-
 /** Body for a debug similarity query against one or more storages. */
 export const RagDebugQuerySchema = z
   .object({

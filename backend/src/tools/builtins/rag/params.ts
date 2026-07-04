@@ -1,11 +1,26 @@
 import { z } from 'zod';
 
+/**
+ * One dispatch surface, three operations (runvane's one-tool-per-capability
+ * pattern): retrieval plus the source-management ops that let the agent grow
+ * its own index from chat. `suggest_sources` returns scan results for the
+ * model to judge; `add_source` is additionally gated by the
+ * `allow_source_changes` rule.
+ */
 export const RagToolParamsSchema = z
   .object({
+    operation: z
+      .enum(['query', 'suggest_sources', 'add_source'])
+      .default('query')
+      .describe(
+        'query: semantic retrieval (default). suggest_sources: explore a base directory and list ' +
+          'indexable candidate folders. add_source: add root folders to a configured storage and re-index.',
+      ),
     query: z
       .string()
       .min(1)
-      .describe('Natural-language query; retrieves the most semantically similar indexed chunks.'),
+      .optional()
+      .describe('query: natural-language query; retrieves the most semantically similar indexed chunks.'),
     top_k: z
       .number()
       .finite()
@@ -13,7 +28,21 @@ export const RagToolParamsSchema = z
       .min(1)
       .max(50)
       .optional()
-      .describe('Max chunks to return (capped by the agent rule).'),
+      .describe('query: max chunks to return (capped by the agent rule).'),
+    base: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('suggest_sources: absolute directory to explore.'),
+    storage: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('add_source: target storage name or id; defaults to the only configured storage.'),
+    roots: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('add_source: absolute directory paths to add as indexing roots.'),
   })
   .strict();
 

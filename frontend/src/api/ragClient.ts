@@ -41,22 +41,6 @@ export function getRagGraphBuilders(): Promise<GraphBuilderInfo[]> {
   return getJson("/api/rag/graph-builders") as Promise<GraphBuilderInfo[]>;
 }
 
-export type SuggestedRoot = {
-  path: string;
-  relative: string;
-  files: number;
-  samples: string[];
-  recommended: boolean | null;
-  reason: string | null;
-};
-
-export function suggestRagRoots(base: string): Promise<{ base: string; candidates: SuggestedRoot[] }> {
-  return sendJson("/api/rag/suggest-roots", "POST", { base }) as Promise<{
-    base: string;
-    candidates: SuggestedRoot[];
-  }>;
-}
-
 export function getRagStorages(): Promise<RagStorageInfo[]> {
   return getJson("/api/rag/storages") as Promise<RagStorageInfo[]>;
 }

@@ -203,50 +203,84 @@ test("RAG graph: ingest extracts a graph; graph strategy pulls connected docs + 
   }
 });
 
-test("RAG suggest: exploring a base offers roots; picked ones fill the form", async ({ app }) => {
-  const base = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-suggest-"));
+test("RAG chat: the agent explores a base and adds sources via the rag tool", async ({ app, request }) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-chatsrc-"));
   const put = async (rel: string, content: string) => {
     await mkdir(path.dirname(path.join(base, rel)), { recursive: true });
     await writeFile(path.join(base, rel), content);
   };
-  const name = `e2e-suggest-${Date.now()}`;
+  const baseUrl = apiBaseUrl();
+  const name = `e2e-chatsrc-${Date.now()}`;
   try {
     await put("docs/db.md", DB_DOC);
     await put("docs/cooking.md", COOK_DOC);
     await put("src/main.ts", "export const x = 1;");
     await put("node_modules/pkg/index.js", "module.exports = {};");
 
-    await app.page.goto("/settings/rag");
-    await app.page.getByTestId("rag-suggest-base").fill(base);
-    await app.page.getByTestId("rag-suggest").click();
-    await expect(app.page.getByTestId("rag-suggestions")).toBeVisible({ timeout: 15_000 });
+    // An empty storage the agent will grow from chat.
+    const createRes = await request.post(`${baseUrl}/api/rag/storages`, {
+      data: {
+        name,
+        entitySource: "files",
+        embeddingProviderId: "stub",
+        embeddingModel: "stub-embed",
+        sourceParams: { roots: [] },
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const storage = (await createRes.json()) as { id: string };
 
-    // The stub LLM recommends *docs* dirs; src is offered but rejected;
-    // node_modules never shows up at all.
-    const docsRow = app.page.locator('[data-testid="rag-suggestion"][data-suggest-rel="docs"]');
-    await expect(docsRow).toHaveCount(1);
-    await expect(docsRow.getByTestId("rag-suggestion-reason")).toContainText("documentation");
-    await expect(docsRow.locator("input[type=checkbox]")).toBeChecked();
-    const srcRow = app.page.locator('[data-testid="rag-suggestion"][data-suggest-rel="src"]');
-    await expect(srcRow).toHaveCount(1);
-    await expect(srcRow.locator("input[type=checkbox]")).not.toBeChecked();
-    await expect(app.page.locator('[data-testid="rag-suggestion"][data-suggest-rel*="node_modules"]')).toHaveCount(0);
+    const agentId = await defaultAgentId(request);
+    const agent = (await (await request.get(`${baseUrl}/api/agents/${agentId}`)).json()) as {
+      name: string;
+      default_llm_configuration: Record<string, unknown> | null;
+    };
+    const original = agent.default_llm_configuration ?? null;
+    const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
+    tools.rag = {
+      policy: "allow",
+      rules: { storages: [storage.id], top_k: 8, strategy: "simple", allow_source_changes: true },
+    };
 
-    // Add the picked roots and finish creating the storage with them.
-    await app.page.getByTestId("rag-suggest-add").click();
-    await expect(app.page.getByTestId("rag-roots")).toHaveValue(new RegExp(`docs`));
-    await expect(app.page.getByTestId("rag-roots")).not.toHaveValue(new RegExp(`src`));
-    await app.page.getByTestId("rag-name").fill(name);
-    await app.page.getByTestId("rag-provider").fill("stub");
-    await app.page.getByTestId("rag-model").fill("stub-embed");
-    await app.page.getByTestId("rag-create").click();
-    const card = storageCard(app.page, name);
-    await expect(card).toBeVisible({ timeout: 10_000 });
-    await card.getByTestId("rag-ingest").click();
-    await expect(card.getByTestId("rag-storage-meta")).toContainText("2 chunks", { timeout: 10_000 });
+    try {
+      expect(
+        (
+          await request.put(`${baseUrl}/api/agents/${agentId}`, {
+            data: { name: agent.name, default_llm_configuration: { ...(original ?? {}), tools } },
+          })
+        ).ok(),
+      ).toBeTruthy();
 
-    await card.getByTestId("rag-delete").click();
-    await expect(card).toHaveCount(0, { timeout: 10_000 });
+      // The stub planner explores the base (suggest_sources), then adds
+      // <base>/docs (add_source), then finalizes.
+      await app.chat.gotoNew(agentId);
+      await app.chat.userInput.typeMessage(`__rag_sources_probe__ base=${base} storage=${name} index the docs`);
+      await app.chat.userInput.send();
+      await expect(app.chat.transcript.assistantMessage).toContainText("indexed the docs folder", {
+        timeout: 20_000,
+      });
+      await expect(app.chat.transcript.toolRow()).toContainText("rag");
+
+      // The add_source ingest runs in the background — poll until the docs
+      // (and only the docs: 2 files) are queryable.
+      await expect
+        .poll(
+          async () => {
+            const infos = (await (await request.get(`${baseUrl}/api/rag/storages`)).json()) as Array<{
+              id: string;
+              counts: { chunks: number; sources: number };
+            }>;
+            return infos.find((s) => s.id === storage.id)?.counts ?? null;
+          },
+          { timeout: 15_000 },
+        )
+        .toEqual({ chunks: 2, sources: 2, nodes: 0, edges: 0 });
+    } finally {
+      await request.put(`${baseUrl}/api/agents/${agentId}`, {
+        data: { name: agent.name, default_llm_configuration: original },
+      });
+      await request.delete(`${baseUrl}/api/rag/storages/${storage.id}`);
+    }
   } finally {
     await rm(base, { recursive: true, force: true });
   }

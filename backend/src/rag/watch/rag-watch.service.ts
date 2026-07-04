@@ -43,6 +43,20 @@ export class RagWatchService implements OnModuleInit, OnModuleDestroy {
     return [...this.watchers.keys()];
   }
 
+  /** Drop a storage's watcher (its params changed) and re-reconcile so it
+   *  comes back subscribed to the current sourceParams. */
+  restart(storageId: string): void {
+    const controller = this.watchers.get(storageId);
+    if (controller) {
+      controller.abort();
+      this.watchers.delete(storageId);
+    }
+    const timer = this.debounces.get(storageId);
+    if (timer) clearTimeout(timer);
+    this.debounces.delete(storageId);
+    this.reconcile();
+  }
+
   /** Start/stop watchers to match the manifests. Call after any manifest
    *  create/update/delete that could change the watched set. */
   reconcile(): void {

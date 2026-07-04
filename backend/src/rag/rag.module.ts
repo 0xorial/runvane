@@ -14,7 +14,6 @@ import { ENTITY_SOURCES } from './sources/entity-source.js';
 import { EntitySourceRegistry } from './sources/entity-source.registry.js';
 import { FilesEntitySource } from './sources/files.source.js';
 import { RAG_DATA_DIR, StorageRegistry } from './store/storage-registry.service.js';
-import { RootSuggesterService } from './sources/root-suggester.service.js';
 
 /**
  * The RAG subsystem. `LlmProviderRegistry` is a global provider, so only the
@@ -40,7 +39,6 @@ import { RootSuggesterService } from './sources/root-suggester.service.js';
       inject: [FilesEntitySource],
     },
     EntitySourceRegistry,
-    RootSuggesterService,
     LlmGraphBuilder,
     {
       provide: GRAPH_BUILDERS,
@@ -53,6 +51,14 @@ import { RootSuggesterService } from './sources/root-suggester.service.js';
     RagWatchService,
     RetrieverService,
   ],
-  exports: [StorageRegistry, RetrieverService, IngestionService, IngestRunner, EntitySourceRegistry, GraphBuilderRegistry],
+  exports: [
+    StorageRegistry,
+    RetrieverService,
+    IngestionService,
+    IngestRunner,
+    RagWatchService,
+    EntitySourceRegistry,
+    GraphBuilderRegistry,
+  ],
 })
 export class RagModule {}
