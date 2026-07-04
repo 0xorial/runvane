@@ -108,6 +108,44 @@ export class OpenRouterProvider implements LlmProvider {
     return Array.from(new Set(data.map(parseModelIdentifier).filter((x) => x.length > 0)));
   }
 
+  /** `POST {base_url}/embeddings` — OpenRouter routes OpenAI-compatible
+   *  embedding models (e.g. 'openai/text-embedding-3-small'), so RAG
+   *  storages can embed through the same account as chat. */
+  async embedTexts(
+    settingsIn: ProviderSettingsDict,
+    model: string,
+    texts: string[],
+    signal?: AbortSignal,
+  ): Promise<number[][]> {
+    if (texts.length === 0) return [];
+    const settings = this.mergedSettings(settingsIn);
+    const baseUrl = normalizeBaseUrl(settings, this.defaultBaseUrl);
+    const key = apiKey(settings);
+    if (!baseUrl) throw new Error('base_url is required');
+    if (!key) throw new Error('api_key is required');
+    const res = await fetch(`${baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: buildHeaders(settings),
+      body: JSON.stringify({ model, input: texts }),
+      ...(signal ? { signal } : {}),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`embeddings request failed (${res.status}): ${body.slice(0, 300)}`);
+    }
+    const raw = (await res.json()) as { data?: Array<{ embedding?: unknown; index?: unknown }> };
+    const rows = Array.isArray(raw.data) ? raw.data.slice() : [];
+    rows.sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0));
+    const vectors = rows.map((row) => {
+      if (!Array.isArray(row.embedding)) throw new Error('embeddings response missing vector data');
+      return row.embedding.map((x) => Number(x));
+    });
+    if (vectors.length !== texts.length) {
+      throw new Error(`embeddings: expected ${texts.length} vectors, got ${vectors.length}`);
+    }
+    return vectors;
+  }
+
   listModelCapabilitiesFromPayload(payload: unknown[]): Array<{
     model_name: string;
     supports_image_input: boolean;
