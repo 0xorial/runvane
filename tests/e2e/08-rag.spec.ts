@@ -387,7 +387,8 @@ test("RAG graph: the rag tool uses the graph strategy in chat", async ({ app, re
   const ingest = (await (await request.post(`${base}/api/rag/storages/${storage.id}/ingest`)).json()) as {
     graph: { nodes: number; edges: number; failedSources: number } | null;
   };
-  expect(ingest.graph).toEqual({ nodes: 3, edges: 2, failedSources: 0 });
+  // Structural fields only — the result also carries extraction LLM usage.
+  expect(ingest.graph).toMatchObject({ nodes: 3, edges: 2, failedSources: 0 });
 
   const agentId = await defaultAgentId(request);
   const agent = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
