@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
 import { CreateStorageSchema, RagDebugQuerySchema, UpdateStorageSchema } from './contracts/rag.js';
@@ -99,8 +100,17 @@ export class RagController {
   updateStorage(@Param('id') id: string, @Body() body: UpdateStorageDto) {
     const updated = this.storages.updateManifest(id, { watch: body.watch });
     if (!updated) throw new NotFoundException(`storage '${id}' not found`);
+    this.storages.open(id)?.appendLog('watch_changed', 'user', { watch: body.watch });
     this.watcher.reconcile();
     return this.storages.info(id);
+  }
+
+  /** Newest-first activity log for one storage (who did what, when, stats). */
+  @Get('storages/:id/log')
+  storageLog(@Param('id') id: string, @Query('limit') limit?: string) {
+    const store = this.storages.open(id);
+    if (!store) throw new NotFoundException(`storage '${id}' not found`);
+    return { entries: store.listLog(limit ? Number(limit) : 50) };
   }
 
   @Delete('storages/:id')

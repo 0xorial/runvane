@@ -19,7 +19,9 @@ describe('IngestRunner', () => {
     });
     const runner = new IngestRunner(
       { ingest } as never,
-      { getManifest: () => ({ name: 'S' }) } as never,
+      // open() → null: log writes are optional-chained, so the runner works
+      // against a registry with no backing store (as in this fake).
+      { getManifest: () => ({ name: 'S' }), open: () => null } as never,
       {
         run: (_spec: unknown, fn: (signal: AbortSignal, taskId: string) => Promise<IngestResult>) =>
           fn(new AbortController().signal, 'task-1'),

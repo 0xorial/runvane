@@ -5,6 +5,9 @@ import { bufferToFloat32, dot, float32ToBuffer, l2normalize } from '../vector.js
 import type {
   ChunkInput,
   ChunkRef,
+  RagLogActor,
+  RagLogEntry,
+  RagLogEvent,
   SourceGraphInput,
   StorageManifest,
   StoreCounts,
@@ -65,6 +68,13 @@ CREATE TABLE IF NOT EXISTS graph_mentions (
   PRIMARY KEY (node_id, source_type, source_id, chunk_index)
 );
 CREATE INDEX IF NOT EXISTS idx_graph_mentions_provenance ON graph_mentions(source_type, source_id);
+CREATE TABLE IF NOT EXISTS activity_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  at          TEXT NOT NULL,
+  event       TEXT NOT NULL,
+  actor       TEXT NOT NULL,
+  detail_json TEXT NOT NULL DEFAULT '{}'
+);
 `;
 
 /** Case/whitespace-insensitive identity for node deduplication. */
@@ -379,6 +389,33 @@ export class RagStore {
       });
     }
     return out;
+  }
+
+  /** Append one activity-log entry (audit trail: who did what, when). */
+  appendLog(event: RagLogEvent, actor: RagLogActor, detail: Record<string, unknown> = {}): void {
+    this.db
+      .prepare(`INSERT INTO activity_log(at, event, actor, detail_json) VALUES(?, ?, ?, ?)`)
+      .run(new Date().toISOString(), event, actor, JSON.stringify(detail));
+  }
+
+  /** Newest-first activity entries. */
+  listLog(limit = 50): RagLogEntry[] {
+    const rows = this.db
+      .prepare(`SELECT id, at, event, actor, detail_json FROM activity_log ORDER BY id DESC LIMIT ?`)
+      .all(Math.max(1, Math.min(500, Math.floor(limit)))) as Array<{
+      id: number;
+      at: string;
+      event: string;
+      actor: string;
+      detail_json: string;
+    }>;
+    return rows.map((r) => ({
+      id: Number(r.id),
+      at: r.at,
+      event: r.event as RagLogEvent,
+      actor: r.actor as RagLogActor,
+      detail: safeParseObject(r.detail_json),
+    }));
   }
 
   private deleteSourceGraphRows(sourceType: string, sourceId: string): void {

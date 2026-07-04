@@ -6,6 +6,7 @@
     getRagGraphBuilders,
     getRagSources,
     getRagStorages,
+    getRagStorageLog,
     ingestRagStorage,
     queryRagStorage,
     updateRagStorage,
@@ -14,6 +15,7 @@
     type GraphBuilderInfo,
     type IngestResult,
     type RagGraphContext,
+    type RagLogEntry,
     type RagQueryHit,
     type RagStorageInfo,
   } from "@/api/ragClient";
@@ -50,6 +52,8 @@
   let queryUseGraph = $state<Record<string, boolean>>({});
   let queryHits = $state<Record<string, RagQueryHit[]>>({});
   let queryGraphs = $state<Record<string, RagGraphContext | null>>({});
+  let logOpen = $state<Record<string, boolean>>({});
+  let logEntries = $state<Record<string, RagLogEntry[]>>({});
 
   const canCreate = $derived(
     name.trim().length > 0 &&
@@ -207,6 +211,41 @@
       error = e instanceof Error ? e.message : String(e);
     });
   }
+
+  async function toggleLog(id: string): Promise<void> {
+    const next = !logOpen[id];
+    logOpen = { ...logOpen, [id]: next };
+    if (!next) return;
+    try {
+      logEntries = { ...logEntries, [id]: (await getRagStorageLog(id)).entries };
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  /** One human line per log entry; the interesting keys per event, in order. */
+  function logSummary(entry: RagLogEntry): string {
+    const d = entry.detail;
+    switch (entry.event) {
+      case "created":
+        return `embedding ${d.embedding}${d.graph ? ` · graph ${d.graph}` : ""}${d.watch ? " · watching" : ""}`;
+      case "ingest":
+        return (
+          `+${d.added} ~${d.updated} =${d.skipped} -${d.removed} · ${d.total_chunks} chunks` +
+          (d.nodes !== undefined ? ` · ${d.nodes} nodes/${d.edges} edges` : "") +
+          (Number(d.graph_failures) > 0 ? ` · ${d.graph_failures} graph failures` : "") +
+          ` · ${((Number(d.duration_ms) || 0) / 1000).toFixed(1)}s`
+        );
+      case "ingest_failed":
+        return String(d.error ?? "failed");
+      case "source_added":
+        return `${(Array.isArray(d.roots) ? d.roots : []).join(", ")} · chat ${String(d.conversation_id ?? "").slice(0, 8)}`;
+      case "watch_changed":
+        return d.watch ? "watching on" : "watching off";
+      default:
+        return "";
+    }
+  }
 </script>
 
 <main class="flex min-w-0 flex-col gap-3.5" data-testid="rag-section">
@@ -323,6 +362,15 @@
               <button
                 type="button"
                 class="{ghostBtn} border-slate-300"
+                data-testid="rag-log-toggle"
+                title="Activity log: who changed this storage, when, with what stats"
+                onclick={() => toggleLog(storage.id)}
+              >
+                Log
+              </button>
+              <button
+                type="button"
+                class="{ghostBtn} border-slate-300"
                 data-testid="rag-watch-toggle"
                 title={storage.watch ? "Stop watching sources" : "Auto-index when sources change"}
                 disabled={busyId === storage.id}
@@ -338,6 +386,35 @@
               </button>
             </div>
           </div>
+
+          {#if logOpen[storage.id]}
+            <div class="mt-2 rounded-md border border-border bg-muted/40 p-2 text-xs" data-testid="rag-log">
+              {#if !logEntries[storage.id]}
+                <span class="text-muted-foreground">Loading…</span>
+              {:else if logEntries[storage.id].length === 0}
+                <span class="text-muted-foreground">No activity yet.</span>
+              {:else}
+                <ul class="flex flex-col gap-1">
+                  {#each logEntries[storage.id] as entry (entry.id)}
+                    <li class="flex items-baseline gap-2" data-testid="rag-log-entry" data-log-event={entry.event} data-log-actor={entry.actor}>
+                      <span class="shrink-0 tabular-nums text-muted-foreground">{new Date(entry.at).toLocaleString()}</span>
+                      <span
+                        class="shrink-0 rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {entry.actor === 'agent'
+                          ? 'bg-violet-500/15 text-violet-600'
+                          : entry.actor === 'watcher'
+                            ? 'bg-teal-500/15 text-teal-600'
+                            : 'bg-slate-500/15 text-slate-600'}"
+                      >
+                        {entry.actor}
+                      </span>
+                      <span class="shrink-0 font-medium text-foreground">{entry.event.replace("_", " ")}</span>
+                      <span class="min-w-0 truncate text-muted-foreground" title={logSummary(entry)}>{logSummary(entry)}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          {/if}
 
           {#if indexing}
             <div

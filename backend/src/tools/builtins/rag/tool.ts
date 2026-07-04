@@ -68,7 +68,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
   async runTool(params: RagToolParams, context: ToolRunContext): Promise<unknown> {
     const rules = parseRagToolRules(context.toolRules ?? this.getDefaultRules());
     if (params.operation === 'suggest_sources') return this.suggestSources(params);
-    if (params.operation === 'add_source') return this.addSource(params, rules);
+    if (params.operation === 'add_source') return this.addSource(params, rules, context);
 
     if (!params.query) throw new Error('rag: operation "query" needs the `query` parameter');
     if (rules.storages.length === 0) {
@@ -135,7 +135,11 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
   }
 
   /** Add roots to one of the agent's storages and re-index in the background. */
-  private async addSource(params: RagToolParams, rules: RagToolRules): Promise<unknown> {
+  private async addSource(
+    params: RagToolParams,
+    rules: RagToolRules,
+    context: ToolRunContext,
+  ): Promise<unknown> {
     if (!rules.allow_source_changes) {
       throw new Error(
         'rag: add_source is disabled for this agent — enable the allow_source_changes rule to let it modify storage sources',
@@ -183,11 +187,16 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
       this.storages.updateManifest(manifest.id, {
         sourceParams: { ...manifest.sourceParams, roots: merged },
       });
+      this.storages.open(manifest.id)?.appendLog('source_added', 'agent', {
+        roots: added,
+        conversation_id: context.conversationId,
+        agent_id: context.agentId,
+      });
       // The watcher holds the old roots; re-subscribe with the new ones.
       if (manifest.watch) this.watcher.restart(manifest.id);
     }
     // Re-index in the background — progress shows as a running task.
-    void this.ingestRunner.run(manifest.id, 'manual').catch((error) => {
+    void this.ingestRunner.run(manifest.id, 'agent').catch((error) => {
       this.logger.warn(`add_source ingest of '${manifest.id}' failed: ${String(error)}`);
     });
     return {

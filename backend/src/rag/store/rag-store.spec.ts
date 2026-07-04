@@ -76,6 +76,23 @@ describe('RagStore', () => {
     expect(store.listSourceIds('files')).toEqual([]);
   });
 
+  describe('activity log', () => {
+    it('appends and lists newest-first with detail round-trip and limit', () => {
+      store.appendLog('created', 'user', { name: 'S', watch: false });
+      store.appendLog('ingest', 'watcher', { added: 2, duration_ms: 1234 });
+      store.appendLog('source_added', 'agent', { roots: ['/a'], conversation_id: 'c1' });
+
+      const all = store.listLog();
+      expect(all.map((e) => e.event)).toEqual(['source_added', 'ingest', 'created']);
+      expect(all[0]!.actor).toBe('agent');
+      expect(all[0]!.detail).toEqual({ roots: ['/a'], conversation_id: 'c1' });
+      expect(all[1]!.detail.added).toBe(2);
+      expect(Date.parse(all[0]!.at)).not.toBeNaN();
+
+      expect(store.listLog(2).map((e) => e.event)).toEqual(['source_added', 'ingest']);
+    });
+  });
+
   describe('knowledge graph', () => {
     /** Two sources: a.md mentions Alpha+Beta (edge), b.md mentions Beta+Gamma (edge). */
     function seedGraph(): void {

@@ -70,6 +70,20 @@ export type StoredGraphEdge = {
   description: string;
 };
 
+/** Who performed a logged storage action. Agent actors carry conversation
+ *  provenance in the entry's detail (`conversation_id`, `agent_id`). */
+export type RagLogActor = 'user' | 'agent' | 'watcher';
+
+export type RagLogEvent = 'created' | 'ingest' | 'ingest_failed' | 'source_added' | 'watch_changed';
+
+export type RagLogEntry = {
+  id: number;
+  at: string;
+  event: RagLogEvent;
+  actor: RagLogActor;
+  detail: Record<string, unknown>;
+};
+
 /** Address of one stored chunk (for mention provenance lookups). */
 export type ChunkRef = { sourceType: string; sourceId: string; chunkIndex: number };
 

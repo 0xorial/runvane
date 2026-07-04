@@ -2,6 +2,7 @@
 // that file) so this stays isolated from the rest of the API surface.
 import { getJson, sendJson, deleteJson } from "./client";
 import type {
+  RagLogEntry,
   RagStorageInfo,
   RagQueryHit,
   RagRetrieveResult,
@@ -10,6 +11,7 @@ import type {
 } from "../../../backend/src/rag/contracts/rag";
 
 export type {
+  RagLogEntry,
   RagStorageInfo,
   RagQueryHit,
   RagGraphContext,
@@ -51,6 +53,12 @@ export function createRagStorage(input: CreateRagStorageInput): Promise<RagStora
 
 export function updateRagStorage(id: string, patch: { watch: boolean }): Promise<RagStorageInfo> {
   return sendJson(`/api/rag/storages/${encodeURIComponent(id)}`, "PATCH", patch) as Promise<RagStorageInfo>;
+}
+
+export function getRagStorageLog(id: string, limit = 50): Promise<{ entries: RagLogEntry[] }> {
+  return getJson(`/api/rag/storages/${encodeURIComponent(id)}/log?limit=${limit}`) as Promise<{
+    entries: RagLogEntry[];
+  }>;
 }
 
 export function deleteRagStorage(id: string): Promise<{ ok: boolean }> {

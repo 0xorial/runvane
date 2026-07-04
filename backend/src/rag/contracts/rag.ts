@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export type { RagLogActor, RagLogEntry, RagLogEvent } from '../store/rag-store.types.js';
+
 /** Knowledge-graph config for a storage: which builder extracts it, with builder-specific params. */
 export const StorageGraphSchema = z
   .object({

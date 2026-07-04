@@ -80,6 +80,15 @@ test("RAG: create a files storage, ingest, retrieve the closest doc, delete", as
     const top = card.getByTestId("rag-hit").first().getByTestId("rag-hit-source");
     await expect(top).toHaveText("db.md", { timeout: 10_000 });
 
+    // Activity log: creation and the manual ingest, newest first, with stats.
+    await card.getByTestId("rag-log-toggle").click();
+    await expect(card.getByTestId("rag-log")).toBeVisible();
+    const entries = card.getByTestId("rag-log-entry");
+    await expect(entries.first()).toHaveAttribute("data-log-event", "ingest");
+    await expect(entries.first()).toHaveAttribute("data-log-actor", "user");
+    await expect(entries.first()).toContainText("+2 ~0 =0 -0");
+    await expect(entries.last()).toHaveAttribute("data-log-event", "created");
+
     await card.getByTestId("rag-delete").click();
     await expect(card).toHaveCount(0, { timeout: 10_000 });
   } finally {
@@ -277,6 +286,17 @@ test("RAG chat: the agent explores a base and adds sources via the rag tool", as
           { timeout: 15_000 },
         )
         .toEqual({ chunks: 2, sources: 2, nodes: 0, edges: 0 });
+
+      // The audit trail attributes both the source change and the re-index to
+      // the agent, with the acting conversation recorded.
+      const log = (await (
+        await request.get(`${baseUrl}/api/rag/storages/${storage.id}/log`)
+      ).json()) as { entries: Array<{ event: string; actor: string; detail: Record<string, unknown> }> };
+      const sourceAdded = log.entries.find((e) => e.event === "source_added");
+      expect(sourceAdded?.actor).toBe("agent");
+      expect(String(sourceAdded?.detail.roots)).toContain("/docs");
+      expect(String(sourceAdded?.detail.conversation_id ?? "")).not.toHaveLength(0);
+      expect(log.entries.find((e) => e.event === "ingest")?.actor).toBe("agent");
     } finally {
       await request.put(`${baseUrl}/api/agents/${agentId}`, {
         data: { name: agent.name, default_llm_configuration: original },

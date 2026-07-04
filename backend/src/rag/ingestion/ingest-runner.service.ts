@@ -4,7 +4,13 @@ import { StorageRegistry } from '../store/storage-registry.service.js';
 import { IngestionService } from './ingestion.service.js';
 import type { IngestResult } from '../contracts/rag.js';
 
-export type IngestTrigger = 'manual' | 'watch';
+export type IngestTrigger = 'manual' | 'watch' | 'agent';
+
+const LOG_ACTOR: Record<IngestTrigger, 'user' | 'watcher' | 'agent'> = {
+  manual: 'user',
+  watch: 'watcher',
+  agent: 'agent',
+};
 
 /**
  * Runs storage ingests as registry tasks — visible and cancellable in the
@@ -50,17 +56,41 @@ export class IngestRunner {
     return promise;
   }
 
-  private execute(storageId: string, trigger: IngestTrigger): Promise<IngestResult> {
+  private async execute(storageId: string, trigger: IngestTrigger): Promise<IngestResult> {
     const name = this.storages.getManifest(storageId)?.name ?? storageId;
-    return this.tasks.run(
-      { kind: 'ingest', title: `Index "${name}"`, meta: { storageId, trigger } },
-      (signal, taskId) =>
-        this.ingestion.ingest(storageId, {
-          signal,
-          onProgress: (p) =>
-            this.tasks.setProgress(taskId, `${p.added} added · ${p.updated} updated · ${p.skipped} skipped`),
-        }),
-    );
+    const startedAt = Date.now();
+    try {
+      const result = await this.tasks.run(
+        { kind: 'ingest', title: `Index "${name}"`, meta: { storageId, trigger } },
+        (signal, taskId) =>
+          this.ingestion.ingest(storageId, {
+            signal,
+            onProgress: (p) =>
+              this.tasks.setProgress(taskId, `${p.added} added · ${p.updated} updated · ${p.skipped} skipped`),
+          }),
+      );
+      this.storages.open(storageId)?.appendLog('ingest', LOG_ACTOR[trigger], {
+        trigger,
+        duration_ms: Date.now() - startedAt,
+        added: result.added,
+        updated: result.updated,
+        skipped: result.skipped,
+        removed: result.removed,
+        total_chunks: result.totalChunks,
+        total_sources: result.totalSources,
+        ...(result.graph
+          ? { nodes: result.graph.nodes, edges: result.graph.edges, graph_failures: result.graph.failedSources }
+          : {}),
+      });
+      return result;
+    } catch (error) {
+      this.storages.open(storageId)?.appendLog('ingest_failed', LOG_ACTOR[trigger], {
+        trigger,
+        duration_ms: Date.now() - startedAt,
+        error: String(error).slice(0, 500),
+      });
+      throw error;
+    }
   }
 }
 

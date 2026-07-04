@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { RagStore } from './rag-store.js';
-import type { StorageManifest } from './rag-store.types.js';
+import type { RagLogActor, StorageManifest } from './rag-store.types.js';
 import type { RagStorageInfo } from '../contracts/rag.js';
 
 /** DI token for the RAG data directory (one .sqlite file per storage). */
@@ -71,7 +71,7 @@ export class StorageRegistry implements OnModuleDestroy {
     return store;
   }
 
-  create(input: CreateStorageInput): StorageManifest {
+  create(input: CreateStorageInput, actor: RagLogActor = 'user'): StorageManifest {
     const id = randomUUID();
     const store = new RagStore(this.fileFor(id));
     const manifest: StorageManifest = {
@@ -90,6 +90,14 @@ export class StorageRegistry implements OnModuleDestroy {
       lastIngestedAt: null,
     };
     store.setManifest(manifest);
+    store.appendLog('created', actor, {
+      name: manifest.name,
+      entity_source: manifest.entitySource,
+      embedding: `${manifest.embeddingProviderId}/${manifest.embeddingModel}`,
+      graph: manifest.graph ? `${manifest.graph.builder}` : null,
+      watch: manifest.watch ?? false,
+      roots: Array.isArray(manifest.sourceParams.roots) ? manifest.sourceParams.roots : [],
+    });
     this.cache.set(id, store);
     return manifest;
   }
