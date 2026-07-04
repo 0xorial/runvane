@@ -6,6 +6,7 @@ import { GRAPH_BUILDERS } from './graph/graph-builder.js';
 import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
 import { IngestRunner } from './ingestion/ingest-runner.service.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
+import { LightRagGraphBuilder } from './graph/lightrag-graph-builder.js';
 import { LlmGraphBuilder } from './graph/llm-graph-builder.js';
 import { RagWatchService } from './watch/rag-watch.service.js';
 import { RagController } from './rag.controller.js';
@@ -40,10 +41,11 @@ import { RAG_DATA_DIR, StorageRegistry } from './store/storage-registry.service.
     },
     EntitySourceRegistry,
     LlmGraphBuilder,
+    LightRagGraphBuilder,
     {
       provide: GRAPH_BUILDERS,
-      useFactory: (llm: LlmGraphBuilder) => [llm],
-      inject: [LlmGraphBuilder],
+      useFactory: (llm: LlmGraphBuilder, lightrag: LightRagGraphBuilder) => [llm, lightrag],
+      inject: [LlmGraphBuilder, LightRagGraphBuilder],
     },
     GraphBuilderRegistry,
     IngestionService,

@@ -30,7 +30,10 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
   knowledge-graph layer (pluggable graph builders; `graph` strategy walks entity
   relations to pull in connected-but-lexically-far chunks); storages can watch
   their sources and re-index on change, with live progress in the running-tasks
-  panel
+  panel. Builders: `llm` (zero-dep, any configured provider) and `lightrag`
+  ([LightRAG](https://github.com/HKUDS/LightRAG) as a self-bootstrapping Python
+  sidecar — needs only `python3` ≥3.10 on PATH; it creates its own venv and
+  pip-installs `lightrag-hku` on first use)
 - api tool (backend introspection: tools, agents, presets, tasks)
 - conversations tool (read chat history and conversation metadata)
 - filesystem tools (`filesystem`, `filesystem_index`)

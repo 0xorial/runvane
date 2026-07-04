@@ -60,7 +60,7 @@
       providerId.trim().length > 0 &&
       model.trim().length > 0 &&
       (entitySource !== "files" || rootsText.trim().length > 0) &&
-      (graphBuilder !== "llm" || (graphProviderId.trim().length > 0 && graphModel.trim().length > 0)),
+      (graphBuilder === "" || (graphProviderId.trim().length > 0 && graphModel.trim().length > 0)),
   );
 
   const inputClass =
@@ -126,13 +126,11 @@
         embeddingProviderId: providerId.trim(),
         embeddingModel: model.trim(),
         sourceParams,
+        // Both builders (llm, lightrag) take the same provider/model params.
         graph: graphBuilder
           ? {
               builder: graphBuilder,
-              params:
-                graphBuilder === "llm"
-                  ? { providerId: graphProviderId.trim(), model: graphModel.trim() }
-                  : {},
+              params: { providerId: graphProviderId.trim(), model: graphModel.trim() },
             }
           : null,
         watch: watchNew,
@@ -308,7 +306,7 @@
         <span class="font-semibold">Watch sources</span>
         <span class="text-muted-foreground">(auto-index on change)</span>
       </label>
-      {#if graphBuilder === "llm"}
+      {#if graphBuilder !== ""}
         <div class="grid grid-cols-2 gap-2.5">
           <label class="flex flex-col gap-1 text-xs">
             <span class="font-semibold text-foreground">Extraction provider id</span>
