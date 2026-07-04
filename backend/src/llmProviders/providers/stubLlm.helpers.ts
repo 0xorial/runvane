@@ -431,17 +431,19 @@ export function pickStubReply(request: LlmRequest): string {
   if (stubIsToolParamsRequest(blob)) {
     if (stubIsAskAttachmentToolParamsRequest(blob)) return stubAskAttachmentParamsReply(blob);
     if (/Produce JSON args for tool "rag"/.test(blob)) {
-      // Structured tool_requests (the source-management flow) pass through
-      // verbatim; free-text requests fall back to the canonical probe query.
-      const tail = blob.split('Planner request:')[1] ?? '';
-      const start = tail.indexOf('{');
-      const end = tail.lastIndexOf('}');
-      if (start !== -1 && end > start) {
+      // The user message is the planner's raw tool_request (no prefix — only
+      // ask_attachment adds a params-context note). Structured requests from
+      // the source-management flow are one-line JSON objects; pass them
+      // through verbatim. The schema line also contains "operation" but never
+      // starts a line with '{', so scanning whole lines cannot match it.
+      for (const line of blob.split('\n').reverse()) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{') || !trimmed.includes('"operation"')) continue;
         try {
-          const parsed = JSON.parse(tail.slice(start, end + 1)) as Record<string, unknown>;
+          const parsed = JSON.parse(trimmed) as Record<string, unknown>;
           if (typeof parsed.operation === 'string') return JSON.stringify(parsed);
         } catch {
-          /* fall through to the default query params */
+          /* keep scanning */
         }
       }
       return JSON.stringify({ query: 'database migration prisma' });

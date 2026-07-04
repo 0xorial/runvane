@@ -204,6 +204,8 @@ test("RAG graph: ingest extracts a graph; graph strategy pulls connected docs + 
 });
 
 test("RAG chat: the agent explores a base and adds sources via the rag tool", async ({ app, request }) => {
+  // Two tool rounds + a background ingest — needs more than the default budget.
+  test.setTimeout(30_000);
   const base = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-chatsrc-"));
   const put = async (rel: string, content: string) => {
     await mkdir(path.dirname(path.join(base, rel)), { recursive: true });
