@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ChatEntrySchema, UserMessageEntrySchema } from './chatEntry.js';
+import { ConversationTokenUsageByModelSchema } from './conversations.js';
 
 export const SseType = {
   USER_MESSAGE: 'user_message',
@@ -34,14 +35,7 @@ export const ConversationSseRowSchema = z.object({
   providerCostPartial: z.boolean(),
   /** User's branch anchor (stored on conversation); client resolves to live tip. */
   defaultViewLeafAnchorId: z.string().nullable(),
-  tokenUsageByModel: z.array(
-    z.object({
-      modelName: z.string(),
-      promptTokens: z.number(),
-      cachedPromptTokens: z.number(),
-      completionTokens: z.number(),
-    }),
-  ),
+  tokenUsageByModel: z.array(ConversationTokenUsageByModelSchema),
 });
 export type ConversationSseRow = z.infer<typeof ConversationSseRowSchema>;
 

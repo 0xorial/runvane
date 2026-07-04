@@ -100,5 +100,17 @@ describeLive('conversation provider cost aggregation (integration)', () => {
     const afterSecond = await getConversationCost(baseUrl, conversationId);
     expect(afterSecond.providerCostTotal).toBeCloseTo(afterFirst.providerCostTotal, 8);
     expect(afterSecond.providerCostPartial).toBe(true);
+
+    // Per-model rollup (feeds the cost popover): the stub model's row carries
+    // the reported sum, and is flagged incomplete because turn 2 reported
+    // nothing — the UI must show the reported amount, never "set price".
+    const row = (
+      (await getConversation(baseUrl, conversationId)) as unknown as {
+        tokenUsageByModel: Array<{ modelName: string; providerCostUsd: number | null; providerCostComplete: boolean }>;
+      }
+    ).tokenUsageByModel.find((r) => r.modelName === STUB_MODEL);
+    expect(row).toBeDefined();
+    expect(row!.providerCostUsd).toBeCloseTo(0.01234, 8);
+    expect(row!.providerCostComplete).toBe(false);
   }, 15_000);
 });

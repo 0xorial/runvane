@@ -20,6 +20,12 @@ export const ConversationTokenUsageByModelSchema = z.object({
   promptTokens: z.number(),
   cachedPromptTokens: z.number(),
   completionTokens: z.number(),
+  /** Provider-reported USD summed over this model's turns; null when no turn
+   *  reported a cost (distinct from a genuine $0 total). */
+  providerCostUsd: z.number().nullable(),
+  /** True when every counted turn reported a cost — the sum is exact, not a
+   *  lower bound. */
+  providerCostComplete: z.boolean(),
 });
 
 export const ConversationRowSchema = z.object({

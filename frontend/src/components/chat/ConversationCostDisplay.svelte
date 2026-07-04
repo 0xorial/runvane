@@ -177,7 +177,17 @@
           </div>
           <div class="shrink-0 whitespace-nowrap text-right">
             {#if row.costUsd !== null}
-              {preciseUsd(row.costUsd)}
+              <span
+                data-testid="model-cost"
+                data-cost-source={row.source}
+                title={row.source === "provider"
+                  ? row.lowerBound
+                    ? "Provider-reported (some turns reported no cost — at least this much)"
+                    : "Reported by the provider"
+                  : "Estimated from configured pricing"}
+              >
+                {row.lowerBound ? "≥ " : ""}{preciseUsd(row.costUsd)}
+              </span>
             {:else if row.modelName}
               <button
                 type="button"

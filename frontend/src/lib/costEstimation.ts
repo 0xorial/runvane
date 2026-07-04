@@ -3,6 +3,10 @@ import { TokenUsageMapper, type EntryTokenUsage } from "../../../backend/src/con
 
 export type TokenUsageByModelRow = {
   modelName: string;
+  /** Provider-reported USD for this model (null/absent = nothing reported). */
+  providerCostUsd?: number | null;
+  /** True when every turn reported a cost, i.e. the reported sum is exact. */
+  providerCostComplete?: boolean;
 } & Required<Pick<EntryTokenUsage, "promptTokens" | "cachedPromptTokens" | "completionTokens">>;
 
 export type ModelPricing = {
@@ -94,7 +98,7 @@ function displayedTotalTokens(usage: TokenUsageByModelRow): number {
   return (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0);
 }
 
-/** One model's contribution to a conversation, with its estimated cost (null when unpriced). */
+/** One model's contribution to a conversation, with its cost (null when unknown). */
 export type ModelCostRow = {
   modelName: string;
   promptTokens: number;
@@ -102,8 +106,14 @@ export type ModelCostRow = {
   completionTokens: number;
   /** Prompt + completion; cached prompt is already included in `promptTokens`. */
   totalTokens: number;
-  /** Estimated USD for this model alone, or null when it has no pricing entry. */
+  /** USD for this model alone: provider-reported when available, else the
+   *  pricing-table estimate, else null (unknown). */
   costUsd: number | null;
+  /** Where `costUsd` came from. Provider-reported always wins over estimates. */
+  source: "provider" | "estimate" | null;
+  /** True when `costUsd` is a lower bound: the provider reported cost for only
+   *  some of this model's turns. */
+  lowerBound: boolean;
 };
 
 /**
@@ -133,6 +143,11 @@ export type ConversationCostSummary = {
 /**
  * Classify a conversation's cost from its per-model token usage and the cached pricing map.
  * Pure: callers pass token usage (provided externally) and pricing (read from frontend cache).
+ *
+ * Per model, provider-reported cost (e.g. OpenRouter's per-generation USD)
+ * always beats the pricing-table estimate — a model whose provider reports
+ * cost never demands "set price". The pricing table is the fallback for
+ * providers that only report tokens.
  */
 export function summarizeConversationCost(
   usageRows: TokenUsageByModelRow[],
@@ -142,8 +157,10 @@ export function summarizeConversationCost(
   const unpricedSeen = new Set<string>();
   const unpricedModels: string[] = [];
   let totalTokens = 0;
-  let pricedCount = 0;
-  let unpricedCount = 0;
+  let knownCount = 0;
+  let unknownCount = 0;
+  let lowerBoundCount = 0;
+  let costSum = 0;
 
   for (const usage of usageRows) {
     if (displayedTotalTokens(usage) === 0) continue;
@@ -151,32 +168,53 @@ export function summarizeConversationCost(
     const prices = name ? pricingByModel.get(name) : undefined;
     const rowTotal = displayedTotalTokens(usage);
     totalTokens += rowTotal;
-    if (prices) {
-      pricedCount += 1;
+
+    const reported = typeof usage.providerCostUsd === "number" ? usage.providerCostUsd : null;
+    let costUsd: number | null;
+    let source: ModelCostRow["source"];
+    let lowerBound = false;
+    if (reported !== null) {
+      costUsd = reported;
+      source = "provider";
+      lowerBound = usage.providerCostComplete !== true;
+    } else if (prices) {
+      costUsd = estimateConversationCostUsd([usage], pricingByModel);
+      source = "estimate";
     } else {
-      unpricedCount += 1;
+      costUsd = null;
+      source = null;
+    }
+
+    if (costUsd === null) {
+      unknownCount += 1;
       if (name && !unpricedSeen.has(name)) {
         unpricedSeen.add(name);
         unpricedModels.push(name);
       }
+    } else {
+      knownCount += 1;
+      if (lowerBound) lowerBoundCount += 1;
+      costSum += costUsd;
     }
+
     perModel.push({
       modelName: name,
       promptTokens: usage.promptTokens ?? 0,
       cachedPromptTokens: usage.cachedPromptTokens ?? 0,
       completionTokens: usage.completionTokens ?? 0,
       totalTokens: rowTotal,
-      costUsd: prices ? estimateConversationCostUsd([usage], pricingByModel) : null,
+      costUsd,
+      source,
+      lowerBound,
     });
   }
 
-  // Authoritative known total (single rounding pass) rather than re-summing the per-model rows.
-  const knownCostUsd = estimateConversationCostUsd(usageRows, pricingByModel);
+  const knownCostUsd = Number(costSum.toFixed(8));
 
   let state: ConversationCostState;
   if (perModel.length === 0) state = "empty";
-  else if (pricedCount === 0) state = "unpriced";
-  else if (unpricedCount > 0) state = "partial";
+  else if (knownCount === 0) state = "unpriced";
+  else if (unknownCount > 0 || lowerBoundCount > 0) state = "partial";
   else state = "priced";
 
   return { state, knownCostUsd, totalTokens, unpricedModels, perModel };
