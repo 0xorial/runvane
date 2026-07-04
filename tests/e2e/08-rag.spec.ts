@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Page } from "@playwright/test";
@@ -200,6 +200,55 @@ test("RAG graph: ingest extracts a graph; graph strategy pulls connected docs + 
     await expect(card).toHaveCount(0, { timeout: 10_000 });
   } finally {
     await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("RAG suggest: exploring a base offers roots; picked ones fill the form", async ({ app }) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-suggest-"));
+  const put = async (rel: string, content: string) => {
+    await mkdir(path.dirname(path.join(base, rel)), { recursive: true });
+    await writeFile(path.join(base, rel), content);
+  };
+  const name = `e2e-suggest-${Date.now()}`;
+  try {
+    await put("docs/db.md", DB_DOC);
+    await put("docs/cooking.md", COOK_DOC);
+    await put("src/main.ts", "export const x = 1;");
+    await put("node_modules/pkg/index.js", "module.exports = {};");
+
+    await app.page.goto("/settings/rag");
+    await app.page.getByTestId("rag-suggest-base").fill(base);
+    await app.page.getByTestId("rag-suggest").click();
+    await expect(app.page.getByTestId("rag-suggestions")).toBeVisible({ timeout: 15_000 });
+
+    // The stub LLM recommends *docs* dirs; src is offered but rejected;
+    // node_modules never shows up at all.
+    const docsRow = app.page.locator('[data-testid="rag-suggestion"][data-suggest-rel="docs"]');
+    await expect(docsRow).toHaveCount(1);
+    await expect(docsRow.getByTestId("rag-suggestion-reason")).toContainText("documentation");
+    await expect(docsRow.locator("input[type=checkbox]")).toBeChecked();
+    const srcRow = app.page.locator('[data-testid="rag-suggestion"][data-suggest-rel="src"]');
+    await expect(srcRow).toHaveCount(1);
+    await expect(srcRow.locator("input[type=checkbox]")).not.toBeChecked();
+    await expect(app.page.locator('[data-testid="rag-suggestion"][data-suggest-rel*="node_modules"]')).toHaveCount(0);
+
+    // Add the picked roots and finish creating the storage with them.
+    await app.page.getByTestId("rag-suggest-add").click();
+    await expect(app.page.getByTestId("rag-roots")).toHaveValue(new RegExp(`docs`));
+    await expect(app.page.getByTestId("rag-roots")).not.toHaveValue(new RegExp(`src`));
+    await app.page.getByTestId("rag-name").fill(name);
+    await app.page.getByTestId("rag-provider").fill("stub");
+    await app.page.getByTestId("rag-model").fill("stub-embed");
+    await app.page.getByTestId("rag-create").click();
+    const card = storageCard(app.page, name);
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await card.getByTestId("rag-ingest").click();
+    await expect(card.getByTestId("rag-storage-meta")).toContainText("2 chunks", { timeout: 10_000 });
+
+    await card.getByTestId("rag-delete").click();
+    await expect(card).toHaveCount(0, { timeout: 10_000 });
+  } finally {
+    await rm(base, { recursive: true, force: true });
   }
 });
 

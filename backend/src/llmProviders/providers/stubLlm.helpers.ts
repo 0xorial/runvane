@@ -269,6 +269,25 @@ export function stubGraphExtractionReply(blob: string): string {
   });
 }
 
+/**
+ * Suggest-roots stub: recommends every scanned directory whose relative path
+ * contains "docs" (reason "documentation") and rejects the rest, so e2e
+ * fixtures control the verdicts through directory naming alone.
+ */
+export function stubIsSuggestRootsRequest(blob: string): boolean {
+  return /review directory scan results/i.test(blob);
+}
+
+export function stubSuggestRootsReply(blob: string): string {
+  const rows: Array<{ relative: string; recommend: boolean; reason: string }> = [];
+  for (const match of blob.matchAll(/- relative "([^"]+)":/g)) {
+    const relative = match[1]!;
+    const recommend = relative.includes('docs');
+    rows.push({ relative, recommend, reason: recommend ? 'documentation' : 'not documentation' });
+  }
+  return JSON.stringify(rows);
+}
+
 /** Drives the rag-tool e2e: a user message containing RAG_PROBE_MARKER makes
  *  the planner call the `rag` tool once, then finalize. */
 export function stubIsRagProbeConversation(request: LlmRequest): boolean {
@@ -380,6 +399,7 @@ export function pickStubReply(request: LlmRequest): string {
     return '{}';
   }
   if (stubIsGraphExtractionRequest(blob)) return stubGraphExtractionReply(blob);
+  if (stubIsSuggestRootsRequest(blob)) return stubSuggestRootsReply(blob);
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;

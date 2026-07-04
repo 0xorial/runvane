@@ -8,6 +8,7 @@
     getRagStorages,
     ingestRagStorage,
     queryRagStorage,
+    suggestRagRoots,
     updateRagStorage,
     type CreateRagStorageInput,
     type EntitySourceInfo,
@@ -16,6 +17,7 @@
     type RagGraphContext,
     type RagQueryHit,
     type RagStorageInfo,
+    type SuggestedRoot,
   } from "@/api/ragClient";
   import { cancelTask } from "@/api/client";
   import { ensureTasksStream, getTasksSnapshot } from "@/lib/tasksStore.svelte";
@@ -41,6 +43,12 @@
   let graphModel = $state("");
   let watchNew = $state(false);
   let creating = $state(false);
+
+  // Suggest-roots: explore a base dir, offer candidates, add the picked ones.
+  let suggestBase = $state("");
+  let suggesting = $state(false);
+  let suggestions = $state<SuggestedRoot[] | null>(null);
+  let suggestPicked = $state<Record<string, boolean>>({});
 
   // Per-storage transient UI state.
   let busyId = $state<string | null>(null);
@@ -189,6 +197,34 @@
     }
   }
 
+  async function runSuggest(): Promise<void> {
+    const base = suggestBase.trim();
+    if (!base || suggesting) return;
+    suggesting = true;
+    error = null;
+    try {
+      const result = await suggestRagRoots(base);
+      suggestions = result.candidates;
+      const picked: Record<string, boolean> = {};
+      for (const c of result.candidates) picked[c.path] = c.recommended === true;
+      suggestPicked = picked;
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      suggesting = false;
+    }
+  }
+
+  function addPickedRoots(): void {
+    if (!suggestions) return;
+    const existing = new Set(rootsText.split("\n").map((r) => r.trim()).filter(Boolean));
+    for (const c of suggestions) {
+      if (suggestPicked[c.path] && !existing.has(c.path)) existing.add(c.path);
+    }
+    rootsText = [...existing].join("\n");
+    suggestions = null;
+  }
+
   async function toggleWatch(storage: RagStorageInfo): Promise<void> {
     busyId = storage.id;
     error = null;
@@ -254,6 +290,49 @@
           <textarea class="{inputClass} min-h-[64px] resize-y font-mono" data-testid="rag-roots" bind:value={rootsText}
             placeholder={"/workspace/docs\n/workspace/backend/src"}></textarea>
         </label>
+        <div class="col-span-2 flex flex-col gap-1.5 text-xs">
+          <div class="flex items-center gap-2">
+            <input
+              class={inputClass}
+              data-testid="rag-suggest-base"
+              placeholder="…or let the agent explore a base dir, e.g. /workspace"
+              bind:value={suggestBase}
+              onkeydown={(e) => e.key === "Enter" && runSuggest()}
+            />
+            <button type="button" class="{ghostBtn} border-slate-300 shrink-0" data-testid="rag-suggest"
+              disabled={suggesting || suggestBase.trim().length === 0} onclick={runSuggest}>
+              {suggesting ? "Exploring…" : "Suggest"}
+            </button>
+          </div>
+          {#if suggestions}
+            {#if suggestions.length === 0}
+              <div class="text-muted-foreground" data-testid="rag-suggest-empty">Nothing indexable found under that base.</div>
+            {:else}
+              <div class="flex flex-col gap-1 rounded-md border border-border bg-muted/40 p-2" data-testid="rag-suggestions">
+                {#each suggestions as c (c.path)}
+                  <label class="flex items-start gap-2" data-testid="rag-suggestion" data-suggest-rel={c.relative || "."}>
+                    <input type="checkbox"
+                      checked={suggestPicked[c.path] ?? false}
+                      onchange={(e) => (suggestPicked = { ...suggestPicked, [c.path]: e.currentTarget.checked })} />
+                    <span class="min-w-0">
+                      <code class="text-foreground">{c.relative || "."}</code>
+                      <span class="text-muted-foreground"> · {c.files} files</span>
+                      {#if c.reason}
+                        <span class={c.recommended ? "text-teal-600" : "text-muted-foreground"} data-testid="rag-suggestion-reason"> · {c.reason}</span>
+                      {/if}
+                      <span class="block truncate text-[10px] text-muted-foreground">{c.samples.join(", ")}</span>
+                    </span>
+                  </label>
+                {/each}
+                <div>
+                  <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-suggest-add" onclick={addPickedRoots}>
+                    Add selected to roots
+                  </button>
+                </div>
+              </div>
+            {/if}
+          {/if}
+        </div>
       {/if}
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Knowledge graph</span>

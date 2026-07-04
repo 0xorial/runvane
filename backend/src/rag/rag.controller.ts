@@ -10,7 +10,13 @@ import {
   Post,
 } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
-import { CreateStorageSchema, RagDebugQuerySchema, UpdateStorageSchema } from './contracts/rag.js';
+import {
+  CreateStorageSchema,
+  RagDebugQuerySchema,
+  SuggestRootsSchema,
+  UpdateStorageSchema,
+} from './contracts/rag.js';
+import { RootSuggesterService } from './sources/root-suggester.service.js';
 import { EmbeddingsService } from './embeddings/embeddings.service.js';
 import { EntitySourceRegistry } from './sources/entity-source.registry.js';
 import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
@@ -22,6 +28,7 @@ import { StorageRegistry } from './store/storage-registry.service.js';
 class CreateStorageDto extends createZodDto(CreateStorageSchema) {}
 class UpdateStorageDto extends createZodDto(UpdateStorageSchema) {}
 class RagDebugQueryDto extends createZodDto(RagDebugQuerySchema) {}
+class SuggestRootsDto extends createZodDto(SuggestRootsSchema) {}
 
 /**
  * The separate RAG ingestion + management surface. Builds/queries the RAG
@@ -38,7 +45,16 @@ export class RagController {
     private readonly embeddings: EmbeddingsService,
     private readonly graphBuilders: GraphBuilderRegistry,
     private readonly watcher: RagWatchService,
+    private readonly rootSuggester: RootSuggesterService,
   ) {}
+
+  /** Explore a base directory and offer storage roots worth indexing —
+   *  bounded scan ranked by indexable-file density, refined by one LLM call
+   *  when a default provider is configured. */
+  @Post('suggest-roots')
+  async suggestRoots(@Body() body: SuggestRootsDto) {
+    return { base: body.base, candidates: await this.rootSuggester.suggest(body.base) };
+  }
 
   /** Available RAGable entity types (files, later conversations/facts). */
   @Get('sources')
