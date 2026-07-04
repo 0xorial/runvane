@@ -57,8 +57,18 @@ export type IngestResult = {
   totalSources: number;
   embeddingDim: number | null;
   /** Present iff the storage has a graph layer configured. `failedSources`
-   *  counts items whose extraction failed this run (retried on next ingest). */
-  graph: { nodes: number; edges: number; failedSources: number } | null;
+   *  counts items whose extraction failed this run (retried on next ingest).
+   *  The usage fields account the extraction's LLM spend — background
+   *  indexing is real token burn and must be visible. */
+  graph: {
+    nodes: number;
+    edges: number;
+    failedSources: number;
+    llmCalls: number;
+    promptTokens: number;
+    completionTokens: number;
+    costUsd: number | null;
+  } | null;
 };
 
 export type RagQueryHit = {

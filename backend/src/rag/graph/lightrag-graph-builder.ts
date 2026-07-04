@@ -7,7 +7,12 @@ import path from 'node:path';
 import { z } from 'zod';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
 import type { SourceGraphInput } from '../store/rag-store.types.js';
-import type { GraphBuilder, GraphBuilderInput } from './graph-builder.js';
+import type {
+  GraphBuilder,
+  GraphBuilderInput,
+  GraphExtractionResult,
+  GraphExtractionUsage,
+} from './graph-builder.js';
 
 const LightRagParamsSchema = z
   .object({
@@ -34,7 +39,20 @@ const INSTALL_HINT =
 export type SidecarGraphReply = {
   entities?: Array<{ name?: unknown; type?: unknown; description?: unknown }>;
   relations?: Array<{ source?: unknown; target?: unknown; relation?: unknown; description?: unknown }>;
+  usage?: { llm_calls?: unknown; prompt_tokens?: unknown; completion_tokens?: unknown; cost_usd?: unknown };
 };
+
+export function mapSidecarUsage(reply: SidecarGraphReply): GraphExtractionUsage | null {
+  const usage = reply.usage;
+  if (!usage || typeof usage !== 'object') return null;
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  return {
+    llmCalls: num(usage.llm_calls),
+    promptTokens: num(usage.prompt_tokens),
+    completionTokens: num(usage.completion_tokens),
+    costUsd: typeof usage.cost_usd === 'number' && Number.isFinite(usage.cost_usd) ? usage.cost_usd : null,
+  };
+}
 
 /**
  * Map a sidecar extraction reply into the normalized graph contract. Mentions
@@ -116,7 +134,7 @@ export class LightRagGraphBuilder implements GraphBuilder, OnModuleDestroy {
     }
   }
 
-  async extract(input: GraphBuilderInput, signal?: AbortSignal): Promise<SourceGraphInput> {
+  async extract(input: GraphBuilderInput, signal?: AbortSignal): Promise<GraphExtractionResult> {
     const params = LightRagParamsSchema.parse(input.params);
     const settings = (await this.providerSettings.getProviderSettings(params.providerId)) ?? {};
     const baseUrl = String(settings.base_url ?? DEFAULT_BASE_URLS[params.providerId] ?? '').trim();
@@ -141,7 +159,8 @@ export class LightRagGraphBuilder implements GraphBuilder, OnModuleDestroy {
       EXTRACT_TIMEOUT_MS,
       signal,
     );
-    return mapSidecarReply(reply as SidecarGraphReply);
+    const parsed = reply as SidecarGraphReply;
+    return { graph: mapSidecarReply(parsed), usage: mapSidecarUsage(parsed) };
   }
 
   /** One-time venv bootstrap; returns the venv's python binary. */

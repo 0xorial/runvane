@@ -41,7 +41,34 @@ def reply(payload: dict) -> None:
 
 # --- OpenAI-compatible chat call via stdlib (no client-lib version drift) ----
 
-def chat_completion(config: dict, prompt: str, system_prompt, history_messages) -> str:
+class UsageTally:
+    """Accumulates LLM usage across one extraction, so the caller can surface
+    the spend (background indexing must never be invisible token burn)."""
+
+    def __init__(self) -> None:
+        self.llm_calls = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.cost_usd = None  # None = provider never reported cost
+
+    def add(self, usage: dict) -> None:
+        self.llm_calls += 1
+        self.prompt_tokens += int(usage.get("prompt_tokens") or 0)
+        self.completion_tokens += int(usage.get("completion_tokens") or 0)
+        cost = usage.get("cost")
+        if isinstance(cost, (int, float)):
+            self.cost_usd = (self.cost_usd or 0.0) + float(cost)
+
+    def as_dict(self) -> dict:
+        return {
+            "llm_calls": self.llm_calls,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "cost_usd": self.cost_usd,
+        }
+
+
+def chat_completion(config: dict, tally: UsageTally, prompt: str, system_prompt, history_messages) -> str:
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -59,6 +86,7 @@ def chat_completion(config: dict, prompt: str, system_prompt, history_messages) 
     )
     with urllib.request.urlopen(req, timeout=300) as res:
         data = json.loads(res.read().decode())
+    tally.add(data.get("usage") or {})
     return data["choices"][0]["message"]["content"] or ""
 
 
@@ -84,8 +112,10 @@ async def run_extract(text: str, config: dict) -> dict:
     from lightrag import LightRAG
     from lightrag.utils import EmbeddingFunc
 
+    tally = UsageTally()
+
     async def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs) -> str:
-        return await asyncio.to_thread(chat_completion, config, prompt, system_prompt, history_messages)
+        return await asyncio.to_thread(chat_completion, config, tally, prompt, system_prompt, history_messages)
 
     async def embedding_fn(texts):
         return hash_embedding(texts)
@@ -113,7 +143,7 @@ async def run_extract(text: str, config: dict) -> dict:
         except Exception as e:  # harvesting still possible; storage is on disk
             log(f"finalize_storages failed (continuing): {e}")
 
-        return harvest_graph(workdir)
+        return {**harvest_graph(workdir), "usage": tally.as_dict()}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

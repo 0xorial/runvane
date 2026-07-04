@@ -61,6 +61,12 @@ export class IngestionService {
     let skipped = 0;
     let removed = 0;
     let graphFailed = 0;
+    // Extraction is background LLM spend — account it so the ingest result,
+    // task, and activity log can show what the graph build actually cost.
+    let graphLlmCalls = 0;
+    let graphPromptTokens = 0;
+    let graphCompletionTokens = 0;
+    let graphCostUsd: number | null = null;
     let dim = manifest.embeddingDim;
     const present = new Set<string>();
 
@@ -105,10 +111,16 @@ export class IngestionService {
 
       if (graphBuilder && graphConfig) {
         try {
-          const graph = await graphBuilder.extract(
+          const { graph, usage } = await graphBuilder.extract(
             { item, chunks, params: graphConfig.params },
             options.signal,
           );
+          if (usage) {
+            graphLlmCalls += usage.llmCalls;
+            graphPromptTokens += usage.promptTokens;
+            graphCompletionTokens += usage.completionTokens;
+            if (usage.costUsd !== null) graphCostUsd = (graphCostUsd ?? 0) + usage.costUsd;
+          }
           store.replaceSourceGraph(
             { sourceType: source.type, sourceId: item.sourceId },
             backfillMentions(graph, chunks),
@@ -160,7 +172,17 @@ export class IngestionService {
       totalChunks: counts.chunks,
       totalSources: counts.sources,
       embeddingDim: dim,
-      graph: graphConfig ? { nodes: counts.nodes, edges: counts.edges, failedSources: graphFailed } : null,
+      graph: graphConfig
+        ? {
+            nodes: counts.nodes,
+            edges: counts.edges,
+            failedSources: graphFailed,
+            llmCalls: graphLlmCalls,
+            promptTokens: graphPromptTokens,
+            completionTokens: graphCompletionTokens,
+            costUsd: graphCostUsd,
+          }
+        : null,
     };
   }
 }

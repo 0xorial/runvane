@@ -79,7 +79,14 @@ export class IngestRunner {
         total_chunks: result.totalChunks,
         total_sources: result.totalSources,
         ...(result.graph
-          ? { nodes: result.graph.nodes, edges: result.graph.edges, graph_failures: result.graph.failedSources }
+          ? {
+              nodes: result.graph.nodes,
+              edges: result.graph.edges,
+              graph_failures: result.graph.failedSources,
+              graph_llm_calls: result.graph.llmCalls,
+              graph_tokens: result.graph.promptTokens + result.graph.completionTokens,
+              ...(result.graph.costUsd !== null ? { graph_cost_usd: result.graph.costUsd } : {}),
+            }
           : {}),
       });
       return result;

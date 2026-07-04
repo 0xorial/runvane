@@ -19,6 +19,22 @@ export type GraphBuilderInput = {
   params: Record<string, unknown>;
 };
 
+/** LLM spend of one extraction — surfaced in the ingest task/activity log so
+ *  background graph building is never invisible token burn. */
+export type GraphExtractionUsage = {
+  llmCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  /** Provider-reported USD, when the provider reports it; null otherwise. */
+  costUsd: number | null;
+};
+
+export type GraphExtractionResult = {
+  graph: SourceGraphInput;
+  /** Null when the builder cannot account its calls. */
+  usage: GraphExtractionUsage | null;
+};
+
 export interface GraphBuilder {
   /** Stable identifier persisted in a storage manifest, e.g. 'llm'. */
   readonly type: string;
@@ -26,7 +42,7 @@ export interface GraphBuilder {
   readonly label: string;
   /** Extract one source item's graph. Throwing marks the item's graph as failed
    *  (ingestion records it and continues); the item's chunks are still stored. */
-  extract(input: GraphBuilderInput, signal?: AbortSignal): Promise<SourceGraphInput>;
+  extract(input: GraphBuilderInput, signal?: AbortSignal): Promise<GraphExtractionResult>;
   /** Optional creation-time params check; throw with a human message on bad params. */
   validateParams?(params: Record<string, unknown>): void;
 }

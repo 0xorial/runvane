@@ -19,7 +19,7 @@
     type RagQueryHit,
     type RagStorageInfo,
   } from "@/api/ragClient";
-  import { cancelTask } from "@/api/client";
+  import { cancelTask, getLlmSettings } from "@/api/client";
   import { ensureTasksStream, getTasksSnapshot } from "@/lib/tasksStore.svelte";
   import type { TaskInfo } from "../../../../backend/src/contracts/task";
   import Icon from "@/components/ui/Icon.svelte";
@@ -28,6 +28,8 @@
   let storages = $state<RagStorageInfo[]>([]);
   let sources = $state<EntitySourceInfo[]>([]);
   let graphBuilders = $state<GraphBuilderInfo[]>([]);
+  // Configured providers + their verified model lists, for input suggestions.
+  let llmProviders = $state<Array<{ id: string; models: string[] }>>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -66,18 +68,30 @@
   const inputClass =
     "w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs text-foreground";
 
+  const modelsFor = (providerId: string): string[] =>
+    llmProviders.find((p) => p.id === providerId.trim())?.models ?? [];
+  const embeddingModelOptions = $derived(modelsFor(providerId));
+  const graphModelOptions = $derived(modelsFor(graphProviderId));
+
   async function load(): Promise<void> {
     loading = true;
     error = null;
     try {
-      const [nextStorages, nextSources, nextBuilders] = await Promise.all([
+      const [nextStorages, nextSources, nextBuilders, llmSettings] = await Promise.all([
         getRagStorages(),
         getRagSources(),
         getRagGraphBuilders(),
+        getLlmSettings().catch(() => null), // suggestions only — never block the page
       ]);
       storages = nextStorages;
       sources = nextSources;
       graphBuilders = nextBuilders;
+      if (llmSettings) {
+        llmProviders = llmSettings.providers.map((p) => ({
+          id: p.id,
+          models: Array.isArray(p.models) ? p.models : [],
+        }));
+      }
       if (!sources.some((s) => s.type === entitySource) && sources[0]) entitySource = sources[0].type;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -232,6 +246,10 @@
           `+${d.added} ~${d.updated} =${d.skipped} -${d.removed} · ${d.total_chunks} chunks` +
           (d.nodes !== undefined ? ` · ${d.nodes} nodes/${d.edges} edges` : "") +
           (Number(d.graph_failures) > 0 ? ` · ${d.graph_failures} graph failures` : "") +
+          (Number(d.graph_llm_calls) > 0
+            ? ` · ${d.graph_llm_calls} LLM calls/${d.graph_tokens} tok` +
+              (d.graph_cost_usd !== undefined ? `/$${Number(d.graph_cost_usd).toFixed(4)}` : "")
+            : "") +
           ` · ${((Number(d.duration_ms) || 0) / 1000).toFixed(1)}s`
         );
       case "ingest_failed":
@@ -279,12 +297,18 @@
       </label>
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Embedding provider id</span>
-        <input class={inputClass} data-testid="rag-provider" bind:value={providerId} placeholder="openai / lmstudio" />
+        <input class={inputClass} data-testid="rag-provider" bind:value={providerId} placeholder="openai / lmstudio" list="rag-provider-options" />
       </label>
       <label class="flex flex-col gap-1 text-xs">
         <span class="font-semibold text-foreground">Embedding model</span>
-        <input class={inputClass} data-testid="rag-model" bind:value={model} placeholder="text-embedding-3-small" />
+        <input class={inputClass} data-testid="rag-model" bind:value={model} placeholder="text-embedding-3-small" list="rag-embed-model-options" />
       </label>
+      <datalist id="rag-provider-options">
+        {#each llmProviders as p (p.id)}<option value={p.id}></option>{/each}
+      </datalist>
+      <datalist id="rag-embed-model-options">
+        {#each embeddingModelOptions as m (m)}<option value={m}></option>{/each}
+      </datalist>
       {#if entitySource === "files"}
         <label class="col-span-2 flex flex-col gap-1 text-xs">
           <span class="font-semibold text-foreground">Roots (one absolute path per line)</span>
@@ -306,16 +330,26 @@
         <span class="font-semibold">Watch sources</span>
         <span class="text-muted-foreground">(auto-index on change)</span>
       </label>
+      {#if graphBuilder === "lightrag"}
+        <p class="col-span-2 -mt-1 text-[11px] text-muted-foreground" data-testid="rag-lightrag-hint">
+          Runs the LightRAG library locally as a Python sidecar. Needs <code>python3</code> (≥3.10) on the
+          backend; the first ingest bootstraps a private venv once (~1 min). The provider must be
+          OpenAI-compatible.
+        </p>
+      {/if}
       {#if graphBuilder !== ""}
         <div class="grid grid-cols-2 gap-2.5">
           <label class="flex flex-col gap-1 text-xs">
             <span class="font-semibold text-foreground">Extraction provider id</span>
-            <input class={inputClass} data-testid="rag-graph-provider" bind:value={graphProviderId} placeholder="openai / lmstudio" />
+            <input class={inputClass} data-testid="rag-graph-provider" bind:value={graphProviderId} placeholder="openai / lmstudio" list="rag-provider-options" />
           </label>
           <label class="flex flex-col gap-1 text-xs">
             <span class="font-semibold text-foreground">Extraction model</span>
-            <input class={inputClass} data-testid="rag-graph-model" bind:value={graphModel} placeholder="gpt-4o-mini" />
+            <input class={inputClass} data-testid="rag-graph-model" bind:value={graphModel} placeholder="gpt-4o-mini" list="rag-graph-model-options" />
           </label>
+          <datalist id="rag-graph-model-options">
+            {#each graphModelOptions as m (m)}<option value={m}></option>{/each}
+          </datalist>
         </div>
       {/if}
     </div>
@@ -439,7 +473,9 @@
             <div class="mt-2 text-xs text-muted-foreground" data-testid="rag-ingest-result">
               Ingest: +{r.added} added · {r.updated} updated · {r.skipped} skipped · {r.removed} removed
               {#if r.graph}· graph: {r.graph.nodes} nodes / {r.graph.edges} edges{#if r.graph.failedSources > 0}
-                  · {r.graph.failedSources} extraction failures{/if}{/if}
+                  · {r.graph.failedSources} extraction failures{/if}{#if r.graph.llmCalls > 0}
+                  · {r.graph.llmCalls} LLM calls / {r.graph.promptTokens + r.graph.completionTokens} tok{#if r.graph.costUsd !== null}
+                    / ${r.graph.costUsd.toFixed(4)}{/if}{/if}{/if}
             </div>
           {/if}
 

@@ -4,7 +4,7 @@ import { LlmProviderRegistry } from '../../llmProviders/registry.js';
 import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-settings.repo.js';
 import { getCompletionText, textMessage, type LlmRequest } from '../../llmProviders/types.js';
 import type { SourceGraphInput } from '../store/rag-store.types.js';
-import type { GraphBuilder, GraphBuilderInput } from './graph-builder.js';
+import type { GraphBuilder, GraphBuilderInput, GraphExtractionResult } from './graph-builder.js';
 
 /** Hard caps so one noisy document can't flood the graph. */
 const MAX_ENTITIES = 50;
@@ -126,7 +126,7 @@ export class LlmGraphBuilder implements GraphBuilder {
     }
   }
 
-  async extract(input: GraphBuilderInput, signal?: AbortSignal): Promise<SourceGraphInput> {
+  async extract(input: GraphBuilderInput, signal?: AbortSignal): Promise<GraphExtractionResult> {
     const params = this.parseParams(input.params);
     const provider = this.providers.get(params.providerId);
     if (!provider) throw new Error(`graph llm builder: unknown provider '${params.providerId}'`);
@@ -147,6 +147,14 @@ export class LlmGraphBuilder implements GraphBuilder {
     };
 
     const completion = await provider.streamCompletion(settings, params.model, request, () => {}, signal);
-    return parseExtractionReply(getCompletionText(completion));
+    return {
+      graph: parseExtractionReply(getCompletionText(completion)),
+      usage: {
+        llmCalls: 1,
+        promptTokens: completion.usage?.promptTokens ?? 0,
+        completionTokens: completion.usage?.completionTokens ?? 0,
+        costUsd: typeof completion.usage?.costUsd === 'number' ? completion.usage.costUsd : null,
+      },
+    };
   }
 }
