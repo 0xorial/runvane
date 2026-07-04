@@ -133,48 +133,6 @@ export class ThoughtProcessingService {
     });
   }
 
-  /**
-   * Like {@link startThought}, but skips the model round-trip entirely:
-   * `responseText` is fed straight into `decisionStep.run` as if it were the
-   * LLM's reply, so `prepareStep`/`reasonStep` (and their network call) never
-   * run. The prepare and stream entries still land on the chain — marked
-   * `completed` immediately — so the thought is fully visible and
-   * reprocessable like any other; only the LLM call itself is elided. Used by
-   * tool-param resolution when a tool's `separate_params_resolution` is off:
-   * the planner's own free-text tool request is parsed directly instead of
-   * asking a model to reformat it.
-   */
-  startThoughtWithoutLlm<TInput>(args: {
-    provider: ThoughtTypeProvider<TInput>;
-    conversationId: string;
-    scope: LifecycleScope;
-    chain: ChatChain;
-    llm: LlmRef;
-    input: TInput;
-    responseText: string;
-  }): void {
-    const { provider, conversationId, scope, chain, llm, input, responseText } = args;
-    scope.throwIfAborted();
-    const ctx = this.createContext(conversationId, chain, llm);
-    const display = requestToDisplay(provider.runPrepare(input));
-    const prepareCreatePromise = this.appendCompletedPrepareEntry(ctx, provider, display, null);
-    scope.spawn(async () => {
-      try {
-        ctx.prepareEntryId = await prepareCreatePromise;
-        await this.chatEntries.mergeEntryPayload(conversationId, ctx.prepareEntryId, {
-          inputJson: serializeThoughtInput(input, ctx.prepareEntryId),
-        });
-        await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, ctx.prepareEntryId);
-        ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, display, responseText);
-        ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
-        const completion: LlmCompletion = { parts: [{ kind: 'text', text: responseText }], finishReason: 'stop' };
-        await this.decisionStep.run(provider, input, ctx, completion, scope);
-      } finally {
-        provider.onThoughtSettled?.(input, ctx);
-      }
-    });
-  }
-
   private appendPreparePlaceholder(ctx: ThoughtContext, provider: AnyThoughtProvider): Promise<{ id: string }> {
     return ctx.chain.append(ctx.thoughtId, (parentId) =>
       this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {

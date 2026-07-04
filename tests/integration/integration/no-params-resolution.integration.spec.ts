@@ -96,6 +96,16 @@ describeLive('tool param resolution is configurable (integration)', () => {
 
     controller.complete(NO_PARAMS_RESOLUTION_TOOL);
     await waitFinalAnswer(conversationId);
+
+    // The disabled step must not exist AT ALL: no tool_params thought entries
+    // in the transcript — not a completed one, not a skipped one.
+    const entries = await listAllMessages(baseUrl, conversationId);
+    const paramsThoughts = entries.filter(
+      (e) =>
+        (e as { thoughtType?: string }).thoughtType === 'tool_params' ||
+        JSON.stringify(e).includes('Resolve tool parameters'),
+    );
+    expect(paramsThoughts).toEqual([]);
   }, 30_000);
 
   it('separate_params_resolution unset (default true) resolves params via the LLM step, discarding the planner JSON', async () => {
@@ -108,5 +118,11 @@ describeLive('tool param resolution is configurable (integration)', () => {
 
     controller.complete(NO_PARAMS_RESOLUTION_TOOL);
     await waitFinalAnswer(conversationId);
+
+    // Guard the other direction: with resolution ON the thought is visible.
+    const entries = await listAllMessages(baseUrl, conversationId);
+    expect(
+      entries.some((e) => (e as { thoughtType?: string }).thoughtType === 'tool_params'),
+    ).toBe(true);
   }, 30_000);
 });

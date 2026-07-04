@@ -288,16 +288,16 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       });
       return;
     }
-    // separate_params_resolution is off for this tool: skip the extra LLM call
-    // and parse the planner's own tool request directly as the params JSON.
-    this.thoughtProcessing.startThoughtWithoutLlm({
-      provider: this.toolParamsProvider,
-      conversationId: toolParamsInput.conversationId,
-      scope,
+    // separate_params_resolution is off for this tool: the resolution step
+    // does not exist — no tool_params thought, no LLM call. The planner's own
+    // tool_request is the params JSON, and the invocation hangs off THIS
+    // planner thought.
+    this.toolParamsProvider.startDirect({
+      input: toolParamsInput,
+      decidingThoughtId: ctx.thoughtId,
       chain: ctx.chain,
       llm: ctx.downstreamLlm,
-      input: toolParamsInput,
-      responseText: args.requested.toolRequest,
+      scope,
     });
   }
 

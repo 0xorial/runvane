@@ -1,4 +1,5 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { ChatChain } from '../../conversations/chat-chain.js';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
@@ -9,7 +10,7 @@ import { RunToolService, type ToolBatchRef } from '../../tools/run-tool.service.
 import type { AgentToolConfig } from '../../agents/agent.entity.js';
 import type { GuardrailConfig } from '../../contracts/guardrail.js';
 import { buildToolParamsMessages, parseToolParamsJson } from '../lib/toolParamsPrompt.js';
-import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
+import type { LlmRef, ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import { GuardrailThoughtTypeProvider } from './guardrailProvider.js';
 
 export type ToolParamsInput = {
@@ -30,6 +31,7 @@ export type ToolParamsInput = {
 export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolParamsInput> {
   readonly thoughtType = 'tool_params' as const;
   readonly prepareTitle = 'Resolve tool parameters';
+  private readonly logger = new Logger(ToolParamsThoughtTypeProvider.name);
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -87,8 +89,81 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
 
     await this.markActionCompleted(ctx, input.toolName, parsedParams);
 
-    const mainLlm = ctx.llm;
+    await this.dispatchResolvedParams({
+      input,
+      params: parsedParams,
+      decidingThoughtId: ctx.thoughtId,
+      chain: ctx.chain,
+      llm: ctx.llm,
+      scope,
+    });
+  };
 
+  /**
+   * Direct dispatch for tools whose `separate_params_resolution` is OFF: the
+   * resolution step does not exist, so NO tool_params thought is created —
+   * the planner's tool_request must itself be the JSON args, and the tool
+   * invocation hangs off the deciding (planner) thought. A tool_request that
+   * doesn't parse as JSON breaks the direct-params contract: the batch member
+   * resolves as failed so the planner continuation isn't stranded.
+   */
+  startDirect(args: {
+    input: ToolParamsInput;
+    decidingThoughtId: string;
+    chain: ChatChain;
+    llm: LlmRef;
+    scope: LifecycleScope;
+  }): void {
+    const { input, decidingThoughtId, chain, llm, scope } = args;
+    const failMember = (): void =>
+      this.runTool.resolveFailedToolParamsMember({
+        conversationId: input.conversationId,
+        thoughtId: decidingThoughtId,
+        plannerFollowup: input.plannerFollowup,
+        scope,
+        chain,
+        llm,
+        ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
+      });
+
+    let params: Record<string, unknown>;
+    try {
+      params = parseToolParamsJson(
+        input.toolRequest,
+        input.toolName,
+        `direct tool params for ${input.toolName}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `direct params for '${input.toolName}' are not valid JSON (separate_params_resolution is off): ${String(error)}`,
+      );
+      failMember();
+      return;
+    }
+    scope.spawn(async () => {
+      try {
+        await this.dispatchResolvedParams({ input, params, decidingThoughtId, chain, llm, scope });
+      } catch (error) {
+        scope.throwIfAborted();
+        this.logger.warn(`direct dispatch of '${input.toolName}' failed: ${String(error)}`);
+        failMember();
+      }
+    });
+  }
+
+  /** Thought-independent tail of params resolution: guardrail (when
+   *  configured) or straight tool run. The only two callers are runDecision
+   *  (resolution thought) and startDirect (no thought), so their behavior
+   *  can't drift apart. */
+  private async dispatchResolvedParams(args: {
+    input: ToolParamsInput;
+    params: Record<string, unknown>;
+    decidingThoughtId: string;
+    chain: ChatChain;
+    llm: LlmRef;
+    scope: LifecycleScope;
+  }): Promise<void> {
+    const { input, params, decidingThoughtId, chain, llm, scope } = args;
     if (input.guardrailConfig) {
       // Delegate to GuardrailThoughtTypeProvider so the guardrail LLM call is
       // visible as a thought entry in the chat chain.
@@ -97,16 +172,16 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           conversationId: input.conversationId,
           agentId: input.agentId,
           toolName: input.toolName,
-          params: parsedParams,
+          params,
           toolRequest: input.toolRequest,
           guardrailConfig: input.guardrailConfig,
           plannerFollowup: input.plannerFollowup,
-          mainLlm,
+          mainLlm: llm,
           ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
           ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
         },
         scope,
-        chain: ctx.chain,
+        chain,
       });
       return;
     }
@@ -116,18 +191,18 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         conversationId: input.conversationId,
         agentId: input.agentId,
         toolName: input.toolName,
-        params: parsedParams,
+        params,
         toolRequest: input.toolRequest,
         plannerFollowup: input.plannerFollowup,
-        decidingThoughtId: ctx.thoughtId,
+        decidingThoughtId,
         ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,
-      ctx.chain,
-      mainLlm,
+      chain,
+      llm,
     );
-  };
+  }
 
   private async markActionCompleted(
     ctx: ThoughtContext,
