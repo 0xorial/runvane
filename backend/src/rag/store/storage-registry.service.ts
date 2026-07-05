@@ -71,7 +71,11 @@ export class StorageRegistry implements OnModuleDestroy {
     return store;
   }
 
-  create(input: CreateStorageInput, actor: RagLogActor = 'user'): StorageManifest {
+  create(
+    input: CreateStorageInput,
+    actor: RagLogActor = 'user',
+    logExtra: Record<string, unknown> = {},
+  ): StorageManifest {
     const id = randomUUID();
     const store = new RagStore(this.fileFor(id));
     const manifest: StorageManifest = {
@@ -97,6 +101,7 @@ export class StorageRegistry implements OnModuleDestroy {
       graph: manifest.graph ? `${manifest.graph.builder}` : null,
       watch: manifest.watch ?? false,
       roots: Array.isArray(manifest.sourceParams.roots) ? manifest.sourceParams.roots : [],
+      ...logExtra,
     });
     this.cache.set(id, store);
     return manifest;

@@ -10,12 +10,19 @@ import { z } from 'zod';
 export const RagToolParamsSchema = z
   .object({
     operation: z
-      .enum(['query', 'suggest_sources', 'add_source'])
+      .enum(['query', 'suggest_sources', 'add_source', 'create_storage'])
       .default('query')
       .describe(
         'query: semantic retrieval (default). suggest_sources: explore a base directory and list ' +
-          'indexable candidate folders. add_source: add root folders to a configured storage and re-index.',
+          'indexable candidate folders. add_source: add root folders to a configured storage and re-index. ' +
+          'create_storage: create a new storage from the agent-configured defaults (name + optional roots) ' +
+          'when no suitable storage exists.',
       ),
+    name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('create_storage: short human name for the new storage.'),
     query: z
       .string()
       .min(1)

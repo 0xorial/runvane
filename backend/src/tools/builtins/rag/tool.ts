@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import path from 'node:path';
 import { zerialize } from 'zodex';
+import { AgentsService } from '../../../agents/agents.service.js';
 import { BaseTool, type ToolRunContext } from '../../base-tool.js';
+import { GraphBuilderRegistry } from '../../../rag/graph/graph-builder.registry.js';
 import { IngestRunner } from '../../../rag/ingestion/ingest-runner.service.js';
 import { RagWatchService } from '../../../rag/watch/rag-watch.service.js';
 import { RetrieverService } from '../../../rag/retrieval/retriever.service.js';
@@ -19,6 +21,8 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
     private readonly storages: StorageRegistry,
     private readonly ingestRunner: IngestRunner,
     private readonly watcher: RagWatchService,
+    private readonly graphBuilders: GraphBuilderRegistry,
+    private readonly agents: AgentsService,
   ) {
     super();
   }
@@ -36,8 +40,11 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
       'operation "suggest_sources": explore a base directory and get candidate folders worth ' +
       'indexing (file counts + samples) — judge them yourself, nothing is added automatically. ' +
       'operation "add_source": add root folders to a configured storage and re-index it ' +
-      '(requires the allow_source_changes rule). Use suggest_sources before add_source when the ' +
-      'user asks to index something and the exact folders are unclear.'
+      '(requires the allow_source_changes rule). ' +
+      'operation "create_storage": when no suitable storage exists, create one from the ' +
+      'agent-configured template — pass a short name and optionally initial roots ' +
+      '(requires allow_source_changes and configured storage_defaults). ' +
+      'Use suggest_sources first when the user asks to index something and the exact folders are unclear.'
     );
   }
 
@@ -69,6 +76,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
     const rules = parseRagToolRules(context.toolRules ?? this.getDefaultRules());
     if (params.operation === 'suggest_sources') return this.suggestSources(params);
     if (params.operation === 'add_source') return this.addSource(params, rules, context);
+    if (params.operation === 'create_storage') return this.createStorage(params, rules, context);
 
     if (!params.query) throw new Error('rag: operation "query" needs the `query` parameter');
     if (rules.storages.length === 0) {
@@ -134,6 +142,103 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
     };
   }
 
+  /**
+   * Create a storage from the agent's configured template and make it usable
+   * immediately: the id is appended to the agent's stored rag rules, so the
+   * next planner round can query/add_source it. The model only supplies a
+   * name and (optionally) initial roots — embedding/graph choices come from
+   * `storage_defaults`, which the user set in agent settings.
+   */
+  private async createStorage(
+    params: RagToolParams,
+    rules: RagToolRules,
+    context: ToolRunContext,
+  ): Promise<unknown> {
+    if (!rules.allow_source_changes) {
+      throw new Error(
+        'rag: create_storage is disabled for this agent — enable the allow_source_changes rule first',
+      );
+    }
+    const defaults = rules.storage_defaults;
+    if (!defaults) {
+      throw new Error(
+        'rag: create_storage needs the storage_defaults rule (embedding provider/model template) — ' +
+          "set it in this agent's rag rules; storage creation from chat never picks models on its own",
+      );
+    }
+    const name = params.name?.trim();
+    if (!name) throw new Error('rag: operation "create_storage" needs the `name` parameter');
+    if (this.storages.listManifests().some((m) => m.name === name)) {
+      throw new Error(
+        `rag: a storage named '${name}' already exists — use add_source (storage: '${name}') to grow it`,
+      );
+    }
+    const roots = (params.roots ?? []).map((r) => r.trim()).filter(Boolean);
+    for (const root of roots) {
+      if (!path.isAbsolute(root)) {
+        throw new Error(`rag: create_storage roots must be absolute paths ('${root}' is not)`);
+      }
+    }
+    const graph = defaults.graph ?? null;
+    if (graph && !this.graphBuilders.get(graph.builder)) {
+      throw new Error(`rag: storage_defaults references unknown graph builder '${graph.builder}'`);
+    }
+
+    const manifest = this.storages.create(
+      {
+        name,
+        entitySource: 'files',
+        embeddingProviderId: defaults.embeddingProviderId,
+        embeddingModel: defaults.embeddingModel,
+        sourceParams: { roots },
+        graph,
+        watch: defaults.watch,
+      },
+      'agent',
+      { conversation_id: context.conversationId, agent_id: context.agentId },
+    );
+
+    // Make it visible to future turns: append to the agent's stored rag rules.
+    let agentUpdated = false;
+    if (context.agentId) {
+      try {
+        const agent = await this.agents.get(context.agentId);
+        const cfg = (agent?.default_llm_configuration ?? {}) as {
+          tools?: Record<string, { rules?: Record<string, unknown> }>;
+        } & Record<string, unknown>;
+        const tools = (cfg.tools ??= {});
+        const ragTool = (tools.rag ??= {});
+        const ragRules = (ragTool.rules ??= {});
+        const list = Array.isArray(ragRules.storages) ? (ragRules.storages as unknown[]).map(String) : [];
+        if (!list.includes(manifest.id)) list.push(manifest.id);
+        ragRules.storages = list;
+        agentUpdated =
+          (await this.agents.update(context.agentId, { default_llm_configuration: cfg } as never)) !== null;
+      } catch (error) {
+        this.logger.warn(`create_storage: could not add '${manifest.id}' to agent rules: ${String(error)}`);
+      }
+    }
+
+    if (defaults.watch) this.watcher.reconcile();
+    if (roots.length > 0) {
+      void this.ingestRunner.run(manifest.id, 'agent').catch((error) => {
+        this.logger.warn(`create_storage ingest of '${manifest.id}' failed: ${String(error)}`);
+      });
+    }
+    return {
+      operation: 'create_storage',
+      storage: { id: manifest.id, name: manifest.name },
+      embedding: `${defaults.embeddingProviderId}/${defaults.embeddingModel}`,
+      graph: graph?.builder ?? null,
+      watch: defaults.watch,
+      roots,
+      ingest: roots.length > 0 ? 'started' : 'skipped (no roots yet — use add_source)',
+      note: agentUpdated
+        ? "Storage added to this agent's rag storages; it becomes queryable as indexing completes."
+        : "Storage created, but it could not be added to the agent's rag rules automatically — add it in agent settings.",
+    };
+  }
+
   /** Add roots to one of the agent's storages and re-index in the background. */
   private async addSource(
     params: RagToolParams,
@@ -156,7 +261,14 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
     const configured = rules.storages
       .map((id) => this.storages.getManifest(id))
       .filter((m): m is NonNullable<typeof m> => m !== null);
-    if (configured.length === 0) throw new Error('rag: no storages configured for this agent');
+    if (configured.length === 0) {
+      throw new Error(
+        'rag: no storages configured for this agent' +
+          (rules.storage_defaults
+            ? ' — use operation "create_storage" (with a name and these roots) to create one first'
+            : ''),
+      );
+    }
     const wanted = params.storage?.trim();
     const manifest = wanted
       ? configured.find((m) => m.id === wanted || m.name === wanted)

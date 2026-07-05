@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { StorageGraphSchema } from '../../../rag/contracts/rag.js';
 
 /**
  * Per-agent RAG config lives in this tool's rules — the same mechanism every
@@ -15,10 +16,23 @@ export const RagToolRulesSchema = z
     top_k: z.number().finite().int().min(1).max(50).default(8),
     strategy: z.enum(['simple', 'graph']).default('simple'),
     max_hops: z.number().finite().int().min(1).max(3).default(1),
-    /** Lets the agent grow its own index from chat (`add_source`). Off by
-     *  default: indexing a path both reads it and persists its content into
-     *  the storage, so it needs an explicit per-agent opt-in. */
+    /** Lets the agent grow its own index from chat (`add_source`,
+     *  `create_storage`). Off by default: indexing a path both reads it and
+     *  persists its content into the storage, so it needs an explicit
+     *  per-agent opt-in. */
     allow_source_changes: z.boolean().default(false),
+    /** Template for storages the agent creates from chat (`create_storage`).
+     *  Embedding/graph model choices are cost decisions and stay with the
+     *  user — the model only picks a name and roots. Unset = the agent can
+     *  add sources to existing storages but not create new ones. */
+    storage_defaults: z
+      .object({
+        embeddingProviderId: z.string().min(1),
+        embeddingModel: z.string().min(1),
+        graph: StorageGraphSchema.nullish(),
+        watch: z.boolean().default(false),
+      })
+      .nullish(),
   })
   .strict();
 

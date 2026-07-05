@@ -308,6 +308,91 @@ test("RAG chat: the agent explores a base and adds sources via the rag tool", as
   }
 });
 
+test("RAG chat: the agent creates a storage on the fly from the configured template", async ({ app, request }) => {
+  test.setTimeout(30_000);
+  const base = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-create-"));
+  const put = async (rel: string, content: string) => {
+    await mkdir(path.dirname(path.join(base, rel)), { recursive: true });
+    await writeFile(path.join(base, rel), content);
+  };
+  const baseUrl = apiBaseUrl();
+  const name = `e2e-created-${Date.now()}`;
+  let createdId: string | null = null;
+
+  const agentId = await defaultAgentId(request);
+  const agent = (await (await request.get(`${baseUrl}/api/agents/${agentId}`)).json()) as {
+    name: string;
+    default_llm_configuration: Record<string, unknown> | null;
+  };
+  const original = agent.default_llm_configuration ?? null;
+
+  try {
+    await put("docs/db.md", DB_DOC);
+    await put("docs/cooking.md", COOK_DOC);
+
+    // NO storages configured — only the template the user set in agent rules.
+    const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
+    tools.rag = {
+      policy: "allow",
+      rules: {
+        storages: [],
+        top_k: 8,
+        strategy: "simple",
+        allow_source_changes: true,
+        storage_defaults: { embeddingProviderId: "stub", embeddingModel: "stub-embed", watch: false },
+      },
+    };
+    expect(
+      (
+        await request.put(`${baseUrl}/api/agents/${agentId}`, {
+          data: { name: agent.name, default_llm_configuration: { ...(original ?? {}), tools } },
+        })
+      ).ok(),
+    ).toBeTruthy();
+
+    await app.chat.gotoNew(agentId);
+    await app.chat.userInput.typeMessage(`__rag_create_probe__ base=${base} name=${name} index the docs`);
+    await app.chat.userInput.send();
+    await expect(app.chat.transcript.assistantMessage).toContainText("Created a storage", { timeout: 20_000 });
+
+    // The storage exists, was created BY THE AGENT (audit trail), got indexed,
+    // and was appended to the agent's own rag rules for future turns.
+    await expect
+      .poll(
+        async () => {
+          const infos = (await (await request.get(`${baseUrl}/api/rag/storages`)).json()) as Array<{
+            id: string;
+            name: string;
+            counts: { chunks: number };
+          }>;
+          const created = infos.find((s) => s.name === name);
+          createdId = created?.id ?? null;
+          return created?.counts.chunks ?? null;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(2);
+
+    const log = (await (
+      await request.get(`${baseUrl}/api/rag/storages/${createdId}/log`)
+    ).json()) as { entries: Array<{ event: string; actor: string; detail: Record<string, unknown> }> };
+    const created = log.entries.find((e) => e.event === "created");
+    expect(created?.actor).toBe("agent");
+    expect(String(created?.detail.conversation_id ?? "")).not.toHaveLength(0);
+
+    const after = (await (await request.get(`${baseUrl}/api/agents/${agentId}`)).json()) as {
+      default_llm_configuration?: { tools?: { rag?: { rules?: { storages?: string[] } } } };
+    };
+    expect(after.default_llm_configuration?.tools?.rag?.rules?.storages).toContain(createdId);
+  } finally {
+    await request.put(`${baseUrl}/api/agents/${agentId}`, {
+      data: { name: agent.name, default_llm_configuration: original },
+    });
+    if (createdId) await request.delete(`${baseUrl}/api/rag/storages/${createdId}`);
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
 test("RAG watch: a watched storage auto-indexes on source changes, no Ingest click", async ({ app }) => {
   const docs = await makeDocs({ "db.md": DB_DOC });
   const name = `e2e-watch-${Date.now()}`;

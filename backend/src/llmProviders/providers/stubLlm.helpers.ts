@@ -325,6 +325,55 @@ export function stubRagSourcesPlanner(request: LlmRequest): string {
   });
 }
 
+/**
+ * Drives the create-storage e2e: a user message with RAG_CREATE_MARKER plus
+ * `base=<dir> name=<storage>` makes the planner (1) explore the base,
+ * (2) create a storage named `<storage>` with `<base>/docs` as its root,
+ * then (3) finalize.
+ */
+export const RAG_CREATE_MARKER = '__rag_create_probe__';
+export const STUB_RAG_CREATE_REPLY = 'Created a storage and started indexing the docs folder.';
+
+export function stubIsRagCreateConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(RAG_CREATE_MARKER);
+}
+
+export function stubRagCreatePlanner(request: LlmRequest): string {
+  const text = stubUserText(request);
+  const base = text.match(/base=(\S+)/)?.[1] ?? '';
+  const name = text.match(/name=(\S+)/)?.[1] ?? '';
+  const results = stubCountToolResults(request);
+  if (results === 0) {
+    return JSON.stringify({
+      assistant_thinking: 'No storage exists; explore the base first.',
+      assistant_output: 'Let me look at that folder.',
+      tool_requests: [
+        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'suggest_sources', base }) },
+      ],
+      followup: 'continue',
+    });
+  }
+  if (results === 1) {
+    return JSON.stringify({
+      assistant_thinking: 'Docs found; create a storage from the agent template.',
+      assistant_output: 'Creating a storage for the docs.',
+      tool_requests: [
+        {
+          tool_name: 'rag',
+          tool_request: JSON.stringify({ operation: 'create_storage', name, roots: [`${base}/docs`] }),
+        },
+      ],
+      followup: 'continue',
+    });
+  }
+  return JSON.stringify({
+    assistant_thinking: 'Storage created and indexing started.',
+    assistant_output: STUB_RAG_CREATE_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 /** Drives the rag-tool e2e: a user message containing RAG_PROBE_MARKER makes
  *  the planner call the `rag` tool once, then finalize. */
 export function stubIsRagProbeConversation(request: LlmRequest): boolean {
@@ -467,6 +516,7 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
     if (stubIsRagSourcesConversation(request)) return stubRagSourcesPlanner(request);
+    if (stubIsRagCreateConversation(request)) return stubRagCreatePlanner(request);
     if (stubIsRagProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubRagPlannerFinalize() : stubRagPlannerFirstRound();
     }
