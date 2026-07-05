@@ -209,6 +209,12 @@ export const ToolInvocationEntrySchema = ChatEntryBaseSchema.extend({
   toolId: z.string(),
   state: ToolStateSchema,
   parameters: z.record(z.string(), z.unknown()),
+  /** The params the model originally requested, kept when the user edited
+   *  them before approving. The run used `parameters`, not these. */
+  originalParameters: z.record(z.string(), z.unknown()).optional(),
+  /** True when the user edited parameters before approval — the transcript
+   *  must make obvious that the executed call differs from the requested one. */
+  parametersEdited: z.boolean().optional(),
   result: ToolEnvelopeSchema.nullable().optional(),
 });
 export type ToolInvocationEntry = z.infer<typeof ToolInvocationEntrySchema>;

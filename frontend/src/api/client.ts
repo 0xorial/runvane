@@ -291,10 +291,12 @@ export async function cancelPendingMessage(
 export async function approveToolInvocation(
   conversationId: string,
   entryId: string,
+  /** Edited params to run instead of the requested ones (audited server-side). */
+  parameters?: Record<string, unknown>,
 ): Promise<PostAcceptedResult<unknown>> {
   return postJsonAccepted(
     `/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/approve`,
-    {},
+    parameters !== undefined ? { parameters } : {},
   );
 }
 

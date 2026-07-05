@@ -13,7 +13,43 @@
   let toggled = $state<boolean | null>(null);
   let approving = $state(false);
   let denying = $state(false);
+  let editingParams = $state(false);
+  let paramsDraft = $state("");
+  let paramsError = $state<string | null>(null);
   const expanded = $derived(toggled ?? (entry.state === "requested" || entry.state === "running"));
+
+  // The stored parameters payload carries planner bookkeeping; the user edits
+  // (and reads) only the real tool params.
+  const cleanParams = $derived.by(() => {
+    const { tool_request, source, __tool_batch, ...params } = entry.parameters as Record<string, unknown>;
+    void tool_request; void source; void __tool_batch;
+    return params;
+  });
+
+  function startEditParams(): void {
+    paramsDraft = JSON.stringify(cleanParams, null, 2);
+    paramsError = null;
+    editingParams = true;
+  }
+
+  /** Returns the edited params when valid and actually different, undefined
+   *  when unchanged, or null when the draft isn't valid JSON. */
+  function editedParamsForApprove(): Record<string, unknown> | undefined | null {
+    if (!editingParams) return undefined;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(paramsDraft);
+    } catch (e) {
+      paramsError = `Not valid JSON: ${e instanceof Error ? e.message : String(e)}`;
+      return null;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      paramsError = "Parameters must be a JSON object.";
+      return null;
+    }
+    const edited = parsed as Record<string, unknown>;
+    return JSON.stringify(edited) === JSON.stringify(cleanParams) ? undefined : edited;
+  }
 
   const toolName = $derived(entry.toolId || "tool");
   // Where this tool ran — looked up from the catalog so the row shows whether
@@ -62,9 +98,12 @@
 
   async function onApproveClick(): Promise<void> {
     if (!conversationId || approving || denying) return;
+    const edited = editedParamsForApprove();
+    if (edited === null) return; // invalid draft — error shown inline
     approving = true;
     try {
-      await approveToolInvocation(conversationId, entry.id);
+      await approveToolInvocation(conversationId, entry.id, edited);
+      editingParams = false;
     } catch (e) {
       notifyError(e instanceof Error ? e.message : "Failed to approve tool");
     } finally {
@@ -106,6 +145,15 @@
           <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />
         {/if}
         <span class="font-mono font-medium text-foreground">{toolName}</span>
+        {#if entry.parametersEdited}
+          <span
+            class="rounded bg-warning/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-warning"
+            title="Parameters were edited by the user before approval — the executed call differs from what the model requested"
+            data-testid="tool-edited-badge"
+          >
+            edited
+          </span>
+        {/if}
         {#if toolLocation}
           <span
             class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {toolLocation === 'target'
@@ -147,9 +195,44 @@
             </div>
           {/if}
           <div>
-            <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Arguments</span>
-            <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{paramsText}</pre>
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {entry.parametersEdited ? "Arguments (edited by you)" : "Arguments"}
+              </span>
+              {#if entry.state === "requested" && !editingParams}
+                <button
+                  type="button"
+                  class="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                  data-testid="tool-edit-params"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    startEditParams();
+                  }}
+                >
+                  Edit
+                </button>
+              {/if}
+            </div>
+            {#if editingParams && entry.state === "requested"}
+              <textarea
+                class="mt-1 min-h-[96px] w-full resize-y rounded border border-warning/40 bg-background p-2 font-mono text-xs text-secondary-foreground"
+                data-testid="tool-params-editor"
+                bind:value={paramsDraft}
+                oninput={() => (paramsError = null)}
+              ></textarea>
+              {#if paramsError}
+                <div class="mt-1 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive" data-testid="tool-params-error">{paramsError}</div>
+              {/if}
+            {:else}
+              <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{paramsText}</pre>
+            {/if}
           </div>
+          {#if entry.parametersEdited && entry.originalParameters}
+            <div>
+              <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Original arguments (as requested by the model)</span>
+              <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-muted-foreground" data-testid="tool-original-params">{stringifyMaybe(entry.originalParameters)}</pre>
+            </div>
+          {/if}
           {#if entry.state === "running" && liveOutput}
             <div>
               <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Live output</span>

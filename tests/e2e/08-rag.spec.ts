@@ -308,6 +308,54 @@ test("RAG chat: the agent explores a base and adds sources via the rag tool", as
   }
 });
 
+test("tool approval: editing rag params before approving is audited in the transcript", async ({ app, request }) => {
+  const base = apiBaseUrl();
+  const agentId = await defaultAgentId(request);
+  const agent = (await (await request.get(`${base}/api/agents/${agentId}`)).json()) as {
+    name: string;
+    default_llm_configuration: Record<string, unknown> | null;
+  };
+  const original = agent.default_llm_configuration ?? null;
+  const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
+  tools.rag = { policy: "ask", rules: { storages: [], top_k: 8, strategy: "simple" } };
+
+  try {
+    expect(
+      (
+        await request.put(`${base}/api/agents/${agentId}`, {
+          data: { name: agent.name, default_llm_configuration: { ...(original ?? {}), tools } },
+        })
+      ).ok(),
+    ).toBeTruthy();
+
+    await app.chat.gotoNew(agentId);
+    await app.chat.userInput.typeMessage(RAG_PROBE_MESSAGE);
+    await app.chat.userInput.send();
+    await app.chat.transcript.waitForToolState("requested");
+    const tool = app.chat.transcript.toolRow();
+
+    // Edit the params in place, then approve.
+    await tool.getByTestId("tool-edit-params").click();
+    const editor = tool.getByTestId("tool-params-editor");
+    await expect(editor).toBeVisible();
+    await editor.fill('{"query": "edited by user"}');
+    await tool.getByTestId("tool-approve-button").click();
+    await app.chat.transcript.waitForToolState("done");
+
+    // The pre-edit must be obvious: badge without expanding…
+    await expect(tool.getByTestId("tool-edited-badge")).toBeVisible();
+    // …and both the edited and the original arguments when expanded.
+    await tool.locator("button").first().click();
+    await expect(tool).toContainText("Arguments (edited by you)");
+    await expect(tool).toContainText("edited by user");
+    await expect(tool.getByTestId("tool-original-params")).toContainText("database migration prisma");
+  } finally {
+    await request.put(`${base}/api/agents/${agentId}`, {
+      data: { name: agent.name, default_llm_configuration: original },
+    });
+  }
+});
+
 test("RAG chat: the agent creates a storage on the fly from the configured template", async ({ app, request }) => {
   test.setTimeout(30_000);
   const base = await mkdtemp(path.join(os.tmpdir(), "e2e-rag-create-"));

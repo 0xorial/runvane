@@ -108,10 +108,15 @@ export async function approveToolInvocation(
   baseUrl: string,
   conversationId: string,
   entryId: string,
+  parameters?: Record<string, unknown>,
 ): Promise<void> {
   const res = await fetch(
     `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/approve`,
-    { method: 'POST', headers: { 'content-type': 'application/json' } },
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      ...(parameters !== undefined ? { body: JSON.stringify({ parameters }) } : {}),
+    },
   );
   if (!res.ok) {
     const detail = await res.text();

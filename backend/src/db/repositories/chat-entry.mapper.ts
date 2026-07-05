@@ -222,6 +222,10 @@ function mapToolInvocation(base: ChatEntryBase, payload: Record<string, unknown>
     toolId: requireString(payload, 'toolId', ctx),
     state: requireToolState(payload, ctx),
     parameters: requireRecord(payload.parameters, `${ctx}.parameters`),
+    ...(payload.originalParameters !== undefined
+      ? { originalParameters: requireRecord(payload.originalParameters, `${ctx}.originalParameters`) }
+      : {}),
+    ...(payload.parametersEdited === true ? { parametersEdited: true } : {}),
     result,
   };
 }

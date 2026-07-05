@@ -179,7 +179,15 @@ export class RunToolService {
    * entry `requested → running → done` and continuing the planner afterward.
    */
   async approveAndRun(
-    args: { conversationId: string; toolEntryId: string; agentId: string },
+    args: {
+      conversationId: string;
+      toolEntryId: string;
+      agentId: string;
+      /** User-edited params to run instead of the requested ones. Validated
+       *  against the tool's schema before anything is persisted or run; the
+       *  entry keeps the originals + an edited flag for the transcript. */
+      editedParameters?: Record<string, unknown>;
+    },
     scope: LifecycleScope,
     chain: ChatChain,
     llm: LlmRef,
@@ -196,9 +204,28 @@ export class RunToolService {
 
     // Strip the planner-meta keys toParametersPayload() added to recover the
     // real tool params; the tool's strict param schema rejects extras.
-    const { tool_request, source: _source, __tool_batch, ...rawParams } = entry.parameters;
+    const { tool_request, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
     const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
     const toolBatch = parseToolBatch(__tool_batch);
+
+    // Approve-with-edits: run the user's params, keep the model's on record.
+    const edited = args.editedParameters;
+    const isEdited = edited !== undefined && JSON.stringify(edited) !== JSON.stringify(requestedParams);
+    const rawParams = isEdited ? edited : requestedParams;
+    if (isEdited) {
+      tool.parseParams(edited); // validate before persisting — surfaces as an HTTP error
+      await this.chatEntries.mergeEntryPayload(args.conversationId, args.toolEntryId, {
+        parameters: {
+          ...edited,
+          ...(tool_request !== undefined ? { tool_request } : {}),
+          ...(_source !== undefined ? { source: _source } : {}),
+          ...(__tool_batch !== undefined ? { __tool_batch } : {}),
+        },
+        originalParameters: requestedParams,
+        parametersEdited: true,
+      });
+      await publishChatEntryUpsert(this.hub, this.chatEntries, args.conversationId, args.toolEntryId);
+    }
 
     const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');

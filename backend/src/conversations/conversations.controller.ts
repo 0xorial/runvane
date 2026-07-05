@@ -356,11 +356,20 @@ export class ConversationsController {
   async approveToolInvocation(
     @Param('conversationId') conversationId: string,
     @Param('entryId') entryId: string,
+    @Body() body?: { parameters?: Record<string, unknown> },
   ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
+    const editedParameters =
+      body?.parameters && typeof body.parameters === 'object' && !Array.isArray(body.parameters)
+        ? body.parameters
+        : undefined;
     try {
-      await this.conversationProcessor.approveToolInvocation({ conversationId, toolEntryId: entryId });
+      await this.conversationProcessor.approveToolInvocation({
+        conversationId,
+        toolEntryId: entryId,
+        ...(editedParameters !== undefined ? { editedParameters } : {}),
+      });
       return { conversationId, toolEntryId: entryId };
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'failed to approve tool invocation';

@@ -57,7 +57,11 @@ export class ConversationProcessorService {
     private readonly contextInjection: ContextInjectionService,
   ) {}
 
-  async approveToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
+  async approveToolInvocation(args: {
+    conversationId: string;
+    toolEntryId: string;
+    editedParameters?: Record<string, unknown>;
+  }): Promise<void> {
     const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
     if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
@@ -70,7 +74,12 @@ export class ConversationProcessorService {
     const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.approveAndRun(
-        { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
+        {
+          conversationId: args.conversationId,
+          toolEntryId: args.toolEntryId,
+          agentId,
+          ...(args.editedParameters !== undefined ? { editedParameters: args.editedParameters } : {}),
+        },
         scope,
         chain,
         llm,
