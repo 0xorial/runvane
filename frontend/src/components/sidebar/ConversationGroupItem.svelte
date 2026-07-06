@@ -63,7 +63,9 @@
     >{countLabel}</span>
   </button>
   {#if !collapsed}
-    <div class="mt-0.5 flex flex-col gap-0.5">
+    <!-- Indent + guide rail so member rows read as contained by the group,
+         not as siblings of top-level conversations. -->
+    <div class="ml-[13px] mt-0.5 flex flex-col gap-0.5 border-l border-border/70 pl-1.5">
       {@render children()}
     </div>
   {/if}
