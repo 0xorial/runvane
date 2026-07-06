@@ -181,7 +181,11 @@
                   : ''}"
               >
                 <td class="px-4 py-2.5 font-mono text-[12px]">
-                  <span class={missing ? "text-amber-700 dark:text-amber-400" : ""}>{row.model_name}</span>
+                  <span
+                    class={missing ? "text-amber-700 dark:text-amber-400" : ""}
+                    title={row.model_name.startsWith("~")
+                      ? "“~” marks a provider alias that routes to the latest version of the underlying model."
+                      : undefined}>{row.model_name}</span>
                 </td>
                 <td class="px-3 py-2.5">
                   <span class="rounded px-1.5 py-0.5 text-[10px] font-medium {sourceBadgeClass(row.source)}">
@@ -204,7 +208,7 @@
                       value={state.draft.selfHosted ? "" : state.draft.input}
                       disabled={state.draft.selfHosted}
                       oninput={(e) => patchDraft(row, { input: e.currentTarget.value })}
-                      placeholder={state.draft.selfHosted ? "n/a" : "—"}
+                      placeholder="—"
                       class="w-24 rounded border border-border bg-background px-2 py-1 font-mono text-xs disabled:opacity-50"
                     />
                   </td>
@@ -214,7 +218,7 @@
                       value={state.draft.selfHosted ? "" : state.draft.cachedInput}
                       disabled={state.draft.selfHosted}
                       oninput={(e) => patchDraft(row, { cachedInput: e.currentTarget.value })}
-                      placeholder={state.draft.selfHosted ? "n/a" : "—"}
+                      placeholder="—"
                       class="w-24 rounded border border-border bg-background px-2 py-1 font-mono text-xs disabled:opacity-50"
                     />
                   </td>
@@ -224,7 +228,7 @@
                       value={state.draft.selfHosted ? "" : state.draft.output}
                       disabled={state.draft.selfHosted}
                       oninput={(e) => patchDraft(row, { output: e.currentTarget.value })}
-                      placeholder={state.draft.selfHosted ? "n/a" : "—"}
+                      placeholder="—"
                       class="w-24 rounded border border-border bg-background px-2 py-1 font-mono text-xs disabled:opacity-50"
                     />
                   </td>
@@ -258,27 +262,27 @@
                   </td>
                   <td class="px-3 py-2.5 text-right font-mono text-[12px]">
                     {#if row.self_hosted}
-                      <span class="text-muted-foreground/50">n/a</span>
+                      <span class="text-muted-foreground/50" title="Self-hosted — no per-token cost">—</span>
                     {:else if row.input_cost_per_1m == null}
-                      <span class="text-amber-600 dark:text-amber-500">—</span>
+                      <span class="text-amber-600 dark:text-amber-500" title="No pricing set">—</span>
                     {:else}
                       {formatCost(row.input_cost_per_1m)}
                     {/if}
                   </td>
                   <td class="px-3 py-2.5 text-right font-mono text-[12px]">
                     {#if row.self_hosted}
-                      <span class="text-muted-foreground/50">n/a</span>
+                      <span class="text-muted-foreground/50" title="Self-hosted — no per-token cost">—</span>
                     {:else if row.cached_input_cost_per_1m == null}
-                      <span class="text-amber-600 dark:text-amber-500">—</span>
+                      <span class="text-amber-600 dark:text-amber-500" title="No pricing set">—</span>
                     {:else}
                       {formatCost(row.cached_input_cost_per_1m)}
                     {/if}
                   </td>
                   <td class="px-3 py-2.5 text-right font-mono text-[12px]">
                     {#if row.self_hosted}
-                      <span class="text-muted-foreground/50">n/a</span>
+                      <span class="text-muted-foreground/50" title="Self-hosted — no per-token cost">—</span>
                     {:else if row.output_cost_per_1m == null}
-                      <span class="text-amber-600 dark:text-amber-500">—</span>
+                      <span class="text-amber-600 dark:text-amber-500" title="No pricing set">—</span>
                     {:else}
                       {formatCost(row.output_cost_per_1m)}
                     {/if}

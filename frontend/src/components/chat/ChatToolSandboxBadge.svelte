@@ -23,7 +23,7 @@
     data-testid="chat-tool-env"
     data-env-id={env.id}
     title={toolSandboxDescription(env)}
-    class="inline-flex max-w-[11rem] shrink-0 items-center gap-1 rounded-md border border-border bg-secondary/40 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+    class="inline-flex min-w-12 max-w-[11rem] items-center gap-1 rounded-md border border-border bg-secondary/40 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
   >
     <ToolSandboxIcon kind={env.kind} class="h-3 w-3 shrink-0" />
     <span class="truncate">{env.name}</span>

@@ -104,7 +104,7 @@
       </svg>
     {/snippet}
   </PanelIconButton>
-  <div class="min-w-0 flex-1">
+  <div class="min-w-0 flex-1 overflow-hidden">
     <div class="flex min-w-0 items-center gap-2">
       <EditableConversationTitle {title} disabled={!conversationId} onCommit={onCommit} />
       <ConversationCostDisplay usageByModel={tokenUsageByModel} {pricingByModel} />

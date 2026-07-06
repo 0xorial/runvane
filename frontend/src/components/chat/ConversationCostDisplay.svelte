@@ -27,11 +27,11 @@
     return String(n);
   }
 
-  /** Headline amount, 2 decimals. `lowerBound` swaps the sub-cent rule so it reads with the `>` prefix. */
-  function headlineAmount(value: number, lowerBound: boolean): string {
-    if (value <= 0) return "0.00";
-    if (value < 0.01) return lowerBound ? "0.00" : "<0.01";
-    return value.toFixed(2);
+  /** Headline USD amount incl. the `$`, 2 decimals. `lowerBound` prepends `>` — the shown cost is a minimum. */
+  function headlineUsd(value: number, lowerBound: boolean): string {
+    if (value > 0 && value < 0.01 && !lowerBound) return "<$0.01";
+    const amount = value <= 0 ? "0.00" : value < 0.01 ? "0.00" : value.toFixed(2);
+    return `${lowerBound ? ">" : ""}$${amount}`;
   }
 
   /** Precise amount for the breakdown rows, trailing zeros trimmed. */
@@ -45,10 +45,10 @@
   const headline = $derived.by(() => {
     switch (summary.state) {
       case "priced":
-        return { kind: "price" as const, text: `$${headlineAmount(summary.knownCostUsd, false)}` };
+        return { kind: "price" as const, text: headlineUsd(summary.knownCostUsd, false) };
       case "partial":
         // `>` denotes the shown cost is a lower bound — unpriced models add an unknown amount.
-        return { kind: "price" as const, text: `$>${headlineAmount(summary.knownCostUsd, true)}` };
+        return { kind: "price" as const, text: headlineUsd(summary.knownCostUsd, true) };
       case "unpriced":
         return { kind: "set" as const, text: "set pricing" };
       default:
@@ -118,7 +118,7 @@
     role="presentation"
     data-testid="conversation-cost"
     data-cost-state={summary.state}
-    class="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground {className}"
+    class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] text-muted-foreground {className}"
     onmouseenter={show}
     onmouseleave={scheduleHide}
     onfocusin={show}

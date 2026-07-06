@@ -82,7 +82,7 @@ describe('normalizeConversationCategorizationConfig', () => {
   it('fills defaults from an empty/invalid blob', () => {
     const cfg = normalizeConversationCategorizationConfig(null);
     expect(cfg.enabled).toBe(true);
-    expect(cfg.sidebarRecentLimit).toBe(5);
+    expect(cfg.sidebarRecentLimit).toBe(25);
     expect(cfg.prompt.length).toBeGreaterThan(0);
   });
 

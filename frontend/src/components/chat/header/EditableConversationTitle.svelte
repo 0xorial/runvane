@@ -71,7 +71,7 @@
   <button
     type="button"
     data-testid="conversation-title"
-    class="truncate rounded-md px-1 py-0.5 text-left text-sm font-medium text-foreground hover:bg-muted/60 disabled:cursor-default disabled:hover:bg-transparent"
+    class="min-w-[10ch] truncate rounded-md px-1 py-0.5 text-left text-sm font-medium text-foreground hover:bg-muted/60 disabled:cursor-default disabled:hover:bg-transparent"
     {disabled}
     title={disabled ? title : "Click to rename conversation"}
     onclick={() => {
