@@ -24,8 +24,13 @@ install_deps() {
   fi
 }
 
-install_deps backend prisma_gen
+install_deps backend true
 install_deps frontend true
+
+# The generated Prisma client lives in the shadow volume and goes stale when a
+# re-pin changes schema.prisma without touching a lockfile — regenerate every
+# boot (cheap next to the snapshot build).
+prisma_gen
 
 # Build the snapshot. No watcher runs here, so nest build's clean step is safe,
 # and /app lives on the /shared volume (not virtiofs) so there's no unlink race.
