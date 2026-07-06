@@ -45,6 +45,7 @@
   let graphModel = $state("");
   let watchNew = $state(false);
   let creating = $state(false);
+  let showCreate = $state(false);
 
   // Per-storage transient UI state.
   let busyId = $state<string | null>(null);
@@ -116,6 +117,12 @@
     return byStorage;
   });
 
+  // With nothing to list yet the collapsed form is a pointless extra click, so
+  // it starts open (also when the last storage is deleted).
+  $effect(() => {
+    if (!loading && storages.length === 0) showCreate = true;
+  });
+
   // When an ingest task for a listed storage finishes, refresh counts/meta.
   let prevIndexing = new Set<string>();
   $effect(() => {
@@ -154,6 +161,7 @@
       rootsText = "";
       graphBuilder = "";
       watchNew = false;
+      showCreate = false;
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -279,92 +287,11 @@
     </div>
   {/if}
 
-  <!-- Create -->
-  <section class="rounded-lg border border-border bg-card p-3">
-    <div class="mb-2 text-[13px] font-bold text-foreground">New storage</div>
-    <div class="grid grid-cols-2 gap-2.5">
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Name</span>
-        <input class={inputClass} data-testid="rag-name" bind:value={name} placeholder="My docs" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Entity source</span>
-        <select class={inputClass} data-testid="rag-source" bind:value={entitySource}>
-          {#each sources as s (s.type)}
-            <option value={s.type}>{s.label}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Embedding provider id</span>
-        <input class={inputClass} data-testid="rag-provider" bind:value={providerId} placeholder="openai / lmstudio" list="rag-provider-options" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Embedding model</span>
-        <input class={inputClass} data-testid="rag-model" bind:value={model} placeholder="text-embedding-3-small" list="rag-embed-model-options" />
-      </label>
-      <datalist id="rag-provider-options">
-        {#each llmProviders as p (p.id)}<option value={p.id}></option>{/each}
-      </datalist>
-      <datalist id="rag-embed-model-options">
-        {#each embeddingModelOptions as m (m)}<option value={m}></option>{/each}
-      </datalist>
-      {#if entitySource === "files"}
-        <label class="col-span-2 flex flex-col gap-1 text-xs">
-          <span class="font-semibold text-foreground">Roots (one absolute path per line)</span>
-          <textarea class="{inputClass} min-h-[64px] resize-y font-mono" data-testid="rag-roots" bind:value={rootsText}
-            placeholder={"/workspace/docs\n/workspace/backend/src"}></textarea>
-        </label>
-      {/if}
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Knowledge graph</span>
-        <select class={inputClass} data-testid="rag-graph-builder" bind:value={graphBuilder}>
-          <option value="">None</option>
-          {#each graphBuilders as b (b.type)}
-            <option value={b.type}>{b.label}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="flex items-center gap-1.5 self-end pb-1.5 text-xs text-foreground">
-        <input type="checkbox" data-testid="rag-watch" bind:checked={watchNew} />
-        <span class="font-semibold">Watch sources</span>
-        <span class="text-muted-foreground">(auto-index on change)</span>
-      </label>
-      {#if graphBuilder === "lightrag"}
-        <p class="col-span-2 -mt-1 text-[11px] text-muted-foreground" data-testid="rag-lightrag-hint">
-          Runs the LightRAG library locally as a Python sidecar. Needs <code>python3</code> (≥3.10) on the
-          backend; the first ingest bootstraps a private venv once (~1 min). The provider must be
-          OpenAI-compatible.
-        </p>
-      {/if}
-      {#if graphBuilder !== ""}
-        <div class="grid grid-cols-2 gap-2.5">
-          <label class="flex flex-col gap-1 text-xs">
-            <span class="font-semibold text-foreground">Extraction provider id</span>
-            <input class={inputClass} data-testid="rag-graph-provider" bind:value={graphProviderId} placeholder="openai / lmstudio" list="rag-provider-options" />
-          </label>
-          <label class="flex flex-col gap-1 text-xs">
-            <span class="font-semibold text-foreground">Extraction model</span>
-            <input class={inputClass} data-testid="rag-graph-model" bind:value={graphModel} placeholder="gpt-4o-mini" list="rag-graph-model-options" />
-          </label>
-          <datalist id="rag-graph-model-options">
-            {#each graphModelOptions as m (m)}<option value={m}></option>{/each}
-          </datalist>
-        </div>
-      {/if}
-    </div>
-    <div class="mt-2.5">
-      <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-create" disabled={!canCreate || creating} onclick={create}>
-        {creating ? "Creating…" : "Create storage"}
-      </button>
-    </div>
-  </section>
-
   <!-- List -->
   {#if loading}
     <p class="text-sm text-muted-foreground">Loading…</p>
   {:else if storages.length === 0}
-    <p class="text-sm text-muted-foreground" data-testid="rag-empty">No storages yet. Create one above, then ingest it.</p>
+    <p class="text-sm text-muted-foreground" data-testid="rag-empty">No storages yet. Create one below, then ingest it.</p>
   {:else}
     <div class="flex flex-col gap-2.5">
       {#each storages as storage (storage.id)}
@@ -551,5 +478,101 @@
         </section>
       {/each}
     </div>
+  {/if}
+
+  <!-- Create -->
+  {#if !showCreate}
+    <div>
+      <button type="button" class={ghostBtn} data-testid="rag-add" onclick={() => (showCreate = true)}>
+        + Add storage
+      </button>
+    </div>
+  {:else}
+  <section class="rounded-lg border border-border bg-card p-3">
+    <div class="mb-2 flex items-center justify-between">
+      <div class="text-[13px] font-bold text-foreground">New storage</div>
+      {#if storages.length > 0}
+        <button type="button" class="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Close new-storage form" onclick={() => (showCreate = false)}>
+          ✕
+        </button>
+      {/if}
+    </div>
+    <div class="grid grid-cols-2 gap-2.5">
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-foreground">Name</span>
+        <input class={inputClass} data-testid="rag-name" bind:value={name} placeholder="My docs" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-foreground">Entity source</span>
+        <select class={inputClass} data-testid="rag-source" bind:value={entitySource}>
+          {#each sources as s (s.type)}
+            <option value={s.type}>{s.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-foreground">Embedding provider id</span>
+        <input class={inputClass} data-testid="rag-provider" bind:value={providerId} placeholder="openai / lmstudio" list="rag-provider-options" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-foreground">Embedding model</span>
+        <input class={inputClass} data-testid="rag-model" bind:value={model} placeholder="text-embedding-3-small" list="rag-embed-model-options" />
+      </label>
+      <datalist id="rag-provider-options">
+        {#each llmProviders as p (p.id)}<option value={p.id}></option>{/each}
+      </datalist>
+      <datalist id="rag-embed-model-options">
+        {#each embeddingModelOptions as m (m)}<option value={m}></option>{/each}
+      </datalist>
+      {#if entitySource === "files"}
+        <label class="col-span-2 flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">Roots (one absolute path per line)</span>
+          <textarea class="{inputClass} min-h-[64px] resize-y font-mono" data-testid="rag-roots" bind:value={rootsText}
+            placeholder={"/workspace/docs\n/workspace/backend/src"}></textarea>
+        </label>
+      {/if}
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="font-semibold text-foreground">Knowledge graph</span>
+        <select class={inputClass} data-testid="rag-graph-builder" bind:value={graphBuilder}>
+          <option value="">None</option>
+          {#each graphBuilders as b (b.type)}
+            <option value={b.type}>{b.label}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="flex items-center gap-1.5 self-end pb-1.5 text-xs text-foreground">
+        <input type="checkbox" data-testid="rag-watch" bind:checked={watchNew} />
+        <span class="font-semibold">Watch sources</span>
+        <span class="text-muted-foreground">(auto-index on change)</span>
+      </label>
+      {#if graphBuilder === "lightrag"}
+        <p class="col-span-2 -mt-1 text-[11px] text-muted-foreground" data-testid="rag-lightrag-hint">
+          Runs the LightRAG library locally as a Python sidecar. Needs <code>python3</code> (≥3.10) on the
+          backend; the first ingest bootstraps a private venv once (~1 min). The provider must be
+          OpenAI-compatible.
+        </p>
+      {/if}
+      {#if graphBuilder !== ""}
+        <div class="grid grid-cols-2 gap-2.5">
+          <label class="flex flex-col gap-1 text-xs">
+            <span class="font-semibold text-foreground">Extraction provider id</span>
+            <input class={inputClass} data-testid="rag-graph-provider" bind:value={graphProviderId} placeholder="openai / lmstudio" list="rag-provider-options" />
+          </label>
+          <label class="flex flex-col gap-1 text-xs">
+            <span class="font-semibold text-foreground">Extraction model</span>
+            <input class={inputClass} data-testid="rag-graph-model" bind:value={graphModel} placeholder="gpt-4o-mini" list="rag-graph-model-options" />
+          </label>
+          <datalist id="rag-graph-model-options">
+            {#each graphModelOptions as m (m)}<option value={m}></option>{/each}
+          </datalist>
+        </div>
+      {/if}
+    </div>
+    <div class="mt-2.5">
+      <button type="button" class="{ghostBtn} border-slate-300" data-testid="rag-create" disabled={!canCreate || creating} onclick={create}>
+        {creating ? "Creating…" : "Create storage"}
+      </button>
+    </div>
+  </section>
   {/if}
 </main>

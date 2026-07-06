@@ -47,6 +47,10 @@ async function createStorage(
   roots: string,
   opts: { graph?: boolean; watch?: boolean } = {},
 ) {
+  // The create form sits below the list behind "+ Add storage" (auto-expanded
+  // only while no storages exist); wait out the initial load first.
+  await expect(page.getByTestId("rag-add").or(page.getByTestId("rag-name"))).toBeVisible();
+  if (await page.getByTestId("rag-add").isVisible()) await page.getByTestId("rag-add").click();
   await page.getByTestId("rag-name").fill(name);
   await page.getByTestId("rag-provider").fill("stub");
   await page.getByTestId("rag-model").fill("stub-embed");

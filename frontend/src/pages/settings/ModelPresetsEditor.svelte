@@ -96,7 +96,6 @@
 
 <div class="flex flex-col gap-3">
   <div class="flex flex-wrap items-start gap-2.5">
-    <button type="button" class={ghostBtn} onclick={() => void handleAdd()}>Add preset</button>
     <div class="flex flex-wrap gap-2" role="list" aria-label="Model presets">
       {#each presets as preset (preset.id)}
         <button
@@ -109,6 +108,7 @@
         </button>
       {/each}
     </div>
+    <button type="button" class={ghostBtn} onclick={() => void handleAdd()}>+ Add preset</button>
   </div>
 
   <div class="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">

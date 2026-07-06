@@ -18,6 +18,7 @@
   let remoteCommand = $state("");
   let creating = $state(false);
   let busyId = $state<string | null>(null);
+  let showCreate = $state(false);
 
   const canCreate = $derived(name.trim().length > 0 && host.trim().length > 0);
   const inputClass = "w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs text-foreground";
@@ -55,6 +56,7 @@
       port = "";
       identityFile = "";
       remoteCommand = "";
+      showCreate = false;
       await load();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -96,41 +98,6 @@
     </div>
   {/if}
 
-  <section class="rounded-lg border border-border bg-card p-3">
-    <div class="mb-2 text-[13px] font-bold text-foreground">New ssh sandbox</div>
-    <div class="grid grid-cols-2 gap-2.5">
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Name</span>
-        <input class={inputClass} data-testid="tool-env-name" bind:value={name} placeholder="Build box" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Host</span>
-        <input class={inputClass} data-testid="tool-env-host" bind:value={host} placeholder="box.local" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">User (optional)</span>
-        <input class={inputClass} data-testid="tool-env-user" bind:value={user} placeholder="dev" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Port (optional)</span>
-        <input class={inputClass} data-testid="tool-env-port" bind:value={port} placeholder="22" inputmode="numeric" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Identity file (optional)</span>
-        <input class={inputClass} data-testid="tool-env-identity" bind:value={identityFile} placeholder="~/.ssh/id_ed25519" />
-      </label>
-      <label class="flex flex-col gap-1 text-xs">
-        <span class="font-semibold text-foreground">Remote command (optional)</span>
-        <input class={inputClass} data-testid="tool-env-remote" bind:value={remoteCommand} placeholder="runvane-toolhost" />
-      </label>
-    </div>
-    <div class="mt-2.5">
-      <button type="button" class="{ghostBtn} border-slate-300" data-testid="tool-env-create" disabled={!canCreate || creating} onclick={create}>
-        {creating ? "Adding…" : "Add sandbox"}
-      </button>
-    </div>
-  </section>
-
   {#if loading}
     <p class="text-sm text-muted-foreground">Loading…</p>
   {:else}
@@ -162,5 +129,53 @@
         </section>
       {/each}
     </div>
+  {/if}
+
+  {#if !showCreate}
+    <div>
+      <button type="button" class={ghostBtn} data-testid="tool-env-add" onclick={() => (showCreate = true)}>
+        + Add ssh sandbox
+      </button>
+    </div>
+  {:else}
+    <section class="rounded-lg border border-border bg-card p-3">
+      <div class="mb-2 flex items-center justify-between">
+        <div class="text-[13px] font-bold text-foreground">New ssh sandbox</div>
+        <button type="button" class="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Close new-sandbox form" onclick={() => (showCreate = false)}>
+          ✕
+        </button>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">Name</span>
+          <input class={inputClass} data-testid="tool-env-name" bind:value={name} placeholder="Build box" />
+        </label>
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">Host</span>
+          <input class={inputClass} data-testid="tool-env-host" bind:value={host} placeholder="box.local" />
+        </label>
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">User (optional)</span>
+          <input class={inputClass} data-testid="tool-env-user" bind:value={user} placeholder="dev" />
+        </label>
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">Port (optional)</span>
+          <input class={inputClass} data-testid="tool-env-port" bind:value={port} placeholder="22" inputmode="numeric" />
+        </label>
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">Identity file (optional)</span>
+          <input class={inputClass} data-testid="tool-env-identity" bind:value={identityFile} placeholder="~/.ssh/id_ed25519" />
+        </label>
+        <label class="flex flex-col gap-1 text-xs">
+          <span class="font-semibold text-foreground">Remote command (optional)</span>
+          <input class={inputClass} data-testid="tool-env-remote" bind:value={remoteCommand} placeholder="runvane-toolhost" />
+        </label>
+      </div>
+      <div class="mt-2.5">
+        <button type="button" class="{ghostBtn} border-slate-300" data-testid="tool-env-create" disabled={!canCreate || creating} onclick={create}>
+          {creating ? "Adding…" : "Add sandbox"}
+        </button>
+      </div>
+    </section>
   {/if}
 </main>

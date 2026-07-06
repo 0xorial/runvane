@@ -10,6 +10,7 @@
     setSelectedToolForEdit,
   } from "@/lib/chatToolDraft.svelte";
   import type { ExplicitToolOverrideMode, ToolOverrideUiMode } from "@/lib/chatToolOverrides";
+  import { SEGMENT_ACTIVE_CLASS } from "@/lib/segmentColors";
 
   let {
     toolName,
@@ -36,10 +37,10 @@
   });
 
   const options: { id: ExplicitToolOverrideMode; label: string; activeClass: string }[] = [
-    { id: "off", label: "Off", activeClass: "bg-muted font-semibold text-foreground" },
-    { id: "ask", label: "Ask", activeClass: "bg-sky-500/25 font-semibold text-sky-800 dark:text-sky-200" },
-    { id: "allow", label: "Allow", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
-    { id: "custom", label: "Custom", activeClass: "bg-emerald-500/25 font-semibold text-emerald-800 dark:text-emerald-200" },
+    { id: "off", label: "Off", activeClass: SEGMENT_ACTIVE_CLASS.off },
+    { id: "ask", label: "Ask", activeClass: SEGMENT_ACTIVE_CLASS.conditional },
+    { id: "allow", label: "Allow", activeClass: SEGMENT_ACTIVE_CLASS.enabled },
+    { id: "custom", label: "Custom", activeClass: SEGMENT_ACTIVE_CLASS.custom },
   ];
 
   const selected = $derived((mode === "inherit" ? effectiveMode : mode) as ExplicitToolOverrideMode);

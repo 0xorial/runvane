@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from "@/components/ui/Icon.svelte";
   import ToolRulesEditor from "@/components/settings/ToolRulesEditor.svelte";
+  import { SEGMENT_ACTIVE_CLASS } from "@/lib/segmentColors";
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
   import { readGuardrailConfig } from "./agentGuardrail";
   import {
@@ -36,18 +37,17 @@
   const toolRulesZodSchemas = $derived(buildToolRulesZodSchemas(toolCatalog));
   const agentSeparateParamsResolution = $derived(getAgentSeparateParamsResolution(currentAgent));
 
-  // Segment colours mirror the chat-sidebar tool control for visual parity.
   const POLICY_SEGMENTS: { id: ToolPolicy; label: string; activeClass: string }[] = [
-    { id: "off", label: "Off", activeClass: "bg-muted font-semibold text-foreground" },
-    { id: "ask", label: "Ask", activeClass: "bg-sky-500/25 font-semibold text-sky-800 dark:text-sky-200" },
-    { id: "allow", label: "Allow", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
-    { id: "custom", label: "Custom", activeClass: "bg-emerald-500/25 font-semibold text-emerald-800 dark:text-emerald-200" },
+    { id: "off", label: "Off", activeClass: SEGMENT_ACTIVE_CLASS.off },
+    { id: "ask", label: "Ask", activeClass: SEGMENT_ACTIVE_CLASS.conditional },
+    { id: "allow", label: "Allow", activeClass: SEGMENT_ACTIVE_CLASS.enabled },
+    { id: "custom", label: "Custom", activeClass: SEGMENT_ACTIVE_CLASS.custom },
   ];
 
   const PARAMS_RESOLUTION_SEGMENTS: { id: boolean | null; label: string; activeClass: string }[] = [
-    { id: null, label: "Per-tool", activeClass: "bg-muted font-semibold text-foreground" },
-    { id: true, label: "Always", activeClass: "bg-sky-500/25 font-semibold text-sky-800 dark:text-sky-200" },
-    { id: false, label: "Never", activeClass: "bg-orange-500/25 font-semibold text-orange-800 dark:text-orange-200" },
+    { id: null, label: "Per-tool", activeClass: SEGMENT_ACTIVE_CLASS.conditional },
+    { id: true, label: "Always", activeClass: SEGMENT_ACTIVE_CLASS.enabled },
+    { id: false, label: "Never", activeClass: SEGMENT_ACTIVE_CLASS.off },
   ];
 
   function setAgentSeparateParamsResolution(value: boolean | null): void {

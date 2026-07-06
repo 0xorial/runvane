@@ -106,6 +106,8 @@ test("settings Tool Sandboxes section creates and deletes an ssh env", async ({ 
   await page.goto("/settings/tool-sandboxes", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("tool-sandboxes-section")).toBeVisible();
 
+  // The creation form sits collapsed under the list behind the add button.
+  await page.getByTestId("tool-env-add").click();
   await page.getByTestId("tool-env-name").fill("E2E Settings Box");
   await page.getByTestId("tool-env-host").fill("settings.e2e.local");
   await page.getByTestId("tool-env-create").click();
