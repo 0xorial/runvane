@@ -104,6 +104,9 @@
           "suite": "unit"
         }
       ]
+    ],
+    "transformIgnorePatterns": [
+      "/node_modules/(?!zodex/)"
     ]
   }
 }

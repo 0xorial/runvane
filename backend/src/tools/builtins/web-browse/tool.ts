@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
 import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
-import { describeFetchFailure } from '../../fetch-failure.js';
+import { describeFetchFailure, isServiceUnreachable } from '../../fetch-failure.js';
 import { parseWebBrowseParams, webBrowseParamsSchema, type WebBrowseParams } from './params.js';
 import { WebBrowseRulesSchema, parseWebBrowseRules, type WebBrowseRules } from './rules.js';
 
@@ -107,6 +107,17 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
       // Already-formatted errors pass through; wrap raw fetch failures with the
       // target URL, the endpoint, and the real cause (not "fetch failed").
       if (error instanceof Error && error.message.startsWith('web_browse:')) throw error;
+      // No browse proxy at the configured endpoint: guide the user to set one
+      // up instead of surfacing a bare errno.
+      if (isServiceUnreachable(error)) {
+        throw new Error(
+          `web_browse is not available: no browse proxy is reachable at ${rules.endpoint} (${describeFetchFailure(error)}). ` +
+            `This tool needs a Steel-compatible scrape endpoint — e.g. the ai-browsing-enabler (start it with docker compose; it serves scraping on :3000). ` +
+            `Point the tool at it by setting the RUNVANE_WEB_BROWSE_ENDPOINT env var for the backend, ` +
+            `or per agent via Settings → Agents → Tools → web_browse → endpoint rule. ` +
+            `Until then, answer from existing knowledge and tell the user web browsing is unconfigured.`,
+        );
+      }
       throw new Error(
         `web_browse: ${params.url} via ${endpoint.toString()} failed — ${describeFetchFailure(error)}`,
       );

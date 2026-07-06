@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
 import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
-import { describeFetchFailure } from '../../fetch-failure.js';
+import { describeFetchFailure, isServiceUnreachable } from '../../fetch-failure.js';
 import { parseWebSearchParams, webSearchParamsSchema, type WebSearchParams } from './params.js';
 import { WebSearchRulesSchema, parseWebSearchRules, type WebSearchRules } from './rules.js';
 
@@ -107,6 +107,17 @@ export class WebSearchTool extends BaseTool<WebSearchParams, WebSearchRules> {
       // Already-formatted (e.g. non-2xx) errors pass through; wrap raw fetch
       // failures with the URL attempted and the real cause (not "fetch failed").
       if (error instanceof Error && error.message.startsWith('web_search:')) throw error;
+      // No search proxy at the configured endpoint: guide the user to set one
+      // up instead of surfacing a bare errno.
+      if (isServiceUnreachable(error)) {
+        throw new Error(
+          `web_search is not available: no search proxy is reachable at ${rules.endpoint} (${describeFetchFailure(error)}). ` +
+            `This tool needs a SearXNG-compatible JSON endpoint — e.g. the ai-browsing-enabler (start it with docker compose; it serves search on :8080). ` +
+            `Point the tool at it by setting the RUNVANE_WEB_SEARCH_ENDPOINT env var for the backend, ` +
+            `or per agent via Settings → Agents → Tools → web_search → endpoint rule. ` +
+            `Until then, answer from existing knowledge and tell the user web search is unconfigured.`,
+        );
+      }
       throw new Error(`web_search: GET ${url.toString()} failed — ${describeFetchFailure(error)}`);
     } finally {
       clearTimeout(timer);

@@ -25,3 +25,33 @@ export function describeFetchFailure(error: unknown): string {
   if (seen.length === 0) seen.push(error.message);
   return seen.join('; ');
 }
+
+// Errno codes that mean "nothing is listening there" (service down, wrong
+// host, DNS miss) — as opposed to a flaky-but-present service.
+const UNREACHABLE_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/**
+ * True when a failed `fetch()` indicates the target service is not reachable
+ * at all — the caller can then explain how to configure/start it instead of
+ * surfacing a bare errno.
+ */
+export function isServiceUnreachable(error: unknown): boolean {
+  // Duck-typed rather than `instanceof Error`: undici error causes can come
+  // from another realm (notably under jest's VM), where instanceof fails.
+  const walk = (e: unknown): boolean => {
+    if (e == null || typeof e !== 'object') return false;
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string' && UNREACHABLE_CODES.has(code)) return true;
+    const nested = (e as { errors?: unknown[] }).errors;
+    if (Array.isArray(nested) && nested.some(walk)) return true;
+    return walk((e as { cause?: unknown }).cause);
+  };
+  return walk(error);
+}
