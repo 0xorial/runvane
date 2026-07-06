@@ -10,7 +10,6 @@
     agents: "Agents",
     tools: "Tools",
     "tool-sandboxes": "Tool Sandboxes",
-    skills: "Skills",
     rag: "RAG",
   };
 

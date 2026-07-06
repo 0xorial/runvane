@@ -180,7 +180,5 @@
     <RagStoragesSection />
   {:else if section === "tool-sandboxes"}
     <ToolSandboxesSection />
-  {:else}
-    <div class={settingsPlaceholderBox}>Skills UI placeholder.</div>
   {/if}
 </main>

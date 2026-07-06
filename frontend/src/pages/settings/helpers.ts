@@ -12,7 +12,6 @@ export const SETTINGS_SECTIONS = [
   "model-pricing",
   "agents",
   "tools",
-  "skills",
   "rag",
   "tool-sandboxes",
 ] as const;

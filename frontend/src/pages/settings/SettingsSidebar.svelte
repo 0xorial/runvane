@@ -8,7 +8,6 @@
     { section: "model-presets", label: "Model Presets" },
     { section: "model-pricing", label: "Model Pricing" },
     { section: "tools", label: "Tools" },
-    { section: "skills", label: "Skills" },
     { section: "rag", label: "RAG" },
     { section: "tool-sandboxes", label: "Tool Sandboxes" },
     { section: "agents", label: "Agents" },
