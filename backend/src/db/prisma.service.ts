@@ -1,21 +1,27 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { performance } from 'node:perf_hooks';
+import { PrismaClient } from '../generated/prisma/client.js';
 
 /**
  * Deep DB instrumentation, opt-in via RUNVANE_DB_DIAG=1 (the test harness turns
  * it on; off in production). Read-only — it changes no query behavior. Logs any
- * statement or interactive transaction slower than RUNVANE_DB_DIAG_SLOW_MS
- * (default 100ms), or everything with RUNVANE_DB_DIAG_ALL=1.
+ * interactive transaction slower than RUNVANE_DB_DIAG_SLOW_MS (default 100ms),
+ * or everything with RUNVANE_DB_DIAG_ALL=1.
+ *
+ * Prisma 7 note: the per-statement query-event log and the $metrics pool
+ * sampler are gone with the Rust engine ($on('query') and the "metrics"
+ * preview no longer exist); the transaction timeline below is pure JS and
+ * survives. Queries now run through the better-sqlite3 driver adapter — the
+ * engine-side lock-wait class the statement log was built to catch (the itx
+ * RwLock deadlock, prisma/prisma#11750) no longer exists.
  */
 const DB_DIAG = process.env.RUNVANE_DB_DIAG === '1';
 const DB_DIAG_ALL = process.env.RUNVANE_DB_DIAG_ALL === '1';
 const DB_DIAG_SLOW_MS = Number(process.env.RUNVANE_DB_DIAG_SLOW_MS ?? '100');
 
-// One shared monotonic clock stamped on every diag line so SQL statements and
-// transaction lifecycles can be placed on a single timeline and correlated
-// (BEGIN/COMMIT are issued by Prisma outside the callback, so they can't be
-// tagged with a tx id at the source — but they serialize, so end-time matches).
+// One shared monotonic clock stamped on every diag line so transaction
+// lifecycles can be placed on a single timeline and correlated.
 const CLOCK0 = performance.now();
 const at = (): number => Math.round(performance.now() - CLOCK0);
 
@@ -32,35 +38,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   constructor() {
     super({
-      datasources: {
-        db: {
-          // Fall back to the same path Prisma migrations target (resolved
-          // relative to the schema at backend/prisma). Without this match, an
-          // unset DATABASE_URL opens a *different*, empty DB than the one
-          // migrations built — the classic "where did my data go" footgun.
-          url: PrismaService.sqliteUrlWithSingleConnection(
-            process.env.DATABASE_URL ?? 'file:./backend.sqlite',
-          ),
-        },
-      },
-      // Emit per-statement query events (with engine-measured duration, which
-      // includes lock-wait) only when diagnostics are on.
-      ...(DB_DIAG ? { log: [{ level: 'query', emit: 'event' as const }] } : {}),
+      // Driver adapter (no Rust engine). The fallback matches the path Prisma
+      // migrations target. Unlike the old engine, the adapter resolves relative
+      // `file:` URLs against the process cwd (backend/), not the schema dir —
+      // hence `./prisma/…` where the old fallback said `./backend.sqlite`.
+      adapter: new PrismaBetterSqlite3({
+        url: process.env.DATABASE_URL ?? 'file:./prisma/backend.sqlite',
+      }),
     });
-  }
-
-  /**
-   * Optional SQLite pool-size override (RUNVANE_SQLITE_CONN_LIMIT), used by the
-   * DB diagnostics workflow to reproduce/rule out concurrency effects. Unset =
-   * Prisma's default pool. NOTE: interactive transactions are banned on the
-   * chat-entries write path (see chat-entries-base.repo.ts) because concurrent
-   * itx deadlock inside the query engine (prisma/prisma#11750); batch
-   * transactions are safe with the full pool.
-   */
-  private static sqliteUrlWithSingleConnection(url: string): string {
-    const lim = process.env.RUNVANE_SQLITE_CONN_LIMIT;
-    if (!lim || !url.startsWith('file:') || /[?&]connection_limit=/.test(url)) return url;
-    return `${url}${url.includes('?') ? '&' : '?'}connection_limit=${lim}`;
   }
 
   async onModuleInit(): Promise<void> {
@@ -78,41 +63,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   private installDbDiagnostics(): void {
-    // Sample Prisma's own connection-pool metrics on the shared clock. During a
-    // freeze this shows directly whether connections are all busy and whether
-    // queries are queued waiting for a connection (prisma_client_queries_wait).
-    const metricsClient = this as unknown as {
-      $metrics: { json: () => Promise<{ gauges: { key: string; value: number }[]; counters: { key: string; value: number }[] }> };
-    };
-    const sampler = setInterval(() => {
-      // $metrics only exists while the schema enables the "metrics" preview
-      // feature; don't let the sampler crash the process if it's removed.
-      if (typeof metricsClient.$metrics?.json !== 'function') return;
-      metricsClient.$metrics
-        .json()
-        .then((m) => {
-          const v = (k: string) =>
-            m.gauges.find((x) => x.key === k)?.value ?? m.counters.find((x) => x.key === k)?.value ?? '?';
-          this.diag.warn(
-            `metrics@${at()}ms pool_open=${v('prisma_pool_connections_open')} busy=${v('prisma_pool_connections_busy')} idle=${v('prisma_pool_connections_idle')} q_active=${v('prisma_client_queries_active')} q_wait=${v('prisma_client_queries_wait')}`,
-          );
-        })
-        .catch(() => {});
-    }, 150);
-    sampler.unref();
-
-    // Per-statement timing. `e.duration` is what the engine spent, so a write
-    // blocked on the SQLite writer lock shows up here as a multi-second query.
-    (this as unknown as { $on: (e: 'query', cb: (ev: Prisma.QueryEvent) => void) => void }).$on(
-      'query',
-      (e) => {
-        if (DB_DIAG_ALL || e.duration >= DB_DIAG_SLOW_MS) {
-          // end@ = when this statement finished; started at end-duration.
-          this.diag.warn(`sql end@${at()}ms dur=${e.duration}ms | ${e.query.replace(/\s+/g, ' ').slice(0, 40)}`);
-        }
-      },
-    );
-
     // Per-transaction timing + live concurrency + the internal statement
     // timeline (offset from tx start, and each statement's own duration). The
     // timeline is what distinguishes "held the lock while starved of loop time"
@@ -159,11 +109,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         this.txOpen -= 1;
         const total = Math.round(performance.now() - t0);
         // commitMs = time after the callback returned until the tx settled
-        // (Prisma COMMIT round-trip + result delivery). acquiredAfter = BEGIN.
+        // (COMMIT round-trip + result delivery). acquiredAfter = BEGIN.
         const commitMs = callbackMs < 0 ? -1 : total - acquiredAfter - callbackMs;
         if (DB_DIAG_ALL || total >= DB_DIAG_SLOW_MS) {
-          // begin_done@ ≈ this tx's BEGIN end-time; settle@ ≈ its COMMIT end-time.
-          // Match those against the `sql end@` lines to pull its BEGIN/COMMIT.
           this.diag.warn(
             `tx#${id} begin_done@${beginDoneAt}ms settle@${at()}ms total=${total}ms begin=${acquiredAfter}ms callback=${callbackMs}ms commit=${commitMs}ms concurrentOpen=${concurrentOpen} steps=[${steps.join(' | ')}]`,
           );

@@ -19,10 +19,10 @@ const repoRoot = path.join(__dirname, "..");
 const backendDir = path.join(repoRoot, "backend");
 
 // --- Linux-native shims (see memory: runvane-prisma-linux-engine) -----------
+// (Prisma 7 runs engine-free via the better-sqlite3 driver adapter, so only
+// the vite natives and Playwright browsers still need Linux-side shims.)
 const cache = "/shared/.cache";
 const shims = {
-  PRISMA_QUERY_ENGINE_LIBRARY: `${cache}/runvane-prisma/libquery_engine-linux-arm64-openssl-3.0.x.so.node`,
-  PRISMA_SCHEMA_ENGINE_BINARY: `${cache}/runvane-prisma/schema-engine-linux-arm64-openssl-3.0.x`,
   PLAYWRIGHT_BROWSERS_PATH: `${cache}/ms-playwright`,
 };
 // NODE_PATH is applied ONLY to the e2e run — a global NODE_PATH perturbs jest
@@ -36,7 +36,7 @@ const useShims = onLinux && shimsPresent;
 if (onLinux && !shimsPresent) {
   console.error(
     "run-all-tests: on Linux but the native test binaries are missing under\n" +
-      `  ${cache}/runvane-prisma, ${cache}/runvane-natives, ${cache}/ms-playwright\n` +
+      `  ${cache}/runvane-natives, ${cache}/ms-playwright\n` +
       "Restore them before running (see memory note runvane-prisma-linux-engine).",
   );
   process.exit(1);

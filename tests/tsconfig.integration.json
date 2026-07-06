@@ -2,7 +2,9 @@
   "extends": "../backend/tsconfig.json",
   "compilerOptions": {
     "rootDir": "integration",
-    "noEmit": true
+    "noEmit": true,
+    "module": "commonjs",
+    "moduleResolution": "node10"
   },
   "include": ["integration/**/*.ts"]
 }

@@ -11,8 +11,6 @@ set -euo pipefail
 
 cd /workspace
 
-prisma_gen() { ( cd backend && npx prisma generate ); }
-
 # install_deps <dir> [post-install-cmd...]
 install_deps() {
   local dir="$1"; shift
@@ -26,7 +24,7 @@ install_deps() {
   fi
 }
 
-install_deps backend prisma_gen
+install_deps backend true
 install_deps frontend true
 
 echo "=== launching backend :$BACKEND_PORT (nest start --watch) + frontend :$FRONTEND_PORT (vite) ==="

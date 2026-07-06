@@ -59,12 +59,13 @@ the instant one waiter times out.
 
 Fix (`9446566`): **interactive transactions are banned on the chat-entries write path.**
 All four `$transaction(async (tx) => …)` call sites became batch transactions
-(`$transaction([...])`) — one atomic engine-side request that never enters the ITX
-registry, so the deadlock cannot form and the full connection pool stays. Do not
-reintroduce the callback form there (see the comment in
+(`$transaction([...])`) — one atomic request that never entered the old engine's ITX
+registry, so the deadlock could not form. The Rust engine (and with it that deadlock
+class and the `RUNVANE_SQLITE_CONN_LIMIT` pool override) is gone since Prisma 7 —
+queries run through the better-sqlite3 driver adapter — but the batch form stays as
+the simpler shape (see the comment in
 `backend/src/db/repositories/chat-entries-base.repo.ts`). `PrismaService` also enables
-WAL + `busy_timeout=5000`; `RUNVANE_SQLITE_CONN_LIMIT` exists as a diagnostics-only
-pool override.
+WAL + `busy_timeout=5000`.
 
 ## Zero-tolerance log gate
 

@@ -10,10 +10,6 @@ set -euo pipefail
 STABLE_DB=/workspace/backend/prisma/backend.sqlite
 DEV_DB=/workspace/backend/prisma/backend.dev.sqlite
 
-# Linux Prisma engines, kept off the virtiofs share (see runvane-prisma-linux-engine).
-export PRISMA_QUERY_ENGINE_LIBRARY="${PRISMA_QUERY_ENGINE_LIBRARY:-/shared/.cache/runvane-prisma/libquery_engine-linux-arm64-openssl-3.0.x.so.node}"
-export PRISMA_SCHEMA_ENGINE_BINARY="${PRISMA_SCHEMA_ENGINE_BINARY:-/shared/.cache/runvane-prisma/schema-engine-linux-arm64-openssl-3.0.x}"
-
 [ -f "$STABLE_DB" ] || { echo "stable DB missing: $STABLE_DB" >&2; exit 1; }
 
 echo "[1/4] stop rv-dev (release its DB file)"

@@ -49,6 +49,10 @@ function templateHash() {
 /** migrate + seed into `dbPath` via the prisma CLI (the slow path, ~3s). */
 function buildDatabase(dbPath, label) {
   const env = { ...process.env, DATABASE_URL: `file:${dbPath}` };
+  // Pre-Prisma-7 environments exported per-platform engine binaries; a stale
+  // override crashes the v7 CLI ("Could not parse schema engine response").
+  delete env.PRISMA_QUERY_ENGINE_LIBRARY;
+  delete env.PRISMA_SCHEMA_ENGINE_BINARY;
   const migrate = spawnSync("npx", ["prisma", "migrate", "deploy"], {
     cwd: backendDir,
     env,
@@ -59,7 +63,8 @@ function buildDatabase(dbPath, label) {
   }
   const seed = spawnSync(
     "npx",
-    ["prisma", "db", "execute", "--stdin", "--schema", "prisma/schema.prisma"],
+    // (no --schema: the v7 CLI reads schema + datasource from prisma.config.ts)
+    ["prisma", "db", "execute", "--stdin"],
     {
       cwd: backendDir,
       env,
