@@ -300,6 +300,16 @@ export async function approveToolInvocation(
   );
 }
 
+export async function retryToolInvocation(
+  conversationId: string,
+  entryId: string,
+): Promise<PostAcceptedResult<unknown>> {
+  return postJsonAccepted(
+    `/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/retry`,
+    {},
+  );
+}
+
 export async function denyToolInvocation(
   conversationId: string,
   entryId: string,

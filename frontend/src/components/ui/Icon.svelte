@@ -16,6 +16,7 @@
       | "sun"
       | "moon"
       | "loader"
+      | "rotate-cw"
       | "activity"
       | "square"
       | "arrow-right"
@@ -46,6 +47,8 @@
 >
   {#if name === "x"}
     <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+  {:else if name === "rotate-cw"}
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
   {:else if name === "trash"}
     <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
   {:else if name === "pencil"}

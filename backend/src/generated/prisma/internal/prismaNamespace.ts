@@ -394,7 +394,8 @@ export const ModelName = {
   ModelCapability: 'ModelCapability',
   ModelCapabilityOverride: 'ModelCapabilityOverride',
   UploadAttachment: 'UploadAttachment',
-  StreamCursor: 'StreamCursor'
+  StreamCursor: 'StreamCursor',
+  ToolRun: 'ToolRun'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -410,7 +411,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "conversation" | "chatEntry" | "conversationGroup" | "agent" | "llmProviderSetting" | "appSetting" | "modelPreset" | "modelCapability" | "modelCapabilityOverride" | "uploadAttachment" | "streamCursor"
+    modelProps: "conversation" | "chatEntry" | "conversationGroup" | "agent" | "llmProviderSetting" | "appSetting" | "modelPreset" | "modelCapability" | "modelCapabilityOverride" | "uploadAttachment" | "streamCursor" | "toolRun"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1228,6 +1229,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    ToolRun: {
+      payload: Prisma.$ToolRunPayload<ExtArgs>
+      fields: Prisma.ToolRunFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ToolRunFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ToolRunFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>
+        }
+        findFirst: {
+          args: Prisma.ToolRunFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ToolRunFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>
+        }
+        findMany: {
+          args: Prisma.ToolRunFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>[]
+        }
+        create: {
+          args: Prisma.ToolRunCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>
+        }
+        createMany: {
+          args: Prisma.ToolRunCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ToolRunCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>[]
+        }
+        delete: {
+          args: Prisma.ToolRunDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>
+        }
+        update: {
+          args: Prisma.ToolRunUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>
+        }
+        deleteMany: {
+          args: Prisma.ToolRunDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ToolRunUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ToolRunUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>[]
+        }
+        upsert: {
+          args: Prisma.ToolRunUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ToolRunPayload>
+        }
+        aggregate: {
+          args: Prisma.ToolRunAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateToolRun>
+        }
+        groupBy: {
+          args: Prisma.ToolRunGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ToolRunGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ToolRunCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ToolRunCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1418,6 +1493,28 @@ export const StreamCursorScalarFieldEnum = {
 } as const
 
 export type StreamCursorScalarFieldEnum = (typeof StreamCursorScalarFieldEnum)[keyof typeof StreamCursorScalarFieldEnum]
+
+
+export const ToolRunScalarFieldEnum = {
+  id: 'id',
+  conversationId: 'conversationId',
+  chatEntryId: 'chatEntryId',
+  agentId: 'agentId',
+  toolId: 'toolId',
+  attempt: 'attempt',
+  retryOfRunId: 'retryOfRunId',
+  status: 'status',
+  parametersJson: 'parametersJson',
+  resultJson: 'resultJson',
+  error: 'error',
+  startedAt: 'startedAt',
+  finishedAt: 'finishedAt',
+  elapsedMs: 'elapsedMs',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ToolRunScalarFieldEnum = (typeof ToolRunScalarFieldEnum)[keyof typeof ToolRunScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1650,6 +1747,7 @@ export type GlobalOmitConfig = {
   modelCapabilityOverride?: Prisma.ModelCapabilityOverrideOmit
   uploadAttachment?: Prisma.UploadAttachmentOmit
   streamCursor?: Prisma.StreamCursorOmit
+  toolRun?: Prisma.ToolRunOmit
 }
 
 /* Types for Logging */

@@ -61,7 +61,8 @@ export const ModelName = {
   ModelCapability: 'ModelCapability',
   ModelCapabilityOverride: 'ModelCapabilityOverride',
   UploadAttachment: 'UploadAttachment',
-  StreamCursor: 'StreamCursor'
+  StreamCursor: 'StreamCursor',
+  ToolRun: 'ToolRun'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -231,6 +232,28 @@ export const StreamCursorScalarFieldEnum = {
 } as const
 
 export type StreamCursorScalarFieldEnum = (typeof StreamCursorScalarFieldEnum)[keyof typeof StreamCursorScalarFieldEnum]
+
+
+export const ToolRunScalarFieldEnum = {
+  id: 'id',
+  conversationId: 'conversationId',
+  chatEntryId: 'chatEntryId',
+  agentId: 'agentId',
+  toolId: 'toolId',
+  attempt: 'attempt',
+  retryOfRunId: 'retryOfRunId',
+  status: 'status',
+  parametersJson: 'parametersJson',
+  resultJson: 'resultJson',
+  error: 'error',
+  startedAt: 'startedAt',
+  finishedAt: 'finishedAt',
+  elapsedMs: 'elapsedMs',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ToolRunScalarFieldEnum = (typeof ToolRunScalarFieldEnum)[keyof typeof ToolRunScalarFieldEnum]
 
 
 export const SortOrder = {

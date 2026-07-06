@@ -167,3 +167,30 @@ model StreamCursor {
 
   @@map("stream_cursor")
 }
+
+// One row per tool execution attempt. The tool-invocation chat entry is the
+// transcript surface (mutated in place on approve/retry); this table is the
+// immutable per-attempt audit and the base for retrying failed runs.
+model ToolRun {
+  id             String    @id
+  conversationId String    @map("conversation_id")
+  chatEntryId    String    @map("chat_entry_id")
+  agentId        String?   @map("agent_id")
+  toolId         String    @map("tool_id")
+  /** 1 for the first execution of an entry, +1 per retry. */
+  attempt        Int       @default(1)
+  retryOfRunId   String?   @map("retry_of_run_id")
+  status         String // running | done | error | aborted
+  parametersJson Json      @map("parameters_json")
+  resultJson     Json?     @map("result_json")
+  error          String?
+  startedAt      DateTime  @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  elapsedMs      Int?      @map("elapsed_ms")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([conversationId])
+  @@index([chatEntryId])
+  @@map("tool_runs")
+}

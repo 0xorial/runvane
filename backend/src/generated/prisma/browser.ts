@@ -72,3 +72,8 @@ export type UploadAttachment = Prisma.UploadAttachmentModel
  * 
  */
 export type StreamCursor = Prisma.StreamCursorModel
+/**
+ * Model ToolRun
+ * 
+ */
+export type ToolRun = Prisma.ToolRunModel

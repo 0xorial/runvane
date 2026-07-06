@@ -4,6 +4,7 @@ import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { SseType } from '../contracts/sse.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
+import { ToolRunsRepo } from '../db/repositories/tool-runs.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../sse/sse-helpers.js';
 import { TaskRegistryService } from '../tasks/task-registry.service.js';
@@ -79,6 +80,7 @@ export class RunToolService {
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
+    private readonly toolRuns: ToolRunsRepo,
     private readonly tools: ToolRegistry,
     private readonly hub: SseHubService,
     private readonly agents: AgentsRepo,
@@ -255,6 +257,83 @@ export class RunToolService {
     };
 
     // The planner continuation hangs off the approved tool entry.
+    chain.setTip(args.toolEntryId);
+
+    scope.spawn(async () => {
+      await this.executeTool({
+        input,
+        tool,
+        parsedParams,
+        parsedRules,
+        entries,
+        scope,
+        chain,
+        llm,
+        existingEntryId: args.toolEntryId,
+      });
+    });
+  }
+
+  /**
+   * User-retry path: the user clicked "Retry" on a failed (`error`) tool
+   * invocation. Re-runs the tool with the entry's recorded params, updating the
+   * same entry in place (`error → running → done/error`) — the tool_runs table
+   * keeps the per-attempt history. The user's click counts as approval (like
+   * approve), but a tool whose policy is now `off` stays off. The original
+   * fan-out batch resolved long ago, so the retry never re-joins it — it
+   * continues the planner by itself once the run settles.
+   */
+  async retryToolInvocation(
+    args: { conversationId: string; toolEntryId: string; agentId: string },
+    scope: LifecycleScope,
+    chain: ChatChain,
+    llm: LlmRef,
+  ): Promise<void> {
+    const entry = await this.chatEntries.getChatEntry(args.conversationId, args.toolEntryId);
+    if (!entry || entry.type !== 'tool-invocation') {
+      throw new Error(`retry: entry ${args.toolEntryId} is not a tool-invocation`);
+    }
+    if (entry.state !== 'error') {
+      throw new Error(`retry: tool invocation ${args.toolEntryId} is not failed (state=${entry.state})`);
+    }
+    // Blocked entries (forbidden / not-found) also persist as `error`, but they
+    // never ran — retrying them would bypass the permission decision.
+    if (entry.result && entry.result.permission_state !== 'allow') {
+      throw new Error(`retry: tool invocation ${args.toolEntryId} was blocked, not failed — nothing to retry`);
+    }
+    const tool = this.tools.get(entry.toolId);
+    if (!tool) throw new Error(`retry: unknown tool ${entry.toolId}`);
+
+    const { tool_request, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
+    void __tool_batch; // the old batch is resolved; a retry must not re-join it
+    const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
+
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
+    const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
+    const toolOverrides = anchorUser?.type === 'user-message' ? anchorUser.overrides?.tools : undefined;
+
+    const agent = await this.agents.get(args.agentId);
+    const toolCfg = resolveToolConfig(agent, toolOverrides, entry.toolId);
+    if ((toolCfg.policy ?? 'off') === 'off') {
+      throw new Error(`retry: tool ${entry.toolId} is disabled for this agent`);
+    }
+    const rawRules = { ...(toolCfg.rules ?? tool.getDefaultRules()) };
+    delete (rawRules as Record<string, unknown>).allowed;
+    const parsedRules = tool.parseRules(rawRules);
+    const parsedParams = tool.parseParams(requestedParams);
+
+    const input: RunToolInput = {
+      conversationId: args.conversationId,
+      agentId: args.agentId,
+      toolName: entry.toolId,
+      params: requestedParams,
+      approvalGranted: true,
+      plannerFollowup: { mode: 'continue' },
+      ...(toolRequest ? { toolRequest } : {}),
+      ...(toolOverrides ? { toolOverrides } : {}),
+    };
+
+    // The planner continuation hangs off the retried entry, mirroring approve.
     chain.setTip(args.toolEntryId);
 
     scope.spawn(async () => {
@@ -472,6 +551,22 @@ export class RunToolService {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
+    // Per-attempt audit row (attempt/retry lineage derived from prior runs of
+    // this entry). Best-effort: bookkeeping must never block the tool itself.
+    const runId = await this.toolRuns
+      .beginRun({
+        conversationId: input.conversationId,
+        chatEntryId: entryId,
+        agentId: input.agentId,
+        toolId: input.toolName,
+        parameters: parameters,
+        startedAt,
+      })
+      .catch((err) => {
+        this.logger.warn(`tool_runs begin failed: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+      });
+
     // Run the tool. A throw here (timeout, connection failure, etc.) must NOT
     // leave the entry stranded in `running` — record it as `error` either way.
     let output: unknown = null;
@@ -536,6 +631,18 @@ export class RunToolService {
         state: 'error',
         result: envelope,
       });
+      if (runId) {
+        await this.toolRuns
+          .finishRun({
+            id: runId,
+            status: aborted ? 'aborted' : 'error',
+            result: envelope,
+            error: detail,
+            finishedAt,
+            elapsedMs: timing.elapsed_ms,
+          })
+          .catch(() => undefined);
+      }
       await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
       if (!aborted) {
         this.hub.publish(input.conversationId, {
@@ -562,6 +669,11 @@ export class RunToolService {
       timing,
     };
     await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'done', result: envelope });
+    if (runId) {
+      await this.toolRuns
+        .finishRun({ id: runId, status: 'done', result: envelope, finishedAt, elapsedMs: timing.elapsed_ms })
+        .catch(() => undefined);
+    }
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_END,
       chatEntryId: entryId,

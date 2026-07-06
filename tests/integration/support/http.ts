@@ -104,6 +104,17 @@ export async function getAgentIdByName(baseUrl: string, name: string): Promise<s
   return agent.id;
 }
 
+export async function retryToolInvocation(
+  baseUrl: string,
+  conversationId: string,
+  entryId: string,
+): Promise<Response> {
+  return fetch(
+    `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/retry`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+  );
+}
+
 export async function approveToolInvocation(
   baseUrl: string,
   conversationId: string,

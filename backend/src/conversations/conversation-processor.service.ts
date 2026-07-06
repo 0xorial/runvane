@@ -89,6 +89,29 @@ export class ConversationProcessorService {
     }
   }
 
+  async retryToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
+    const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
+    if (!anchorUser) throw new Error('conversation has no user message to resolve the agent from');
+    const agentId = anchorUser.agentId;
+    const llm = await this.resolveLlmRef({
+      explicitProviderId: anchorUser.llm?.providerId,
+      explicitModel: anchorUser.llm?.model,
+      agentId,
+    });
+    const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
+    try {
+      await this.runTool.retryToolInvocation(
+        { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
+        scope,
+        chain,
+        llm,
+      );
+    } finally {
+      scope.rootDone();
+    }
+  }
+
   async denyToolInvocation(args: { conversationId: string; toolEntryId: string }): Promise<void> {
     const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');

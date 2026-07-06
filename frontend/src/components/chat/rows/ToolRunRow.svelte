@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { approveToolInvocation, denyToolInvocation, getTools } from "@/api/client";
+  import { approveToolInvocation, denyToolInvocation, getTools, retryToolInvocation } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
   import type { ToolInvocationEntry } from "@/protocol/chatEntry";
   import { notifyError } from "@/utils/toast";
@@ -13,6 +13,7 @@
   let toggled = $state<boolean | null>(null);
   let approving = $state(false);
   let denying = $state(false);
+  let retrying = $state(false);
   let editingParams = $state(false);
   let paramsDraft = $state("");
   let paramsError = $state<string | null>(null);
@@ -111,6 +112,23 @@
     }
   }
 
+  // Retry applies to genuine execution failures only; blocked entries (forbid,
+  // tool-not-found) also persist as `error` but never ran and must keep zero
+  // affordances (their envelope carries permission_state ≠ 'allow').
+  const retryable = $derived(entry.state === "error" && entry.result?.permission_state === "allow");
+
+  async function onRetryClick(): Promise<void> {
+    if (!conversationId || retrying) return;
+    retrying = true;
+    try {
+      await retryToolInvocation(conversationId, entry.id);
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Failed to retry tool");
+    } finally {
+      retrying = false;
+    }
+  }
+
   async function onDenyClick(): Promise<void> {
     if (!conversationId || approving || denying) return;
     denying = true;
@@ -187,6 +205,23 @@
           {#if entry.state === "error" && errorText}
             <div class="rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
               <span class="font-semibold">Error:</span> {errorText}
+            </div>
+          {/if}
+          {#if retryable}
+            <div class="pt-1">
+              <button
+                type="button"
+                data-testid="tool-retry-button"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  void onRetryClick();
+                }}
+                disabled={!conversationId || retrying}
+                class="flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+              >
+                <Icon name="rotate-cw" class="h-3 w-3 shrink-0" />
+                {retrying ? "Retrying…" : "Retry"}
+              </button>
             </div>
           {/if}
           {#if entry.state === "denied"}

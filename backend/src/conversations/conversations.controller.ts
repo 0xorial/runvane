@@ -377,6 +377,23 @@ export class ConversationsController {
     }
   }
 
+  @Post(':conversationId/tool-invocations/:entryId/retry')
+  @HttpCode(202)
+  async retryToolInvocation(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+    try {
+      await this.conversationProcessor.retryToolInvocation({ conversationId, toolEntryId: entryId });
+      return { conversationId, toolEntryId: entryId };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'failed to retry tool invocation';
+      throw new BadRequestException(detail);
+    }
+  }
+
   @Post(':conversationId/tool-invocations/:entryId/deny')
   @HttpCode(202)
   async denyToolInvocation(
