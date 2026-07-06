@@ -44,25 +44,31 @@ docker run -d --name rv-dev -p 52200:52200 -p 52201:52201 \
   -v "$HERE/dev-entry.sh":/usr/local/bin/dev-entry.sh \
   runvane-dev
 
-# Join the enabler's network (if it's up) so the endpoint hostnames resolve.
-if docker network inspect "$ENABLER_NET" >/dev/null 2>&1; then
-  docker network connect "$ENABLER_NET" rv-dev 2>/dev/null || true
-  echo "wired rv-dev -> $ENABLER_NET (web_search/web_browse)"
-else
-  echo "note: enabler network $ENABLER_NET not found; web tools will error until it is up"
-fi
-
 # 5. rv-stable — pinned snapshot, real DB, built artifacts (entry mounted from this repo).
 docker rm -f rv-stable >/dev/null 2>&1 || true
 docker run -d --name rv-stable -p 52210:52210 -p 52211:52211 \
   -e BACKEND_PORT=52210 -e FRONTEND_PORT=52211 \
   -e FRONTEND_ORIGIN=http://localhost:52211 -e VITE_API_BASE_URL=http://localhost:52210 \
   -e DATABASE_URL=file:/dbdir/backend.sqlite \
+  -e RUNVANE_WEB_SEARCH_ENDPOINT="$WEB_SEARCH_ENDPOINT" \
+  -e RUNVANE_WEB_BROWSE_ENDPOINT="$WEB_BROWSE_ENDPOINT" \
   -v "$WORKTREE":/app -v /workspace/backend/prisma:/dbdir \
   -v rv-backend-nm-stable:/app/backend/node_modules \
   -v rv-frontend-nm-stable:/app/frontend/node_modules \
   -v "$HERE/dev-entry-stable.sh":/usr/local/bin/dev-entry-stable.sh \
   runvane-dev /usr/local/bin/dev-entry-stable.sh
+
+# Join the enabler's network (if it's up) so the endpoint hostnames resolve —
+# BOTH instances need it; rv-stable was forgotten originally, leaving its web
+# tools pointing at localhost (i.e. itself).
+if docker network inspect "$ENABLER_NET" >/dev/null 2>&1; then
+  for c in rv-dev rv-stable; do
+    docker network connect "$ENABLER_NET" "$c" 2>/dev/null || true
+  done
+  echo "wired rv-dev + rv-stable -> $ENABLER_NET (web_search/web_browse)"
+else
+  echo "note: enabler network $ENABLER_NET not found; web tools will error until it is up"
+fi
 
 echo "up: rv-dev :52200/:52201 (backend.dev.sqlite), rv-stable :52210/:52211 (backend.sqlite)"
 echo "watch: docker logs -f rv-dev   /   docker logs -f rv-stable"
