@@ -76,6 +76,9 @@ describeLive('tool retry (integration)', () => {
     const failed = await waitForTool(conversationId, (t) => t.state === 'error');
     expect(failed.result?.error).toContain('transient boom');
 
+    // The controller's release gate is one-shot per tool name and is already
+    // resolved with the failure — reset so the retried run gets a fresh gate.
+    controller.reset();
     controller.complete(NO_PARAMS_RESOLUTION_TOOL, { ok: true, after: 'retry' });
     const res = await retryToolInvocation(baseUrl, conversationId, failed.id);
     expect(res.status).toBe(202);
