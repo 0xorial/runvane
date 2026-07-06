@@ -8,6 +8,7 @@ import type { LlmCompletion } from '../../llmProviders/types.js';
 // from this module elsewhere (notably plannerProvider's streaming mirror).
 export {
   extractAssistantOutputFromJsonLike,
+  extractAssistantPreviewFromStream,
   extractLastBalancedJsonObject,
   parseJsonObjectLoose,
 } from './plannerSyntax/plannerOutput.js';

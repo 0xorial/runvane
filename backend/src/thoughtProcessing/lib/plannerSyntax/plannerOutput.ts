@@ -196,3 +196,70 @@ export function plainTextPlannerOutput(reply: string): ParsedPlannerOutput {
     followup: 'finalize',
   };
 }
+
+// --- live streaming preview --------------------------------------------------
+
+// Openers that mark the start of a tool-call block inside a plain-text planner
+// reply: deepseek/DSML fullwidth-bar tokens, llama-style pipe tags, XML-ish
+// function/invoke tags (anthropic, tool_call tags), mistral's [TOOL_CALLS],
+// and gemma's ```tool_code fence.
+const TOOL_CALL_OPENER =
+  /<｜[^<>]*tool[^<>]*>|<\|[^<>|]*tool[^<>|]*\|>|<\s*(?:function_calls?|invoke|tool_call|tool_code)\b|\[TOOL_CALLS\]|```tool_code/i;
+
+// Literal openers a streamed tail can be a prefix of (angle-tag openers are
+// handled by shape instead — see heldTailLength).
+const OPENER_PREFIX_TOKENS = ['[TOOL_CALLS]', '```tool_code'];
+
+/**
+ * Length of the suffix that might still grow into a tool-call opener and must
+ * be withheld from the live preview (a half-received `<｜tool▁ca…` must not
+ * flash in the user's bubble). Prose stays live: `a < b` or a closed tag stops
+ * matching the opener shapes and is released on the next delta.
+ */
+function heldTailLength(text: string): number {
+  const windowStart = Math.max(0, text.length - 64);
+  for (let start = windowStart; start < text.length; start += 1) {
+    const tail = text.slice(start);
+    if (tail[0] === '<') {
+      if (/^<[｜|]?[\w▁｜|/-]*$/.test(tail)) return tail.length;
+      continue;
+    }
+    if (OPENER_PREFIX_TOKENS.some((token) => token.toLowerCase().startsWith(tail.toLowerCase()))) {
+      return tail.length;
+    }
+    if (/^`{1,3}$/.test(tail)) return tail.length;
+  }
+  return 0;
+}
+
+/**
+ * Extract the user-visible part of a *partially streamed* planner reply, for
+ * the live assistant-message mirror. Handles both reply families:
+ * JSON-syntax replies stream through the `assistant_output` field extractor;
+ * plain-text replies (deepseek/gemma/llama answer style) stream as-is, cut at
+ * the first tool-call opener with a possibly-half-received opener withheld.
+ * Best-effort by design — the decision step overwrites the mirrored text with
+ * the authoritative parse when the turn completes.
+ */
+export function extractAssistantPreviewFromStream(text: string): string {
+  const raw = String(text ?? '');
+  if (!raw) return '';
+  // JSON planner replies (also fenced ones): the field extractor already
+  // tolerates unterminated strings mid-stream.
+  if (raw.includes('"assistant_output"')) return extractAssistantOutputFromJsonLike(raw);
+  // Some local servers leave Qwen-style `<think>…</think>` blocks inline in the
+  // text stream — never mirror them: drop closed blocks, cut at an open one
+  // (a half-received `<thi` tail is withheld by heldTailLength below).
+  const withoutThink = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  const openThink = withoutThink.search(/<think>/i);
+  const source = (openThink >= 0 ? withoutThink.slice(0, openThink) : withoutThink).replace(/^\s+/, '');
+  if (!source) return '';
+  // A structured reply is forming (object/fence first) but the output field
+  // has not streamed yet — show nothing rather than raw braces.
+  if (looksLikeJsonStart(source)) return '';
+  const opener = TOOL_CALL_OPENER.exec(source);
+  const visible = opener ? source.slice(0, opener.index) : source;
+  if (opener) return visible.trimEnd();
+  const held = heldTailLength(visible);
+  return held > 0 ? visible.slice(0, visible.length - held) : visible;
+}

@@ -20,7 +20,7 @@ import { stripPrepareInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
 import { buildPlannerMessages, describeToolChange, extractToolOperations, type PlannerToolInfo } from '../lib/plannerPrompt.js';
 import {
-  extractAssistantOutputFromJsonLike,
+  extractAssistantPreviewFromStream,
   parsePlannerCompletion,
   type ParsedPlannerOutput,
 } from '../lib/plannerTextParsing.js';
@@ -162,7 +162,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const state = this.ensureState(streamEntryId);
     state.reconstructedReply += event.delta;
 
-    const extracted = extractAssistantOutputFromJsonLike(state.reconstructedReply);
+    const extracted = extractAssistantPreviewFromStream(state.reconstructedReply);
     const answerDelta = incrementalDelta(state.streamedAnswer, extracted);
     if (!answerDelta) return;
     state.streamedAnswer = extracted;
