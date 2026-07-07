@@ -605,6 +605,42 @@ export function stubDirectBadParamsFinalize(): string {
   });
 }
 
+/**
+ * Drives the todo_write e2e: a user message containing TODO_PROBE_MARKER makes
+ * the planner (1) record a to-do list via `todo_write`, then (2) finalize. The
+ * tool_request is structured JSON; the tool-params stub echoes the `todos`
+ * payload through verbatim so the resolved call carries the real list.
+ */
+export const TODO_PROBE_MARKER = '__todo_probe__';
+export const STUB_TODO_REPLY = 'Recorded the plan and worked through the steps.';
+export const STUB_TODO_ITEMS = [
+  { content: 'Explore the codebase', status: 'completed', activeForm: 'Exploring the codebase' },
+  { content: 'Implement the feature', status: 'in_progress', activeForm: 'Implementing the feature' },
+  { content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+];
+
+export function stubIsTodoProbeConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(TODO_PROBE_MARKER);
+}
+
+export function stubTodoPlannerFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Lay out the plan as a to-do list before starting.',
+    assistant_output: 'Here is my plan.',
+    tool_requests: [{ tool_name: 'todo_write', tool_request: JSON.stringify({ todos: STUB_TODO_ITEMS }) }],
+    followup: 'continue',
+  });
+}
+
+export function stubTodoPlannerFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Plan recorded; finish up.',
+    assistant_output: STUB_TODO_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
@@ -629,6 +665,20 @@ export function pickStubReply(request: LlmRequest): string {
         }
       }
       return JSON.stringify({ query: 'database migration prisma' });
+    }
+    if (/Produce JSON args for tool "todo_write"/.test(blob)) {
+      // The planner's tool_request is a one-line `{"todos":[…]}` object; echo it
+      // through so the resolved call carries the real list instead of `{}`.
+      for (const line of blob.split('\n').reverse()) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{') || !trimmed.includes('"todos"')) continue;
+        try {
+          const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+          if (Array.isArray(parsed.todos)) return JSON.stringify(parsed);
+        } catch {
+          /* keep scanning */
+        }
+      }
     }
     return '{}';
   }
@@ -664,6 +714,9 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubIsRagCreateConversation(request)) return stubRagCreatePlanner(request);
     if (stubIsRagProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubRagPlannerFinalize() : stubRagPlannerFirstRound();
+    }
+    if (stubIsTodoProbeConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubTodoPlannerFinalize() : stubTodoPlannerFirstRound();
     }
     if (stubHasPlannerToolResult(request)) return stubProbeTimePlannerFinalize();
     if (stubIsProbeTimeConversation(request)) return stubProbeTimePlannerFirstRound();

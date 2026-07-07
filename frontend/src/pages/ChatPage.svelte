@@ -1,6 +1,7 @@
 <script lang="ts">
   import ChatTranscript from "@/components/chat/ChatTranscript.svelte";
   import ChatComposer from "@/components/chat/ChatComposer.svelte";
+  import TodoListPanel from "@/components/chat/TodoListPanel.svelte";
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
   import ForkedFromBanner from "@/components/chat/ForkedFromBanner.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
@@ -133,6 +134,7 @@
           anchorEntryId={alignAnchor?.id ?? null}
           alignToken={alignAnchor?.token ?? 0}
         />
+        <TodoListPanel entries={session.activePathEntries} />
         <ChatComposer
           {conversationId}
           {pathPlannerLlm}
@@ -174,6 +176,7 @@
         anchorEntryId={alignAnchor?.id ?? null}
         alignToken={alignAnchor?.token ?? 0}
       />
+      <TodoListPanel entries={session.activePathEntries} />
       <ChatComposer
         {conversationId}
         {pathPlannerLlm}

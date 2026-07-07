@@ -10,6 +10,7 @@ import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
 import { FilesystemIndexTool } from './builtins/filesystem-index/tool.js';
 import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
+import { TodoWriteTool } from './builtins/todo/tool.js';
 import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
 import { SerialConnectionManager } from './builtins/serial/connection.js';
@@ -24,6 +25,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
   imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule, RagModule],
   providers: [
     GetCurrentTimeTool,
+    TodoWriteTool,
     CurlTool,
     FilesystemTool,
     FilesystemIndexStore,
@@ -42,6 +44,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
       useFactory: (...tools) => tools,
       inject: [
         GetCurrentTimeTool,
+        TodoWriteTool,
         CurlTool,
         FilesystemTool,
         FilesystemIndexTool,

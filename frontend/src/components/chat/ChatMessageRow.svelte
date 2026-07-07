@@ -6,6 +6,7 @@
   import AssistantMessageRow from "./rows/AssistantMessageRow.svelte";
   import ThoughtTripletRow from "./rows/ThoughtTripletRow.svelte";
   import ToolRunRow from "./rows/ToolRunRow.svelte";
+  import TodoWriteRow from "./rows/TodoWriteRow.svelte";
   import CheckpointSummaryRow from "./rows/CheckpointSummaryRow.svelte";
   import ContextInjectionRow from "./rows/ContextInjectionRow.svelte";
   import UserMessageRow from "./rows/UserMessageRow.svelte";
@@ -46,6 +47,8 @@
     <!-- rendered inside prepare-anchored triplet -->
   {:else if entry.type === "assistant-message"}
     <AssistantMessageRow {entry} {conversationId} />
+  {:else if entry.type === "tool-invocation" && entry.toolId === "todo_write"}
+    <TodoWriteRow {entry} />
   {:else if entry.type === "tool-invocation"}
     <ToolRunRow {entry} {conversationId} />
   {:else if entry.type === "checkpoint-summary"}
