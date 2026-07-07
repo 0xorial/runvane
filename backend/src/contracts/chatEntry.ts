@@ -215,6 +215,10 @@ export const ToolInvocationEntrySchema = ChatEntryBaseSchema.extend({
   /** True when the user edited parameters before approval — the transcript
    *  must make obvious that the executed call differs from the requested one. */
   parametersEdited: z.boolean().optional(),
+  /** Execution attempt count (from tool_runs); ≥2 means the entry was retried.
+   *  Surfaced so a near-instant retry that fails identically still visibly
+   *  changes the row. */
+  attempt: z.number().int().min(1).optional(),
   result: ToolEnvelopeSchema.nullable().optional(),
 });
 export type ToolInvocationEntry = z.infer<typeof ToolInvocationEntrySchema>;

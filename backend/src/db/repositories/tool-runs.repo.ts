@@ -30,7 +30,7 @@ export type ToolRunRow = {
 export class ToolRunsRepo {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Insert the row for an execution that just started; returns its id. */
+  /** Insert the row for an execution that just started; returns id + attempt. */
   async beginRun(args: {
     conversationId: string;
     chatEntryId: string;
@@ -38,11 +38,12 @@ export class ToolRunsRepo {
     toolId: string;
     parameters: Record<string, unknown>;
     startedAt: Date;
-  }): Promise<string> {
+  }): Promise<{ id: string; attempt: number }> {
     // Attempt numbering + retry link derive from the previous run of the same
     // entry, so callers don't have to thread history around.
     const prev = await this.latestForEntry(args.conversationId, args.chatEntryId);
     const id = randomUUID();
+    const attempt = (prev?.attempt ?? 0) + 1;
     await this.prisma.toolRun.create({
       data: {
         id,
@@ -50,14 +51,14 @@ export class ToolRunsRepo {
         chatEntryId: args.chatEntryId,
         agentId: args.agentId ?? null,
         toolId: args.toolId,
-        attempt: (prev?.attempt ?? 0) + 1,
+        attempt,
         retryOfRunId: prev?.id ?? null,
         status: 'running',
         parametersJson: JSON.parse(JSON.stringify(args.parameters)),
         startedAt: args.startedAt,
       },
     });
-    return id;
+    return { id, attempt };
   }
 
   async finishRun(args: {

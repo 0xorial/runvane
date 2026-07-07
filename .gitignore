@@ -22,6 +22,8 @@ backend/.rag/
 .env.user
 .env.ports
 backend/prisma/backend.sqlite
+backend/prisma/backend.sqlite-shm
+backend/prisma/backend.sqlite-wal
 backend/prisma/backend.dev.sqlite*
 backend/backend.sqlite
 

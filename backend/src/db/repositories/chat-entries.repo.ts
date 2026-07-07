@@ -278,6 +278,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   ): Promise<void> {
     const patch: Record<string, unknown> = { state: input.state };
     if (input.result !== undefined) patch.result = input.result;
+    if (input.attempt !== undefined) patch.attempt = input.attempt;
     if (input.parameters !== undefined) patch.parameters = input.parameters;
     await this.mergeEntryPayload(conversationId, input.id, patch);
   }

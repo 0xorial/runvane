@@ -172,6 +172,17 @@
             edited
           </span>
         {/if}
+        {#if (entry.attempt ?? 1) > 1}
+          <!-- A retry that re-fails in milliseconds would otherwise leave the
+               row looking untouched; the counter makes each attempt visible. -->
+          <span
+            class="rounded bg-primary/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-primary"
+            title="This tool was retried — {entry.attempt} execution attempts so far"
+            data-testid="tool-attempt-badge"
+          >
+            attempt {entry.attempt}
+          </span>
+        {/if}
         {#if toolLocation}
           <span
             class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {toolLocation === 'target'

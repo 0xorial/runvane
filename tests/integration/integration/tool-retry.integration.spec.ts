@@ -20,7 +20,11 @@ const describeLive = runLive ? describe : describe.skip;
 
 const STEP_TIMEOUT = 15_000;
 
-type ToolInvocationRow = ChatEntryRow & { state?: string; result?: { error?: string | null } | null };
+type ToolInvocationRow = ChatEntryRow & {
+  state?: string;
+  attempt?: number;
+  result?: { error?: string | null } | null;
+};
 
 /**
  * Retry on a failed tool run: the entry re-runs in place (`error → running →
@@ -85,6 +89,7 @@ describeLive('tool retry (integration)', () => {
 
     const done = await waitForTool(conversationId, (t) => t.id === failed.id && t.state === 'done');
     expect(done.id).toBe(failed.id); // same transcript row, re-run in place
+    expect(done.attempt).toBe(2); // the retry is visible on the entry itself
 
     const runs = await toolRuns.listForEntry(conversationId, failed.id);
     expect(runs.map((r) => ({ attempt: r.attempt, status: r.status }))).toEqual([
