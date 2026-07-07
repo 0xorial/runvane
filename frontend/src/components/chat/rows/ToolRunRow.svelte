@@ -69,7 +69,7 @@
     const prefix = "Guardrail flagged: ";
     return err.startsWith(prefix) ? err.slice(prefix.length) : null;
   });
-  const paramsText = $derived(stringifyMaybe(entry.parameters));
+  const paramsText = $derived(stringifyMaybe(cleanParams));
   const outputText = $derived(entry.result?.output != null ? stringifyMaybe(entry.result.output) : "");
   const errorText = $derived(entry.result?.error ?? "");
   // Transient live output streamed while the tool runs (see chatSessionStore).

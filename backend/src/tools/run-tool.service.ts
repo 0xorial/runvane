@@ -260,7 +260,12 @@ export class RunToolService implements OnModuleInit {
     const toolBatch = parseToolBatch(__tool_batch);
 
     // Approve-with-edits: run the user's params, keep the model's on record.
-    const edited = args.editedParameters;
+    // The client's edit box may round-trip our bookkeeping stamps — drop them
+    // (they're re-attached from the stored entry on persist below).
+    const edited =
+      args.editedParameters === undefined
+        ? undefined
+        : (stripToolParamEnvelope(args.editedParameters) as Record<string, unknown>);
     const isEdited = edited !== undefined && JSON.stringify(edited) !== JSON.stringify(requestedParams);
     const rawParams = isEdited ? edited : requestedParams;
     if (isEdited) {
