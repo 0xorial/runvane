@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
 import { ContextInjectionService } from '../context-injection/context-injection.service.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
+import { PendingMessagesRepo } from '../db/repositories/pending-messages.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated, publishChatEntryUpsert } from '../sse/sse-helpers.js';
@@ -33,12 +34,10 @@ function isAbortError(error: unknown): boolean {
 }
 
 @Injectable()
-export class ConversationProcessorService {
+export class ConversationProcessorService implements OnModuleInit {
   private readonly logger = new Logger(ConversationProcessorService.name);
   private readonly activeExecutions = new Map<string, LifecycleScope>();
   private readonly messagePostLocks = new Map<string, Promise<unknown>>();
-  /** Messages posted with `enqueue` while a run was in flight, FIFO per conversation. */
-  private readonly pendingMessages = new Map<string, PostConversationMessageDto[]>();
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -53,9 +52,27 @@ export class ConversationProcessorService {
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
+    private readonly pendingMsgs: PendingMessagesRepo,
     private readonly categorizer: ConversationCategorizerService,
     private readonly contextInjection: ContextInjectionService,
   ) {}
+
+  /**
+   * Queued messages are durable (pending_messages) — a restart must not drop
+   * text the user typed. Whatever the dead process left queued drains now,
+   * through the normal drain path.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const conversationIds = await this.pendingMsgs.conversationIdsWithPending();
+      for (const conversationId of conversationIds) {
+        this.logger.warn(`boot: draining queued message(s) left by a previous process: conversation=${conversationId}`);
+        void this.drainPendingMessages(conversationId);
+      }
+    } catch (error) {
+      this.logger.error('boot drain of queued messages failed', error instanceof Error ? error.stack : String(error));
+    }
+  }
 
   async approveToolInvocation(args: {
     conversationId: string;
@@ -214,21 +231,17 @@ export class ConversationProcessorService {
   }
 
   /** Snapshot of queued (not-yet-posted) messages for a conversation. */
-  listPendingMessages(conversationId: string): Array<{ clientRequestId: string; text: string }> {
-    const queue = this.pendingMessages.get(conversationId) ?? [];
+  async listPendingMessages(conversationId: string): Promise<Array<{ clientRequestId: string; text: string }>> {
+    const queue = await this.pendingMsgs.list(conversationId);
     return queue
-      .filter((m): m is PostConversationMessageDto & { clientRequestId: string } => Boolean(m.clientRequestId))
-      .map((m) => ({ clientRequestId: m.clientRequestId, text: m.message }));
+      .filter((m): m is { clientRequestId: string; dto: PostConversationMessageDto } => Boolean(m.clientRequestId))
+      .map((m) => ({ clientRequestId: m.clientRequestId, text: m.dto.message }));
   }
 
   /** Remove a queued message before it drains. Returns true if one was removed. */
-  cancelPendingMessage(conversationId: string, clientRequestId: string): boolean {
-    const queue = this.pendingMessages.get(conversationId);
-    if (!queue) return false;
-    const idx = queue.findIndex((m) => m.clientRequestId === clientRequestId);
-    if (idx === -1) return false;
-    queue.splice(idx, 1);
-    if (queue.length === 0) this.pendingMessages.delete(conversationId);
+  async cancelPendingMessage(conversationId: string, clientRequestId: string): Promise<boolean> {
+    const removed = await this.pendingMsgs.removeByClientRequestId(conversationId, clientRequestId);
+    if (!removed) return false;
     this.hub.publish(conversationId, { type: SseType.MESSAGE_DEQUEUED, clientRequestId });
     return true;
   }
@@ -241,10 +254,8 @@ export class ConversationProcessorService {
    */
   private async drainPendingMessages(conversationId: string): Promise<void> {
     if (this.isProcessing(conversationId)) return;
-    const queue = this.pendingMessages.get(conversationId);
-    if (!queue || queue.length === 0) return;
-    const next = queue.shift()!;
-    if (queue.length === 0) this.pendingMessages.delete(conversationId);
+    const next = await this.pendingMsgs.shiftOldest(conversationId);
+    if (!next) return;
 
     if (next.clientRequestId) {
       this.hub.publish(conversationId, {
@@ -435,9 +446,7 @@ export class ConversationProcessorService {
     // scope's completion drain it (with a freshly-resolved parent). When
     // nothing is running, fall through and post immediately.
     if (body.enqueue && !body.steer && this.isProcessing(conversationId)) {
-      const queue = this.pendingMessages.get(conversationId) ?? [];
-      queue.push(body);
-      this.pendingMessages.set(conversationId, queue);
+      await this.pendingMsgs.enqueue(conversationId, body);
       if (body.clientRequestId) {
         this.hub.publish(conversationId, {
           type: SseType.MESSAGE_ENQUEUED,

@@ -327,7 +327,7 @@ export class ConversationsController {
   ) {
     const exists = await this.conversations.get(conversationId);
     if (!exists) throw new NotFoundException('conversation not found');
-    const cancelled = this.conversationProcessor.cancelPendingMessage(conversationId, body.clientRequestId);
+    const cancelled = await this.conversationProcessor.cancelPendingMessage(conversationId, body.clientRequestId);
     return { conversationId, cancelled };
   }
 

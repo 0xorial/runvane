@@ -395,7 +395,8 @@ export const ModelName = {
   ModelCapabilityOverride: 'ModelCapabilityOverride',
   UploadAttachment: 'UploadAttachment',
   StreamCursor: 'StreamCursor',
-  ToolRun: 'ToolRun'
+  ToolRun: 'ToolRun',
+  PendingMessage: 'PendingMessage'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -411,7 +412,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "conversation" | "chatEntry" | "conversationGroup" | "agent" | "llmProviderSetting" | "appSetting" | "modelPreset" | "modelCapability" | "modelCapabilityOverride" | "uploadAttachment" | "streamCursor" | "toolRun"
+    modelProps: "conversation" | "chatEntry" | "conversationGroup" | "agent" | "llmProviderSetting" | "appSetting" | "modelPreset" | "modelCapability" | "modelCapabilityOverride" | "uploadAttachment" | "streamCursor" | "toolRun" | "pendingMessage"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1303,6 +1304,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    PendingMessage: {
+      payload: Prisma.$PendingMessagePayload<ExtArgs>
+      fields: Prisma.PendingMessageFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PendingMessageFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PendingMessageFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>
+        }
+        findFirst: {
+          args: Prisma.PendingMessageFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PendingMessageFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>
+        }
+        findMany: {
+          args: Prisma.PendingMessageFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>[]
+        }
+        create: {
+          args: Prisma.PendingMessageCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>
+        }
+        createMany: {
+          args: Prisma.PendingMessageCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PendingMessageCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>[]
+        }
+        delete: {
+          args: Prisma.PendingMessageDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>
+        }
+        update: {
+          args: Prisma.PendingMessageUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>
+        }
+        deleteMany: {
+          args: Prisma.PendingMessageDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PendingMessageUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PendingMessageUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>[]
+        }
+        upsert: {
+          args: Prisma.PendingMessageUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PendingMessagePayload>
+        }
+        aggregate: {
+          args: Prisma.PendingMessageAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePendingMessage>
+        }
+        groupBy: {
+          args: Prisma.PendingMessageGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PendingMessageGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PendingMessageCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PendingMessageCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1515,6 +1590,17 @@ export const ToolRunScalarFieldEnum = {
 } as const
 
 export type ToolRunScalarFieldEnum = (typeof ToolRunScalarFieldEnum)[keyof typeof ToolRunScalarFieldEnum]
+
+
+export const PendingMessageScalarFieldEnum = {
+  seq: 'seq',
+  conversationId: 'conversationId',
+  clientRequestId: 'clientRequestId',
+  dtoJson: 'dtoJson',
+  createdAt: 'createdAt'
+} as const
+
+export type PendingMessageScalarFieldEnum = (typeof PendingMessageScalarFieldEnum)[keyof typeof PendingMessageScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1748,6 +1834,7 @@ export type GlobalOmitConfig = {
   uploadAttachment?: Prisma.UploadAttachmentOmit
   streamCursor?: Prisma.StreamCursorOmit
   toolRun?: Prisma.ToolRunOmit
+  pendingMessage?: Prisma.PendingMessageOmit
 }
 
 /* Types for Logging */

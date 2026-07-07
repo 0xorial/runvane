@@ -62,7 +62,8 @@ export const ModelName = {
   ModelCapabilityOverride: 'ModelCapabilityOverride',
   UploadAttachment: 'UploadAttachment',
   StreamCursor: 'StreamCursor',
-  ToolRun: 'ToolRun'
+  ToolRun: 'ToolRun',
+  PendingMessage: 'PendingMessage'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -254,6 +255,17 @@ export const ToolRunScalarFieldEnum = {
 } as const
 
 export type ToolRunScalarFieldEnum = (typeof ToolRunScalarFieldEnum)[keyof typeof ToolRunScalarFieldEnum]
+
+
+export const PendingMessageScalarFieldEnum = {
+  seq: 'seq',
+  conversationId: 'conversationId',
+  clientRequestId: 'clientRequestId',
+  dtoJson: 'dtoJson',
+  createdAt: 'createdAt'
+} as const
+
+export type PendingMessageScalarFieldEnum = (typeof PendingMessageScalarFieldEnum)[keyof typeof PendingMessageScalarFieldEnum]
 
 
 export const SortOrder = {

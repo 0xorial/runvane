@@ -194,3 +194,17 @@ model ToolRun {
   @@index([chatEntryId])
   @@map("tool_runs")
 }
+
+// A user message accepted while a run was in flight, waiting its turn. Persisted
+// so a backend restart cannot drop text the user already typed — boot drains
+// leftovers instead (the in-memory queue this replaces lost them silently).
+model PendingMessage {
+  seq             Int      @id @default(autoincrement())
+  conversationId  String   @map("conversation_id")
+  clientRequestId String?  @map("client_request_id")
+  dtoJson         Json     @map("dto_json")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId, seq])
+  @@map("pending_messages")
+}

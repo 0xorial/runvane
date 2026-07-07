@@ -99,3 +99,8 @@ export type StreamCursor = Prisma.StreamCursorModel
  * 
  */
 export type ToolRun = Prisma.ToolRunModel
+/**
+ * Model PendingMessage
+ * 
+ */
+export type PendingMessage = Prisma.PendingMessageModel

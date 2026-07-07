@@ -6,6 +6,7 @@ import { ConversationsRepo } from './repositories/conversations.repo.js';
 import { LlmProviderSettingsRepo } from './repositories/llm-provider-settings.repo.js';
 import { ModelCapabilitiesRepo } from './repositories/model-capabilities.repo.js';
 import { ModelPresetsRepo } from './repositories/model-presets.repo.js';
+import { PendingMessagesRepo } from './repositories/pending-messages.repo.js';
 import { ToolRunsRepo } from './repositories/tool-runs.repo.js';
 import { UploadsRepo } from './repositories/uploads.repo.js';
 import { PrismaService } from './prisma.service.js';
@@ -24,6 +25,7 @@ import { StreamCursorService } from './stream-cursor.service.js';
     ModelCapabilitiesRepo,
     UploadsRepo,
     ToolRunsRepo,
+    PendingMessagesRepo,
   ],
   exports: [
     PrismaService,
@@ -37,6 +39,7 @@ import { StreamCursorService } from './stream-cursor.service.js';
     ModelCapabilitiesRepo,
     UploadsRepo,
     ToolRunsRepo,
+    PendingMessagesRepo,
   ],
 })
 export class DatabaseModule {}
