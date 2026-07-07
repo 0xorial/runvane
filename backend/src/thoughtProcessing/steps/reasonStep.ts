@@ -190,16 +190,25 @@ export class ReasonStep {
     const hasChunks = !!(completion.rawChunks && completion.rawChunks.length > 0);
     const rawResponse = hasChunks ? JSON.stringify(completion.rawChunks, null, 2) : responseText;
     // Assembled view: the COMPLETE response with only the streaming chunking
-    // removed — never an extraction. Native tool calls are response parts too;
-    // without them a native-calling model's assembled view shows just the prose
-    // (or nothing) while tools visibly run.
+    // removed — no extraction, no invented markup. A plain-text reply assembles
+    // to its text; a reply with native tool_call parts assembles to the message
+    // JSON those chunks add up to.
     const nativeCalls = getCompletionToolCalls(completion);
-    const assembledResponse = [
-      responseText,
-      ...nativeCalls.map((call) => `[tool_call] ${call.toolName} ${JSON.stringify(call.args)}`),
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+    const assembledResponse =
+      nativeCalls.length === 0
+        ? responseText
+        : JSON.stringify(
+            {
+              ...(responseText ? { content: responseText } : {}),
+              tool_calls: nativeCalls.map((call) => ({
+                id: call.callId,
+                name: call.toolName,
+                arguments: call.args,
+              })),
+            },
+            null,
+            2,
+          );
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
       status: 'completed',
       llmResponse: rawResponse,
