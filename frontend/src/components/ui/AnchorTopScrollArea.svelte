@@ -31,10 +31,11 @@
   let contentEl = $state<HTMLDivElement | null>(null);
   let bottomSpacerPx = $state(0);
   let bottomSpacerRef = 0;
-  // Initialized to the mount-time token: a remount (panel toggle) must not
-  // replay an align the user triggered earlier.
-  let alignedToken = alignToken;
-  let lastResetKey = resetKey;
+  // Seeded on each effect's first run (undefined = not yet seeded): a remount
+  // (panel toggle) must not replay an align the user triggered earlier, nor
+  // treat the mount itself as a conversation switch.
+  let alignedToken: number | undefined = undefined;
+  let lastResetKey: string | null | undefined = undefined;
   let lastAnchorId: string | null = null;
   let rafRef: number | null = null;
   const animRafRef = { current: null as number | null };
@@ -152,6 +153,10 @@
   // a request is solely the anchor-going-null branch's job.
   $effect(() => {
     const key = resetKey;
+    if (lastResetKey === undefined) {
+      lastResetKey = key;
+      return;
+    }
     if (key === lastResetKey) return;
     lastResetKey = key;
     cancelAlignRaf();
@@ -167,6 +172,7 @@
   $effect(() => {
     const id = anchorEntryId;
     const token = alignToken;
+    if (alignedToken === undefined) alignedToken = token;
     if (!id) {
       alignedToken = token;
       cancelAlignRaf();
