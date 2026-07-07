@@ -52,9 +52,14 @@
     stickToBottom = isScrolledToBottom(scrollEl);
   }
 
-  function cancelAlignRaf(): void {
+  /** Stop the align loop only — a smooth-scroll already underway keeps going. */
+  function cancelAlignLoop(): void {
     if (rafRef != null) cancelAnimationFrame(rafRef);
     rafRef = null;
+  }
+
+  function cancelAlignRaf(): void {
+    cancelAlignLoop();
     if (animRafRef.current != null) cancelAnimationFrame(animRafRef.current);
     animRafRef.current = null;
   }
@@ -140,15 +145,16 @@
     rafRef = requestAnimationFrame(run);
   }
 
-  // Conversation switch: land at the bottom of the new transcript. Declared
-  // BEFORE the align effect: when a send creates the conversation, the reset
-  // and the align request land in the same flush and the align must survive.
+  // Conversation switch: land at the bottom of the new transcript. Deliberately
+  // leaves alignFulfilled alone — a send that CREATES the conversation requests
+  // its align before the navigation, and that request must survive the reset
+  // (it re-fires when the placeholder id resolves to the real row). Abandoning
+  // a request is solely the anchor-going-null branch's job.
   $effect(() => {
     const key = resetKey;
     if (key === lastResetKey) return;
     lastResetKey = key;
     cancelAlignRaf();
-    alignFulfilled = true;
     lastAnchorId = null;
     clearSpacer();
     stickToBottom = true;
@@ -173,7 +179,7 @@
       alignedToken = token;
       lastAnchorId = id;
       scheduleAlign(id);
-      return cancelAlignRaf;
+      return cancelAlignLoop;
     }
     if (id !== lastAnchorId) {
       // Same align event, new row id: a placeholder or optimistic id resolved
@@ -181,7 +187,7 @@
       lastAnchorId = id;
       if (!alignFulfilled) {
         scheduleAlign(id);
-        return cancelAlignRaf;
+        return cancelAlignLoop;
       }
     }
   });
