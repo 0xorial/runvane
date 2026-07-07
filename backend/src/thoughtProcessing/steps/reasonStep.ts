@@ -5,7 +5,7 @@ import { LlmProviderSettingsRepo } from '../../db/repositories/llm-provider-sett
 import { StreamInterruptedError } from '../../llmProviders/provider.js';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
 import { expandAttachmentRefs } from '../../llmProviders/expandAttachments.js';
-import { getCompletionText, getCompletionThinking } from '../../llmProviders/types.js';
+import { getCompletionText, getCompletionThinking, getCompletionToolCalls } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
@@ -189,12 +189,23 @@ export class ReasonStep {
     // back to the assembled text for adapters that don't capture them (stub).
     const hasChunks = !!(completion.rawChunks && completion.rawChunks.length > 0);
     const rawResponse = hasChunks ? JSON.stringify(completion.rawChunks, null, 2) : responseText;
+    // Assembled view: the COMPLETE response with only the streaming chunking
+    // removed — never an extraction. Native tool calls are response parts too;
+    // without them a native-calling model's assembled view shows just the prose
+    // (or nothing) while tools visibly run.
+    const nativeCalls = getCompletionToolCalls(completion);
+    const assembledResponse = [
+      responseText,
+      ...nativeCalls.map((call) => `[tool_call] ${call.toolName} ${JSON.stringify(call.args)}`),
+    ]
+      .filter(Boolean)
+      .join('\n\n');
     await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
       status: 'completed',
       llmResponse: rawResponse,
-      // Assembled view: the full response text, de-chunked. Only stored when it
-      // differs from the raw view (i.e. the provider streamed chunks).
-      ...(hasChunks && responseText ? { assembledResponse: responseText } : {}),
+      // Only stored when it differs from the raw view (i.e. the provider
+      // streamed chunks).
+      ...(hasChunks && assembledResponse ? { assembledResponse } : {}),
       ...(thinkingText ? { thinkingText } : {}),
       thoughtMs: Date.now() - startedAt,
     });
