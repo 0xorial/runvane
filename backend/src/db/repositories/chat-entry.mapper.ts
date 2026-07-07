@@ -226,6 +226,9 @@ function mapToolInvocation(base: ChatEntryBase, payload: Record<string, unknown>
       ? { originalParameters: requireRecord(payload.originalParameters, `${ctx}.originalParameters`) }
       : {}),
     ...(payload.parametersEdited === true ? { parametersEdited: true } : {}),
+    ...(Number.isInteger(payload.attempt) && (payload.attempt as number) >= 1
+      ? { attempt: payload.attempt as number }
+      : {}),
     result,
   };
 }
