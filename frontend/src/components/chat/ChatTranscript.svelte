@@ -12,13 +12,15 @@
     entries,
     isSessionLoading,
     selectedAgentId = "",
-    topAnchorEntryId = null,
+    anchorEntryId = null,
+    alignToken = 0,
   }: {
     conversationId: string | null;
     entries: ObservableItem<LinkedChatEntry>[];
     isSessionLoading: boolean;
     selectedAgentId?: string;
-    topAnchorEntryId?: string | null;
+    anchorEntryId?: string | null;
+    alignToken?: number;
   } = $props();
 
   const thoughtTripletsById = $derived(buildThoughtTripletsById(entries));
@@ -26,7 +28,9 @@
 </script>
 
 <AnchorTopScrollArea
-  topAnchorEntryId={topAnchorEntryId}
+  {anchorEntryId}
+  {alignToken}
+  resetKey={conversationId}
   testId="chat-transcript"
   class="scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-scroll overflow-x-hidden"
 >

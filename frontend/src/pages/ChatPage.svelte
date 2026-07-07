@@ -9,7 +9,6 @@
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
   import { setChatSessionContext } from "@/lib/chatSessionContext";
   import { resolveLastPlannerLlmOnPath } from "@/lib/resolveLastPlannerLlm";
-  import { resolveTopAnchorEntryId } from "@/lib/chatTopAnchor";
   import { agentIdFromSearch, chatSearch, navigate, settingsLinkFromSearch } from "@/lib/router";
   import { Pane, PaneGroup } from "paneforge";
 
@@ -33,7 +32,12 @@
 
   const session = createChatSessionState(() => conversationId);
 
-  let selectedBranchAnchorEntryId = $state<string | null>(null);
+  // Aligning a row to the viewport top is an explicit user event (sending a
+  // message, picking a branch anchor) — never derived from transcript state, so
+  // loading or switching a conversation can't scroll on its own.
+  type AlignAnchor = { id: string; token: number; source: "sent" | "branch" };
+  let alignAnchor = $state<AlignAnchor | null>(null);
+  let alignSeq = 0;
   let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
   const selectedAgentId = $derived(agentIdFromSearch(search));
   setChatSessionContext({
@@ -61,14 +65,27 @@
     return tripletStreamIdByThoughtId.get(selected.thoughtId) ?? entryId;
   }
 
-  const topAnchorEntryId = $derived(
-    resolveTopAnchorEntryId(conversationId, session.activePathEntries, selectedBranchAnchorEntryId),
-  );
   const pathPlannerLlm = $derived(resolveLastPlannerLlmOnPath(activePathEntries));
 
-  function handleSent(_optimisticRowId: string): void {
-    selectedBranchAnchorEntryId = null;
+  function handleSent(optimisticRowId: string): void {
+    alignAnchor = { id: optimisticRowId, token: ++alignSeq, source: "sent" };
   }
+
+  // The optimistic user row is rekeyed to its server id when the SSE ack lands;
+  // follow it so an in-flight align (and later spacer upkeep) tracks the row.
+  $effect(() => {
+    const anchor = alignAnchor;
+    if (!anchor || activePathEntryById.has(anchor.id)) return;
+    if (anchor.source === "sent") {
+      for (let i = activePathEntries.length - 1; i >= 0; i -= 1) {
+        if (activePathEntries[i].type === "user-message") {
+          alignAnchor = { ...anchor, id: activePathEntries[i].id };
+          return;
+        }
+      }
+    }
+    alignAnchor = null;
+  });
 
   function openSettings(): void {
     navigate(settingsLinkFromSearch($chatSearch));
@@ -79,7 +96,7 @@
     const id = conversationId;
     if (id === lastConversationId) return;
     lastConversationId = id;
-    selectedBranchAnchorEntryId = null;
+    alignAnchor = null;
   });
 
   $effect(() => {
@@ -108,7 +125,8 @@
           entries={session.activePathEntries}
           isSessionLoading={session.isSessionLoading}
           {selectedAgentId}
-          {topAnchorEntryId}
+          anchorEntryId={alignAnchor?.id ?? null}
+          alignToken={alignAnchor?.token ?? 0}
         />
         <ChatComposer
           {conversationId}
@@ -129,7 +147,7 @@
             activePathEntries={session.activePathEntries}
             switchToBranch={session.switchToBranch}
             onAnchorEntrySelected={(entryId) => {
-              selectedBranchAnchorEntryId = resolveVisibleAnchorEntryId(entryId);
+              alignAnchor = { id: resolveVisibleAnchorEntryId(entryId), token: ++alignSeq, source: "branch" };
             }}
           />
         </aside>
@@ -142,7 +160,8 @@
         entries={session.activePathEntries}
         isSessionLoading={session.isSessionLoading}
         {selectedAgentId}
-        {topAnchorEntryId}
+        anchorEntryId={alignAnchor?.id ?? null}
+        alignToken={alignAnchor?.token ?? 0}
       />
       <ChatComposer
         {conversationId}

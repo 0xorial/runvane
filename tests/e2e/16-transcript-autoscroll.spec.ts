@@ -35,6 +35,135 @@ test("transcript follows new content to the bottom when the user is already at t
     .toBeLessThanOrEqual(8);
 });
 
+test("reloading a conversation lands at the bottom without re-running the send-time anchoring", async ({
+  app,
+  request,
+}) => {
+  await app.page.setViewportSize({ width: 1280, height: 900 });
+  await app.chat.gotoNew(await defaultAgentId(request));
+  await app.chat.userInput.typeMessage(USER_MSG_HELLO);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply();
+
+  const container = app.chat.transcript.container;
+  const spacerHeight = () =>
+    container.evaluate((el) => (el.lastElementChild as HTMLElement).getBoundingClientRect().height);
+  // Sending anchored the message to the top and reserved a spacer below the reply.
+  await expect.poll(spacerHeight).toBeGreaterThan(0);
+
+  await app.page.reload({ waitUntil: "domcontentloaded" });
+  await app.chat.transcript.waitForAssistantReply();
+  // Give a would-be align (the old derived-anchor bug) time to fire before asserting.
+  await app.page.waitForTimeout(600);
+
+  expect(await spacerHeight()).toBe(0);
+  await expect
+    .poll(() => container.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+    .toBeLessThanOrEqual(8);
+});
+
+test("switching conversations lands at the bottom, not at the other chat's last user message", async ({
+  app,
+  request,
+}) => {
+  await app.page.setViewportSize({ width: 1280, height: 500 });
+  const agentId = await defaultAgentId(request);
+
+  await app.chat.gotoNew(agentId);
+  await app.chat.userInput.typeMessage(USER_MSG_HELLO);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply();
+  await app.chat.userInput.typeMessage("filler e2e switch-target message");
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantMessageCount(2);
+  const firstConversationId = app.chat.conversationIdFromUrl();
+
+  await app.chat.gotoNew(agentId);
+  await app.chat.userInput.typeMessage("second conversation message");
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply();
+
+  // Client-side switch back to the first conversation (no page load).
+  await app.sidebar.openConversation(firstConversationId);
+  await app.chat.transcript.waitForUserMessageCount(2);
+  await app.page.waitForTimeout(600);
+
+  const container = app.chat.transcript.container;
+  const spacer = await container.evaluate((el) =>
+    (el.lastElementChild as HTMLElement).getBoundingClientRect().height,
+  );
+  expect(spacer).toBe(0);
+  await expect
+    .poll(() => container.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
+    .toBeLessThanOrEqual(8);
+});
+
+test("viewport resizes while at the bottom keep the bottom pinned instead of scrolling back to the anchor", async ({
+  app,
+  request,
+}) => {
+  await app.page.setViewportSize({ width: 1280, height: 900 });
+  await app.chat.gotoNew(await defaultAgentId(request));
+  await app.chat.userInput.typeMessage(USER_MSG_HELLO);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply();
+  await app.page.waitForTimeout(600); // let the send-time align settle
+
+  const container = app.chat.transcript.container;
+  const distanceToBottom = () =>
+    container.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+
+  // Real overflow past the anchor, user reads at the true bottom.
+  await growContentBy(container, 2000);
+  await container.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await app.page.waitForTimeout(200);
+
+  // Two resizes: the first also flushes the stale spacer; the second used to hit
+  // the settled-spacer path and smooth-scroll all the way back to the anchor.
+  await app.page.setViewportSize({ width: 1280, height: 600 });
+  await expect.poll(distanceToBottom).toBeLessThanOrEqual(8);
+  await app.page.setViewportSize({ width: 1280, height: 500 });
+  await app.page.waitForTimeout(600);
+  await expect.poll(distanceToBottom).toBeLessThanOrEqual(8);
+});
+
+test("sending a message aligns it to the top of the viewport even after scrolling away", async ({
+  app,
+  request,
+}) => {
+  await app.page.setViewportSize({ width: 1280, height: 900 });
+  await app.chat.gotoNew(await defaultAgentId(request));
+  await app.chat.userInput.typeMessage(USER_MSG_HELLO);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply();
+  await app.page.waitForTimeout(600);
+
+  const container = app.chat.transcript.container;
+  await growContentBy(container, 2000);
+  await container.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await app.page.waitForTimeout(200);
+
+  await app.chat.userInput.typeMessage("second message after scrolling away");
+  await app.chat.userInput.send();
+
+  // The align event scrolls down to the freshly sent message (which sits below
+  // the 2000px synthetic block), surviving the optimistic-row → server-id rekey.
+  await expect
+    .poll(() => container.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(1000);
+  const anchorDelta = await container.evaluate((el) => {
+    const rows = el.querySelectorAll<HTMLElement>('[data-chat-entry-type="user-message"]');
+    const last = rows[rows.length - 1];
+    return last.getBoundingClientRect().top - el.getBoundingClientRect().top;
+  });
+  // At (or scrolled past) the viewport top — never still below it.
+  expect(anchorDelta).toBeLessThanOrEqual(24);
+});
+
 test("transcript leaves the scroll position alone once the user has scrolled away from the bottom", async ({
   app,
   request,

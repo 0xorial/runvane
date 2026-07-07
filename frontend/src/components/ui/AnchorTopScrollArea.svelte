@@ -1,18 +1,27 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { Snippet } from "svelte";
   import {
     calculateAnchorScrollPlan,
     offsetTopWithinAncestor,
     smoothScrollTo,
+    type AnchorScrollPlan,
   } from "@/lib/anchorScroll";
 
   let {
-    topAnchorEntryId = null,
+    anchorEntryId = null,
+    alignToken = 0,
+    resetKey = null,
     class: className = "",
     testId,
     children,
   }: {
-    topAnchorEntryId?: string | null;
+    /** Row to align to the viewport top. Follows rekeys; changing it alone never scrolls. */
+    anchorEntryId?: string | null;
+    /** Bumped once per explicit align event (send / branch pick); the only scroll trigger. */
+    alignToken?: number;
+    /** Any change (conversation switch) resets to a fresh stuck-to-bottom view. */
+    resetKey?: string | null;
     class?: string;
     testId?: string;
     children: Snippet;
@@ -22,6 +31,10 @@
   let contentEl = $state<HTMLDivElement | null>(null);
   let bottomSpacerPx = $state(0);
   let bottomSpacerRef = 0;
+  // Initialized to the mount-time token: a remount (panel toggle) must not
+  // replay an align the user triggered earlier.
+  let alignedToken = alignToken;
+  let lastResetKey = resetKey;
   let lastAnchorId: string | null = null;
   let rafRef: number | null = null;
   const animRafRef = { current: null as number | null };
@@ -51,11 +64,11 @@
     return contentEl.querySelector<HTMLElement>(`[data-chat-entry-id="${entryId}"]`);
   }
 
-  function alignOnce(entryId: string): boolean {
+  function measurePlan(entryId: string): AnchorScrollPlan | null {
     const scroll = scrollEl;
     const content = contentEl;
     const anchor = getAnchor(entryId);
-    if (!scroll || !content || !anchor) return false;
+    if (!scroll || !content || !anchor) return null;
 
     const viewportHeight = scroll.clientHeight;
     const anchorTopFromOffsets = offsetTopWithinAncestor(anchor, content);
@@ -67,19 +80,39 @@
             scroll.scrollTop + (anchor.getBoundingClientRect().top - scroll.getBoundingClientRect().top),
           );
     const anchorBottom = anchorTop + anchor.offsetHeight;
-    const plan = calculateAnchorScrollPlan({
+    return calculateAnchorScrollPlan({
       anchorTop,
       anchorBottom,
       totalContentHeight: Math.max(0, content.scrollHeight),
       viewportHeight,
     });
+  }
+
+  /** Refresh the reserved spacer for the current anchor without any scrolling. */
+  function updateSpacer(entryId: string): void {
+    const plan = measurePlan(entryId);
+    if (!plan) return;
+    if (Math.abs(plan.spacerHeight - bottomSpacerRef) > 1) {
+      bottomSpacerRef = plan.spacerHeight;
+      bottomSpacerPx = plan.spacerHeight;
+    }
+  }
+
+  function clearSpacer(): void {
+    bottomSpacerRef = 0;
+    bottomSpacerPx = 0;
+  }
+
+  function alignOnce(entryId: string): boolean {
+    const plan = measurePlan(entryId);
+    if (!plan || !scrollEl) return false;
 
     if (Math.abs(plan.spacerHeight - bottomSpacerRef) > 1) {
       bottomSpacerRef = plan.spacerHeight;
       bottomSpacerPx = plan.spacerHeight;
       return false;
     }
-    smoothScrollTo(scroll, Math.max(0, plan.scrollTopTarget), animRafRef);
+    smoothScrollTo(scrollEl, Math.max(0, plan.scrollTopTarget), animRafRef);
     return true;
   }
 
@@ -87,7 +120,7 @@
     cancelAlignRaf();
     tries = 0;
     const run = () => {
-      if (topAnchorEntryId !== entryId) return;
+      if (anchorEntryId !== entryId) return;
       const done = alignOnce(entryId);
       if (done) {
         rafRef = null;
@@ -103,18 +136,48 @@
     rafRef = requestAnimationFrame(run);
   }
 
+  // Aligning is an EVENT (token bump on send / branch pick), never state sync:
+  // a conversation loading, an SSE re-snapshot, or a row rekey must not scroll
+  // the transcript on their own.
   $effect(() => {
-    if (!topAnchorEntryId) {
+    const id = anchorEntryId;
+    const token = alignToken;
+    if (!id) {
+      alignedToken = token;
       cancelAlignRaf();
       lastAnchorId = null;
-      bottomSpacerRef = 0;
-      bottomSpacerPx = 0;
+      clearSpacer();
       return;
     }
-    if (lastAnchorId === topAnchorEntryId) return;
-    lastAnchorId = topAnchorEntryId;
-    scheduleAlign(topAnchorEntryId);
-    return cancelAlignRaf;
+    if (token !== alignedToken) {
+      alignedToken = token;
+      lastAnchorId = id;
+      scheduleAlign(id);
+      return cancelAlignRaf;
+    }
+    if (id !== lastAnchorId) {
+      // Same align event, new row id: the optimistic row was rekeyed to its
+      // server id. Re-target only an in-flight align; a finished one must not
+      // scroll again — the user may have moved on.
+      const inFlight = rafRef != null;
+      lastAnchorId = id;
+      if (inFlight) {
+        scheduleAlign(id);
+        return cancelAlignRaf;
+      }
+    }
+  });
+
+  // Conversation switch: land at the bottom of the new transcript.
+  $effect(() => {
+    const key = resetKey;
+    if (key === lastResetKey) return;
+    lastResetKey = key;
+    cancelAlignRaf();
+    lastAnchorId = null;
+    clearSpacer();
+    stickToBottom = true;
+    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
   });
 
   $effect(() => {
@@ -130,15 +193,19 @@
   });
 
   // The reserved spacer is sized against the viewport's own height (see
-  // calculateAnchorScrollPlan), so it goes stale if the viewport resizes after
-  // the align loop has already finished (e.g. toggling a side panel, resizing
-  // the window) — recompute it whenever that happens.
+  // calculateAnchorScrollPlan), so recompute it when the viewport resizes
+  // (side panel toggle, composer growing, window resize). Never scroll from
+  // here: when the user sits at the bottom, keep the bottom pinned; when they
+  // scrolled up to read, leave their position alone.
   $effect(() => {
     const scroll = scrollEl;
     if (!scroll) return;
 
     const observer = new ResizeObserver(() => {
-      if (lastAnchorId) alignOnce(lastAnchorId);
+      if (lastAnchorId && rafRef == null) updateSpacer(lastAnchorId);
+      void tick().then(() => {
+        if (stickToBottom && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+      });
     });
     observer.observe(scroll);
     return () => observer.disconnect();
