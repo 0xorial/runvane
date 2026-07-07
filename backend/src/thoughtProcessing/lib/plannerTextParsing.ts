@@ -62,9 +62,13 @@ export function parsePlannerCompletion(
   // calls, so don't raise the "parse failed" diagnostic in that case.
   const fromText = parsePlannerOutput(getCompletionText(completion), native.length > 0 ? undefined : onJsonParseFailed);
   if (native.length === 0) return fromText;
+  // A model that uses native function-calling puts its calls THERE; calls also
+  // written into the text protocol are the same intent narrated twice (glm
+  // does this). Concatenating both channels fans out duplicate members — and
+  // duplicate executions once params resolve — so the structured channel wins.
   return {
     assistantOutput: fromText.assistantOutput,
-    toolRequests: [...fromText.toolRequests, ...native],
+    toolRequests: native,
     followup: 'continue',
   };
 }

@@ -30,6 +30,23 @@ describe('parsePlannerCompletion — native tool_calls', () => {
     expect(parsed.toolRequests).toEqual([{ toolName: 'search', toolRequest: '{"q":"cats"}' }]);
   });
 
+  it('drops text-channel tool requests when native tool_calls are present (same intent twice)', () => {
+    const completion: LlmCompletion = {
+      parts: [
+        {
+          kind: 'text',
+          text: '{"assistant_output":"Searching.","tool_requests":[{"tool_name":"search","tool_request":"find cats please"}]}',
+        },
+        { kind: 'tool_call', callId: 'c1', toolName: 'search', args: { q: 'cats' } },
+      ],
+      finishReason: 'tool_calls',
+    };
+    const parsed = parsePlannerCompletion(completion);
+    expect(parsed.assistantOutput).toBe('Searching.');
+    // One member, from the structured channel — not two for one logical call.
+    expect(parsed.toolRequests).toEqual([{ toolName: 'search', toolRequest: '{"q":"cats"}' }]);
+  });
+
   it('falls back to text parsing when there are no native tool_calls', () => {
     const completion: LlmCompletion = {
       parts: [{ kind: 'text', text: '{"tool_requests":[{"tool_name":"x","tool_request":"y"}]}' }],
