@@ -274,7 +274,13 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
 
   async updateToolInvocation(
     conversationId: string,
-    input: { id: string; state: ToolInvocationState; result?: unknown; parameters?: Record<string, unknown> },
+    input: {
+      id: string;
+      state: ToolInvocationState;
+      result?: unknown;
+      attempt?: number;
+      parameters?: Record<string, unknown>;
+    },
   ): Promise<void> {
     const patch: Record<string, unknown> = { state: input.state };
     if (input.result !== undefined) patch.result = input.result;
