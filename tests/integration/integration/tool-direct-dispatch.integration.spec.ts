@@ -109,6 +109,13 @@ describeLive('tool direct dispatch (integration)', () => {
       (e) => e.type === 'thought-prepare' && (e as { title?: string }).title === 'Resolve tool parameters',
     );
     expect(resolverThoughts.length).toBe(1); // prose args degraded to the resolver instead of failing
+
+    // The repair is explicit on the planner's call-tool step, not silent.
+    const repairSummary = entries.find((e) => {
+      const summary = String((e as { summary?: string }).summary ?? '');
+      return summary.includes('repaired via parameter resolution') && summary.includes('get_current_time');
+    });
+    expect(repairSummary).toBeTruthy();
   }, 30_000);
 
   it('does not resume planning while a batch sibling is still running', async () => {

@@ -9,6 +9,9 @@ export type PlannerToolInfo = {
   description: string;
   /** For dispatch tools: the values of the `operation` param. Empty otherwise. */
   operations: string[];
+  /** Set for tools whose separate_params_resolution is OFF: the tool_request
+   *  must BE the literal JSON args, so the model needs the schema up front. */
+  directParamsSchema?: unknown;
 };
 
 export type BuildPlannerMessagesInput = {
@@ -39,7 +42,11 @@ export function extractToolOperations(paramsSchema: unknown): string[] {
 function formatToolLine(tool: PlannerToolInfo): string {
   const desc = tool.description.replace(/\s+/g, ' ').trim();
   const ops = tool.operations.length > 0 ? ` Operations: ${tool.operations.join(', ')}.` : '';
-  return desc ? `- ${tool.name} — ${desc}${ops}` : `- ${tool.name}${ops}`;
+  const direct =
+    tool.directParamsSchema !== undefined
+      ? ` [direct args] tool_request must be the literal JSON arguments matching: ${JSON.stringify(tool.directParamsSchema)}.`
+      : '';
+  return desc ? `- ${tool.name} — ${desc}${ops}${direct}` : `- ${tool.name}${ops}${direct}`;
 }
 
 /**
@@ -82,13 +89,13 @@ function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, ThoughtStre
 function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[]): string {
   const parts: string[] = [];
   if (agentSystemPrompt.trim().length > 0) parts.push(agentSystemPrompt.trim());
-  parts.push(
-    tools.length > 0
-      ? `Tools (a separate agent fills each call's JSON args from your natural-language request):\n${tools
-          .map(formatToolLine)
-          .join('\n')}`
-      : 'Tools: (none)',
-  );
+  const hasDirect = tools.some((t) => t.directParamsSchema !== undefined);
+  const toolsHeader = hasDirect
+    ? 'Tools. Default: write each tool_request as a natural-language brief — a separate agent fills the ' +
+      "call's JSON args. Exception: for tools marked [direct args] there is no such agent — your " +
+      'tool_request must itself be the JSON arguments, exactly matching the given schema:'
+    : "Tools (a separate agent fills each call's JSON args from your natural-language request):";
+  parts.push(tools.length > 0 ? `${toolsHeader}\n${tools.map(formatToolLine).join('\n')}` : 'Tools: (none)');
   parts.push(
     'Reply with one JSON object (preferred — it is the only format that lets you set assistant_output and followup explicitly):\n' +
       '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string}], "followup": "finalize"|"continue"}\n' +
@@ -96,7 +103,7 @@ function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[
       '`assistant_output` is the user-facing text of your response. ' +
       '`tool_requests` is an array of tool requests. ' +
       '`followup` is the mode for the next step: "finalize" if you need to finalize the conversation, "continue" if you need to continue the conversation. ' +
-      '`tool_request` is a natural-language brief; a separate agent then fills the JSON args. ' +
+      '`tool_request` is a natural-language brief (except for [direct args] tools, where it must be the literal JSON arguments). ' +
       'Use "continue" only if you need tool results before replying.\n' +
       'Code fences or surrounding prose are fine. If that JSON is impractical, you may instead write your reply as prose and ' +
       'express tool calls in any common format (e.g. <tool_call>{"name": ..., "arguments": ...}</tool_call> or [TOOL_CALLS] [...]); ' +

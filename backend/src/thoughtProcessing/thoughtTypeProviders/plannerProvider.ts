@@ -33,6 +33,11 @@ export type PlannerInput = {
   agentId: string;
   systemPrompt: string;
   enabledToolIds: string[];
+  /** Tools with separate_params_resolution OFF: their tool_request must BE the
+   *  JSON args, and the prompt must say so instead of asking for prose.
+   *  Optional for hydrated legacy snapshots — the prompt then degrades to the
+   *  prose-mode instructions (routing re-derives directness from the agent). */
+  directToolIds?: string[];
   entries: ChatEntry[];
   toolOverrides?: Record<string, AgentToolConfig>;
   /** Set when this turn's available tools differ from the previous user turn. */
@@ -77,12 +82,16 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (!agent) throw new Error(`planner agent not found: ${agentId}`);
     const toolOverrides = anchorUserMessage.overrides?.tools;
     const enabledToolIds = this.resolveEnabledToolIds(agent, toolOverrides);
+    const directToolIds = enabledToolIds.filter(
+      (name) => !resolveSeparateParamsResolution(agent, toolOverrides, name),
+    );
     const toolChangeNote = await this.computeToolChangeNote(entries, agent, enabledToolIds);
     return {
       conversationId,
       agentId,
       systemPrompt: agent.system_prompt ?? '',
       enabledToolIds,
+      directToolIds,
       entries,
       ...(toolOverrides ? { toolOverrides } : {}),
       ...(toolChangeNote ? { toolChangeNote } : {}),
@@ -115,7 +124,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       messages: buildPlannerMessages({
         systemPrompt: input.systemPrompt,
         entries: input.entries,
-        tools: this.describeToolsForPlanner(input.enabledToolIds),
+        tools: this.describeToolsForPlanner(input.enabledToolIds, input.directToolIds ?? []),
         ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
       }),
       // Declare the enabled tools natively. We render prior tool calls as native
@@ -141,13 +150,17 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   // Enrich the bare enabled-tool names with each tool's model-facing
   // description and dispatch operations, so the planner can select tools (and
   // operations) deliberately rather than guessing from the name alone.
-  private describeToolsForPlanner(enabledToolIds: string[]): PlannerToolInfo[] {
+  private describeToolsForPlanner(enabledToolIds: string[], directToolIds: string[]): PlannerToolInfo[] {
+    const direct = new Set(directToolIds);
     return enabledToolIds.map((name) => {
       const tool = this.tools.get(name);
       return {
         name,
         description: tool?.getAiDescription() ?? '',
         operations: tool ? extractToolOperations(tool.getParamsSchema()) : [],
+        // Direct-args tools need their schema in the prompt: the model writes
+        // the literal JSON args itself, no resolver fills them in.
+        ...(direct.has(name) && tool ? { directParamsSchema: tool.getParamsSchema() } : {}),
       };
     });
   }
@@ -199,23 +212,47 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const parseResult = toPlannerParseResult(parsed);
     const decision = toLlmDecision(parsed, requestedToolCalls);
 
+    // Route every member up front so a repaired request (direct-args tool given
+    // non-JSON) is explicit on the thought's call-tool step, never silent.
+    let dispatchPlans: Array<{
+      requested: { toolName: string; toolRequest: string };
+      route: 'resolution' | 'direct' | 'repair';
+    }> = [];
+    let agent: AgentEntity | null = null;
+    if (requestedToolCalls.length > 0) {
+      agent = await this.agents.get(input.agentId);
+      if (!agent) throw new Error(`planner: agent not found for tool execution: ${input.agentId}`);
+      const resolvedAgent = agent;
+      dispatchPlans = requestedToolCalls.map((requested) => {
+        if (resolveSeparateParamsResolution(resolvedAgent, input.toolOverrides, requested.toolName)) {
+          return { requested, route: 'resolution' as const };
+        }
+        return isParseableToolParamsJson(requested.toolRequest)
+          ? { requested, route: 'direct' as const }
+          : { requested, route: 'repair' as const };
+      });
+    }
+    const repairedToolNames = dispatchPlans.filter((p) => p.route === 'repair').map((p) => p.requested.toolName);
+
     await this.persistStreamEntryDecision(ctx, completion, parseResult, decision);
     const assistantEntryId = await this.finalizeAssistantMessage(state ?? null, ctx, assistantText);
-    await this.finalizeThoughtAction(ctx, action, assistantText, parseResult);
+    await this.finalizeThoughtAction(ctx, action, assistantText, parseResult, repairedToolNames);
     if (action === 'final_answer' && assistantEntryId) {
       await this.chatEntries.setDefaultViewLeaf(input.conversationId, assistantEntryId);
     }
     await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, input.conversationId);
 
-    if (requestedToolCalls.length === 0) return;
-    const agent = await this.agents.get(input.agentId);
-    if (!agent) throw new Error(`planner: agent not found for tool execution: ${input.agentId}`);
+    if (requestedToolCalls.length === 0 || !agent) return;
     // One fan-out batch for this decision: the planner continues only after all
     // `size` tools reach a terminal state (RunToolService.memberResolved).
     const toolBatch = { id: crypto.randomUUID(), size: requestedToolCalls.length };
-    for (const requested of requestedToolCalls) {
+    for (const plan of dispatchPlans) {
       scope.throwIfAborted();
-      this.startToolParamsThought({ input, agent, requested, followup: parsed.followup, toolBatch }, ctx, scope);
+      this.startToolParamsThought(
+        { input, agent, requested: plan.requested, route: plan.route, followup: parsed.followup, toolBatch },
+        ctx,
+        scope,
+      );
     }
   };
 
@@ -234,6 +271,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       input: PlannerInput;
       agent: AgentEntity;
       requested: { toolName: string; toolRequest: string };
+      /** Routing decided in runDecision: 'repair' = direct-args tool whose
+       *  request wasn't JSON, degraded to the resolution thought. */
+      route: 'resolution' | 'direct' | 'repair';
       followup: 'continue' | 'finalize';
       toolBatch: { id: string; size: number };
     },
@@ -269,22 +309,17 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
         system_prompt: toolPromptOverride || basePrompt,
       };
     }
-    const separateParamsResolution = resolveSeparateParamsResolution(
-      args.agent,
-      args.input.toolOverrides,
-      args.requested.toolName,
-    );
     // Direct dispatch is an optimization for models that emit clean JSON args;
-    // some (glm) write prose tool requests half the time. When the request
-    // isn't JSON, degrade to the resolution thought — its whole job is turning
-    // that prose into schema-valid args — instead of failing the call.
-    const directParamsNotJson = !separateParamsResolution && !isParseableToolParamsJson(args.requested.toolRequest);
-    if (directParamsNotJson) {
+    // some (glm) write prose tool requests half the time. 'repair' means the
+    // request wasn't JSON and degrades to the resolution thought — its whole
+    // job is turning that prose into schema-valid args — instead of failing
+    // the call. The routing is decided (and surfaced) in runDecision.
+    if (args.route === 'repair') {
       this.logger.warn(
         `'${args.requested.toolName}' direct params are not JSON — falling back to params resolution`,
       );
     }
-    if (separateParamsResolution || directParamsNotJson) {
+    if (args.route !== 'direct') {
       this.thoughtProcessing.startThought({
         provider: this.toolParamsProvider,
         conversationId: toolParamsInput.conversationId,
@@ -383,9 +418,16 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     action: 'tool_call' | 'final_answer',
     assistantText: string,
     parseResult: PlannerParseResult,
+    repairedToolNames: string[] = [],
   ): Promise<void> {
     if (!ctx.thoughtActionEntryId) return;
-    const summary = action === 'tool_call' ? 'Queued tool call(s)' : assistantText || 'Completed';
+    // A repaired request must be explicit on the call-tool step — the model
+    // gave non-JSON args to a direct-args tool and the resolver stepped in.
+    const repairNote =
+      repairedToolNames.length > 0
+        ? ` — ${repairedToolNames.join(', ')}: request was not valid JSON args, repaired via parameter resolution`
+        : '';
+    const summary = action === 'tool_call' ? `Queued tool call(s)${repairNote}` : assistantText || 'Completed';
     // Custom summary/action only — status is flipped by DecisionStep.
     await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
       summary,

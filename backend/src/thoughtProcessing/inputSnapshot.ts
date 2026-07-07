@@ -12,6 +12,8 @@ type PlannerSnapshot = {
   agentId: string;
   systemPrompt: string;
   enabledToolIds: string[];
+  /** Absent on snapshots persisted before direct-args prompt annotations. */
+  directToolIds?: string[];
   leafEntryId: string;
 };
 
@@ -80,6 +82,7 @@ export function serializeThoughtInput(input: unknown, prepareEntryId: string): s
       agentId: input.agentId,
       systemPrompt: input.systemPrompt,
       enabledToolIds: input.enabledToolIds,
+      ...(input.directToolIds ? { directToolIds: input.directToolIds } : {}),
       leafEntryId: prepareEntryId,
     };
     return JSON.stringify(snap);
@@ -122,6 +125,7 @@ async function hydratePlannerInput(
     agentId: snap.agentId,
     systemPrompt: snap.systemPrompt,
     enabledToolIds: snap.enabledToolIds,
+    ...(snap.directToolIds ? { directToolIds: snap.directToolIds } : {}),
     entries,
   };
 }
