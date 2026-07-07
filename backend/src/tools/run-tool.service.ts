@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { SseType } from '../contracts/sse.js';
@@ -64,19 +64,25 @@ type ToolEnvelope = {
   timing: { started_at: string; finished_at: string; elapsed_ms: number };
 };
 
-type ToolBatchState = { size: number; resolved: Set<string>; continued: boolean };
-
 @Injectable()
-export class RunToolService {
+export class RunToolService implements OnModuleInit {
   private readonly logger = new Logger(RunToolService.name);
 
   /**
-   * Fan-in state per tool-fanout batch, keyed by `ToolBatchRef.id`. Lives in
-   * the (singleton) service so it survives across the separate HTTP requests
-   * that approve/deny a tool. An entry is created lazily on the first member to
-   * resolve and deleted once the planner continuation has been kicked off.
+   * Per-conversation serialization of the fan-in check, so siblings settling
+   * concurrently evaluate "any pending tools left?" one at a time. Purely a
+   * concurrency gate — the pending state itself is derived from the chat
+   * entries (see maybeContinuePlanner), never stored here.
    */
-  private readonly toolBatches = new Map<string, ToolBatchState>();
+  private readonly continueChecks = new Map<string, Promise<void>>();
+  /**
+   * batchId → epoch-ms of the last planner continuation for that batch.
+   * Collapses siblings that complete the batch in the same instant into one
+   * continuation; anything later (a user retry re-running a member) is a new
+   * completion and continues planning again.
+   */
+  private readonly recentBatchContinues = new Map<string, number>();
+  private static readonly BATCH_CONTINUE_DEDUPE_MS = 1500;
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -90,6 +96,42 @@ export class RunToolService {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
     private readonly taskRegistry: TaskRegistryService,
   ) {}
+
+  /**
+   * Boot sweep: a tool that was `running` when the process died can never
+   * settle — and since pending state is derived from the chat history, a
+   * zombie `running` entry would block its wave's fan-in forever. Mark them
+   * failed (retryable: permission_state stays 'allow') and close their
+   * tool_runs rows. `requested` entries are untouched — approval is still
+   * valid across restarts.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const zombies = await this.chatEntries.listRunningToolInvocations();
+      for (const zombie of zombies) {
+        const now = new Date().toISOString();
+        const envelope: ToolEnvelope = {
+          ok: false,
+          toolId: zombie.toolId,
+          output: null,
+          error: 'The backend restarted while this tool was running. Retry to run it again.',
+          permission_state: 'allow',
+          timing: { started_at: now, finished_at: now, elapsed_ms: 0 },
+        };
+        await this.chatEntries.updateToolInvocation(zombie.conversationId, {
+          id: zombie.id,
+          state: 'error',
+          result: envelope,
+        });
+      }
+      const orphanedRuns = await this.toolRuns.sweepOrphanedRunning();
+      if (zombies.length > 0 || orphanedRuns > 0) {
+        this.logger.warn(`boot sweep: ${zombies.length} zombie running tool entr(ies) marked failed, ${orphanedRuns} orphaned tool_runs row(s) closed`);
+      }
+    } catch (error) {
+      this.logger.error('boot sweep failed', error instanceof Error ? error.stack : String(error));
+    }
+  }
 
   async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
     const tool = this.tools.get(input.toolName);
@@ -122,7 +164,7 @@ export class RunToolService {
       // "Off": tool unavailable to this agent. A forbidden tool is a terminal
       // (resolved) batch member, so count it toward the fan-in before returning.
       const blocked = await this.recordBlocked({ input, permission: 'forbid', parsedParams, chain });
-      this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
+      this.memberResolved({ input, scope, chain, llm });
       return blocked;
     }
     // Guardrail-flagged calls block with permission='ask_user' even when the
@@ -154,7 +196,7 @@ export class RunToolService {
       const permission = mostPermissivePermission(ruleResults);
       if (permission === 'forbid') {
         const blocked = await this.recordBlocked({ input, permission, parsedParams, chain });
-        this.memberResolved({ input, entryId: blocked.toolEntryId, scope, chain, llm });
+        this.memberResolved({ input, scope, chain, llm });
         return blocked;
       }
       if (permission === 'ask_user' && input.approvalGranted !== true) {
@@ -305,8 +347,11 @@ export class RunToolService {
     if (!tool) throw new Error(`retry: unknown tool ${entry.toolId}`);
 
     const { tool_request, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
-    void __tool_batch; // the old batch is resolved; a retry must not re-join it
     const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
+    // The batch stamp stays with the entry: the fan-in derives pending state
+    // from the chat history, so while the retry runs its wave counts as
+    // pending again, and its completion re-checks the whole wave.
+    const toolBatch = parseToolBatch(__tool_batch);
 
     const entries = await this.chatEntries.listChatEntriesFromLeaf(args.conversationId, args.toolEntryId);
     const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
@@ -330,6 +375,7 @@ export class RunToolService {
       approvalGranted: true,
       plannerFollowup: { mode: 'continue' },
       ...(toolRequest ? { toolRequest } : {}),
+      ...(toolBatch ? { toolBatch } : {}),
       ...(toolOverrides ? { toolOverrides } : {}),
     };
 
@@ -406,7 +452,6 @@ export class RunToolService {
         plannerFollowup: { mode: 'continue' },
         ...(toolBatch ? { toolBatch } : {}),
       },
-      entryId: entry.id,
       scope,
       chain,
       llm,
@@ -655,7 +700,7 @@ export class RunToolService {
         });
         // A failed tool is a resolved batch member — continue planning (once
         // every sibling resolves) so the agent can see the failure and adapt.
-        this.memberResolved({ input, entryId, scope, chain, llm });
+        this.memberResolved({ input, scope, chain, llm });
       }
       return { kind: 'completed', toolEntryId: entryId };
     }
@@ -684,46 +729,70 @@ export class RunToolService {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
-    this.memberResolved({ input, entryId, scope, chain, llm });
+    this.memberResolved({ input, scope, chain, llm });
     return { kind: 'completed', toolEntryId: entryId };
   }
 
   /**
-   * Records one fan-out batch member reaching a terminal state (done / error /
-   * forbidden / denied) and, once **every** member has resolved, continues the
-   * planner exactly once. Tools awaiting approval are NOT terminal and must not
-   * call this until they are approved (→ run) or denied.
-   *
-   * Synchronous on purpose: the resolved-set update and the "already continued"
-   * test-and-set happen without an intervening await, so concurrently-finishing
-   * siblings can't both trip the continuation. Single-tool flows (size 1) and
-   * any caller without batch context continue immediately, preserving the old
-   * one-tool-then-planner behavior.
+   * Called when a tool invocation reaches a terminal state (done / error /
+   * forbidden / denied). Whether planning resumes is decided from the CHAT
+   * HISTORY: if the batch has zero tool invocations still `requested`/`running`
+   * and the planner asked to continue, the planner runs. The DB is the single
+   * source of truth, so an approval that arrives after a backend restart still
+   * fans in correctly — the previous in-memory scoreboard forgot half-resolved
+   * batches on every restart and stranded the run. Tools awaiting approval are
+   * NOT terminal and must not call this until approved (→ run) or denied.
    */
   private memberResolved(args: {
     input: RunToolInput;
-    entryId: string;
     scope: LifecycleScope;
     chain: ChatChain;
     llm: LlmRef;
   }): void {
-    const { input, entryId, scope, chain, llm } = args;
-    const shouldContinue = input.plannerFollowup?.mode === 'continue';
+    const { input, scope, chain, llm } = args;
+    if (input.plannerFollowup?.mode !== 'continue') return;
+    const conversationId = input.conversationId;
+    // Serialize checks per conversation so concurrently-settling siblings
+    // evaluate one at a time against the already-persisted states.
+    const prev = this.continueChecks.get(conversationId) ?? Promise.resolve();
+    const next = prev.then(() =>
+      this.maybeContinuePlanner(input, scope, chain, llm).catch((error) => {
+        this.logger.error(
+          `tool fan-in check failed: conversation=${conversationId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }),
+    );
+    this.continueChecks.set(conversationId, next);
+    void next.finally(() => {
+      if (this.continueChecks.get(conversationId) === next) this.continueChecks.delete(conversationId);
+    });
+  }
+
+  private async maybeContinuePlanner(
+    input: RunToolInput,
+    scope: LifecycleScope,
+    chain: ChatChain,
+    llm: LlmRef,
+  ): Promise<void> {
     const batch = input.toolBatch;
-    if (!batch) {
-      if (shouldContinue) this.continuePlanner(input.conversationId, scope, chain, llm);
-      return;
+    if (batch) {
+      const pending = await this.chatEntries.countPendingToolInvocationsInBatch(input.conversationId, batch.id);
+      if (pending > 0) return; // still pending tools in the chat history — wait for them
+      // Siblings that completed the batch in the same instant each see zero
+      // pending; collapse them into one continuation. A later re-completion of
+      // the same batch (user retry) is far outside the window and continues.
+      const now = Date.now();
+      const last = this.recentBatchContinues.get(batch.id) ?? 0;
+      if (now - last < RunToolService.BATCH_CONTINUE_DEDUPE_MS) return;
+      this.recentBatchContinues.set(batch.id, now);
+      if (this.recentBatchContinues.size > 200) {
+        for (const [id, t] of this.recentBatchContinues) {
+          if (now - t > 60_000) this.recentBatchContinues.delete(id);
+        }
+      }
     }
-    let state = this.toolBatches.get(batch.id);
-    if (!state) {
-      state = { size: batch.size, resolved: new Set<string>(), continued: false };
-      this.toolBatches.set(batch.id, state);
-    }
-    state.resolved.add(entryId);
-    if (state.continued || state.resolved.size < state.size) return;
-    state.continued = true;
-    this.toolBatches.delete(batch.id);
-    if (shouldContinue) this.continuePlanner(input.conversationId, scope, chain, llm);
+    this.continuePlanner(input.conversationId, scope, chain, llm);
   }
 
   private continuePlanner(conversationId: string, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): void {
@@ -748,7 +817,6 @@ export class RunToolService {
    */
   resolveFailedToolParamsMember(args: {
     conversationId: string;
-    thoughtId: string;
     toolBatch?: ToolBatchRef;
     plannerFollowup?: { mode: 'continue' | 'finalize' };
     scope: LifecycleScope;
@@ -764,7 +832,6 @@ export class RunToolService {
         ...(args.plannerFollowup ? { plannerFollowup: args.plannerFollowup } : {}),
         ...(args.toolBatch ? { toolBatch: args.toolBatch } : {}),
       },
-      entryId: args.thoughtId,
       scope: args.scope,
       chain: args.chain,
       llm: args.llm,

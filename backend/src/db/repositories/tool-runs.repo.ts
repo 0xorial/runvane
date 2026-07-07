@@ -80,6 +80,15 @@ export class ToolRunsRepo {
     });
   }
 
+  /** Close runs stranded in `running` by a dead process (boot sweep). Returns the count. */
+  async sweepOrphanedRunning(): Promise<number> {
+    const res = await this.prisma.toolRun.updateMany({
+      where: { status: 'running' },
+      data: { status: 'aborted', error: 'backend restarted while the tool was running' },
+    });
+    return res.count;
+  }
+
   async latestForEntry(conversationId: string, chatEntryId: string): Promise<ToolRunRow | null> {
     const row = await this.prisma.toolRun.findFirst({
       where: { conversationId, chatEntryId },

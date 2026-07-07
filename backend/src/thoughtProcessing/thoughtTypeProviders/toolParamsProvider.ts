@@ -77,7 +77,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       // against its fan-out batch so the planner isn't stranded waiting on it.
       this.runTool.resolveFailedToolParamsMember({
         conversationId: input.conversationId,
-        thoughtId: ctx.thoughtId,
         plannerFollowup: input.plannerFollowup,
         scope,
         chain: ctx.chain,
@@ -118,7 +117,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     const failMember = (): void =>
       this.runTool.resolveFailedToolParamsMember({
         conversationId: input.conversationId,
-        thoughtId: decidingThoughtId,
         plannerFollowup: input.plannerFollowup,
         scope,
         chain,

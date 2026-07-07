@@ -282,6 +282,36 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     await this.mergeEntryPayload(conversationId, input.id, patch);
   }
 
+  /**
+   * Non-terminal (`requested` / `running`) tool invocations of one planner
+   * fan-out batch, straight from the chat history — the durable source of
+   * truth for "are there still pending tools before planning resumes".
+   */
+  async countPendingToolInvocationsInBatch(conversationId: string, batchId: string): Promise<number> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT COUNT(*) AS n
+       FROM chat_entries
+       WHERE conversation_id = ?
+         AND type = 'tool-invocation'
+         AND json_extract(payload_json, '$.state') IN ('requested', 'running')
+         AND json_extract(payload_json, '$.parameters.__tool_batch.id') = ?`,
+      conversationId,
+      batchId,
+    )) as Array<{ n: number | bigint }>;
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  /** Tool invocations stranded in `running` (their process died) — boot-sweep input. */
+  async listRunningToolInvocations(): Promise<Array<{ id: string; conversationId: string; toolId: string }>> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id, conversation_id AS conversationId, json_extract(payload_json, '$.toolId') AS toolId
+       FROM chat_entries
+       WHERE type = 'tool-invocation'
+         AND json_extract(payload_json, '$.state') = 'running'`,
+    )) as Array<{ id: string; conversationId: string; toolId: string | null }>;
+    return rows.map((r) => ({ id: r.id, conversationId: r.conversationId, toolId: r.toolId ?? 'tool' }));
+  }
+
   async updateAssistantMessage(
     conversationId: string,
     input: { id: string; text: string },
