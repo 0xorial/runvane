@@ -103,38 +103,57 @@
     bottomSpacerPx = 0;
   }
 
-  function alignOnce(entryId: string): boolean {
-    const plan = measurePlan(entryId);
-    if (!plan || !scrollEl) return false;
-
-    if (Math.abs(plan.spacerHeight - bottomSpacerRef) > 1) {
-      bottomSpacerRef = plan.spacerHeight;
-      bottomSpacerPx = plan.spacerHeight;
-      return false;
-    }
-    smoothScrollTo(scrollEl, Math.max(0, plan.scrollTopTarget), animRafRef);
-    return true;
-  }
+  // True once the current align request has scrolled (or been abandoned by a
+  // reset). An unfulfilled request may re-fire when its row id resolves; a
+  // fulfilled one never scrolls again — the user may have moved on.
+  let alignFulfilled = true;
 
   function scheduleAlign(entryId: string): void {
     cancelAlignRaf();
+    alignFulfilled = false;
     tries = 0;
+    let spacerApplied = false;
     const run = () => {
-      if (anchorEntryId !== entryId) return;
-      const done = alignOnce(entryId);
-      if (done) {
-        rafRef = null;
+      rafRef = null;
+      if (anchorEntryId !== entryId) return; // retargeted; the effect reschedules
+      const plan = measurePlan(entryId);
+      if (!plan) {
+        // Row not rendered yet (fresh conversation still streaming in).
+        tries += 1;
+        if (tries <= 30) rafRef = requestAnimationFrame(run);
         return;
       }
-      tries += 1;
-      if (tries > 30) {
-        rafRef = null;
+      if (!spacerApplied && Math.abs(plan.spacerHeight - bottomSpacerRef) > 1) {
+        // Phase 1: reserve the spacer, give it one frame to hit the DOM.
+        spacerApplied = true;
+        bottomSpacerRef = plan.spacerHeight;
+        bottomSpacerPx = plan.spacerHeight;
+        rafRef = requestAnimationFrame(run);
         return;
       }
-      rafRef = requestAnimationFrame(run);
+      // Phase 2: scroll. The target only depends on content ABOVE the anchor,
+      // so it's stable even while the reply streams in below — never wait for
+      // frame-to-frame layout stability, it may not arrive.
+      smoothScrollTo(scrollEl!, Math.max(0, plan.scrollTopTarget), animRafRef);
+      alignFulfilled = true;
     };
     rafRef = requestAnimationFrame(run);
   }
+
+  // Conversation switch: land at the bottom of the new transcript. Declared
+  // BEFORE the align effect: when a send creates the conversation, the reset
+  // and the align request land in the same flush and the align must survive.
+  $effect(() => {
+    const key = resetKey;
+    if (key === lastResetKey) return;
+    lastResetKey = key;
+    cancelAlignRaf();
+    alignFulfilled = true;
+    lastAnchorId = null;
+    clearSpacer();
+    stickToBottom = true;
+    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+  });
 
   // Aligning is an EVENT (token bump on send / branch pick), never state sync:
   // a conversation loading, an SSE re-snapshot, or a row rekey must not scroll
@@ -145,6 +164,7 @@
     if (!id) {
       alignedToken = token;
       cancelAlignRaf();
+      alignFulfilled = true;
       lastAnchorId = null;
       clearSpacer();
       return;
@@ -156,28 +176,14 @@
       return cancelAlignRaf;
     }
     if (id !== lastAnchorId) {
-      // Same align event, new row id: the optimistic row was rekeyed to its
-      // server id. Re-target only an in-flight align; a finished one must not
-      // scroll again — the user may have moved on.
-      const inFlight = rafRef != null;
+      // Same align event, new row id: a placeholder or optimistic id resolved
+      // to the server row. Re-fire only if the request hasn't scrolled yet.
       lastAnchorId = id;
-      if (inFlight) {
+      if (!alignFulfilled) {
         scheduleAlign(id);
         return cancelAlignRaf;
       }
     }
-  });
-
-  // Conversation switch: land at the bottom of the new transcript.
-  $effect(() => {
-    const key = resetKey;
-    if (key === lastResetKey) return;
-    lastResetKey = key;
-    cancelAlignRaf();
-    lastAnchorId = null;
-    clearSpacer();
-    stickToBottom = true;
-    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
   });
 
   $effect(() => {

@@ -34,8 +34,10 @@
 
   // Aligning a row to the viewport top is an explicit user event (sending a
   // message, picking a branch anchor) — never derived from transcript state, so
-  // loading or switching a conversation can't scroll on its own.
-  type AlignAnchor = { id: string; token: number; source: "sent" | "branch" };
+  // loading or switching a conversation can't scroll on its own. The anchor is
+  // tagged with its conversation so a send that CREATES the conversation
+  // survives the navigation that follows it.
+  type AlignAnchor = { id: string; conversationId: string; token: number; source: "sent" | "branch" };
   let alignAnchor = $state<AlignAnchor | null>(null);
   let alignSeq = 0;
   let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
@@ -67,15 +69,17 @@
 
   const pathPlannerLlm = $derived(resolveLastPlannerLlmOnPath(activePathEntries));
 
-  function handleSent(optimisticRowId: string): void {
-    alignAnchor = { id: optimisticRowId, token: ++alignSeq, source: "sent" };
+  function handleSent(sentRowId: string, sentConversationId: string): void {
+    alignAnchor = { id: sentRowId, conversationId: sentConversationId, token: ++alignSeq, source: "sent" };
   }
 
-  // The optimistic user row is rekeyed to its server id when the SSE ack lands;
-  // follow it so an in-flight align (and later spacer upkeep) tracks the row.
+  // A sent anchor starts as an optimistic (or, for a send that created the
+  // conversation, placeholder) id and resolves to the server row once the SSE
+  // ack lands — follow it so the align tracks the real transcript row.
   $effect(() => {
     const anchor = alignAnchor;
-    if (!anchor || activePathEntryById.has(anchor.id)) return;
+    if (!anchor || anchor.conversationId !== conversationId) return;
+    if (activePathEntryById.has(anchor.id)) return;
     if (anchor.source === "sent") {
       for (let i = activePathEntries.length - 1; i >= 0; i -= 1) {
         if (activePathEntries[i].type === "user-message") {
@@ -83,8 +87,9 @@
           return;
         }
       }
+      return; // the sent row hasn't streamed in yet — keep waiting
     }
-    alignAnchor = null;
+    alignAnchor = null; // branch anchor left the active path
   });
 
   function openSettings(): void {
@@ -96,7 +101,7 @@
     const id = conversationId;
     if (id === lastConversationId) return;
     lastConversationId = id;
-    alignAnchor = null;
+    if (alignAnchor && alignAnchor.conversationId !== id) alignAnchor = null;
   });
 
   $effect(() => {
@@ -147,7 +152,13 @@
             activePathEntries={session.activePathEntries}
             switchToBranch={session.switchToBranch}
             onAnchorEntrySelected={(entryId) => {
-              alignAnchor = { id: resolveVisibleAnchorEntryId(entryId), token: ++alignSeq, source: "branch" };
+              if (!conversationId) return;
+              alignAnchor = {
+                id: resolveVisibleAnchorEntryId(entryId),
+                conversationId,
+                token: ++alignSeq,
+                source: "branch",
+              };
             }}
           />
         </aside>

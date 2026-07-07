@@ -37,7 +37,9 @@
       modelPresetId?: number | null;
       attachments?: ChatAttachment[];
     }) => OptimisticUserMessage | null;
-    onSent?: (optimisticRowId: string) => void;
+    /** Fired once per direct send; `sentRowId` may be a placeholder that only
+     * resolves to a transcript row after the SSE snapshot (new conversations). */
+    onSent?: (sentRowId: string, conversationId: string) => void;
     textareaRef?: HTMLTextAreaElement | null;
   } = $props();
 
@@ -132,6 +134,7 @@
           clientRequestId,
           sendOpts,
         );
+        onSent?.(`sent-${clientRequestId}`, cid);
         replacePath(`/chat/${encodeURIComponent(cid)}${search}`);
         return;
       }
@@ -146,7 +149,7 @@
           attachments: uploadedAttachments,
         });
         if (!optimistic) throw new Error("appendOptimisticUserMessage failed");
-        onSent?.(optimistic.rowId);
+        onSent?.(optimistic.rowId, conversationId);
         input = "";
         selectedFiles = [];
         await sendMessageToConversation(
