@@ -17,7 +17,7 @@ import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmToolSpec } from '../
 import { resolveSeparateParamsResolution, resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
-import { buildAskAttachmentParamsContext } from '../lib/toolParamsPrompt.js';
+import { buildAskAttachmentParamsContext, isParseableToolParamsJson } from '../lib/toolParamsPrompt.js';
 import { buildPlannerMessages, describeToolChange, extractToolOperations, type PlannerToolInfo } from '../lib/plannerPrompt.js';
 import {
   extractAssistantPreviewFromStream,
@@ -274,7 +274,17 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       args.input.toolOverrides,
       args.requested.toolName,
     );
-    if (separateParamsResolution) {
+    // Direct dispatch is an optimization for models that emit clean JSON args;
+    // some (glm) write prose tool requests half the time. When the request
+    // isn't JSON, degrade to the resolution thought — its whole job is turning
+    // that prose into schema-valid args — instead of failing the call.
+    const directParamsNotJson = !separateParamsResolution && !isParseableToolParamsJson(args.requested.toolRequest);
+    if (directParamsNotJson) {
+      this.logger.warn(
+        `'${args.requested.toolName}' direct params are not JSON — falling back to params resolution`,
+      );
+    }
+    if (separateParamsResolution || directParamsNotJson) {
       this.thoughtProcessing.startThought({
         provider: this.toolParamsProvider,
         conversationId: toolParamsInput.conversationId,

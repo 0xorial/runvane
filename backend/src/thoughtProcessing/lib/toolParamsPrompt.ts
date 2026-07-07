@@ -64,3 +64,14 @@ export function parseToolParamsJson(text: string, toolName: string, context: str
   }
   return obj;
 }
+
+/** True when the text would survive {@link parseToolParamsJson} — used to pick
+ *  direct dispatch vs falling back to the params-resolution thought. */
+export function isParseableToolParamsJson(text: string): boolean {
+  try {
+    parseToolParamsJson(text, '', 'direct-params probe');
+    return true;
+  } catch {
+    return false;
+  }
+}

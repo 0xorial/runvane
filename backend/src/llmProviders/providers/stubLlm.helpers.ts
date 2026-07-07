@@ -510,6 +510,71 @@ export function stubDirectEnvelopeEchoFinalize(): string {
 }
 
 /**
+ * Drives the prose-args fallback integration test: the planner emits a
+ * NATURAL-LANGUAGE tool_request for a tool whose separate_params_resolution is
+ * off. Direct dispatch requires JSON, so the planner must fall back to the
+ * params-resolution thought (whose stub reply is `{}`) and the tool must run.
+ */
+export const DIRECT_PROSE_PARAMS_MARKER = '__direct_prose_params__';
+export const STUB_DIRECT_PROSE_PARAMS_REPLY = 'Prose-params probe complete.';
+
+export function stubIsDirectProseParamsConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(DIRECT_PROSE_PARAMS_MARKER);
+}
+
+export function stubDirectProseParamsFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Ask for the time in plain prose despite direct dispatch.',
+    assistant_output: 'Checking the time.',
+    tool_requests: [{ tool_name: 'get_current_time', tool_request: 'please check the current server time' }],
+    followup: 'continue',
+  });
+}
+
+export function stubDirectProseParamsFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Tool settled; summarize.',
+    assistant_output: STUB_DIRECT_PROSE_PARAMS_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+/**
+ * Drives the fan-in ordering integration test: one decision fans out TWO
+ * members — a prose get_current_time request (resolves + runs instantly via
+ * the resolution fallback) and a mock tool held open by the test controller.
+ * Planning must NOT resume until the held member settles too.
+ */
+export const DIRECT_MIXED_BATCH_MARKER = '__direct_mixed_batch__';
+export const STUB_DIRECT_MIXED_BATCH_REPLY = 'Mixed-batch probe complete.';
+
+export function stubIsDirectMixedBatchConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(DIRECT_MIXED_BATCH_MARKER);
+}
+
+export function stubDirectMixedBatchFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Fan out a fast prose call and a held mock call.',
+    assistant_output: 'Running both probes.',
+    tool_requests: [
+      { tool_name: 'get_current_time', tool_request: 'what time is it right now' },
+      { tool_name: NO_PARAMS_RESOLUTION_TOOL, tool_request: JSON.stringify({ probe: 'mixed-batch' }) },
+    ],
+    followup: 'continue',
+  });
+}
+
+export function stubDirectMixedBatchFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Both members settled; summarize.',
+    assistant_output: STUB_DIRECT_MIXED_BATCH_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+/**
  * Drives the direct-dispatch rejection integration test: the planner emits
  * args a strict tool schema rejects (get_current_time takes none). The failed
  * dispatch must surface as a visible error entry and the planner must still
@@ -585,6 +650,12 @@ export function pickStubReply(request: LlmRequest): string {
     }
     if (stubIsDirectBadParamsConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubDirectBadParamsFinalize() : stubDirectBadParamsFirstRound();
+    }
+    if (stubIsDirectProseParamsConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubDirectProseParamsFinalize() : stubDirectProseParamsFirstRound();
+    }
+    if (stubIsDirectMixedBatchConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubDirectMixedBatchFinalize() : stubDirectMixedBatchFirstRound();
     }
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();

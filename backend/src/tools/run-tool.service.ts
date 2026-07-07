@@ -794,8 +794,12 @@ export class RunToolService implements OnModuleInit {
   ): Promise<void> {
     const batch = input.toolBatch;
     if (batch) {
-      const pending = await this.chatEntries.countPendingToolInvocationsInBatch(input.conversationId, batch.id);
-      if (pending > 0) return; // still pending tools in the chat history — wait for them
+      // Continue only once TERMINAL members reach the batch's stamped size.
+      // Counting pending entries instead is racy: a member that fails before
+      // its siblings' entries are inserted sees "0 pending" vacuously and
+      // resumes planning while an approval is still on its way to the DB.
+      const terminal = await this.chatEntries.countTerminalToolInvocationsInBatch(input.conversationId, batch.id);
+      if (terminal < batch.size) return; // members still unresolved (or not yet persisted)
       // Siblings that completed the batch in the same instant each see zero
       // pending; collapse them into one continuation. A later re-completion of
       // the same batch (user retry) is far outside the window and continues.
@@ -851,6 +855,13 @@ export class RunToolService implements OnModuleInit {
     this.memberResolved({ input: args.input, scope: args.scope, chain: args.chain, llm: args.llm });
   }
 
+  /**
+   * Run the fan-in check for a member whose terminal tool-invocation entry
+   * ALREADY exists (run() persisted an error entry before throwing). Members
+   * without an entry must go through failDirectDispatch instead — the fan-in
+   * counts terminal entries against the batch size, so an entry-less
+   * resolution would strand the batch.
+   */
   resolveFailedToolParamsMember(args: {
     conversationId: string;
     toolBatch?: ToolBatchRef;

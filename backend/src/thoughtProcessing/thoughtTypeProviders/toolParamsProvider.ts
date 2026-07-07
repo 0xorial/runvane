@@ -73,30 +73,82 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await this.markActionFailed(ctx, detail);
-      // This member failed before a tool-invocation entry existed — resolve it
-      // against its fan-out batch so the planner isn't stranded waiting on it.
-      this.runTool.resolveFailedToolParamsMember({
-        conversationId: input.conversationId,
-        plannerFollowup: input.plannerFollowup,
-        scope,
-        chain: ctx.chain,
-        llm: ctx.llm,
-        ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
-      });
+      // Fan-in counts TERMINAL member entries against the batch size, so every
+      // member must persist one — an entry-less failure would strand the batch.
+      await this.failMemberVisible(input, ctx.thoughtId, `The tool-parameter resolver failed: ${detail}`, {}, scope, ctx.chain, ctx.llm);
       throw new Error(`toolParams: ${detail}`, { cause: error });
     }
 
     await this.markActionCompleted(ctx, input.toolName, parsedParams);
 
-    await this.dispatchResolvedParams({
-      input,
-      params: parsedParams,
-      decidingThoughtId: ctx.thoughtId,
-      chain: ctx.chain,
-      llm: ctx.llm,
-      scope,
-    });
+    try {
+      await this.dispatchResolvedParams({
+        input,
+        params: parsedParams,
+        decidingThoughtId: ctx.thoughtId,
+        chain: ctx.chain,
+        llm: ctx.llm,
+        scope,
+      });
+    } catch (error) {
+      scope.throwIfAborted();
+      this.logger.warn(`dispatch of resolved '${input.toolName}' params failed: ${String(error)}`);
+      if ((error as { toolEntryId?: string }).toolEntryId) {
+        // run() already persisted a visible error entry — just resolve the member.
+        this.runTool.resolveFailedToolParamsMember({
+          conversationId: input.conversationId,
+          plannerFollowup: input.plannerFollowup,
+          scope,
+          chain: ctx.chain,
+          llm: ctx.llm,
+          ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
+        });
+        return;
+      }
+      await this.failMemberVisible(
+        input,
+        ctx.thoughtId,
+        `Tool arguments were rejected: ${String(error)}`,
+        parsedParams,
+        scope,
+        ctx.chain,
+        ctx.llm,
+      );
+    }
   };
+
+  /** Persist a terminal error tool entry for a failed member and resolve its batch slot. */
+  private async failMemberVisible(
+    input: ToolParamsInput,
+    decidingThoughtId: string,
+    reason: string,
+    params: Record<string, unknown>,
+    scope: LifecycleScope,
+    chain: ChatChain,
+    llm: LlmRef,
+  ): Promise<void> {
+    await this.runTool
+      .failDirectDispatch({
+        input: {
+          conversationId: input.conversationId,
+          agentId: input.agentId,
+          toolName: input.toolName,
+          params,
+          toolRequest: input.toolRequest,
+          plannerFollowup: input.plannerFollowup,
+          decidingThoughtId,
+          ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
+          ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
+        },
+        reason,
+        scope,
+        chain,
+        llm,
+      })
+      .catch((error) => {
+        this.logger.error(`failDirectDispatch for '${input.toolName}' failed: ${String(error)}`);
+      });
+  }
 
   /**
    * Direct dispatch for tools whose `separate_params_resolution` is OFF: the
@@ -118,29 +170,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     // bare batch-member resolution replans with an UNCHANGED context, and the
     // model just re-emits the same rejected call — an invisible, token-burning
     // loop (glm-5.2 once did 15 rounds of it).
-    const failVisible = (reason: string, params: Record<string, unknown>): void => {
-      void this.runTool
-        .failDirectDispatch({
-          input: {
-            conversationId: input.conversationId,
-            agentId: input.agentId,
-            toolName: input.toolName,
-            params,
-            toolRequest: input.toolRequest,
-            plannerFollowup: input.plannerFollowup,
-            decidingThoughtId,
-            ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
-            ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
-          },
-          reason,
-          scope,
-          chain,
-          llm,
-        })
-        .catch((error) => {
-          this.logger.error(`failDirectDispatch for '${input.toolName}' failed: ${String(error)}`);
-        });
-    };
 
     let params: Record<string, unknown>;
     try {
@@ -150,12 +179,19 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         `direct tool params for ${input.toolName}`,
       );
     } catch (error) {
+      // Normally unreachable: the planner falls back to the resolution thought
+      // for non-JSON direct params before calling startDirect.
       this.logger.warn(
         `direct params for '${input.toolName}' are not valid JSON (separate_params_resolution is off): ${String(error)}`,
       );
-      failVisible(
+      void this.failMemberVisible(
+        input,
+        decidingThoughtId,
         `The planner's arguments for '${input.toolName}' are not valid JSON (separate_params_resolution is off): ${String(error)}`,
         {},
+        scope,
+        chain,
+        llm,
       );
       return;
     }
@@ -177,7 +213,15 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           });
           return;
         }
-        failVisible(`Tool arguments were rejected: ${String(error)}`, params);
+        await this.failMemberVisible(
+          input,
+          decidingThoughtId,
+          `Tool arguments were rejected: ${String(error)}`,
+          params,
+          scope,
+          chain,
+          llm,
+        );
       }
     });
   }

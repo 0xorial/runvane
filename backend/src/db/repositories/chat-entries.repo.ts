@@ -290,17 +290,21 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
   }
 
   /**
-   * Non-terminal (`requested` / `running`) tool invocations of one planner
+   * Terminal (`done` / `error` / `denied`) tool invocations of one planner
    * fan-out batch, straight from the chat history — the durable source of
-   * truth for "are there still pending tools before planning resumes".
+   * truth for "has every member resolved before planning resumes". Counting
+   * TERMINAL entries against the batch's stamped size (instead of counting
+   * pending ones) makes the fan-in safe against a member failing before its
+   * siblings' entries are even inserted: not-yet-persisted members simply
+   * haven't reached the terminal count.
    */
-  async countPendingToolInvocationsInBatch(conversationId: string, batchId: string): Promise<number> {
+  async countTerminalToolInvocationsInBatch(conversationId: string, batchId: string): Promise<number> {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT COUNT(*) AS n
        FROM chat_entries
        WHERE conversation_id = ?
          AND type = 'tool-invocation'
-         AND json_extract(payload_json, '$.state') IN ('requested', 'running')
+         AND json_extract(payload_json, '$.state') IN ('done', 'error', 'denied')
          AND json_extract(payload_json, '$.parameters.__tool_batch.id') = ?`,
       conversationId,
       batchId,
