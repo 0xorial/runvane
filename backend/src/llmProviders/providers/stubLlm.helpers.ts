@@ -472,6 +472,74 @@ export function stubNoParamsResolutionFinalize(): string {
   });
 }
 
+/**
+ * Drives the direct-dispatch envelope-echo integration test: the planner emits
+ * a tool_request whose JSON echoes runvane's own stored bookkeeping keys
+ * (tool_request/source/__tool_batch) — the shape a model imitates after seeing
+ * replayed context turns. Dispatch must strip them and run the tool cleanly.
+ */
+export const DIRECT_ENVELOPE_ECHO_MARKER = '__direct_envelope_echo__';
+export const STUB_DIRECT_ENVELOPE_ECHO_REPLY = 'Envelope echo probe complete.';
+export const DIRECT_ENVELOPE_ECHO_REQUEST = JSON.stringify({
+  probe: 'envelope-echo',
+  tool_request: '{"probe":"envelope-echo"}',
+  source: 'planner_tool_request',
+  __tool_batch: '{"id":"model-echoed","size":2}',
+});
+
+export function stubIsDirectEnvelopeEchoConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(DIRECT_ENVELOPE_ECHO_MARKER);
+}
+
+export function stubDirectEnvelopeEchoFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Call the mock tool echoing the internal envelope keys.',
+    assistant_output: 'Running the mock tool.',
+    tool_requests: [{ tool_name: NO_PARAMS_RESOLUTION_TOOL, tool_request: DIRECT_ENVELOPE_ECHO_REQUEST }],
+    followup: 'continue',
+  });
+}
+
+export function stubDirectEnvelopeEchoFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Mock tool settled; summarize.',
+    assistant_output: STUB_DIRECT_ENVELOPE_ECHO_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+/**
+ * Drives the direct-dispatch rejection integration test: the planner emits
+ * args a strict tool schema rejects (get_current_time takes none). The failed
+ * dispatch must surface as a visible error entry and the planner must still
+ * reach its final answer instead of looping.
+ */
+export const DIRECT_BAD_PARAMS_MARKER = '__direct_bad_params__';
+export const STUB_DIRECT_BAD_PARAMS_REPLY = 'Direct bad-params probe complete.';
+
+export function stubIsDirectBadParamsConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(DIRECT_BAD_PARAMS_MARKER);
+}
+
+export function stubDirectBadParamsFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Call get_current_time with args its schema rejects.',
+    assistant_output: 'Checking the time.',
+    tool_requests: [{ tool_name: 'get_current_time', tool_request: JSON.stringify({ bogus: true }) }],
+    followup: 'continue',
+  });
+}
+
+export function stubDirectBadParamsFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'The tool call failed; wrap up without retrying.',
+    assistant_output: STUB_DIRECT_BAD_PARAMS_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
 export function pickStubReply(request: LlmRequest): string {
   const blob = stubRequestText(request);
   if (isSteerProbeMessage(blob)) return steerProbeReply();
@@ -511,6 +579,12 @@ export function pickStubReply(request: LlmRequest): string {
     }
     if (stubIsNoParamsResolutionConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubNoParamsResolutionFinalize() : stubNoParamsResolutionFirstRound();
+    }
+    if (stubIsDirectEnvelopeEchoConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubDirectEnvelopeEchoFinalize() : stubDirectEnvelopeEchoFirstRound();
+    }
+    if (stubIsDirectBadParamsConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubDirectBadParamsFinalize() : stubDirectBadParamsFirstRound();
     }
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();

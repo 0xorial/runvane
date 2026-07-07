@@ -114,15 +114,33 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     scope: LifecycleScope;
   }): void {
     const { input, decidingThoughtId, chain, llm, scope } = args;
-    const failMember = (): void =>
-      this.runTool.resolveFailedToolParamsMember({
-        conversationId: input.conversationId,
-        plannerFollowup: input.plannerFollowup,
-        scope,
-        chain,
-        llm,
-        ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
-      });
+    // A failed direct dispatch must leave a visible, terminal error entry: a
+    // bare batch-member resolution replans with an UNCHANGED context, and the
+    // model just re-emits the same rejected call — an invisible, token-burning
+    // loop (glm-5.2 once did 15 rounds of it).
+    const failVisible = (reason: string, params: Record<string, unknown>): void => {
+      void this.runTool
+        .failDirectDispatch({
+          input: {
+            conversationId: input.conversationId,
+            agentId: input.agentId,
+            toolName: input.toolName,
+            params,
+            toolRequest: input.toolRequest,
+            plannerFollowup: input.plannerFollowup,
+            decidingThoughtId,
+            ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
+            ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
+          },
+          reason,
+          scope,
+          chain,
+          llm,
+        })
+        .catch((error) => {
+          this.logger.error(`failDirectDispatch for '${input.toolName}' failed: ${String(error)}`);
+        });
+    };
 
     let params: Record<string, unknown>;
     try {
@@ -135,7 +153,10 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       this.logger.warn(
         `direct params for '${input.toolName}' are not valid JSON (separate_params_resolution is off): ${String(error)}`,
       );
-      failMember();
+      failVisible(
+        `The planner's arguments for '${input.toolName}' are not valid JSON (separate_params_resolution is off): ${String(error)}`,
+        {},
+      );
       return;
     }
     scope.spawn(async () => {
@@ -144,7 +165,19 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       } catch (error) {
         scope.throwIfAborted();
         this.logger.warn(`direct dispatch of '${input.toolName}' failed: ${String(error)}`);
-        failMember();
+        if ((error as { toolEntryId?: string }).toolEntryId) {
+          // run() already persisted a visible error entry — just resolve the member.
+          this.runTool.resolveFailedToolParamsMember({
+            conversationId: input.conversationId,
+            plannerFollowup: input.plannerFollowup,
+            scope,
+            chain,
+            llm,
+            ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
+          });
+          return;
+        }
+        failVisible(`Tool arguments were rejected: ${String(error)}`, params);
       }
     });
   }

@@ -28,6 +28,7 @@ function deferred<T>(): Deferred<T> {
 export class MockToolController {
   private readonly started = new Map<string, Deferred<void>>();
   private readonly release = new Map<string, Deferred<Outcome>>();
+  private readonly received = new Map<string, Record<string, unknown>[]>();
 
   private startedGate(name: string): Deferred<void> {
     let d = this.started.get(name);
@@ -47,8 +48,16 @@ export class MockToolController {
     return d;
   }
 
+  /** Params each invocation of the named tool was dispatched with, in start order. */
+  receivedParams(name: string): Record<string, unknown>[] {
+    return this.received.get(name) ?? [];
+  }
+
   /** Called by MockTool.runTool: mark the tool started, then block until released. */
-  async run(name: string, signal: AbortSignal): Promise<unknown> {
+  async run(name: string, signal: AbortSignal, params: Record<string, unknown> = {}): Promise<unknown> {
+    const list = this.received.get(name) ?? [];
+    list.push(params);
+    this.received.set(name, list);
     this.startedGate(name).resolve();
     const aborted = new Promise<never>((_, reject) => {
       if (signal.aborted) reject(new DOMException('Aborted', 'AbortError'));
@@ -77,6 +86,7 @@ export class MockToolController {
   reset(): void {
     this.started.clear();
     this.release.clear();
+    this.received.clear();
   }
 }
 
@@ -122,8 +132,8 @@ export class MockTool extends BaseTool<Record<string, unknown>, MockRules> {
   parseRules(raw: unknown): MockRules {
     return MockRulesSchema.parse(raw ?? {});
   }
-  runTool(_params: Record<string, unknown>, context: ToolRunContext): Promise<unknown> {
-    return this.controller.run(this.toolName, context.signal);
+  runTool(params: Record<string, unknown>, context: ToolRunContext): Promise<unknown> {
+    return this.controller.run(this.toolName, context.signal, params);
   }
 }
 

@@ -1,5 +1,6 @@
 import type { ChatEntry, ThoughtStreamEntry } from '../../contracts/chatEntry.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
+import { stripToolParamEnvelope } from '../../tools/toolParamEnvelope.js';
 
 /** What the planner is told about a single available tool. */
 export type PlannerToolInfo = {
@@ -162,7 +163,17 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
   return [
     {
       role: 'assistant',
-      parts: [{ kind: 'tool_call', callId, toolName: entry.toolId, args: entry.parameters }],
+      // Replay only the tool's real arguments: leaking the stored bookkeeping
+      // stamps (tool_request/source/__tool_batch) teaches the model to emit
+      // them in its own calls, which the strict param schemas then reject.
+      parts: [
+        {
+          kind: 'tool_call',
+          callId,
+          toolName: entry.toolId,
+          args: stripToolParamEnvelope(entry.parameters) as Record<string, unknown>,
+        },
+      ],
     },
     {
       role: 'tool',

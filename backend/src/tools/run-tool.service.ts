@@ -13,6 +13,7 @@ import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProv
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { mostPermissivePermission, type ToolPermission, type ToolPolicy } from './base-tool.js';
 import { ToolRegistry } from './tool-registry.js';
+import { stripToolParamEnvelope } from './toolParamEnvelope.js';
 import type { AgentToolConfig } from '../agents/agent.entity.js';
 import type { GuardrailConfig } from '../contracts/guardrail.js';
 import { resolveToolConfig } from './resolve-tool-config.js';
@@ -138,7 +139,11 @@ export class RunToolService implements OnModuleInit {
     if (!tool) {
       const reason = `Tool not found: ${input.toolName}`;
       const entryId = await this.appendErrorEntry(input, reason, chain);
-      throw new Error(reason + ` (entry=${entryId})`);
+      // Tagged so callers know a visible error entry already exists and don't
+      // append a second one (see ToolParamsThoughtTypeProvider.startDirect).
+      const err = new Error(reason + ` (entry=${entryId})`) as Error & { toolEntryId?: string };
+      err.toolEntryId = entryId;
+      throw err;
     }
 
     // Per-tool config is owned by the agent — load it here rather than threading
@@ -151,7 +156,9 @@ export class RunToolService implements OnModuleInit {
     // tool's strict rules schema doesn't reject older stored configs/overrides.
     delete (rawRules as Record<string, unknown>).allowed;
     const parsedRules = tool.parseRules(rawRules);
-    const parsedParams = tool.parseParams(input.params);
+    // Models imitate the argument shape their context shows and may echo our
+    // stored bookkeeping keys — strip them before the tool's strict schema.
+    const parsedParams = tool.parseParams(stripToolParamEnvelope(input.params));
     const chainTip = chain.getTip();
     if (!chainTip) throw new Error(`runTool: chain tip is unset (conversation=${input.conversationId})`);
     const entries = await this.chatEntries.listChatEntriesFromLeaf(input.conversationId, chainTip);
@@ -598,7 +605,7 @@ export class RunToolService implements OnModuleInit {
 
     // Per-attempt audit row (attempt/retry lineage derived from prior runs of
     // this entry). Best-effort: bookkeeping must never block the tool itself.
-    const runId = await this.toolRuns
+    const run = await this.toolRuns
       .beginRun({
         conversationId: input.conversationId,
         chatEntryId: entryId,
@@ -611,6 +618,10 @@ export class RunToolService implements OnModuleInit {
         this.logger.warn(`tool_runs begin failed: ${err instanceof Error ? err.message : String(err)}`);
         return null;
       });
+    const runId = run?.id ?? null;
+    // Stamped on the entry so the transcript shows retries — a 5ms re-failure
+    // otherwise looks like nothing happened.
+    const attempt = run?.attempt;
 
     // Run the tool. A throw here (timeout, connection failure, etc.) must NOT
     // leave the entry stranded in `running` — record it as `error` either way.
@@ -675,6 +686,7 @@ export class RunToolService implements OnModuleInit {
         id: entryId,
         state: 'error',
         result: envelope,
+        ...(attempt !== undefined ? { attempt } : {}),
       });
       if (runId) {
         await this.toolRuns
@@ -713,7 +725,12 @@ export class RunToolService implements OnModuleInit {
       permission_state: 'allow',
       timing,
     };
-    await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'done', result: envelope });
+    await this.chatEntries.updateToolInvocation(input.conversationId, {
+      id: entryId,
+      state: 'done',
+      result: envelope,
+      ...(attempt !== undefined ? { attempt } : {}),
+    });
     if (runId) {
       await this.toolRuns
         .finishRun({ id: runId, status: 'done', result: envelope, finishedAt, elapsedMs: timing.elapsed_ms })
@@ -815,6 +832,25 @@ export class RunToolService implements OnModuleInit {
    * runDecision — isn't signaled here; if it is the last member it leaves the
    * planner waiting, same limitation as the summarize-attachment batch.)
    */
+  /**
+   * Direct dispatch (separate_params_resolution off) failed before run() could
+   * persist anything — the planner's args didn't parse or were rejected by the
+   * tool's schema. Surface a visible, terminal error entry (the next planner
+   * round then SEES the failed call and can self-correct, instead of silently
+   * re-emitting the same call in a loop) and resolve the batch member so the
+   * fan-in isn't stranded.
+   */
+  async failDirectDispatch(args: {
+    input: RunToolInput;
+    reason: string;
+    scope: LifecycleScope;
+    chain: ChatChain;
+    llm: LlmRef;
+  }): Promise<void> {
+    await this.appendErrorEntry(args.input, args.reason, args.chain);
+    this.memberResolved({ input: args.input, scope: args.scope, chain: args.chain, llm: args.llm });
+  }
+
   resolveFailedToolParamsMember(args: {
     conversationId: string;
     toolBatch?: ToolBatchRef;
