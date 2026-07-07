@@ -44,6 +44,11 @@ test("reloading a conversation lands at the bottom without re-running the send-t
   await app.chat.userInput.typeMessage(USER_MSG_HELLO);
   await app.chat.userInput.send();
   await app.chat.transcript.waitForAssistantReply();
+  // A second message anchors above existing content, so its reserved spacer is
+  // non-zero (for the very first message anchorTop is 0 and so is the spacer).
+  await app.chat.userInput.typeMessage("second message before reload");
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantMessageCount(2);
 
   const container = app.chat.transcript.container;
   const spacerHeight = () =>
@@ -138,23 +143,28 @@ test("sending a message aligns it to the top of the viewport even after scrollin
   await app.chat.userInput.typeMessage(USER_MSG_HELLO);
   await app.chat.userInput.send();
   await app.chat.transcript.waitForAssistantReply();
-  await app.page.waitForTimeout(600);
+  // Real prior history (synthetic divs would land BELOW newly inserted rows in
+  // the DOM, distorting the anchor position of the message under test).
+  for (let i = 0; i < 4; i += 1) {
+    await app.chat.userInput.typeMessage(`filler e2e align message ${i}`);
+    await app.chat.userInput.send();
+    await app.chat.transcript.waitForAssistantMessageCount(i + 2);
+  }
 
   const container = app.chat.transcript.container;
-  await growContentBy(container, 2000);
   await container.evaluate((el) => {
     el.scrollTop = 0;
   });
   await app.page.waitForTimeout(200);
 
-  await app.chat.userInput.typeMessage("second message after scrolling away");
+  await app.chat.userInput.typeMessage("final message after scrolling away");
   await app.chat.userInput.send();
 
-  // The align event scrolls down to the freshly sent message (which sits below
-  // the 2000px synthetic block), surviving the optimistic-row → server-id rekey.
+  // The align event scrolls down from the top to the freshly sent message,
+  // surviving the optimistic-row → server-id rekey.
   await expect
     .poll(() => container.evaluate((el) => el.scrollTop))
-    .toBeGreaterThan(1000);
+    .toBeGreaterThan(300);
   const anchorDelta = await container.evaluate((el) => {
     const rows = el.querySelectorAll<HTMLElement>('[data-chat-entry-type="user-message"]');
     const last = rows[rows.length - 1];
