@@ -9,6 +9,7 @@ import {
   listAllMessages,
   pollUntil,
   postConversationMessage,
+  walkParentChain,
 } from '../support/http';
 import { MockToolController, registerMockTools } from '../support/mock-tool';
 import {
@@ -296,6 +297,98 @@ describeLive('tool fan-out fan-in (integration)', () => {
       for (const name of MOCK_FANOUT_TOOL_NAMES) {
         if (name !== order[denyIndex]) expect(findTool(entries, name)?.state).toBe('done');
       }
+    }, 60_000);
+  });
+
+  // --- scenario 7: approval order vs chain order (the rv-stable fork) -------
+
+  describe('chain stays linear whatever order approvals settle', () => {
+    /** Spine fork check: no entry may have more than one spine child. */
+    function expectLinearSpine(entries: ChatEntryRow[]): void {
+      const spineChildren = new Map<string | null, ChatEntryRow[]>();
+      for (const e of entries) {
+        if (e.isSide) continue;
+        const list = spineChildren.get(e.parentId) ?? [];
+        list.push(e);
+        spineChildren.set(e.parentId, list);
+      }
+      const forks = [...spineChildren.entries()]
+        .filter(([, children]) => children.length > 1)
+        .map(
+          ([parentId, children]) =>
+            `${parentId ?? '<root>'} → [${children.map((c) => `${c.type}:${c.id.slice(0, 8)}`).join(', ')}]`,
+        );
+      expect(forks).toEqual([]);
+    }
+
+    it('members settle in REVERSE chain order → one continuation, anchored at the batch tail', async () => {
+      const conversationId = await startFanout(defaultAgentId, toolOverrides('ask'));
+
+      const ids: Record<string, string> = {};
+      for (const name of MOCK_FANOUT_TOOL_NAMES) ids[name] = (await waitRequested(conversationId, name)).id;
+      await expectPlannerRanOnce(conversationId);
+
+      // Approve all three; each starts executing and parks on the controller.
+      for (const name of MOCK_FANOUT_TOOL_NAMES) {
+        await approveToolInvocation(baseUrl, conversationId, ids[name]);
+        await controller.waitForStart(name);
+      }
+
+      // Settle in REVERSE dispatch order — the first-created entry finishes
+      // LAST. This is the exact production ordering that used to anchor the
+      // continuation at the settling member (mid-batch), forking the chain
+      // and dropping the stranded sibling's result from the continuation's
+      // lineage.
+      await resolveExecuting(conversationId, TOOL_C, 'ok');
+      await expectPlannerRanOnce(conversationId);
+      await resolveExecuting(conversationId, TOOL_B, 'ok');
+      await expectPlannerRanOnce(conversationId);
+      await resolveExecuting(conversationId, TOOL_A, 'ok');
+
+      const entries = await waitFinalAnswer(conversationId);
+      expect(plannerCount(entries)).toBe(2);
+      expectLinearSpine(entries);
+
+      // The continuation hangs off the batch TAIL (last-dispatched member),
+      // never off whichever member happened to settle last.
+      const tail = MOCK_FANOUT_TOOL_NAMES.map((n) => findTool(entries, n)!)
+        .sort((a, b) => a.conversationIndex - b.conversationIndex)
+        .at(-1)!;
+      const continuation = entries.filter(
+        (e) => e.type === 'thought-prepare' && e.title === PLANNER_TITLE,
+      )[1];
+      expect(continuation?.parentId).toBe(tail.id);
+
+      // Every member's result sits on the continuation's lineage — walking up
+      // from the continuation must pass through all three tool entries.
+      const lineage = walkParentChain(entries, continuation!.id).map((e) => e.id);
+      for (const name of MOCK_FANOUT_TOOL_NAMES) expect(lineage).toContain(ids[name]);
+    }, 60_000);
+
+    it('mixed batch: auto-run member still executing while approvals settle → linear spine', async () => {
+      // TOOL_A auto-runs (allow) and is held executing; B and C need approval.
+      const overrides = {
+        tools: {
+          [TOOL_A]: { policy: 'allow' },
+          [TOOL_B]: { policy: 'ask' },
+          [TOOL_C]: { policy: 'ask' },
+        },
+      };
+      const conversationId = await startFanout(defaultAgentId, overrides);
+      await controller.waitForStart(TOOL_A);
+      const ids: Record<string, string> = {};
+      for (const name of [TOOL_B, TOOL_C]) ids[name] = (await waitRequested(conversationId, name)).id;
+
+      // Approvals settle while the auto-run member is still executing.
+      await approveAndComplete(conversationId, TOOL_B, ids[TOOL_B]);
+      await expectPlannerRanOnce(conversationId);
+      await approveAndComplete(conversationId, TOOL_C, ids[TOOL_C]);
+      await expectPlannerRanOnce(conversationId);
+      await resolveExecuting(conversationId, TOOL_A, 'ok');
+
+      const entries = await waitFinalAnswer(conversationId);
+      expect(plannerCount(entries)).toBe(2);
+      expectLinearSpine(entries);
     }, 60_000);
   });
 

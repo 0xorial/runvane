@@ -16,6 +16,7 @@ export type ChatEntryRow = {
   type: string;
   conversationIndex: number;
   parentId: string | null;
+  isSide?: boolean;
   text?: string;
   title?: string;
   toolId?: string;
