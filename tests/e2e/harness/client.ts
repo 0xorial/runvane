@@ -149,8 +149,11 @@ export async function getConversationEntries(
   request: APIRequestContext,
   conversationId: string,
 ): Promise<TranscriptEntry[]> {
+  // all=1: side-lane thought entries (title/categorize/…) hang off their
+  // anchor without being on the default-view lineage — tests polling for
+  // them need the full entry set.
   const res = await request.get(
-    `${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+    `${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}/messages?all=1`,
   );
   expect(res.ok()).toBeTruthy();
   const body = (await res.json()) as { entries: TranscriptEntry[] };

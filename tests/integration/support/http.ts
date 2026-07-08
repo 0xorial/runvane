@@ -226,16 +226,25 @@ export function assertProbeParentChain(entries: ChatEntryRow[], tipId: string): 
     throw new Error(`probe parent chain: user-message parentId=${user.parentId}, expected null`);
   }
 
-  const titlePrepare = path.find(
+  // Title generation is a side-lane thought: anchored at the user message but
+  // deliberately OFF the default-view path (side entries never participate in
+  // branch semantics). Assert anchor + lane instead of path membership.
+  const titlePrepare = entries.find(
     (entry) => entry.type === 'thought-prepare' && entry.title === 'Title generation',
   );
   if (!titlePrepare) {
-    throw new Error(`probe parent chain: missing title thought-prepare on default-view path`);
+    throw new Error(`probe parent chain: missing title thought-prepare`);
   }
   if (titlePrepare.parentId !== user.id) {
     throw new Error(
       `probe parent chain: title prepare parentId=${titlePrepare.parentId}, expected user ${user.id}`,
     );
+  }
+  if (!titlePrepare.isSide) {
+    throw new Error(`probe parent chain: title prepare must be side-lane (isSide)`);
+  }
+  if (path.some((entry) => entry.id === titlePrepare.id)) {
+    throw new Error(`probe parent chain: side-lane title prepare must not be on the default-view path`);
   }
 
   for (const entry of path) {

@@ -4,12 +4,14 @@ import { E2E_LLM_TIMEOUT_MS, E2E_UI_TIMEOUT_MS } from "../timeouts";
 
 export const PROBE_EXPECTED_ENTRY_TYPES = [
   "user-message",
-  "thought-prepare",
-  "thought-prepare",
+  "thought-prepare", // title (side lane, anchored at the user message)
+  "thought-prepare", // decision planning
   "assistant-message",
-  "thought-prepare",
+  // The tool entry is pre-created on the spine at dispatch; the params
+  // resolution runs as a side thought anchored to it, so it renders after.
   "tool-invocation",
-  "thought-prepare",
+  "thought-prepare", // resolve tool parameters (side lane)
+  "thought-prepare", // decision planning (continuation, anchored at the batch tail)
   "assistant-message",
 ] as const;
 

@@ -11,10 +11,9 @@ const describeMaybe = runLive ? describe : describe.skip;
  * snapshot watermark W. The client gates `seq > W`, so EVERY published entry
  * mutation must bump the cursor in its write txn — otherwise its frame rides a
  * stale seq, a snapshot taken just before it (same W) drops it, and the change
- * is lost on the client. The reparent case is the one that bit us: ChatChain
- * splices a late thought step in by reparenting the intervening entry, and if
- * that reparent didn't bump, the spliced fork froze into two sibling branches
- * (title + planner) in the UI.
+ * is lost on the client. (Historically the ChatChain reparent/splice was the
+ * mutation that bit us; reparenting is gone — entries state their causal
+ * parent at insert — so the remaining mutations are payload updates.)
  */
 describeMaybe('stream cursor: every entry mutation advances the cursor (integration)', () => {
   let repo: ChatEntriesRepo;
@@ -36,22 +35,19 @@ describeMaybe('stream cursor: every entry mutation advances the cursor (integrat
     return cursor.current() - before;
   }
 
-  it('reparent (the ChatChain splice) advances the cursor', async () => {
+  it('tool-invocation state updates advance the cursor', async () => {
     const conversationId = await createConversation(baseUrl);
     const user = await repo.appendUserMessage(conversationId, { text: 'hi', agentId, parentId: null });
-    // Pre-splice shape: two prepares as siblings off the user message.
-    const a = await repo.appendThoughtPrepareEntry(conversationId, {
-      thoughtId: 'thought-a',
+    const tool = await repo.appendToolInvocation(conversationId, {
+      toolId: 'mock_tool_1',
+      state: 'resolving',
+      parameters: { tool_request: 'probe' },
       parentId: user.id,
-      title: 'A',
-    });
-    const b = await repo.appendThoughtPrepareEntry(conversationId, {
-      thoughtId: 'thought-b',
-      parentId: user.id,
-      title: 'B',
     });
 
-    const delta = await cursorDeltaAround(() => repo.updateChatEntryParent(conversationId, b.id, a.id));
+    const delta = await cursorDeltaAround(() =>
+      repo.updateToolInvocation(conversationId, { id: tool.id, state: 'running', parameters: { probe: 1 } }),
+    );
     expect(delta).toBeGreaterThan(0);
   }, 30_000);
 
