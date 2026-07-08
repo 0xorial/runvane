@@ -19,12 +19,11 @@ import type { LlmRef } from '../thoughtProcessing/types.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ConversationCategorizerService } from './conversation-categorizer.service.js';
-import { ChatChain } from './chat-chain.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
 import { LifecycleScope } from './lifecycle-scope.js';
 import { resolveSummarizeRange } from './summarizeRange.js';
 
-type ConversationRun = { scope: LifecycleScope; chain: ChatChain };
+type ConversationRun = { scope: LifecycleScope };
 
 /** True for AbortController/AbortSignal cancellations (expected, not failures). */
 function isAbortError(error: unknown): boolean {
@@ -88,7 +87,7 @@ export class ConversationProcessorService implements OnModuleInit {
       explicitModel: anchorUser.llm?.model,
       agentId,
     });
-    const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
+    const { scope } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.approveAndRun(
         {
@@ -98,7 +97,6 @@ export class ConversationProcessorService implements OnModuleInit {
           ...(args.editedParameters !== undefined ? { editedParameters: args.editedParameters } : {}),
         },
         scope,
-        chain,
         llm,
       );
     } finally {
@@ -116,12 +114,11 @@ export class ConversationProcessorService implements OnModuleInit {
       explicitModel: anchorUser.llm?.model,
       agentId,
     });
-    const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
+    const { scope } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.retryToolInvocation(
         { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
         scope,
-        chain,
         llm,
       );
     } finally {
@@ -139,12 +136,11 @@ export class ConversationProcessorService implements OnModuleInit {
       explicitModel: anchorUser.llm?.model,
       agentId,
     });
-    const { scope, chain } = await this.beginRun(args.conversationId, { joinActive: true });
+    const { scope } = await this.beginRun(args.conversationId, { joinActive: true });
     try {
       await this.runTool.denyToolInvocation(
         { conversationId: args.conversationId, toolEntryId: args.toolEntryId, agentId },
         scope,
-        chain,
         llm,
       );
     } finally {
@@ -174,13 +170,13 @@ export class ConversationProcessorService implements OnModuleInit {
   }
 
   /**
-   * Start a run scope + chain for a conversation.
+   * Start a run scope for a conversation.
    *
    * By default a new run steers: it aborts and replaces any active run. Pass
    * `joinActive` for approve/deny of a fanned-out tool — those must NOT disturb
    * sibling tools still executing in the original run, so when a run is already
-   * active we leave it registered and run alongside it. The shared (durable)
-   * fan-in coordinator still ties the two together and continues the planner
+   * active we leave it registered and run alongside it. The durable, DB-derived
+   * fan-in coordinator ties the scopes together and continues the planner
    * once, whichever scope resolves the final tool.
    */
   private async beginRun(conversationId: string, opts: { joinActive?: boolean } = {}): Promise<ConversationRun> {
@@ -216,11 +212,7 @@ export class ConversationProcessorService implements OnModuleInit {
     if (!(opts.joinActive && prev)) {
       this.activeExecutions.set(conversationId, scope);
     }
-    const reparent = async (entryId: string, newParentId: string) => {
-      await this.chatEntries.updateChatEntryParent(conversationId, entryId, newParentId);
-      await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, entryId);
-    };
-    return { scope, chain: new ChatChain(reparent) };
+    return { scope };
   }
 
   cancelProcessing(conversationId: string): number {
@@ -285,9 +277,9 @@ export class ConversationProcessorService implements OnModuleInit {
     llm?: LlmRef;
     applyDownstream?: boolean;
   }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
-    const { scope, chain } = await this.beginRun(args.conversationId);
+    const { scope } = await this.beginRun(args.conversationId);
     try {
-      const result = await this.thoughtProcessing.startReprocessContext(args, scope, chain);
+      const result = await this.thoughtProcessing.startReprocessContext(args, scope);
       await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, args.conversationId);
       return result;
     } finally {
@@ -300,10 +292,10 @@ export class ConversationProcessorService implements OnModuleInit {
     sourceEntryId: string;
     editedResponse: string;
   }): Promise<{ plannerEntryId: string; leafEntryId: string }> {
-    const { scope, chain } = await this.beginRun(args.conversationId);
+    const { scope } = await this.beginRun(args.conversationId);
     try {
       const llm = await this.thoughtProcessing.getLlmRef();
-      const result = await this.thoughtProcessing.startReprocessReason(args, scope, chain, llm);
+      const result = await this.thoughtProcessing.startReprocessReason(args, scope, llm);
       await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, args.conversationId);
       return result;
     } finally {
@@ -322,7 +314,7 @@ export class ConversationProcessorService implements OnModuleInit {
       throw new Error(`reprocess target ${args.sourceEntryId} is not a user-message: ${source.type}`);
     }
 
-    const { scope, chain } = await this.beginRun(args.conversationId);
+    const { scope } = await this.beginRun(args.conversationId);
     try {
       const llm = await this.resolveLlmRef({
         explicitProviderId: source.llm?.providerId,
@@ -339,7 +331,6 @@ export class ConversationProcessorService implements OnModuleInit {
         ...(source.overrides ? { overrides: source.overrides } : {}),
       });
       await this.chatEntries.setDefaultViewLeaf(args.conversationId, sibling.id);
-      chain.setTip(sibling.id);
       const siblingPayload = await this.chatEntries.getChatEntry(args.conversationId, sibling.id);
       if (!siblingPayload || siblingPayload.type !== 'user-message') {
         throw new Error(`appended user-message ${sibling.id} not retrievable as user-message`);
@@ -347,11 +338,12 @@ export class ConversationProcessorService implements OnModuleInit {
       await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, args.conversationId);
       this.hub.publish(args.conversationId, { type: SseType.USER_MESSAGE, entry: siblingPayload });
 
-      this.thoughtProcessing.startThought({
+      void this.thoughtProcessing.startThought({
         provider: this.plannerProvider,
         conversationId: args.conversationId,
         scope,
-        chain,
+        anchorParentId: sibling.id,
+        lane: 'spine',
         llm,
       });
       return { userMessageEntryId: sibling.id, leafEntryId: sibling.id };
@@ -367,20 +359,19 @@ export class ConversationProcessorService implements OnModuleInit {
     const range = resolveSummarizeRange(activeChain, args.firstEntryToSummarize);
     const summarizeAgentId = range.rangeEntries.find((e) => e.type === 'user-message')?.agentId;
 
-    const { scope, chain } = await this.beginRun(args.conversationId);
+    const { scope } = await this.beginRun(args.conversationId);
     try {
       const llm = await this.resolveLlmRef({ agentId: summarizeAgentId });
       // Anchor the new branch at the parent of `firstEntryToSummarize` so the
       // prepare / stream / checkpoint-summary entries become a sibling of the
       // original tail. The original tail stays reachable via the branch
       // selector on the resulting summary entry.
-      chain.setTip(range.fromParentId);
-
-      this.thoughtProcessing.startThought({
+      void this.thoughtProcessing.startThought({
         provider: this.summarizeProvider,
         conversationId: args.conversationId,
         scope,
-        chain,
+        anchorParentId: range.fromParentId,
+        lane: 'spine',
         llm,
         input: {
           conversationId: args.conversationId,
@@ -396,11 +387,10 @@ export class ConversationProcessorService implements OnModuleInit {
   }
 
   /**
-   * Re-run categorization as a standalone thought after a pinned chat is
-   * unlocked. Fire-and-forget. There's no active run to ride here, so it opens
-   * its own run, appends the categorize thought at the current leaf, and
-   * advances the default-view leaf so the thought renders and a later message
-   * chains after it rather than branching off the old leaf.
+   * Re-run categorization as a standalone side thought after a pinned chat is
+   * unlocked. Fire-and-forget. Side thoughts hang off their anchor without
+   * joining branch semantics, so this can never fork the conversation or move
+   * the user's view — it just renders at the branch leaf it annotates.
    */
   recategorizeInBackground(conversationId: string): void {
     void this.recategorize(conversationId).catch((error) => {
@@ -412,28 +402,22 @@ export class ConversationProcessorService implements OnModuleInit {
   private async recategorize(conversationId: string): Promise<void> {
     if (!(await this.categorizer.shouldCategorize(conversationId))) return;
     const titleLlm = await this.thoughtProcessing.getTitleLlmRef();
-    const conversation = await this.conversations.get(conversationId);
-    const leaf = conversation?.defaultViewLeafEntryId ?? null;
+    // The stored anchor is only the user's branch choice — walk to the branch's
+    // real leaf (the raw value goes stale the moment a run appends past it).
+    const leaf = await this.chatEntries.resolveDefaultViewLeaf(conversationId);
 
-    const { scope, chain } = await this.beginRun(conversationId);
+    const { scope } = await this.beginRun(conversationId);
     try {
-      if (leaf) chain.setTip(leaf);
-      this.thoughtProcessing.startThought({
+      void this.thoughtProcessing.startThought({
         provider: this.categorizeProvider,
         conversationId,
         scope,
-        chain,
+        anchorParentId: leaf,
+        lane: 'side',
         llm: titleLlm,
       });
     } finally {
       scope.rootDone();
-    }
-    await scope.whenFinished();
-
-    const tip = chain.getTip();
-    if (tip && tip !== leaf) {
-      await this.chatEntries.setDefaultViewLeaf(conversationId, tip);
-      await publishConversationUpdated(this.hub, this.conversations, this.chatEntries, conversationId);
     }
   }
 
@@ -457,7 +441,7 @@ export class ConversationProcessorService implements OnModuleInit {
       return;
     }
     return this.withMessagePostLock(conversationId, Boolean(body.steer), async () => {
-      const { scope, chain } = await this.beginRun(conversationId);
+      const { scope } = await this.beginRun(conversationId);
       try {
         const llm = await this.resolveLlmRef({
           explicitProviderId: body.llm?.providerId,
@@ -483,7 +467,6 @@ export class ConversationProcessorService implements OnModuleInit {
           ...(body.overrides ? { overrides: body.overrides } : {}),
         });
         await this.chatEntries.setDefaultViewLeaf(conversationId, userEntry.id);
-        chain.setTip(userEntry.id);
         const userPayload = await this.chatEntries.getChatEntry(conversationId, userEntry.id);
         if (!userPayload || userPayload.type !== 'user-message') {
           throw new Error(`appended user-message ${userEntry.id} not retrievable as user-message`);
@@ -499,18 +482,22 @@ export class ConversationProcessorService implements OnModuleInit {
         // Awaited (unlike the fire-and-forget thoughts below): the planner's
         // first `buildInputFromConversation` read must already see this entry
         // in the chain, and there's no LLM call here to run concurrently with.
+        // The context-injection entry (when created) becomes the spine tip the
+        // planner anchors at; side thoughts stay anchored to the user message.
+        let spineTip = userEntry.id;
         if (isFirstMessage) {
-          await this.injectContextFiles(conversationId, body.agentId, chain);
+          const injected = await this.injectContextFiles(conversationId, body.agentId, userEntry.id);
+          if (injected) spineTip = injected.id;
         }
         const categorize = isFirstMessage && (await this.categorizer.shouldCategorize(conversationId));
         this.startThoughts({
           conversationId,
           userMessageId: userEntry.id,
+          plannerAnchorId: spineTip,
           attachments: attachments ?? [],
           isFirstMessage,
           categorize,
           scope,
-          chain,
           llm,
           titleLlm,
         });
@@ -560,23 +547,27 @@ export class ConversationProcessorService implements OnModuleInit {
    * planner thought starts. Best-effort: a scan failure is logged and
    * swallowed rather than failing the user's message.
    */
-  private async injectContextFiles(conversationId: string, agentId: string, chain: ChatChain): Promise<void> {
+  private async injectContextFiles(
+    conversationId: string,
+    agentId: string,
+    parentId: string,
+  ): Promise<{ id: string } | null> {
     try {
       const agent = await this.agents.get(agentId);
       const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined);
-      if (!result) return;
-      const created = await chain.append(null, (parentId) =>
-        this.chatEntries.appendContextInjection(conversationId, {
-          parentId,
-          files: result.files,
-          content: result.content,
-        }),
-      );
+      if (!result) return null;
+      const created = await this.chatEntries.appendContextInjection(conversationId, {
+        parentId,
+        files: result.files,
+        content: result.content,
+      });
       await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+      return created;
     } catch (err) {
       this.logger.warn(
         `context-injection scan failed for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`,
       );
+      return null;
     }
   }
 
@@ -589,67 +580,72 @@ export class ConversationProcessorService implements OnModuleInit {
    *   wait on. When summaries ARE pending, the LAST completing
    *   summarize-attachment provider starts the planner itself (see
    *   `SummarizeAttachmentThoughtTypeProvider.maybeStartPlanner`), so
-   *   the planner prompt is guaranteed to see every
-   *   `summarize_attachment` thought stream with its persisted
-   *   `summaryText`.
+   *   every summary is persisted before the planner input is built
+   *   (the input builder folds side `summarize_attachment` streams in).
    *
    * All calls are fire-and-forget; lifecycle is owned by `scope`.
    */
   private startThoughts(args: {
     conversationId: string;
     userMessageId: string;
+    /** Spine tip the planner extends: the user message, or the context-injection entry after it. */
+    plannerAnchorId: string;
     attachments: ChatAttachment[];
     isFirstMessage: boolean;
     categorize: boolean;
     scope: LifecycleScope;
-    chain: ChatChain;
     llm: LlmRef;
     titleLlm: LlmRef;
   }): void {
+    // Title / categorize / attachment summaries are side thoughts anchored to
+    // the user message: they run concurrently without touching the spine, so
+    // they can never fork the reply timeline.
     if (args.isFirstMessage) {
-      this.thoughtProcessing.startThought({
+      void this.thoughtProcessing.startThought({
         provider: this.autoTitleProvider,
         conversationId: args.conversationId,
         scope: args.scope,
-        chain: args.chain,
+        anchorParentId: args.userMessageId,
+        lane: 'side',
         llm: args.titleLlm,
       });
-      // Auto-categorize as a first-class thought on the run's chain (right after
-      // the title) so it stays linear with the rest of the run instead of
-      // branching off the user message. Gated upstream by `shouldCategorize`.
       if (args.categorize) {
-        this.thoughtProcessing.startThought({
+        void this.thoughtProcessing.startThought({
           provider: this.categorizeProvider,
           conversationId: args.conversationId,
           scope: args.scope,
-          chain: args.chain,
+          anchorParentId: args.userMessageId,
+          lane: 'side',
           llm: args.titleLlm,
         });
       }
     }
     const summaryAttachments = args.attachments.filter((a) => a.mode === 'summary');
     if (summaryAttachments.length === 0) {
-      this.thoughtProcessing.startThought({
+      void this.thoughtProcessing.startThought({
         provider: this.plannerProvider,
         conversationId: args.conversationId,
         scope: args.scope,
-        chain: args.chain,
+        anchorParentId: args.plannerAnchorId,
+        lane: 'spine',
         llm: args.llm,
       });
       return;
     }
     const peersDone = createBatchBarrier(summaryAttachments.length);
     for (const attachment of summaryAttachments) {
-      this.thoughtProcessing.startThought({
+      void this.thoughtProcessing.startThought({
         provider: this.summarizeAttachmentProvider,
         conversationId: args.conversationId,
         scope: args.scope,
-        chain: args.chain,
+        anchorParentId: args.userMessageId,
+        lane: 'side',
         llm: args.llm,
         input: {
           conversationId: args.conversationId,
           attachment,
           userMessageId: args.userMessageId,
+          plannerAnchorId: args.plannerAnchorId,
           peersDone,
           plannerLlm: args.llm,
         },

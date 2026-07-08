@@ -11,6 +11,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
 import { TaskRegistryService } from '../../tasks/task-registry.service.js';
 import { UploadsService } from '../../uploads/uploads.service.js';
+import { appendAtCursor } from '../types.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import type { PreparedReason } from './prepareStep.js';
 import { DecisionStep } from './decisionStep.js';
@@ -86,11 +87,12 @@ export class ReasonStep {
     // `summarize_attachment` entry before its `attachmentId` landed and fail
     // deserialization, killing the SSE connection.
     const extra = provider.streamEntryExtraPayload?.(input);
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         thoughtType: provider.thoughtType,
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'running',
         llm: ctx.llm,
         llmRequest: requestDisplay,
@@ -105,10 +107,11 @@ export class ReasonStep {
     provider: ThoughtTypeProvider<TInput>,
     ctx: ThoughtContext,
   ): Promise<string> {
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'running',
         summary: provider.initialActionSummary ?? 'Waiting for LLM output',
       }),

@@ -25,6 +25,7 @@ import {
   type ParsedPlannerOutput,
 } from '../lib/plannerTextParsing.js';
 import { ThoughtProcessingService } from '../thought-processing.service.js';
+import { appendAtCursor } from '../types.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import { ToolParamsThoughtTypeProvider, type ToolParamsInput } from './toolParamsProvider.js';
 
@@ -72,9 +73,12 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   ) {}
 
   buildInputFromConversation = async (conversationId: string, leafEntryId: string): Promise<PlannerInput> => {
-    const entries = (await this.chatEntries.listChatEntriesFromLeaf(conversationId, leafEntryId)).map(
-      stripPrepareInputJson,
-    );
+    const lineage = await this.chatEntries.listChatEntriesFromLeaf(conversationId, leafEntryId);
+    // Attachment summaries live in the side lane (off the lineage walk); fold
+    // in the summarize_attachment streams anchored on this branch so the
+    // prompt builder can render summary text in place of raw attachments.
+    const sideSummaries = await this.sideSummaryStreams(conversationId, lineage);
+    const entries = [...lineage, ...sideSummaries].map(stripPrepareInputJson);
     const anchorUserMessage = [...entries].reverse().find((entry) => entry.type === 'user-message');
     if (!anchorUserMessage) throw new Error(`planner requires a user-message in conversation ${conversationId}`);
     const agentId = anchorUserMessage.agentId;
@@ -145,6 +149,23 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       specs.push({ name, description: tool.getAiDescription(), paramsSchema: tool.getParamsSchema() });
     }
     return specs;
+  }
+
+  /**
+   * `summarize_attachment` thought streams whose thought is anchored to an
+   * entry on the given lineage (stream → prepare → anchor). Branch-correct:
+   * a summary produced for a sibling branch's user message never leaks in.
+   */
+  private async sideSummaryStreams(conversationId: string, lineage: ChatEntry[]): Promise<ChatEntry[]> {
+    const lineageIds = new Set(lineage.map((e) => e.id));
+    const side = await this.chatEntries.listSideEntries(conversationId);
+    const byId = new Map(side.map((e) => [e.id, e]));
+    return side.filter((e) => {
+      if (e.type !== 'thought_stream' || e.thoughtType !== 'summarize_attachment') return false;
+      const prepare = e.parentId ? byId.get(e.parentId) : undefined;
+      const anchorId = prepare?.parentId ?? null;
+      return anchorId !== null && lineageIds.has(anchorId);
+    });
   }
 
   // Enrich the bare enabled-tool names with each tool's model-facing
@@ -245,11 +266,31 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (requestedToolCalls.length === 0 || !agent) return;
     // One fan-out batch for this decision: the planner continues only after all
     // `size` tools reach a terminal state (RunToolService.memberResolved).
+    //
+    // Every member's spine entry is created HERE, in request order, before
+    // anything runs concurrently. The reply chain through the batch is a fixed
+    // fact from this point on: params resolution, guardrails, approvals and the
+    // tools themselves only ever UPDATE their pre-created entry, so however the
+    // members settle, the batch tail — the continuation's anchor — never moves.
     const toolBatch = { id: crypto.randomUUID(), size: requestedToolCalls.length };
+    const dispatches: Array<{ plan: (typeof dispatchPlans)[number]; toolEntryId: string }> = [];
     for (const plan of dispatchPlans) {
       scope.throwIfAborted();
+      const created = await appendAtCursor(ctx, (parentId) =>
+        this.chatEntries.appendToolInvocation(input.conversationId, {
+          toolId: plan.requested.toolName,
+          state: 'resolving',
+          parameters: { tool_request: plan.requested.toolRequest, __tool_batch: toolBatch },
+          parentId,
+        }),
+      );
+      await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, created.id);
+      dispatches.push({ plan, toolEntryId: created.id });
+    }
+    for (const { plan, toolEntryId } of dispatches) {
+      scope.throwIfAborted();
       this.startToolParamsThought(
-        { input, agent, requested: plan.requested, route: plan.route, followup: parsed.followup, toolBatch },
+        { input, agent, requested: plan.requested, route: plan.route, followup: parsed.followup, toolBatch, toolEntryId },
         ctx,
         scope,
       );
@@ -276,6 +317,8 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       route: 'resolution' | 'direct' | 'repair';
       followup: 'continue' | 'finalize';
       toolBatch: { id: string; size: number };
+      /** The member's pre-created spine entry — everything downstream updates it in place. */
+      toolEntryId: string;
     },
     ctx: ThoughtContext,
     scope: LifecycleScope,
@@ -291,6 +334,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       conversationId: args.input.conversationId,
       agentId: args.input.agentId,
       toolName: args.requested.toolName,
+      toolEntryId: args.toolEntryId,
       toolAiDescription: tool.getAiDescription(),
       toolParamsSchema: tool.getParamsSchema(),
       toolRequest: args.requested.toolRequest,
@@ -320,11 +364,15 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       );
     }
     if (args.route !== 'direct') {
+      // The resolution thought is bookkeeping about HOW this call's args got
+      // filled in: it runs in the side lane, anchored to the tool entry it
+      // resolves, and updates that entry when done.
       this.thoughtProcessing.startThought({
         provider: this.toolParamsProvider,
         conversationId: toolParamsInput.conversationId,
         scope,
-        chain: ctx.chain,
+        anchorParentId: args.toolEntryId,
+        lane: 'side',
         // Tool-param resolution + the post-tool planner continuation run on the
         // downstream model, which equals ctx.llm except for a "just this call"
         // model override.
@@ -335,12 +383,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     }
     // separate_params_resolution is off for this tool: the resolution step
     // does not exist — no tool_params thought, no LLM call. The planner's own
-    // tool_request is the params JSON, and the invocation hangs off THIS
-    // planner thought.
+    // tool_request is the params JSON for the pre-created entry.
     this.toolParamsProvider.startDirect({
       input: toolParamsInput,
-      decidingThoughtId: ctx.thoughtId,
-      chain: ctx.chain,
       llm: ctx.downstreamLlm,
       scope,
     });
@@ -362,7 +407,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   private async streamAssistantDelta(state: StreamState, ctx: ThoughtContext, delta: string): Promise<void> {
     const conversationId = ctx.conversationId;
     if (!state.assistantEntryId) {
-      const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+      const created = await appendAtCursor(ctx, (parentId) =>
         this.chatEntries.appendAssistantMessage(conversationId, { text: '', parentId }),
       );
       state.assistantEntryId = created.id;
@@ -393,7 +438,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       if (entry) this.hub.publish(conversationId, { type: SseType.CHAT_ENTRY_UPSERT, entry });
       return state.assistantEntryId;
     }
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId) =>
       this.chatEntries.appendAssistantMessage(conversationId, { text: assistantText, parentId }),
     );
     const entry = await this.chatEntries.getChatEntry(conversationId, created.id);

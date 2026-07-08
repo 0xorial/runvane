@@ -39,6 +39,7 @@ export type ChatEntryMinAggregateOutputType = {
   conversationId: string | null
   conversationIndex: number | null
   parentId: string | null
+  isSide: boolean | null
   type: string | null
   payloadJson: string | null
   createdAt: Date | null
@@ -49,6 +50,7 @@ export type ChatEntryMaxAggregateOutputType = {
   conversationId: string | null
   conversationIndex: number | null
   parentId: string | null
+  isSide: boolean | null
   type: string | null
   payloadJson: string | null
   createdAt: Date | null
@@ -59,6 +61,7 @@ export type ChatEntryCountAggregateOutputType = {
   conversationId: number
   conversationIndex: number
   parentId: number
+  isSide: number
   type: number
   payloadJson: number
   createdAt: number
@@ -79,6 +82,7 @@ export type ChatEntryMinAggregateInputType = {
   conversationId?: true
   conversationIndex?: true
   parentId?: true
+  isSide?: true
   type?: true
   payloadJson?: true
   createdAt?: true
@@ -89,6 +93,7 @@ export type ChatEntryMaxAggregateInputType = {
   conversationId?: true
   conversationIndex?: true
   parentId?: true
+  isSide?: true
   type?: true
   payloadJson?: true
   createdAt?: true
@@ -99,6 +104,7 @@ export type ChatEntryCountAggregateInputType = {
   conversationId?: true
   conversationIndex?: true
   parentId?: true
+  isSide?: true
   type?: true
   payloadJson?: true
   createdAt?: true
@@ -196,6 +202,7 @@ export type ChatEntryGroupByOutputType = {
   conversationId: string
   conversationIndex: number
   parentId: string | null
+  isSide: boolean
   type: string
   payloadJson: string
   createdAt: Date
@@ -229,6 +236,7 @@ export type ChatEntryWhereInput = {
   conversationId?: Prisma.StringFilter<"ChatEntry"> | string
   conversationIndex?: Prisma.IntFilter<"ChatEntry"> | number
   parentId?: Prisma.StringNullableFilter<"ChatEntry"> | string | null
+  isSide?: Prisma.BoolFilter<"ChatEntry"> | boolean
   type?: Prisma.StringFilter<"ChatEntry"> | string
   payloadJson?: Prisma.StringFilter<"ChatEntry"> | string
   createdAt?: Prisma.DateTimeFilter<"ChatEntry"> | Date | string
@@ -240,6 +248,7 @@ export type ChatEntryOrderByWithRelationInput = {
   conversationId?: Prisma.SortOrder
   conversationIndex?: Prisma.SortOrder
   parentId?: Prisma.SortOrderInput | Prisma.SortOrder
+  isSide?: Prisma.SortOrder
   type?: Prisma.SortOrder
   payloadJson?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -254,6 +263,7 @@ export type ChatEntryWhereUniqueInput = Prisma.AtLeast<{
   conversationId?: Prisma.StringFilter<"ChatEntry"> | string
   conversationIndex?: Prisma.IntFilter<"ChatEntry"> | number
   parentId?: Prisma.StringNullableFilter<"ChatEntry"> | string | null
+  isSide?: Prisma.BoolFilter<"ChatEntry"> | boolean
   type?: Prisma.StringFilter<"ChatEntry"> | string
   payloadJson?: Prisma.StringFilter<"ChatEntry"> | string
   createdAt?: Prisma.DateTimeFilter<"ChatEntry"> | Date | string
@@ -265,6 +275,7 @@ export type ChatEntryOrderByWithAggregationInput = {
   conversationId?: Prisma.SortOrder
   conversationIndex?: Prisma.SortOrder
   parentId?: Prisma.SortOrderInput | Prisma.SortOrder
+  isSide?: Prisma.SortOrder
   type?: Prisma.SortOrder
   payloadJson?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -283,6 +294,7 @@ export type ChatEntryScalarWhereWithAggregatesInput = {
   conversationId?: Prisma.StringWithAggregatesFilter<"ChatEntry"> | string
   conversationIndex?: Prisma.IntWithAggregatesFilter<"ChatEntry"> | number
   parentId?: Prisma.StringNullableWithAggregatesFilter<"ChatEntry"> | string | null
+  isSide?: Prisma.BoolWithAggregatesFilter<"ChatEntry"> | boolean
   type?: Prisma.StringWithAggregatesFilter<"ChatEntry"> | string
   payloadJson?: Prisma.StringWithAggregatesFilter<"ChatEntry"> | string
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"ChatEntry"> | Date | string
@@ -292,6 +304,7 @@ export type ChatEntryCreateInput = {
   id: string
   conversationIndex: number
   parentId?: string | null
+  isSide?: boolean
   type: string
   payloadJson: string
   createdAt?: Date | string
@@ -303,6 +316,7 @@ export type ChatEntryUncheckedCreateInput = {
   conversationId: string
   conversationIndex: number
   parentId?: string | null
+  isSide?: boolean
   type: string
   payloadJson: string
   createdAt?: Date | string
@@ -312,6 +326,7 @@ export type ChatEntryUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -323,6 +338,7 @@ export type ChatEntryUncheckedUpdateInput = {
   conversationId?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -333,6 +349,7 @@ export type ChatEntryCreateManyInput = {
   conversationId: string
   conversationIndex: number
   parentId?: string | null
+  isSide?: boolean
   type: string
   payloadJson: string
   createdAt?: Date | string
@@ -342,6 +359,7 @@ export type ChatEntryUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -352,6 +370,7 @@ export type ChatEntryUncheckedUpdateManyInput = {
   conversationId?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -372,6 +391,7 @@ export type ChatEntryCountOrderByAggregateInput = {
   conversationId?: Prisma.SortOrder
   conversationIndex?: Prisma.SortOrder
   parentId?: Prisma.SortOrder
+  isSide?: Prisma.SortOrder
   type?: Prisma.SortOrder
   payloadJson?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -386,6 +406,7 @@ export type ChatEntryMaxOrderByAggregateInput = {
   conversationId?: Prisma.SortOrder
   conversationIndex?: Prisma.SortOrder
   parentId?: Prisma.SortOrder
+  isSide?: Prisma.SortOrder
   type?: Prisma.SortOrder
   payloadJson?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -396,6 +417,7 @@ export type ChatEntryMinOrderByAggregateInput = {
   conversationId?: Prisma.SortOrder
   conversationIndex?: Prisma.SortOrder
   parentId?: Prisma.SortOrder
+  isSide?: Prisma.SortOrder
   type?: Prisma.SortOrder
   payloadJson?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -451,6 +473,7 @@ export type ChatEntryCreateWithoutConversationInput = {
   id: string
   conversationIndex: number
   parentId?: string | null
+  isSide?: boolean
   type: string
   payloadJson: string
   createdAt?: Date | string
@@ -460,6 +483,7 @@ export type ChatEntryUncheckedCreateWithoutConversationInput = {
   id: string
   conversationIndex: number
   parentId?: string | null
+  isSide?: boolean
   type: string
   payloadJson: string
   createdAt?: Date | string
@@ -498,6 +522,7 @@ export type ChatEntryScalarWhereInput = {
   conversationId?: Prisma.StringFilter<"ChatEntry"> | string
   conversationIndex?: Prisma.IntFilter<"ChatEntry"> | number
   parentId?: Prisma.StringNullableFilter<"ChatEntry"> | string | null
+  isSide?: Prisma.BoolFilter<"ChatEntry"> | boolean
   type?: Prisma.StringFilter<"ChatEntry"> | string
   payloadJson?: Prisma.StringFilter<"ChatEntry"> | string
   createdAt?: Prisma.DateTimeFilter<"ChatEntry"> | Date | string
@@ -507,6 +532,7 @@ export type ChatEntryCreateManyConversationInput = {
   id: string
   conversationIndex: number
   parentId?: string | null
+  isSide?: boolean
   type: string
   payloadJson: string
   createdAt?: Date | string
@@ -516,6 +542,7 @@ export type ChatEntryUpdateWithoutConversationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -525,6 +552,7 @@ export type ChatEntryUncheckedUpdateWithoutConversationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -534,6 +562,7 @@ export type ChatEntryUncheckedUpdateManyWithoutConversationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   conversationIndex?: Prisma.IntFieldUpdateOperationsInput | number
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  isSide?: Prisma.BoolFieldUpdateOperationsInput | boolean
   type?: Prisma.StringFieldUpdateOperationsInput | string
   payloadJson?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -546,6 +575,7 @@ export type ChatEntrySelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   conversationId?: boolean
   conversationIndex?: boolean
   parentId?: boolean
+  isSide?: boolean
   type?: boolean
   payloadJson?: boolean
   createdAt?: boolean
@@ -557,6 +587,7 @@ export type ChatEntrySelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   conversationId?: boolean
   conversationIndex?: boolean
   parentId?: boolean
+  isSide?: boolean
   type?: boolean
   payloadJson?: boolean
   createdAt?: boolean
@@ -568,6 +599,7 @@ export type ChatEntrySelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   conversationId?: boolean
   conversationIndex?: boolean
   parentId?: boolean
+  isSide?: boolean
   type?: boolean
   payloadJson?: boolean
   createdAt?: boolean
@@ -579,12 +611,13 @@ export type ChatEntrySelectScalar = {
   conversationId?: boolean
   conversationIndex?: boolean
   parentId?: boolean
+  isSide?: boolean
   type?: boolean
   payloadJson?: boolean
   createdAt?: boolean
 }
 
-export type ChatEntryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "conversationId" | "conversationIndex" | "parentId" | "type" | "payloadJson" | "createdAt", ExtArgs["result"]["chatEntry"]>
+export type ChatEntryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "conversationId" | "conversationIndex" | "parentId" | "isSide" | "type" | "payloadJson" | "createdAt", ExtArgs["result"]["chatEntry"]>
 export type ChatEntryInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   conversation?: boolean | Prisma.ConversationDefaultArgs<ExtArgs>
 }
@@ -605,6 +638,7 @@ export type $ChatEntryPayload<ExtArgs extends runtime.Types.Extensions.InternalA
     conversationId: string
     conversationIndex: number
     parentId: string | null
+    isSide: boolean
     type: string
     payloadJson: string
     createdAt: Date
@@ -1036,6 +1070,7 @@ export interface ChatEntryFieldRefs {
   readonly conversationId: Prisma.FieldRef<"ChatEntry", 'String'>
   readonly conversationIndex: Prisma.FieldRef<"ChatEntry", 'Int'>
   readonly parentId: Prisma.FieldRef<"ChatEntry", 'String'>
+  readonly isSide: Prisma.FieldRef<"ChatEntry", 'Boolean'>
   readonly type: Prisma.FieldRef<"ChatEntry", 'String'>
   readonly payloadJson: Prisma.FieldRef<"ChatEntry", 'String'>
   readonly createdAt: Prisma.FieldRef<"ChatEntry", 'DateTime'>

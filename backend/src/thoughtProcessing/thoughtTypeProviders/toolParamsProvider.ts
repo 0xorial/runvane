@@ -1,5 +1,4 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
-import { ChatChain } from '../../conversations/chat-chain.js';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
@@ -17,6 +16,8 @@ export type ToolParamsInput = {
   conversationId: string;
   agentId: string;
   toolName: string;
+  /** The pre-created spine entry this member updates through its lifecycle. */
+  toolEntryId: string;
   toolAiDescription: string;
   toolParamsSchema: unknown;
   toolRequest: string;
@@ -74,8 +75,9 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       const detail = error instanceof Error ? error.message : String(error);
       await this.markActionFailed(ctx, detail);
       // Fan-in counts TERMINAL member entries against the batch size, so every
-      // member must persist one — an entry-less failure would strand the batch.
-      await this.failMemberVisible(input, ctx.thoughtId, `The tool-parameter resolver failed: ${detail}`, {}, scope, ctx.chain, ctx.llm);
+      // member's pre-created entry must reach a terminal state — an unresolved
+      // member would strand the batch.
+      await this.failMemberVisible(input, `The tool-parameter resolver failed: ${detail}`, {}, scope, ctx.llm);
       throw new Error(`toolParams: ${detail}`, { cause: error });
     }
 
@@ -85,8 +87,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       await this.dispatchResolvedParams({
         input,
         params: parsedParams,
-        decidingThoughtId: ctx.thoughtId,
-        chain: ctx.chain,
         llm: ctx.llm,
         scope,
       });
@@ -94,12 +94,12 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       scope.throwIfAborted();
       this.logger.warn(`dispatch of resolved '${input.toolName}' params failed: ${String(error)}`);
       if ((error as { toolEntryId?: string }).toolEntryId) {
-        // run() already persisted a visible error entry — just resolve the member.
+        // run() already persisted the visible error on the entry — just resolve the member.
         this.runTool.resolveFailedToolParamsMember({
           conversationId: input.conversationId,
+          toolEntryId: input.toolEntryId,
           plannerFollowup: input.plannerFollowup,
           scope,
-          chain: ctx.chain,
           llm: ctx.llm,
           ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         });
@@ -107,24 +107,20 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       }
       await this.failMemberVisible(
         input,
-        ctx.thoughtId,
         `Tool arguments were rejected: ${String(error)}`,
         parsedParams,
         scope,
-        ctx.chain,
         ctx.llm,
       );
     }
   };
 
-  /** Persist a terminal error tool entry for a failed member and resolve its batch slot. */
+  /** Mark the member's pre-created entry terminally failed and resolve its batch slot. */
   private async failMemberVisible(
     input: ToolParamsInput,
-    decidingThoughtId: string,
     reason: string,
     params: Record<string, unknown>,
     scope: LifecycleScope,
-    chain: ChatChain,
     llm: LlmRef,
   ): Promise<void> {
     await this.runTool
@@ -133,16 +129,15 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           conversationId: input.conversationId,
           agentId: input.agentId,
           toolName: input.toolName,
+          toolEntryId: input.toolEntryId,
           params,
           toolRequest: input.toolRequest,
           plannerFollowup: input.plannerFollowup,
-          decidingThoughtId,
           ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
           ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
         },
         reason,
         scope,
-        chain,
         llm,
       })
       .catch((error) => {
@@ -160,12 +155,10 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
    */
   startDirect(args: {
     input: ToolParamsInput;
-    decidingThoughtId: string;
-    chain: ChatChain;
     llm: LlmRef;
     scope: LifecycleScope;
   }): void {
-    const { input, decidingThoughtId, chain, llm, scope } = args;
+    const { input, llm, scope } = args;
     // A failed direct dispatch must leave a visible, terminal error entry: a
     // bare batch-member resolution replans with an UNCHANGED context, and the
     // model just re-emits the same rejected call — an invisible, token-burning
@@ -186,28 +179,26 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
       );
       void this.failMemberVisible(
         input,
-        decidingThoughtId,
         `The planner's arguments for '${input.toolName}' are not valid JSON (separate_params_resolution is off): ${String(error)}`,
         {},
         scope,
-        chain,
         llm,
       );
       return;
     }
     scope.spawn(async () => {
       try {
-        await this.dispatchResolvedParams({ input, params, decidingThoughtId, chain, llm, scope });
+        await this.dispatchResolvedParams({ input, params, llm, scope });
       } catch (error) {
         scope.throwIfAborted();
         this.logger.warn(`direct dispatch of '${input.toolName}' failed: ${String(error)}`);
         if ((error as { toolEntryId?: string }).toolEntryId) {
-          // run() already persisted a visible error entry — just resolve the member.
+          // run() already persisted the visible error on the entry — just resolve the member.
           this.runTool.resolveFailedToolParamsMember({
             conversationId: input.conversationId,
+            toolEntryId: input.toolEntryId,
             plannerFollowup: input.plannerFollowup,
             scope,
-            chain,
             llm,
             ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
           });
@@ -215,11 +206,9 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         }
         await this.failMemberVisible(
           input,
-          decidingThoughtId,
           `Tool arguments were rejected: ${String(error)}`,
           params,
           scope,
-          chain,
           llm,
         );
       }
@@ -233,20 +222,19 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
   private async dispatchResolvedParams(args: {
     input: ToolParamsInput;
     params: Record<string, unknown>;
-    decidingThoughtId: string;
-    chain: ChatChain;
     llm: LlmRef;
     scope: LifecycleScope;
   }): Promise<void> {
-    const { input, params, decidingThoughtId, chain, llm, scope } = args;
+    const { input, params, llm, scope } = args;
     if (input.guardrailConfig) {
       // Delegate to GuardrailThoughtTypeProvider so the guardrail LLM call is
-      // visible as a thought entry in the chat chain.
+      // visible as a side thought anchored to the tool entry it vets.
       this.guardrailProvider.start({
         input: {
           conversationId: input.conversationId,
           agentId: input.agentId,
           toolName: input.toolName,
+          toolEntryId: input.toolEntryId,
           params,
           toolRequest: input.toolRequest,
           guardrailConfig: input.guardrailConfig,
@@ -256,7 +244,6 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
         },
         scope,
-        chain,
       });
       return;
     }
@@ -266,15 +253,14 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         conversationId: input.conversationId,
         agentId: input.agentId,
         toolName: input.toolName,
+        toolEntryId: input.toolEntryId,
         params,
         toolRequest: input.toolRequest,
         plannerFollowup: input.plannerFollowup,
-        decidingThoughtId,
         ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,
-      chain,
       llm,
     );
   }

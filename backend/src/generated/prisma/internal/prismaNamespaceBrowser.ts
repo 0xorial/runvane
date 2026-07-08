@@ -106,6 +106,7 @@ export const ChatEntryScalarFieldEnum = {
   conversationId: 'conversationId',
   conversationIndex: 'conversationIndex',
   parentId: 'parentId',
+  isSide: 'isSide',
   type: 'type',
   payloadJson: 'payloadJson',
   createdAt: 'createdAt'

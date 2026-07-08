@@ -6,6 +6,7 @@ import { getCompletionText, textMessage } from '../../llmProviders/types.js';
 import type { LlmCompletion, LlmMessage, LlmRequest, LlmStreamEvent } from '../../llmProviders/types.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert, publishConversationUpdated, publishStreamFieldDelta } from '../../sse/sse-helpers.js';
+import { appendAtCursor } from '../types.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 
 export type SummarizeInput = {
@@ -62,7 +63,7 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
     if (!summaryText) {
       throw new Error('summarize produced empty output');
     }
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId) =>
       this.chatEntries.appendCheckpointSummary(ctx.conversationId, {
         parentId,
         summarizedRange: { fromEntryId: input.fromEntryId, toEntryId: input.toEntryId },

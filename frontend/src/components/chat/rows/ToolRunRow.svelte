@@ -77,20 +77,22 @@
   const statusLabel = $derived(
     guardrailReason
       ? "Guardrail flagged"
-      : entry.state === "requested"
-        ? "Needs approval"
-        : entry.state === "running"
-          ? "Running"
-          : entry.state === "done"
-            ? "Done"
-            : entry.state === "denied"
-              ? "Denied"
-              : "Failed",
+      : entry.state === "resolving"
+        ? "Resolving arguments"
+        : entry.state === "requested"
+          ? "Needs approval"
+          : entry.state === "running"
+            ? "Running"
+            : entry.state === "done"
+              ? "Done"
+              : entry.state === "denied"
+                ? "Denied"
+                : "Failed",
   );
   const borderClass = $derived(
     entry.state === "requested"
       ? "border-warning/40 bg-warning/5"
-      : entry.state === "running"
+      : entry.state === "running" || entry.state === "resolving"
         ? "border-primary/30 bg-primary/5"
         : entry.state === "denied"
           ? "border-muted-foreground/20 bg-secondary/30"
@@ -157,7 +159,7 @@
         onclick={() => (toggled = !expanded)}
       >
         <RowIcon name="chevron" class="h-3 w-3 shrink-0 text-muted-foreground {expanded ? 'rotate-90' : ''}" />
-        {#if entry.state === "running"}
+        {#if entry.state === "running" || entry.state === "resolving"}
           <Icon name="loader" class="h-3 w-3 shrink-0 animate-spin text-primary" />
         {:else}
           <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />
@@ -198,7 +200,7 @@
         <span
           class="ml-auto text-[10px] font-medium {entry.state === 'requested'
             ? 'text-warning'
-            : entry.state === 'running'
+            : entry.state === 'running' || entry.state === 'resolving'
               ? 'text-primary'
               : 'text-muted-foreground'}"
         >

@@ -1,5 +1,4 @@
 import { forwardRef, Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { SseType } from '../contracts/sse.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
@@ -32,10 +31,24 @@ export type RunToolInput = {
   conversationId: string;
   agentId: string;
   toolName: string;
+  /**
+   * The invocation's pre-created spine entry. Created by the planner at
+   * dispatch (in request order, so the batch's chain shape is fixed up
+   * front); every later phase — params resolution, guardrail, approval,
+   * execution — updates this entry in place. Also the causal anchor for a
+   * batch-less planner continuation.
+   */
+  toolEntryId: string;
   params: unknown;
   toolRequest?: string;
   approvalGranted?: boolean;
   plannerFollowup?: { mode: 'continue' | 'finalize' };
+  /**
+   * A user retry deliberately continues the planner again even though the
+   * batch already produced a continuation — the new reaction becomes a
+   * sibling branch at the batch tail. Never set on first-time completions.
+   */
+  forceContinuation?: boolean;
   toolBatch?: ToolBatchRef;
   guardrailConfig?: GuardrailConfig;
   /**
@@ -44,13 +57,6 @@ export type RunToolInput = {
    * UI as a guardrail-tagged "needs approval" tool row.
    */
   guardrailFlagReason?: string;
-  /**
-   * The thoughtId of the thought that decided to run this tool (toolParams or
-   * guardrail). Tool-invocation chain entries cluster with that thought so a
-   * later reprocess of the deciding thought includes its tool result in the
-   * new branch's lineage.
-   */
-  decidingThoughtId?: string;
   toolOverrides?: Record<string, AgentToolConfig>;
 };
 
@@ -76,14 +82,6 @@ export class RunToolService implements OnModuleInit {
    * entries (see maybeContinuePlanner), never stored here.
    */
   private readonly continueChecks = new Map<string, Promise<void>>();
-  /**
-   * batchId → epoch-ms of the last planner continuation for that batch.
-   * Collapses siblings that complete the batch in the same instant into one
-   * continuation; anything later (a user retry re-running a member) is a new
-   * completion and continues planning again.
-   */
-  private readonly recentBatchContinues = new Map<string, number>();
-  private static readonly BATCH_CONTINUE_DEDUPE_MS = 1500;
 
   constructor(
     private readonly chatEntries: ChatEntriesRepo,
@@ -134,15 +132,15 @@ export class RunToolService implements OnModuleInit {
     }
   }
 
-  async run(input: RunToolInput, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): Promise<RunToolResult> {
+  async run(input: RunToolInput, scope: LifecycleScope, llm: LlmRef): Promise<RunToolResult> {
     const tool = this.tools.get(input.toolName);
     if (!tool) {
       const reason = `Tool not found: ${input.toolName}`;
-      const entryId = await this.appendErrorEntry(input, reason, chain);
-      // Tagged so callers know a visible error entry already exists and don't
-      // append a second one (see ToolParamsThoughtTypeProvider.startDirect).
-      const err = new Error(reason + ` (entry=${entryId})`) as Error & { toolEntryId?: string };
-      err.toolEntryId = entryId;
+      await this.failEntry(input, reason);
+      // Tagged so callers know the entry already shows the failure and only
+      // the batch member still needs resolving (see ToolParamsThoughtTypeProvider).
+      const err = new Error(reason + ` (entry=${input.toolEntryId})`) as Error & { toolEntryId?: string };
+      err.toolEntryId = input.toolEntryId;
       throw err;
     }
 
@@ -159,9 +157,9 @@ export class RunToolService implements OnModuleInit {
     // Models imitate the argument shape their context shows and may echo our
     // stored bookkeeping keys — strip them before the tool's strict schema.
     const parsedParams = tool.parseParams(stripToolParamEnvelope(input.params));
-    const chainTip = chain.getTip();
-    if (!chainTip) throw new Error(`runTool: chain tip is unset (conversation=${input.conversationId})`);
-    const entries = await this.chatEntries.listChatEntriesFromLeaf(input.conversationId, chainTip);
+    // Tool context = the lineage of this invocation's own entry: the branch it
+    // lives on, whatever else runs concurrently elsewhere in the conversation.
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(input.conversationId, input.toolEntryId);
 
     // Per-agent×tool permission policy — Off / Ask / Allow / Custom, resolved
     // centrally here. `off` denies, `ask` prompts, `allow` runs, and `custom`
@@ -170,8 +168,8 @@ export class RunToolService implements OnModuleInit {
     if (policy === 'off') {
       // "Off": tool unavailable to this agent. A forbidden tool is a terminal
       // (resolved) batch member, so count it toward the fan-in before returning.
-      const blocked = await this.recordBlocked({ input, permission: 'forbid', parsedParams, chain });
-      this.memberResolved({ input, scope, chain, llm });
+      const blocked = await this.recordBlocked({ input, permission: 'forbid', parsedParams });
+      this.memberResolved({ input, scope, llm });
       return blocked;
     }
     // Guardrail-flagged calls block with permission='ask_user' even when the
@@ -181,13 +179,12 @@ export class RunToolService implements OnModuleInit {
         input,
         permission: 'ask_user',
         parsedParams,
-        chain,
         guardrailReason: input.guardrailFlagReason,
       });
     }
     if (policy === 'ask' && input.approvalGranted !== true) {
       // "Ask": request approval up front — no need to consult the tool first.
-      return this.recordBlocked({ input, permission: 'ask_user', parsedParams, chain });
+      return this.recordBlocked({ input, permission: 'ask_user', parsedParams });
     }
 
     if (policy === 'custom') {
@@ -202,12 +199,12 @@ export class RunToolService implements OnModuleInit {
       });
       const permission = mostPermissivePermission(ruleResults);
       if (permission === 'forbid') {
-        const blocked = await this.recordBlocked({ input, permission, parsedParams, chain });
-        this.memberResolved({ input, scope, chain, llm });
+        const blocked = await this.recordBlocked({ input, permission, parsedParams });
+        this.memberResolved({ input, scope, llm });
         return blocked;
       }
       if (permission === 'ask_user' && input.approvalGranted !== true) {
-        return this.recordBlocked({ input, permission, parsedParams, chain });
+        return this.recordBlocked({ input, permission, parsedParams });
       }
     }
 
@@ -218,7 +215,6 @@ export class RunToolService implements OnModuleInit {
       parsedRules,
       entries,
       scope,
-      chain,
       llm,
     });
   }
@@ -240,7 +236,6 @@ export class RunToolService implements OnModuleInit {
       editedParameters?: Record<string, unknown>;
     },
     scope: LifecycleScope,
-    chain: ChatChain,
     llm: LlmRef,
   ): Promise<void> {
     const entry = await this.chatEntries.getChatEntry(args.conversationId, args.toolEntryId);
@@ -300,6 +295,7 @@ export class RunToolService implements OnModuleInit {
       conversationId: args.conversationId,
       agentId: args.agentId,
       toolName: entry.toolId,
+      toolEntryId: args.toolEntryId,
       params: rawParams,
       approvalGranted: true,
       // After a human-approved tool runs, the planner should take stock and
@@ -310,9 +306,6 @@ export class RunToolService implements OnModuleInit {
       ...(toolOverrides ? { toolOverrides } : {}),
     };
 
-    // The planner continuation hangs off the approved tool entry.
-    chain.setTip(args.toolEntryId);
-
     scope.spawn(async () => {
       await this.executeTool({
         input,
@@ -321,9 +314,7 @@ export class RunToolService implements OnModuleInit {
         parsedRules,
         entries,
         scope,
-        chain,
         llm,
-        existingEntryId: args.toolEntryId,
       });
     });
   }
@@ -333,14 +324,13 @@ export class RunToolService implements OnModuleInit {
    * invocation. Re-runs the tool with the entry's recorded params, updating the
    * same entry in place (`error → running → done/error`) — the tool_runs table
    * keeps the per-attempt history. The user's click counts as approval (like
-   * approve), but a tool whose policy is now `off` stays off. The original
-   * fan-out batch resolved long ago, so the retry never re-joins it — it
-   * continues the planner by itself once the run settles.
+   * approve), but a tool whose policy is now `off` stays off. Once the run
+   * settles the planner continues again at the batch tail — deliberately, as a
+   * sibling branch beside the reaction to the original failure.
    */
   async retryToolInvocation(
     args: { conversationId: string; toolEntryId: string; agentId: string },
     scope: LifecycleScope,
-    chain: ChatChain,
     llm: LlmRef,
   ): Promise<void> {
     const entry = await this.chatEntries.getChatEntry(args.conversationId, args.toolEntryId);
@@ -383,16 +373,16 @@ export class RunToolService implements OnModuleInit {
       conversationId: args.conversationId,
       agentId: args.agentId,
       toolName: entry.toolId,
+      toolEntryId: args.toolEntryId,
       params: requestedParams,
       approvalGranted: true,
       plannerFollowup: { mode: 'continue' },
+      // The batch already continued once; this re-reaction is user-intended.
+      forceContinuation: true,
       ...(toolRequest ? { toolRequest } : {}),
       ...(toolBatch ? { toolBatch } : {}),
       ...(toolOverrides ? { toolOverrides } : {}),
     };
-
-    // The planner continuation hangs off the retried entry, mirroring approve.
-    chain.setTip(args.toolEntryId);
 
     scope.spawn(async () => {
       await this.executeTool({
@@ -402,9 +392,7 @@ export class RunToolService implements OnModuleInit {
         parsedRules,
         entries,
         scope,
-        chain,
         llm,
-        existingEntryId: args.toolEntryId,
       });
     });
   }
@@ -418,7 +406,6 @@ export class RunToolService implements OnModuleInit {
   async denyToolInvocation(
     args: { conversationId: string; toolEntryId: string; agentId: string },
     scope: LifecycleScope,
-    chain: ChatChain,
     llm: LlmRef,
   ): Promise<void> {
     const entry = await this.chatEntries.getChatEntry(args.conversationId, args.toolEntryId);
@@ -452,25 +439,24 @@ export class RunToolService implements OnModuleInit {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, args.conversationId, entry.id);
 
-    // The planner continuation hangs off the denied entry, mirroring approve.
-    chain.setTip(entry.id);
     const toolBatch = parseToolBatch((entry.parameters as Record<string, unknown>).__tool_batch);
     this.memberResolved({
       input: {
         conversationId: args.conversationId,
         agentId: args.agentId,
         toolName: entry.toolId,
+        toolEntryId: entry.id,
         params: {},
         plannerFollowup: { mode: 'continue' },
         ...(toolBatch ? { toolBatch } : {}),
       },
       scope,
-      chain,
       llm,
     });
   }
 
-  private async appendErrorEntry(input: RunToolInput, reason: string, chain: ChatChain): Promise<string> {
+  /** Mark the invocation's pre-created entry terminally failed (visible, retriable per envelope). */
+  private async failEntry(input: RunToolInput, reason: string): Promise<void> {
     const startedAt = new Date();
     const envelope: ToolEnvelope = {
       ok: false,
@@ -480,35 +466,30 @@ export class RunToolService implements OnModuleInit {
       permission_state: 'forbid',
       timing: { started_at: startedAt.toISOString(), finished_at: startedAt.toISOString(), elapsed_ms: 0 },
     };
-    const created = await chain.append(input.decidingThoughtId ?? null, (parentId) =>
-      this.chatEntries.appendToolInvocation(input.conversationId, {
-        toolId: input.toolName,
-        state: 'error',
-        parameters: this.toParametersPayload(input, input.params),
-        result: envelope,
-        parentId,
-      }),
-    );
+    await this.chatEntries.updateToolInvocation(input.conversationId, {
+      id: input.toolEntryId,
+      state: 'error',
+      parameters: this.toParametersPayload(input, input.params),
+      result: envelope,
+    });
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_END,
-      chatEntryId: created.id,
+      chatEntryId: input.toolEntryId,
       toolName: input.toolName,
       output: reason,
       ok: false,
       runContinues: false,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, created.id);
-    return created.id;
+    await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, input.toolEntryId);
   }
 
   private async recordBlocked(args: {
     input: RunToolInput;
     permission: ToolPermission;
     parsedParams: unknown;
-    chain: ChatChain;
     guardrailReason?: string;
   }): Promise<{ kind: 'blocked'; toolEntryId: string }> {
-    const { input, permission, parsedParams, chain, guardrailReason } = args;
+    const { input, permission, parsedParams, guardrailReason } = args;
     const startedAt = new Date();
     const baseReason = permission === 'ask_user' ? 'Tool requires user approval.' : 'Tool is forbidden by permission rules.';
     const reason = guardrailReason ? `Guardrail flagged: ${guardrailReason}` : baseReason;
@@ -521,19 +502,16 @@ export class RunToolService implements OnModuleInit {
       timing: { started_at: startedAt.toISOString(), finished_at: startedAt.toISOString(), elapsed_ms: 0 },
     };
     const state = permission === 'ask_user' ? 'requested' : 'error';
+    // Persist the resolved params on the entry: the approval UI's edit box and
+    // a later approve run read them from here.
     const parameters = this.toParametersPayload(input, parsedParams);
-
-    const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
-      this.chatEntries.appendToolInvocation(input.conversationId, {
-        toolId: input.toolName,
-        state,
-        parameters,
-        result: envelope,
-        parentId: p,
-      }),
-    );
-    const entryId = created.id;
-    const parentId = created.parentId;
+    const entryId = input.toolEntryId;
+    await this.chatEntries.updateToolInvocation(input.conversationId, {
+      id: entryId,
+      state,
+      parameters,
+      result: envelope,
+    });
     if (permission === 'ask_user') {
       this.hub.publish(input.conversationId, {
         type: SseType.TOOL_INVOCATION_START,
@@ -541,7 +519,6 @@ export class RunToolService implements OnModuleInit {
         toolName: input.toolName,
         state: 'requested',
         approvalRequired: true,
-        ...(parentId ? { parentId } : {}),
         ...(input.toolRequest ? { argsPreview: input.toolRequest } : {}),
       });
     } else {
@@ -565,45 +542,23 @@ export class RunToolService implements OnModuleInit {
     parsedRules: Record<string, unknown>;
     entries: Awaited<ReturnType<ChatEntriesRepo['listChatEntries']>>;
     scope: LifecycleScope;
-    chain: ChatChain;
     llm: LlmRef;
-    /**
-     * When set (user-approval path), the run updates this already-persisted
-     * `requested` entry in place (`requested → running → done`) instead of
-     * appending a fresh tool-invocation. Caller is responsible for tipping
-     * the chain so any planner continuation hangs off this entry.
-     */
-    existingEntryId?: string;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, scope, chain, llm, existingEntryId } = args;
+    const { input, tool, parsedParams, parsedRules, entries, scope, llm } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
 
-    let entryId: string;
-    let parentId: string | null = null;
-    if (existingEntryId) {
-      entryId = existingEntryId;
-      await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'running', parameters });
-    } else {
-      const created = await chain.append(input.decidingThoughtId ?? null, (p) =>
-        this.chatEntries.appendToolInvocation(input.conversationId, {
-          toolId: input.toolName,
-          state: 'running',
-          parameters,
-          parentId: p,
-        }),
-      );
-      entryId = created.id;
-      parentId = created.parentId;
-    }
+    // The spine entry pre-exists in every path (planner dispatch, approval,
+    // retry); the run only ever moves it `resolving/requested/error → running`.
+    const entryId = input.toolEntryId;
+    await this.chatEntries.updateToolInvocation(input.conversationId, { id: entryId, state: 'running', parameters });
     this.hub.publish(input.conversationId, {
       type: SseType.TOOL_INVOCATION_START,
       chatEntryId: entryId,
       toolName: input.toolName,
       state: 'running',
       approvalRequired: false,
-      ...(parentId ? { parentId } : {}),
       ...(input.toolRequest ? { argsPreview: input.toolRequest } : {}),
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
@@ -717,7 +672,7 @@ export class RunToolService implements OnModuleInit {
         });
         // A failed tool is a resolved batch member — continue planning (once
         // every sibling resolves) so the agent can see the failure and adapt.
-        this.memberResolved({ input, scope, chain, llm });
+        this.memberResolved({ input, scope, llm });
       }
       return { kind: 'completed', toolEntryId: entryId };
     }
@@ -751,7 +706,7 @@ export class RunToolService implements OnModuleInit {
     });
     await publishChatEntryUpsert(this.hub, this.chatEntries, input.conversationId, entryId);
 
-    this.memberResolved({ input, scope, chain, llm });
+    this.memberResolved({ input, scope, llm });
     return { kind: 'completed', toolEntryId: entryId };
   }
 
@@ -768,17 +723,18 @@ export class RunToolService implements OnModuleInit {
   private memberResolved(args: {
     input: RunToolInput;
     scope: LifecycleScope;
-    chain: ChatChain;
     llm: LlmRef;
   }): void {
-    const { input, scope, chain, llm } = args;
+    const { input, scope, llm } = args;
     if (input.plannerFollowup?.mode !== 'continue') return;
     const conversationId = input.conversationId;
     // Serialize checks per conversation so concurrently-settling siblings
-    // evaluate one at a time against the already-persisted states.
+    // evaluate one at a time against the already-persisted states. Each check
+    // AWAITS its continuation's prepare insert, so the next sibling's
+    // "continuation already exists?" guard reads a settled DB.
     const prev = this.continueChecks.get(conversationId) ?? Promise.resolve();
     const next = prev.then(() =>
-      this.maybeContinuePlanner(input, scope, chain, llm).catch((error) => {
+      this.maybeContinuePlanner(input, scope, llm).catch((error) => {
         this.logger.error(
           `tool fan-in check failed: conversation=${conversationId}`,
           error instanceof Error ? error.stack : String(error),
@@ -794,10 +750,10 @@ export class RunToolService implements OnModuleInit {
   private async maybeContinuePlanner(
     input: RunToolInput,
     scope: LifecycleScope,
-    chain: ChatChain,
     llm: LlmRef,
   ): Promise<void> {
     const batch = input.toolBatch;
+    let anchor = input.toolEntryId;
     if (batch) {
       // Continue only once TERMINAL members reach the batch's stamped size.
       // Counting pending entries instead is racy: a member that fails before
@@ -805,46 +761,44 @@ export class RunToolService implements OnModuleInit {
       // resumes planning while an approval is still on its way to the DB.
       const terminal = await this.chatEntries.countTerminalToolInvocationsInBatch(input.conversationId, batch.id);
       if (terminal < batch.size) return; // members still unresolved (or not yet persisted)
-      // Siblings that completed the batch in the same instant each see zero
-      // pending; collapse them into one continuation. A later re-completion of
-      // the same batch (user retry) is far outside the window and continues.
-      const now = Date.now();
-      const last = this.recentBatchContinues.get(batch.id) ?? 0;
-      if (now - last < RunToolService.BATCH_CONTINUE_DEDUPE_MS) return;
-      this.recentBatchContinues.set(batch.id, now);
-      if (this.recentBatchContinues.size > 200) {
-        for (const [id, t] of this.recentBatchContinues) {
-          if (now - t > 60_000) this.recentBatchContinues.delete(id);
-        }
-      }
+      // The continuation reacts to the whole batch: it anchors at the batch
+      // tail (last member in chain order — a static fact since dispatch
+      // pre-creates the chain), NEVER at whichever member happened to settle
+      // last. Anchoring at the settling member was the historical fork bug.
+      anchor = (await this.chatEntries.resolveBatchTailEntryId(input.conversationId, batch.id)) ?? input.toolEntryId;
     }
-    this.continuePlanner(input.conversationId, scope, chain, llm);
+    // One continuation per completion: if the anchor already has a spine
+    // child, a sibling's check (or a pre-restart run) already continued.
+    // Derived from the DB, so it holds across requests and restarts. A user
+    // retry bypasses it — its re-reaction is a deliberate sibling branch.
+    if (!input.forceContinuation) {
+      const hasContinuation = await this.chatEntries.hasSpineChild(input.conversationId, anchor);
+      if (hasContinuation) return;
+    }
+    await this.continuePlanner(input.conversationId, anchor, scope, llm);
   }
 
-  private continuePlanner(conversationId: string, scope: LifecycleScope, chain: ChatChain, llm: LlmRef): void {
+  private async continuePlanner(
+    conversationId: string,
+    anchorParentId: string,
+    scope: LifecycleScope,
+    llm: LlmRef,
+  ): Promise<void> {
     if (scope.signal.aborted) return;
-    this.thoughtProcessing.startThought({
+    await this.thoughtProcessing.startThought({
       provider: this.plannerProvider,
       conversationId,
       scope,
-      chain,
+      anchorParentId,
+      lane: 'spine',
       llm,
     });
   }
 
   /**
-   * Resolve a fan-out member whose parameter-resolution thought failed before
-   * any tool-invocation entry was created (e.g. the LLM returned unparseable
-   * args). Keyed by the failing thought's id since there is no tool entry. Lets
-   * the fan-in complete instead of stranding the planner. (A param-resolution
-   * failure that throws in prepare/reason — rather than a parse error in
-   * runDecision — isn't signaled here; if it is the last member it leaves the
-   * planner waiting, same limitation as the summarize-attachment batch.)
-   */
-  /**
-   * Direct dispatch (separate_params_resolution off) failed before run() could
-   * persist anything — the planner's args didn't parse or were rejected by the
-   * tool's schema. Surface a visible, terminal error entry (the next planner
+   * A member failed before run() could take over — the resolver's args didn't
+   * parse, or the planner's direct args were rejected by the tool's schema.
+   * Mark the member's pre-created entry terminally failed (the next planner
    * round then SEES the failed call and can self-correct, instead of silently
    * re-emitting the same call in a loop) and resolve the batch member so the
    * fan-in isn't stranded.
@@ -853,26 +807,25 @@ export class RunToolService implements OnModuleInit {
     input: RunToolInput;
     reason: string;
     scope: LifecycleScope;
-    chain: ChatChain;
     llm: LlmRef;
   }): Promise<void> {
-    await this.appendErrorEntry(args.input, args.reason, args.chain);
-    this.memberResolved({ input: args.input, scope: args.scope, chain: args.chain, llm: args.llm });
+    await this.failEntry(args.input, args.reason);
+    this.memberResolved({ input: args.input, scope: args.scope, llm: args.llm });
   }
 
   /**
-   * Run the fan-in check for a member whose terminal tool-invocation entry
-   * ALREADY exists (run() persisted an error entry before throwing). Members
-   * without an entry must go through failDirectDispatch instead — the fan-in
-   * counts terminal entries against the batch size, so an entry-less
-   * resolution would strand the batch.
+   * Run the fan-in check for a member whose terminal state is ALREADY
+   * persisted on its entry (run() marked it before throwing). Members whose
+   * entry is still pending must go through failDirectDispatch instead — the
+   * fan-in counts terminal entries against the batch size, so an unresolved
+   * entry would strand the batch.
    */
   resolveFailedToolParamsMember(args: {
     conversationId: string;
+    toolEntryId: string;
     toolBatch?: ToolBatchRef;
     plannerFollowup?: { mode: 'continue' | 'finalize' };
     scope: LifecycleScope;
-    chain: ChatChain;
     llm: LlmRef;
   }): void {
     this.memberResolved({
@@ -880,12 +833,12 @@ export class RunToolService implements OnModuleInit {
         conversationId: args.conversationId,
         agentId: '',
         toolName: '',
+        toolEntryId: args.toolEntryId,
         params: {},
         ...(args.plannerFollowup ? { plannerFollowup: args.plannerFollowup } : {}),
         ...(args.toolBatch ? { toolBatch: args.toolBatch } : {}),
       },
       scope: args.scope,
-      chain: args.chain,
       llm: args.llm,
     });
   }

@@ -1,6 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
-import { ChatChain } from '../../conversations/chat-chain.js';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../../db/repositories/chat-entries.repo.js';
 import { SseHubService } from '../../sse/sse-hub.service.js';
@@ -22,6 +21,8 @@ export type GuardrailProviderInput = {
   conversationId: string;
   agentId: string;
   toolName: string;
+  /** The pre-created spine entry the guardrail vets; the run updates it in place. */
+  toolEntryId: string;
   params: Record<string, unknown>;
   toolRequest?: string;
   guardrailConfig: GuardrailConfig;
@@ -50,16 +51,17 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
 
   /**
    * Called by ToolParamsThoughtTypeProvider.runDecision when guardrailConfig is
-   * present. Starts this provider as a visible thought in the chain using the
-   * guardrail LLM, keeping ThoughtProcessingService out of toolParamsProvider.
+   * present. Starts this provider as a visible side thought anchored to the
+   * tool entry it vets, keeping ThoughtProcessingService out of toolParamsProvider.
    */
-  start(args: { input: GuardrailProviderInput; scope: LifecycleScope; chain: ChatChain }): void {
-    const { input, scope, chain } = args;
+  start(args: { input: GuardrailProviderInput; scope: LifecycleScope }): void {
+    const { input, scope } = args;
     this.thoughtProcessing.startThought({
       provider: this,
       conversationId: input.conversationId,
       scope,
-      chain,
+      anchorParentId: input.toolEntryId,
+      lane: 'side',
       llm: { providerId: input.guardrailConfig.provider_id, model: input.guardrailConfig.model_name },
       input,
     });
@@ -124,16 +126,15 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
         conversationId: input.conversationId,
         agentId: input.agentId,
         toolName: input.toolName,
+        toolEntryId: input.toolEntryId,
         params: input.params,
         toolRequest: input.toolRequest,
         plannerFollowup: input.plannerFollowup,
-        decidingThoughtId: ctx.thoughtId,
         ...(verdict.verdict === 'flag' ? { guardrailFlagReason: verdict.reason } : {}),
         ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
       },
       scope,
-      ctx.chain,
       input.mainLlm,
     );
   };

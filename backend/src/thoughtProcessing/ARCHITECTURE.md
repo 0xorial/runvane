@@ -59,51 +59,51 @@ was the source of all branching races. Two rules:
 - **User-initiated appends** (POST `/messages`, reprocess endpoints) take the
   parent from the request payload — the UI knows where the user wanted the
   message attached.
-- **Forward-flow steps inside a running scope** parent at the run's `ChatChain`
-  tip (see §4). The chain is shared across all thoughts spawned in the run, so
-  concurrent thoughts interleave linearly instead of branching.
+- **Forward-flow steps** parent at an explicit causal anchor (see §4): whoever
+  starts a thought states, from its own knowledge, which entry it follows.
 
-## 4. `ChatChain` — concurrent thoughts interleave linearly
+## 4. Causal anchors + the side lane — no shared cursor
 
-A `ChatChain` is a per-run domain object owned by `ConversationProcessorService`
-(created in `beginRun` alongside the `LifecycleScope`). It holds:
+There is no shared mutable "chain tip". Every producer knows its causal parent
+and threads it explicitly:
 
-- `tip: string | null` — current parent for the next forward-flow append.
-- a serializing mutex.
+- A thought's own steps (prepare → stream → action → assistant message) are
+  strictly sequential; `ThoughtContext.cursorParentId` advances with each
+  append (`appendAtCursor`).
+- `startThought` takes `anchorParentId` + `lane`. The processor anchors the
+  planner at the user message (or the context-injection entry after it);
+  the fan-in anchors the continuation at the batch tail; reprocess anchors at
+  the source entry's parent (a deliberate sibling branch).
+- The planner's decision **pre-creates every tool-invocation entry of a batch
+  on the spine, in request order** (state `resolving`, or `requested`/
+  `running` downstream). Params resolution, guardrails, approvals and the run
+  itself only UPDATE that entry — so the chain shape through a batch is fixed
+  at dispatch and the batch tail (the continuation's anchor) is a static fact,
+  however members settle. One continuation per completion is enforced from the
+  DB ("does the tail already have a spine child?"), restart-safe; a user retry
+  bypasses the guard deliberately (sibling branch at the tail).
 
-Forward-flow appends call `chain.append(parentId => repo.appendXxx({…, parentId}))`:
-
-1. Mutex acquires under FIFO order.
-2. The current `tip` is passed to the append callback as `parentId`.
-3. On success, `tip` advances to the new entry's id.
-
-`ConversationProcessorService` seeds the tip after the user-message append
-(`chain.setTip(userEntry.id)`) and then starts `autoTitle` + `planner`. The
-order of their **first** entries on the chain is deterministic, not racy:
-`startThought` calls `chain.append` for the prepare entry
-**synchronously** (before `scope.spawn`), so the mutex slot is captured at
-caller-call order rather than at microtask resolution time. To keep that call
-synchronous, the LLM provider/model is fetched once per run as `LlmRef` and
-passed in. Subsequent forward-flow appends (stream, action, assistant message,
-tool invocation) chain through the same `tip`, so concurrent thoughts
-interleave linearly:
-`user → titlePrepare → plannerPrepare → titleStream → plannerStream → …`.
-
-Reprocess entry points seed the chain tip to the chosen branch root before
-spawning the reprocess pipeline. Tool-execution and tool-params thoughts run
-under the same chain and chain through the same tip.
+**Side lane** (`is_side = 1`): title, categorize, attachment-summary, params
+resolution and guardrail thoughts are bookkeeping anchored to a spine entry
+(user message or tool entry) for display. They are excluded from branch
+semantics everywhere — leaf walks (`walkToLatestLeaf`), fork counting, the
+frontend chosen path — so any number can run concurrently against the same
+anchor without ever forking the conversation. The planner input folds side
+`summarize_attachment` streams anchored on its lineage back in; other side
+thoughts contribute nothing to prompts.
 
 `LifecycleScope` is intentionally separate — it only handles execution
 lifecycle (cancellation signal + spawned-task completion bookkeeping). It does
-not know about chat-entry lineage. The chain travels alongside the scope as a
-distinct parameter through the pipeline.
+not know about chat-entry lineage.
 
-`ChatEntriesRepo` also keeps a per-conversation append lock, but its only job
-is preventing `MAX(conversation_index) + 1` collisions — lineage correctness
-is owned by `ChatChain`.
+`ChatEntriesRepo` keeps a per-conversation append lock whose only job is
+preventing `MAX(conversation_index) + 1` collisions — lineage correctness
+comes from explicit parents.
 
-Single-process assumption: both mutexes are in-process. If we ever shard the
-backend, both move to DB-level advisory locks or per-conversation owner.
+Single-process assumption: the append lock and the fan-in check serialization
+are in-process; the fan-in *state* (terminal counts, existing-continuation
+guard) is DB-derived, so approvals across restarts stay correct. If we ever
+shard the backend, the same-tick gates move to DB-level advisory locks.
 
 ## 5. Concurrency model: structured per-conversation scopes
 

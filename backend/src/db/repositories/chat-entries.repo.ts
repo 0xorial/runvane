@@ -64,6 +64,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       conversationIndex: row.conversationIndex,
       createdAt: row.createdAt,
       parentId: row.parentId,
+      isSide: false,
       text: input.text,
       agentId: input.agentId,
     };
@@ -89,6 +90,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       conversationIndex: row.conversationIndex,
       createdAt: row.createdAt,
       parentId: row.parentId,
+      isSide: false,
       text: input.text,
     };
   }
@@ -98,6 +100,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     input: {
       thoughtId: string;
       parentId: string | null;
+      isSide?: boolean;
       status?: ThoughtStepStatus;
       requestText?: string;
       title?: string;
@@ -114,6 +117,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const row = await this.appendEntry(conversationId, {
       type: 'thought-prepare',
       parentId: input.parentId,
+      isSide: input.isSide,
       payload,
     });
     return { id: row.id };
@@ -125,6 +129,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       thoughtType: ThoughtType;
       thoughtId: string;
       parentId: string | null;
+      isSide?: boolean;
       status?: ThoughtStepStatus;
       llm?: LlmRef;
       llmRequest?: string;
@@ -152,6 +157,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const row = await this.appendEntry(conversationId, {
       type: 'thought_stream',
       parentId: input.parentId,
+      isSide: input.isSide,
       payload,
     });
     return { id: row.id };
@@ -204,6 +210,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     input: {
       thoughtId: string;
       parentId: string | null;
+      isSide?: boolean;
       status?: ThoughtStepStatus;
       summary?: string;
     },
@@ -216,6 +223,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const row = await this.appendEntry(conversationId, {
       type: 'thought-action',
       parentId: input.parentId,
+      isSide: input.isSide,
       payload,
     });
     return { id: row.id };
@@ -310,6 +318,38 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       batchId,
     )) as Array<{ n: number | bigint }>;
     return Number(rows[0]?.n ?? 0);
+  }
+
+  /**
+   * The batch's chain tail: its last member in chain order. Members are
+   * pre-created back-to-back by the dispatching planner, so the highest
+   * conversation_index among them is the tail. The post-batch planner
+   * continuation anchors here — never at whichever member settled last.
+   */
+  async resolveBatchTailEntryId(conversationId: string, batchId: string): Promise<string | null> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id FROM chat_entries
+       WHERE conversation_id = ?
+         AND type = 'tool-invocation'
+         AND json_extract(payload_json, '$.parameters.__tool_batch.id') = ?
+       ORDER BY conversation_index DESC
+       LIMIT 1`,
+      conversationId,
+      batchId,
+    )) as Array<{ id: string }>;
+    return rows[0]?.id ?? null;
+  }
+
+  /** Whether the entry already has a spine (branch-participating) child. */
+  async hasSpineChild(conversationId: string, entryId: string): Promise<boolean> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT 1 AS present FROM chat_entries
+       WHERE conversation_id = ? AND parent_id = ? AND is_side = 0
+       LIMIT 1`,
+      conversationId,
+      entryId,
+    )) as Array<{ present: number }>;
+    return rows.length > 0;
   }
 
   /** Tool invocations stranded in `running` (their process died) — boot-sweep input. */

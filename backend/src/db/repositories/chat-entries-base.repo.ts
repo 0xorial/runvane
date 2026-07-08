@@ -7,6 +7,8 @@ import type { ChatEntryDbRow, ChatMessageEntry, ThoughtStepStatus } from './chat
 type AppendInput = {
   type: string;
   parentId: string | null;
+  /** Side-lane entry: displayed under its anchor but excluded from branch semantics. */
+  isSide?: boolean;
   payload: Record<string, unknown>;
 };
 
@@ -74,16 +76,17 @@ export class ChatEntriesBaseRepo {
       this.prisma.$transaction([
         this.prisma.$queryRawUnsafe(
           `INSERT INTO chat_entries (
-             id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+             id, conversation_id, conversation_index, parent_id, is_side, type, payload_json, created_at
            ) VALUES (
              ?, ?,
              (SELECT COALESCE(MAX(conversation_index), -1) + 1 FROM chat_entries WHERE conversation_id = ?),
-             ?, ?, ?, ?
+             ?, ?, ?, ?, ?
            ) RETURNING conversation_index`,
           id,
           conversationId,
           conversationId,
           parentId,
+          input.isSide ? 1 : 0,
           input.type,
           payloadJson,
           createdAt,
@@ -134,7 +137,7 @@ export class ChatEntriesBaseRepo {
     for (;;) {
       const childRows = (await this.prisma.$queryRawUnsafe(
         `SELECT id FROM chat_entries
-         WHERE conversation_id = ? AND parent_id = ?
+         WHERE conversation_id = ? AND parent_id = ? AND is_side = 0
          ORDER BY conversation_index DESC
          LIMIT 1`,
         conversationId,
@@ -150,7 +153,7 @@ export class ChatEntriesBaseRepo {
   private async resolveDeepestLeaf(conversationId: string): Promise<string | null> {
     const roots = (await this.prisma.$queryRawUnsafe(
       `SELECT id FROM chat_entries
-       WHERE conversation_id = ? AND parent_id IS NULL
+       WHERE conversation_id = ? AND parent_id IS NULL AND is_side = 0
        ORDER BY conversation_index ASC
        LIMIT 1`,
       conversationId,
@@ -195,7 +198,7 @@ export class ChatEntriesBaseRepo {
     const [curRows, rows] = (await this.prisma.$transaction([
       this.prisma.$queryRawUnsafe(`SELECT value FROM stream_cursor WHERE id = 0`),
       this.prisma.$queryRawUnsafe(
-        `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+        `SELECT id, conversation_id, conversation_index, parent_id, is_side, type, payload_json, created_at
          FROM chat_entries
          WHERE conversation_id = ?
          ORDER BY conversation_index ASC`,
@@ -208,7 +211,7 @@ export class ChatEntriesBaseRepo {
 
   private async fetchAllRows(conversationId: string): Promise<ChatEntryDbRow[]> {
     return (await this.prisma.$queryRawUnsafe(
-      `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+      `SELECT id, conversation_id, conversation_index, parent_id, is_side, type, payload_json, created_at
        FROM chat_entries
        WHERE conversation_id = ?
        ORDER BY conversation_index ASC`,
@@ -226,7 +229,7 @@ export class ChatEntriesBaseRepo {
          JOIN lineage l ON l.parent_id = e.id
          WHERE e.conversation_id = ?
        )
-       SELECT e.id, e.conversation_id, e.conversation_index, e.parent_id, e.type, e.payload_json, e.created_at
+       SELECT e.id, e.conversation_id, e.conversation_index, e.parent_id, e.is_side, e.type, e.payload_json, e.created_at
        FROM chat_entries e
        JOIN lineage l ON l.id = e.id
        WHERE e.conversation_id = ?
@@ -243,9 +246,26 @@ export class ChatEntriesBaseRepo {
     return row ? rowToChatEntry(row) : null;
   }
 
+  /**
+   * Every side-lane entry of the conversation, in index order. Side entries
+   * hang off spine anchors and are excluded from lineage walks; readers that
+   * need them (planner input folding attachment summaries in, renderers
+   * grouping side thoughts under their anchor) fetch them separately.
+   */
+  async listSideEntries(conversationId: string): Promise<ChatEntry[]> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id, conversation_id, conversation_index, parent_id, is_side, type, payload_json, created_at
+       FROM chat_entries
+       WHERE conversation_id = ? AND is_side = 1
+       ORDER BY conversation_index ASC`,
+      conversationId,
+    )) as ChatEntryDbRow[];
+    return rows.map(rowToChatEntry);
+  }
+
   protected async fetchEntryRow(conversationId: string, entryId: string): Promise<ChatEntryDbRow | null> {
     const rows = (await this.prisma.$queryRawUnsafe(
-      `SELECT id, conversation_id, conversation_index, parent_id, type, payload_json, created_at
+      `SELECT id, conversation_id, conversation_index, parent_id, is_side, type, payload_json, created_at
        FROM chat_entries
        WHERE conversation_id = ? AND id = ?
        LIMIT 1`,
@@ -284,10 +304,7 @@ export class ChatEntriesBaseRepo {
    * cursor, then advance the in-memory mirror. Every published change to a
    * chat entry must go through here (or `appendEntry`): the cursor value is the
    * event's seq AND the snapshot watermark, so a mutation that skips the bump
-   * rides a stale seq and the client's `seq > W` gate silently drops it. A
-   * snapshot read in the window between a spliced step's append and the
-   * reparent of its successor would otherwise capture the transient fork and
-   * never receive the reparent — freezing it into a spurious sibling branch.
+   * rides a stale seq and the client's `seq > W` gate silently drops it.
    */
   protected async mutateEntry(...statements: SqlStatement[]): Promise<number> {
     const results = await this.prisma.$transaction([
@@ -317,19 +334,6 @@ export class ChatEntriesBaseRepo {
 
   async setEntryStatus(conversationId: string, entryId: string, status: ThoughtStepStatus): Promise<void> {
     await this.mergeEntryPayload(conversationId, entryId, { status });
-  }
-
-  /**
-   * Rewrite an entry's parent pointer. Used by ChatChain to keep all steps of a
-   * single thought contiguous: when a thought's later step lands while another
-   * thought has already appended after it, we splice the new step in by
-   * reparenting the intervening entry onto the new one.
-   */
-  async updateChatEntryParent(conversationId: string, entryId: string, newParentId: string | null): Promise<void> {
-    await this.mutateEntry({
-      sql: `UPDATE chat_entries SET parent_id = ? WHERE conversation_id = ? AND id = ?`,
-      args: [newParentId, conversationId, entryId],
-    });
   }
 
   /**

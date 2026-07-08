@@ -1,5 +1,4 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
-import { ChatChain } from '../conversations/chat-chain.js';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-settings.repo.js';
@@ -15,9 +14,11 @@ import { SummarizeThoughtTypeProvider } from './thoughtTypeProviders/summarizePr
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
 import type { LlmCompletion } from '../llmProviders/types.js';
 import {
+  appendAtCursor,
   isThoughtStreamEntry,
   type LlmRef,
   type ThoughtContext,
+  type ThoughtLane,
   type ThoughtStreamEntry,
   type ThoughtTypeProvider,
 } from './types.js';
@@ -61,12 +62,7 @@ export class ThoughtProcessingService {
     ];
   }
 
-  /**
-   * Synchronously fetches the active LLM reference. The conversation-processor
-   * calls this once per run and threads the result into the start* methods so
-   * each can call `chain.append` synchronously and preserve caller-order on
-   * the run's chain mutex.
-   */
+  /** Active LLM reference, resolved once per run and threaded into the start* methods. */
   async getLlmRef(): Promise<LlmRef> {
     const llmDoc = await this.llmProviderSettings.getDocument();
     return {
@@ -85,11 +81,13 @@ export class ThoughtProcessingService {
   }
 
   /**
-   * Starts a thought on the run's chain.
+   * Starts a thought at an explicit causal anchor.
    *
-   * The prepare-entry append is enqueued on `chain` synchronously, before
-   * `scope.spawn`, so concurrent thoughts land on the chain in caller-call
-   * order rather than racing on microtask resolution.
+   * The caller states where the thought belongs from its own knowledge: the
+   * user message it reacts to, the batch tail it continues from, the entry it
+   * annotates. Spine thoughts extend the reply branch from the anchor; side
+   * thoughts hang off the anchor without joining branch semantics, so any
+   * number can run concurrently against the same anchor.
    *
    * `input` is optional: when omitted, `provider.buildInputFromConversation`
    * resolves it inside the spawned task (must be defined).
@@ -98,18 +96,26 @@ export class ThoughtProcessingService {
     provider: ThoughtTypeProvider<TInput>;
     conversationId: string;
     scope: LifecycleScope;
-    chain: ChatChain;
+    /** Entry the thought hangs off; null only for an empty conversation. */
+    anchorParentId: string | null;
+    lane: ThoughtLane;
     llm: LlmRef;
     input?: TInput;
-  }): void {
-    const { provider, conversationId, scope, chain, llm } = args;
+  }): Promise<{ prepareEntryId: string }> {
+    const { provider, conversationId, scope, anchorParentId, lane, llm } = args;
     scope.throwIfAborted();
     const buildInput = provider.buildInputFromConversation;
     if (args.input === undefined && !buildInput) {
       throw new Error(`provider ${provider.constructor.name} cannot self-initiate; pass input explicitly`);
     }
-    const ctx = this.createContext(conversationId, chain, llm);
+    const ctx = this.createContext(conversationId, llm, { cursorParentId: anchorParentId, lane });
     const prepareCreatePromise = this.appendPreparePlaceholder(ctx, provider);
+    // Resolves once the prepare placeholder is persisted — the fan-in guard
+    // awaits this so "a continuation already exists" is readable in the DB
+    // before the next sibling checks. Failures surface through the spawned
+    // task; fire-and-forget callers may ignore the returned promise.
+    const prepareReady = prepareCreatePromise.then((p) => ({ prepareEntryId: p.id }));
+    prepareReady.catch(() => undefined);
     scope.spawn(async () => {
       let input: TInput | undefined;
       try {
@@ -131,13 +137,15 @@ export class ThoughtProcessingService {
         if (input !== undefined) provider.onThoughtSettled?.(input, ctx);
       }
     });
+    return prepareReady;
   }
 
   private appendPreparePlaceholder(ctx: ThoughtContext, provider: AnyThoughtProvider): Promise<{ id: string }> {
-    return ctx.chain.append(ctx.thoughtId, (parentId) =>
+    return appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'running',
         title: provider.prepareTitle,
         llm: ctx.llm,
@@ -161,7 +169,6 @@ export class ThoughtProcessingService {
       applyDownstream?: boolean;
     },
     scope: LifecycleScope,
-    chain: ChatChain,
   ): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     scope.throwIfAborted();
     const branch = await this.resolvePrepareSource(args.conversationId, args.sourceEntryId);
@@ -193,9 +200,12 @@ export class ThoughtProcessingService {
           `and none was supplied`,
       );
     }
-    chain.setTip(branch.parentId);
-
-    const ctx = this.createContext(args.conversationId, chain, llm);
+    // The reprocessed thought is a sibling of the source: it anchors at the
+    // source prepare's own parent, in the source's lane.
+    const ctx = this.createContext(args.conversationId, llm, {
+      cursorParentId: branch.parentId,
+      lane: branch.isSide ? 'side' : 'spine',
+    });
     // "Just this call": this thought runs on the override `llm`, but the
     // downstream continuation reverts to the thought's inherited model. When
     // applyDownstream (default), downstreamLlm stays equal to `llm`.
@@ -219,7 +229,6 @@ export class ThoughtProcessingService {
   async startReprocessReason(
     args: { conversationId: string; sourceEntryId: string; editedResponse: string },
     scope: LifecycleScope,
-    chain: ChatChain,
     llm: LlmRef,
   ): Promise<{ plannerEntryId: string; leafEntryId: string }> {
     scope.throwIfAborted();
@@ -230,9 +239,13 @@ export class ThoughtProcessingService {
     if (!provider.buildInputFromConversation) {
       throw new Error(`provider ${provider.constructor.name} cannot build input from conversation`);
     }
-    chain.setTip(source.prepareEntryId);
-
-    const ctx = this.createContext(args.conversationId, chain, source.llm ?? llm, { thoughtId: source.thoughtId });
+    // The edited reason branches at the source's prepare entry: the new
+    // stream+action are siblings of the original stream, same lane.
+    const ctx = this.createContext(args.conversationId, source.llm ?? llm, {
+      thoughtId: source.thoughtId,
+      cursorParentId: source.prepareEntryId,
+      lane: source.isSide ? 'side' : 'spine',
+    });
     ctx.prepareEntryId = source.prepareEntryId;
     ctx.streamEntryId = await this.appendCompletedStreamEntry(ctx, provider, source.llmRequest, editedResponse);
     ctx.thoughtActionEntryId = await this.appendRunningActionEntry(ctx, provider);
@@ -253,9 +266,8 @@ export class ThoughtProcessingService {
 
   private createContext(
     conversationId: string,
-    chain: ChatChain,
     llm: LlmRef,
-    opts: { thoughtId?: string } = {},
+    opts: { thoughtId?: string; cursorParentId: string | null; lane: ThoughtLane },
   ): ThoughtContext {
     return {
       thoughtId: opts.thoughtId ?? crypto.randomUUID(),
@@ -266,7 +278,8 @@ export class ThoughtProcessingService {
       prepareEntryId: null,
       streamEntryId: null,
       thoughtActionEntryId: null,
-      chain,
+      cursorParentId: opts.cursorParentId,
+      lane: opts.lane,
     };
   }
 
@@ -276,6 +289,7 @@ export class ThoughtProcessingService {
   ): Promise<{
     prepareEntryId: string;
     parentId: string | null;
+    isSide: boolean;
     thoughtId: string;
     inputJson: string | null;
     requestText: string | null;
@@ -289,6 +303,7 @@ export class ThoughtProcessingService {
     return {
       prepareEntryId: sourceEntry.id,
       parentId: sourceEntry.parentId,
+      isSide: sourceEntry.isSide,
       thoughtId: sourceEntry.thoughtId,
       inputJson: sourceEntry.inputJson ?? null,
       requestText: sourceEntry.requestText ?? null,
@@ -297,10 +312,9 @@ export class ThoughtProcessingService {
   }
 
   /**
-   * Provider for a thought is identified by the stream entry's type.
-   * With chain-interleaved appends the stream is no longer guaranteed to be
-   * the prepare's direct child, so we look up by `thoughtId` instead of
-   * walking parents.
+   * Provider for a thought is identified by the stream entry's type, looked
+   * up by `thoughtId` (robust against historical chains where another
+   * thought's entry was interleaved between prepare and stream).
    */
   private async resolveProviderForThought(conversationId: string, thoughtId: string): Promise<AnyThoughtProvider> {
     const all = await this.chatEntries.listChatEntries(conversationId, { all: true });
@@ -324,6 +338,7 @@ export class ThoughtProcessingService {
     provider: AnyThoughtProvider;
     thoughtId: string;
     prepareEntryId: string;
+    isSide: boolean;
     llmRequest: string;
     llm?: LlmRef;
   }> {
@@ -341,12 +356,14 @@ export class ThoughtProcessingService {
       provider: AnyThoughtProvider;
       thoughtId: string;
       prepareEntryId: string;
+      isSide: boolean;
       llmRequest: string;
       llm?: LlmRef;
     } = {
       provider,
       thoughtId: source.thoughtId,
       prepareEntryId: source.parentId,
+      isSide: source.isSide,
       llmRequest: source.llmRequest,
     };
     if (source.llm) out.llm = source.llm;
@@ -359,10 +376,11 @@ export class ThoughtProcessingService {
     requestText: string,
     inputJson: string | null,
   ): Promise<string> {
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtPrepareEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'completed',
         requestText,
         title: provider.prepareTitle,
@@ -382,11 +400,12 @@ export class ThoughtProcessingService {
     provider: ThoughtTypeProvider<unknown>,
     llmRequest: string,
   ): Promise<string> {
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         thoughtType: provider.thoughtType,
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'running',
         llm: ctx.llm,
       }),
@@ -397,10 +416,11 @@ export class ThoughtProcessingService {
   }
 
   private async appendRunningActionEntry(ctx: ThoughtContext, provider: ThoughtTypeProvider<unknown>): Promise<string> {
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'running',
         summary: provider.initialActionSummary ?? 'Waiting for LLM output',
       }),
@@ -415,11 +435,12 @@ export class ThoughtProcessingService {
     llmRequest: string,
     llmResponse: string,
   ): Promise<string> {
-    const created = await ctx.chain.append(ctx.thoughtId, (parentId) =>
+    const created = await appendAtCursor(ctx, (parentId, isSide) =>
       this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
         thoughtType: provider.thoughtType,
         thoughtId: ctx.thoughtId,
         parentId,
+        isSide,
         status: 'completed',
         llm: ctx.llm,
       }),

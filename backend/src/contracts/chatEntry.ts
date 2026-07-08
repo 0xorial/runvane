@@ -35,6 +35,13 @@ export const ChatEntryBaseSchema = z.object({
   conversationIndex: z.number(),
   createdAt: z.string(),
   parentId: z.string().nullable(),
+  /**
+   * Side-lane entries (title/categorize/attachment-summary thoughts,
+   * params-resolution and guardrail thoughts) hang off their anchor entry for
+   * display but are not alternatives to it: branch walks, fork counting, and
+   * the chosen path consider spine (isSide=false) children only.
+   */
+  isSide: z.boolean(),
 });
 export type ChatEntryBase = z.infer<typeof ChatEntryBaseSchema>;
 
@@ -201,7 +208,7 @@ export const ToolEnvelopeSchema = z.object({
 });
 export type ToolEnvelope = z.infer<typeof ToolEnvelopeSchema>;
 
-export const ToolStateSchema = z.enum(['requested', 'running', 'done', 'error', 'denied']);
+export const ToolStateSchema = z.enum(['resolving', 'requested', 'running', 'done', 'error', 'denied']);
 export type ToolState = z.infer<typeof ToolStateSchema>;
 
 export const ToolInvocationEntrySchema = ChatEntryBaseSchema.extend({
@@ -246,10 +253,10 @@ export type CheckpointSummaryEntry = z.infer<typeof CheckpointSummaryEntrySchema
  * scan (see context-injection.service.ts). `files` lists every candidate
  * file the scan discovered on disk, each tagged with whether it was folded
  * into `content` (`injected`) or left out (`skipped` — category not
- * selected, unreadable, or binary). Appended as a thought-less chain step
- * (see ChatChain) right after the first user-message, before the planner
- * thought starts, so `content` is already part of the immutable entry DAG
- * the planner reads from — no separate re-scan on reprocess.
+ * selected, unreadable, or binary). Appended as a thought-less spine entry
+ * right after the first user-message, before the planner thought starts, so
+ * `content` is already part of the immutable entry DAG the planner reads
+ * from — no separate re-scan on reprocess.
  */
 export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal('context-injection'),

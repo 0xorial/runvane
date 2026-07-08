@@ -1,6 +1,5 @@
 import type { ChatEntry, ThoughtStreamEntry, ThoughtType } from '../contracts/chatEntry.js';
 import type { LlmRef } from '../contracts/llm.js';
-import type { ChatChain } from '../conversations/chat-chain.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../llmProviders/types.js';
 
@@ -9,6 +8,18 @@ export type { LlmRef, ThoughtStreamEntry, ThoughtType };
 export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEntry {
   return entry.type === 'thought_stream';
 }
+
+/**
+ * Which lane a thought's entries write to.
+ *
+ * `spine` — the reply timeline: user/assistant/tool entries plus the planner's
+ * own thought steps. Spine children of an entry are ALTERNATIVES (branches).
+ * `side` — bookkeeping thoughts (title, categorize, attachment summaries,
+ * params resolution, guardrail) anchored to a spine entry for display but
+ * excluded from branch semantics, so they can run concurrently without ever
+ * forking the conversation.
+ */
+export type ThoughtLane = 'spine' | 'side';
 
 export type ThoughtContext = {
   thoughtId: string;
@@ -26,9 +37,29 @@ export type ThoughtContext = {
   prepareEntryId: string | null;
   streamEntryId: string | null;
   thoughtActionEntryId: string | null;
-  /** Per-run chat-entry append cursor shared across thoughts in the same scope. */
-  chain: ChatChain;
+  /**
+   * Causal append cursor for THIS thought's entries: every append parents at
+   * the cursor and advances it, so the thought's steps form one contiguous
+   * run under the anchor the caller chose. There is no shared mutable tip —
+   * whoever starts a thought states, from its own causal knowledge, where the
+   * thought belongs.
+   */
+  cursorParentId: string | null;
+  lane: ThoughtLane;
 };
+
+/**
+ * Append one entry at the thought's cursor and advance the cursor. All of a
+ * thought's steps are awaited sequentially, so the cursor never races.
+ */
+export async function appendAtCursor<T extends { id: string }>(
+  ctx: ThoughtContext,
+  fn: (parentId: string | null, isSide: boolean) => Promise<T>,
+): Promise<T> {
+  const created = await fn(ctx.cursorParentId, ctx.lane === 'side');
+  ctx.cursorParentId = created.id;
+  return created;
+}
 
 export type ThoughtTypeProvider<TInput> = {
   thoughtType: ThoughtType;

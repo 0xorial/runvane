@@ -17,6 +17,13 @@ export type SummarizeAttachmentInput = {
   /** Id of the user-message that triggered this batch of summaries. */
   userMessageId: string;
   /**
+   * Spine entry the planner anchors at once every summary settles — the
+   * run's tip when the batch was dispatched (the user message, or the
+   * context-injection entry when one was appended after it). The summaries
+   * themselves are side thoughts and never move the spine.
+   */
+  plannerAnchorId: string;
+  /**
    * Per-batch barrier shared by every summarize task in this user-message.
    * Signaled idempotently from both the success path (end of
    * `runDecision`) and the universal `onThoughtSettled` finally — so the
@@ -133,7 +140,8 @@ export class SummarizeAttachmentThoughtTypeProvider implements ThoughtTypeProvid
       provider: this.plannerProvider,
       conversationId: ctx.conversationId,
       scope,
-      chain: ctx.chain,
+      anchorParentId: input.plannerAnchorId,
+      lane: 'spine',
       llm: input.plannerLlm,
     });
   }

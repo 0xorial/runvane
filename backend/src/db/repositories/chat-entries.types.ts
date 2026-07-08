@@ -6,6 +6,8 @@ export type ChatEntryDbRow = {
   conversation_id: string;
   conversation_index: number;
   parent_id: string | null;
+  /** SQLite boolean: 1 = side-lane entry (excluded from branch semantics). */
+  is_side: number;
   type: string;
   payload_json: string;
   created_at: Date;

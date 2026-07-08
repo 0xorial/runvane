@@ -39,6 +39,7 @@ model ChatEntry {
   conversationId    String       @map("conversation_id")
   conversationIndex Int          @map("conversation_index")
   parentId          String?      @map("parent_id")
+  isSide            Boolean      @default(false) @map("is_side")
   type              String
   payloadJson       String       @map("payload_json")
   createdAt         DateTime     @default(now()) @map("created_at")

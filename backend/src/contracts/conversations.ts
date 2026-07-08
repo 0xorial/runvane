@@ -188,6 +188,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
         id: typeof rec.id === 'string' ? rec.id : '',
         text: typeof rec.text === 'string' ? rec.text : '',
         parentId: typeof rec.parentId === 'string' ? rec.parentId : null,
+        isSide: false,
         agentId,
         conversationIndex:
           typeof rec.conversationIndex === 'number' && Number.isFinite(rec.conversationIndex)
@@ -202,6 +203,7 @@ function parseChatMessageEntry(value: unknown, index: number): ChatMessageEntry 
         id: typeof rec.id === 'string' ? rec.id : '',
         text: typeof rec.text === 'string' ? rec.text : '',
         parentId: typeof rec.parentId === 'string' ? rec.parentId : null,
+        isSide: false,
         conversationIndex:
           typeof rec.conversationIndex === 'number' && Number.isFinite(rec.conversationIndex)
             ? rec.conversationIndex
