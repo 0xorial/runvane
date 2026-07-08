@@ -55,3 +55,25 @@ export function isServiceUnreachable(error: unknown): boolean {
   };
   return walk(error);
 }
+
+// Errno codes that mean "the service accepted the connection, then died on
+// THIS request" — the peer dropped mid-exchange, as opposed to nothing
+// listening (UNREACHABLE_CODES) or a flaky-but-clean error response.
+const MID_REQUEST_DROP_CODES = new Set(['ECONNRESET', 'EPIPE', 'UND_ERR_SOCKET']);
+
+/**
+ * True when a failed `fetch()` died mid-request: the service was there and
+ * closed the socket on us. Distinct from {@link isServiceUnreachable} — a
+ * caller may reasonably retry (the request itself likely crashed the peer).
+ */
+export function isMidRequestDrop(error: unknown): boolean {
+  const walk = (e: unknown): boolean => {
+    if (e == null || typeof e !== 'object') return false;
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string' && MID_REQUEST_DROP_CODES.has(code)) return true;
+    const nested = (e as { errors?: unknown[] }).errors;
+    if (Array.isArray(nested) && nested.some(walk)) return true;
+    return walk((e as { cause?: unknown }).cause);
+  };
+  return walk(error);
+}

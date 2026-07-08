@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { zerialize } from 'zodex';
 import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
-import { describeFetchFailure, isServiceUnreachable } from '../../fetch-failure.js';
+import { describeFetchFailure, isMidRequestDrop, isServiceUnreachable } from '../../fetch-failure.js';
 import { parseWebBrowseParams, webBrowseParamsSchema, type WebBrowseParams } from './params.js';
 import { WebBrowseRulesSchema, parseWebBrowseRules, type WebBrowseRules } from './rules.js';
 
@@ -14,6 +14,39 @@ type ScrapeResponse = {
   message?: string;
   error?: string;
 };
+
+/**
+ * Scrape failures that smell like a TLS handshake problem. Steel's headless
+ * chromium reports outright cert errors as net::ERR_CERT_… / net::ERR_SSL_…,
+ * but its scripted navigation also collapses cert rejections into the opaque
+ * net::ERR_ABORTED (verified against a host whose certificate only covered
+ * the apex domain), so that counts too — a spurious extra attempt on a
+ * genuine abort costs one scrape call and nothing else.
+ */
+export function isTlsSuspectScrapeFailure(reason: string): boolean {
+  return /net::ERR_(CERT_|SSL_|ABORTED)/.test(reason);
+}
+
+/**
+ * The www↔apex sibling of an https URL: `www.host` → `host`, `host` →
+ * `www.host`. Desktop chromium silently retries this variant when a cert
+ * only covers the other host — headless scraping doesn't get that grace, so
+ * the tool re-creates it. Returns null when no sensible sibling exists
+ * (non-https, IP literals, localhost, single-label hosts).
+ */
+export function wwwApexVariant(rawUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  const host = url.hostname;
+  if (!host.includes('.') || /^[\d.]+$/.test(host) || host.startsWith('[')) return null;
+  url.hostname = host.startsWith('www.') ? host.slice(4) : `www.${host}`;
+  return url.toString();
+}
 
 /**
  * Harness tool: fetch a page through a headless browser (Steel) and return its
@@ -63,18 +96,20 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
     const rules = parseWebBrowseRules(context.toolRules ?? this.getDefaultRules());
     const endpoint = new URL('/v1/scrape', rules.endpoint);
 
-    const payload: Record<string, unknown> = { url: params.url, format: [params.format] };
-    // proxyUrl is per-call in Steel (its PROXY_URL env is a no-op); this is what
-    // routes browser egress through the exit-node tunnel.
-    if (rules.proxyUrl) payload.proxyUrl = rules.proxyUrl;
-
     const controller = new AbortController();
+    // One timer across every attempt: the fallback shares the call's budget.
     const timer = setTimeout(() => controller.abort(), rules.timeoutMs);
     const onParentAbort = () => controller.abort(context.signal.reason);
     if (context.signal.aborted) controller.abort(context.signal.reason);
     else context.signal.addEventListener('abort', onParentAbort, { once: true });
 
-    try {
+    const scrape = async (
+      url: string,
+    ): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; reason: string }> => {
+      const payload: Record<string, unknown> = { url, format: [params.format] };
+      // proxyUrl is per-call in Steel (its PROXY_URL env is a no-op); this is what
+      // routes browser egress through the exit-node tunnel.
+      if (rules.proxyUrl) payload.proxyUrl = rules.proxyUrl;
       const response = await fetch(endpoint.toString(), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -83,22 +118,96 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
       });
       const body = (await response.json().catch(() => ({}))) as ScrapeResponse;
       if (!response.ok) {
-        const reason = body.message ?? body.error ?? `${response.status} ${response.statusText}`;
-        throw new Error(`web_browse: ${params.url} via ${endpoint.toString()} failed — ${reason}`);
+        return { ok: false, reason: body.message ?? body.error ?? `${response.status} ${response.statusText}` };
       }
       const raw = body.content?.[params.format] ?? '';
       const truncated = raw.length > rules.maxResponseBytes;
       const content = truncated ? raw.slice(0, rules.maxResponseBytes) : raw;
       return {
-        url: params.url,
-        statusCode: body.metadata?.statusCode,
-        title: body.metadata?.title,
-        format: params.format,
-        content,
-        truncated,
-        wordCount: body.metadata?.wordCount,
-        links: params.includeLinks ? (body.links ?? []).map((l) => ({ url: l.url, text: l.text })) : undefined,
+        ok: true,
+        value: {
+          url,
+          statusCode: body.metadata?.statusCode,
+          title: body.metadata?.title,
+          format: params.format,
+          content,
+          truncated,
+          wordCount: body.metadata?.wordCount,
+          links: params.includeLinks ? (body.links ?? []).map((l) => ({ url: l.url, text: l.text })) : undefined,
+        },
       };
+    };
+
+    const withVariantNote = (value: Record<string, unknown>, variant: string, firstReason: string) => ({
+      ...value,
+      requestedUrl: params.url,
+      note:
+        `Fetched ${variant} instead: ${params.url} failed (${firstReason}) — ` +
+        `the site's TLS certificate likely covers only this host variant. Use ${variant} for follow-up requests.`,
+    });
+    // Steel needs a few seconds to relaunch its browser after a scrape crashes
+    // it; resolves early on abort so the next fetch surfaces the AbortError.
+    const relaunchGrace = () =>
+      new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, 6_000);
+        controller.signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+
+    try {
+      let first: Awaited<ReturnType<typeof scrape>>;
+      try {
+        first = await scrape(params.url);
+      } catch (error) {
+        // Mid-request drop: the enabler was reachable but died on this exact
+        // scrape — Steel's browser crashes on some cert-rejected navigations,
+        // so a www↔apex sibling is worth one delayed attempt. Anything else
+        // (service down, abort) falls through to the generic handling.
+        const variant = isMidRequestDrop(error) ? wwwApexVariant(params.url) : null;
+        if (!variant) throw error;
+        await relaunchGrace();
+        const second = await scrape(variant).catch(() => null);
+        if (!second?.ok) throw error; // report the original drop
+        return withVariantNote(second.value, variant, describeFetchFailure(error));
+      }
+      if (first.ok) return first.value;
+
+      // TLS-suspect failure: mirror desktop chromium's www↔apex grace. Sites
+      // whose certificate covers only one of the two variants open fine in a
+      // normal browser (it silently swaps hosts) but hard-fail a headless
+      // scrape — retry the sibling host once before giving up.
+      const variant = isTlsSuspectScrapeFailure(first.reason) ? wwwApexVariant(params.url) : null;
+      if (variant) {
+        // The cert-rejected navigation crashes Steel's browser AND poisons its
+        // connections for a few seconds (measured: immediate follow-ups get
+        // ECONNRESET, +6s succeeds) — so the sibling attempt needs the same
+        // relaunch grace as the socket-drop path, and must swallow its own
+        // transport failures rather than mask the original error.
+        await relaunchGrace();
+        let second: Awaited<ReturnType<typeof scrape>> | null = null;
+        let secondError: unknown;
+        try {
+          second = await scrape(variant);
+        } catch (err) {
+          secondError = err;
+        }
+        if (second?.ok) return withVariantNote(second.value, variant, first.reason);
+        const secondReason = second ? second.reason : describeFetchFailure(secondError);
+        throw new Error(
+          `web_browse: ${params.url} via ${endpoint.toString()} failed — ${first.reason} ` +
+            `(looks like a TLS certificate problem; the www/apex sibling ${variant} also failed: ${secondReason})`,
+        );
+      }
+      const tlsHint = isTlsSuspectScrapeFailure(first.reason)
+        ? ' (this often means a TLS certificate problem the headless browser cannot bypass)'
+        : '';
+      throw new Error(`web_browse: ${params.url} via ${endpoint.toString()} failed — ${first.reason}${tlsHint}`);
     } catch (error) {
       if (context.signal.aborted) context.signal.throwIfAborted();
       if (error instanceof Error && error.name === 'AbortError') {
