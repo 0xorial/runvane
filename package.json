@@ -9,6 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "ports": "node dev-ports/list.mjs",
     "demos": "node scripts/record-demos.mjs",
+    "demos:encode": "node scripts/encode-demos.mjs",
     "test": "node scripts/run-all-tests.mjs",
     "test:unit": "npm test --prefix backend",
     "test:e2e": "node scripts/run-e2e.mjs",

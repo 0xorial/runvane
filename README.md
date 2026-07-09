@@ -43,19 +43,17 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Demos
 
-Animated UI recordings in [`docs/demo/`](docs/demo/). Re-record with `npm run demos` (needs `ffmpeg` and `img2webp`, e.g. `brew install ffmpeg webp`).
+**▶ [Watch the demos](https://0xorial.github.io/runvane/)** — full-quality video recordings of the real app, driven end-to-end against a scripted stub LLM. Click any thumbnail below to jump to its clip.
 
-| Feature | Recording |
+| | |
 | --- | --- |
-| Agentic tool call | ![Agentic tool call](docs/demo/agentic-tool-call.webp) |
-| Multi-model compare | ![Multi-model compare](docs/demo/multi-model-compare.webp) |
-| Steering in-flight runs | ![Steering](docs/demo/steering.webp) |
-| Transparent runtime (activity) | ![Transparent runtime](docs/demo/transparent-runtime.webp) |
-| Thought step drill-down | ![Transparent thought steps](docs/demo/transparent-thought-steps.webp) |
-| Fold + checkpoint summary | ![Summarize fold](docs/demo/summarize-fold.webp) |
-| Guardrail approval | ![Guardrail approval](docs/demo/guardrail-approval.webp) |
-| Branch on edit / reprocess | ![Branch reprocess](docs/demo/branch-reprocess.webp) |
-| Attachment summary + subagent | ![Attachment summary](docs/demo/attachment-summary.webp) |
+| [![Agentic tool call](docs/demo/agentic-tool-call.jpg)](https://0xorial.github.io/runvane/#agentic-tool-call)<br>**Agentic tool call** | [![Multi-model compare](docs/demo/multi-model-compare.jpg)](https://0xorial.github.io/runvane/#multi-model-compare)<br>**Multi-model compare** |
+| [![Steering](docs/demo/steering.jpg)](https://0xorial.github.io/runvane/#steering)<br>**Steering in-flight runs** | [![Transparent runtime](docs/demo/transparent-runtime.jpg)](https://0xorial.github.io/runvane/#transparent-runtime)<br>**Transparent runtime (activity)** |
+| [![Transparent thought steps](docs/demo/transparent-thought-steps.jpg)](https://0xorial.github.io/runvane/#transparent-thought-steps)<br>**Thought step drill-down** | [![Summarize fold](docs/demo/summarize-fold.jpg)](https://0xorial.github.io/runvane/#summarize-fold)<br>**Fold + checkpoint summary** |
+| [![Guardrail approval](docs/demo/guardrail-approval.jpg)](https://0xorial.github.io/runvane/#guardrail-approval)<br>**Guardrail approval** | [![Branch reprocess](docs/demo/branch-reprocess.jpg)](https://0xorial.github.io/runvane/#branch-reprocess)<br>**Branch on edit / reprocess** |
+| [![Attachment summary](docs/demo/attachment-summary.jpg)](https://0xorial.github.io/runvane/#attachment-summary)<br>**Attachment summary + subagent** | |
+
+Re-record with `npm run demos` (needs `ffmpeg`); `npm run demos:encode` re-encodes existing recordings without re-running them. Clips land in [`docs/demo/`](docs/demo/), and GitHub Pages serves [`docs/`](docs/) straight from `main`.
 
 ## Planned features
 

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runvane — demos</title>
+<meta name="description" content="Personal AI chat client focused on local-first control, flexible orchestration, and transparent runtime behavior. Watch the demos.">
+<meta property="og:title" content="Runvane — demos">
+<meta property="og:description" content="Local-first AI chat client with agentic tools, steering, branching, and a transparent runtime. Real end-to-end recordings.">
+<meta property="og:image" content="https://0xorial.github.io/runvane/demo/transparent-runtime.jpg">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b7285'/%3E%3Cpath d='M11 8l14 8-14 8z' fill='white'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: hsl(210 20% 98%);
+    --fg: hsl(240 10% 10%);
+    --muted: hsl(240 5% 40%);
+    --card: hsl(0 0% 100%);
+    --line: hsl(220 14% 88%);
+    --accent: hsl(187 94% 30%);
+    --accent-soft: hsl(187 94% 30% / .09);
+    --shadow: 0 1px 2px hsl(240 10% 10% / .05), 0 12px 32px -12px hsl(240 10% 10% / .18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: hsl(240 10% 7%);
+      --fg: hsl(210 20% 92%);
+      --muted: hsl(220 9% 62%);
+      --card: hsl(240 8% 10%);
+      --line: hsl(240 6% 20%);
+      --accent: hsl(187 94% 46%);
+      --accent-soft: hsl(187 94% 46% / .1);
+      --shadow: 0 1px 2px hsl(0 0% 0% / .4), 0 12px 32px -12px hsl(0 0% 0% / .6);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 0 20px; }
+  code {
+    font: .875em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--accent-soft);
+    border-radius: 5px;
+    padding: .1em .35em;
+  }
+  a { color: var(--accent); }
+
+  header.hero { padding: 72px 0 36px; }
+  .wordmark {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 34px; font-weight: 750; letter-spacing: -.02em;
+  }
+  .wordmark svg { flex: none; }
+  .tagline { margin: 14px 0 6px; font-size: 21px; font-weight: 550; letter-spacing: -.01em; max-width: 34em; }
+  .sub { margin: 0; color: var(--muted); max-width: 44em; }
+  .hero-links { margin-top: 22px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 10px; text-decoration: none;
+    font-weight: 600; font-size: 15px;
+    border: 1px solid var(--line); color: var(--fg); background: var(--card);
+  }
+  .btn.primary { background: var(--accent); border-color: transparent; color: hsl(0 0% 100%); }
+  .btn:hover { filter: brightness(1.05); }
+
+  nav.toc { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-block: 1px solid var(--line); }
+  nav.toc .wrap { display: flex; gap: 6px; overflow-x: auto; padding-block: 10px; scrollbar-width: none; }
+  nav.toc a {
+    flex: none; text-decoration: none; color: var(--muted);
+    font-size: 13.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
+  }
+  nav.toc a:hover { color: var(--fg); background: var(--accent-soft); }
+
+  main { padding-bottom: 40px; }
+  section.demo { padding: 56px 0 8px; scroll-margin-top: 64px; }
+  .demo-head { display: flex; align-items: baseline; gap: 14px; }
+  .demo-head .num { font: 600 13px/1 ui-monospace, monospace; color: var(--accent); letter-spacing: .08em; }
+  h2 { margin: 0; font-size: 24px; letter-spacing: -.015em; }
+  .demo p.desc { margin: 10px 0 20px; color: var(--muted); max-width: 46em; }
+  figure { margin: 0; }
+  .screen {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--card); box-shadow: var(--shadow);
+  }
+  video { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; cursor: pointer; }
+
+  footer { border-top: 1px solid var(--line); margin-top: 56px; padding: 28px 0 48px; color: var(--muted); font-size: 14.5px; }
+  footer p { max-width: 56em; }
+  .hint { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="wordmark">
+      <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M11 8l14 8-14 8z" fill="white"/></svg>
+      runvane
+    </div>
+    <p class="tagline">Personal AI chat client focused on local-first control, flexible orchestration, and transparent runtime behavior.</p>
+    <p class="sub">Keep your data local, avoid vendor lock-in, and see exactly what the agent is doing — every plan, tool call, and token accounted for.</p>
+    <div class="hero-links">
+      <a class="btn primary" href="https://github.com/0xorial/runvane">
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+      <a class="btn" href="https://github.com/0xorial/runvane#developmentusage">Run it locally</a>
+    </div>
+    <p class="hint">Clips loop automatically — click any clip to pause or resume.</p>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Demos">
+  <div class="wrap">
+    <a href="#agentic-tool-call">Tool call</a>
+    <a href="#multi-model-compare">Multi-model</a>
+    <a href="#steering">Steering</a>
+    <a href="#transparent-runtime">Runtime</a>
+    <a href="#transparent-thought-steps">Thought steps</a>
+    <a href="#summarize-fold">Fold</a>
+    <a href="#guardrail-approval">Guardrails</a>
+    <a href="#branch-reprocess">Branching</a>
+    <a href="#attachment-summary">Attachments</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <section class="demo" id="agentic-tool-call">
+    <div class="demo-head"><span class="num">01</span><h2>Agentic tool call</h2></div>
+    <p class="desc">Ask something the model can't know on its own. The agent plans, calls <code>get_current_time</code>, shows the call and its result inline in the transcript, and folds the outcome into its reply.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/agentic-tool-call.jpg" aria-label="Agentic tool call demo">
+      <source src="demo/agentic-tool-call.webm" type="video/webm">
+      <source src="demo/agentic-tool-call.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="multi-model-compare">
+    <div class="demo-head"><span class="num">02</span><h2>Multi-model compare</h2></div>
+    <p class="desc">Send one prompt to several models at once. Each reply lands as a branch on the same message — flip between them with the branch selector to compare answers side by side.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/multi-model-compare.jpg" aria-label="Multi-model compare demo">
+      <source src="demo/multi-model-compare.webm" type="video/webm">
+      <source src="demo/multi-model-compare.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="steering">
+    <div class="demo-head"><span class="num">03</span><h2>Steering in-flight runs</h2></div>
+    <p class="desc">A run heading the wrong way doesn't have to finish. Interrupt it mid-stream, add a correction, and the agent picks up from there with the new instruction instead of starting over.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/steering.jpg" aria-label="Steering demo">
+      <source src="demo/steering.webm" type="video/webm">
+      <source src="demo/steering.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="transparent-runtime">
+    <div class="demo-head"><span class="num">04</span><h2>Transparent runtime</h2></div>
+    <p class="desc">Every run leaves an activity trail. Opening a collapsed planning row reveals the full picture in the details panel — the exact prompt, the model's reasoning, and the action it chose.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/transparent-runtime.jpg" aria-label="Transparent runtime demo">
+      <source src="demo/transparent-runtime.webm" type="video/webm">
+      <source src="demo/transparent-runtime.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="transparent-thought-steps">
+    <div class="demo-head"><span class="num">05</span><h2>Thought-step drill-down</h2></div>
+    <p class="desc">Drill into each step of a run — title generation, decision planning, tool-parameter resolution — all the way down to the raw model response behind it.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/transparent-thought-steps.jpg" aria-label="Thought-step drill-down demo">
+      <source src="demo/transparent-thought-steps.webm" type="video/webm">
+      <source src="demo/transparent-thought-steps.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="summarize-fold">
+    <div class="demo-head"><span class="num">06</span><h2>Fold &amp; checkpoint summary</h2></div>
+    <p class="desc">Long history folds behind a checkpoint: earlier messages collapse into a summary that carries their context forward, keeping the working context lean without losing the thread.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/summarize-fold.jpg" aria-label="Fold and checkpoint summary demo">
+      <source src="demo/summarize-fold.webm" type="video/webm">
+      <source src="demo/summarize-fold.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="guardrail-approval">
+    <div class="demo-head"><span class="num">07</span><h2>Guardrail approval</h2></div>
+    <p class="desc">A guardrail flags a risky tool call and pauses the run. Nothing executes until a human reviews the reason and approves — then the run continues exactly where it stopped.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/guardrail-approval.jpg" aria-label="Guardrail approval demo">
+      <source src="demo/guardrail-approval.webm" type="video/webm">
+      <source src="demo/guardrail-approval.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="branch-reprocess">
+    <div class="demo-head"><span class="num">08</span><h2>Branch on edit &amp; reprocess</h2></div>
+    <p class="desc">Edit an earlier message and reprocess: the conversation branches at that point, and the selector switches between the original line and the new one — nothing is overwritten.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/branch-reprocess.jpg" aria-label="Branch and reprocess demo">
+      <source src="demo/branch-reprocess.webm" type="video/webm">
+      <source src="demo/branch-reprocess.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+  <section class="demo" id="attachment-summary">
+    <div class="demo-head"><span class="num">09</span><h2>Attachment summary &amp; subagent</h2></div>
+    <p class="desc">Attachments enter the context as compact summaries. When a follow-up needs detail the summary can't answer, an <code>ask_attachment</code> subagent reads the full file on demand.</p>
+    <figure class="screen"><video controls muted playsinline loop preload="none" poster="demo/attachment-summary.jpg" aria-label="Attachment summary demo">
+      <source src="demo/attachment-summary.webm" type="video/webm">
+      <source src="demo/attachment-summary.mp4" type="video/mp4">
+    </video></figure>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Every clip is a real end-to-end recording: the actual app, driven by Playwright against a scripted stub LLM, so runs are deterministic and reproducible — re-record any of them with <code>npm run demos</code>.</p>
+    <p><a href="https://github.com/0xorial/runvane">github.com/0xorial/runvane</a> · MIT © Timur Seitosmanov</p>
+  </div>
+</footer>
+
+<script>
+  // Videos ship with native controls (no-JS / reduced-motion fallback); with JS
+  // they become clean auto-playing loops that pause offscreen.
+  const videos = [...document.querySelectorAll("video")];
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const io = new IntersectionObserver((entries) => {
+      for (const { target: v, isIntersecting } of entries) {
+        if (isIntersecting) v.play().catch(() => { v.controls = true; });
+        else if (!v.paused) v.pause();
+      }
+    }, { rootMargin: "200px 0px" });
+    for (const v of videos) {
+      v.removeAttribute("controls");
+      io.observe(v);
+      v.addEventListener("click", () => (v.paused ? v.play() : v.pause()));
+    }
+  }
+</script>
+</body>
+</html>

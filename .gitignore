@@ -37,3 +37,6 @@ demos/demo-output/
 *.mp4
 *.webm
 *.gif
+# …except the encoded demo clips served by GitHub Pages.
+!docs/demo/*.mp4
+!docs/demo/*.webm

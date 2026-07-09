@@ -15,7 +15,8 @@ const apiBaseURL = process.env.E2E_API_BASE_URL;
 const VIDEO = { width: 1280, height: 800 };
 
 // Records polished demo videos (not assertions). Driven by scripts/record-demos.mjs
-// against the stub-LLM e2e harness, then converted to WebP with ffmpeg + img2webp.
+// against the stub-LLM e2e harness, then encoded for the demo site by
+// scripts/encode-demos.mjs (docs/demo/ MP4 + WebM + poster).
 export default defineConfig({
   testDir: demosDir,
   testMatch: "**/*.demo.ts",
