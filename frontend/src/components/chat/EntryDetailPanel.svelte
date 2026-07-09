@@ -14,6 +14,7 @@
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import { notifyError } from "@/utils/toast";
   import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
+  import CostTooltip from "@/components/ui/CostTooltip.svelte";
   import Icon from "@/components/ui/Icon.svelte";
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import RowIcon from "./RowIcon.svelte";
@@ -273,7 +274,15 @@
             {/if}
             {#if thoughtMeta.cost !== null}
               <span class="text-border">·</span>
-              <span>{formatCostUsd(thoughtMeta.cost)}</span>
+              <CostTooltip
+                promptTokens={thoughtMeta.breakdown.input}
+                cachedTokens={thoughtMeta.breakdown.cached}
+                completionTokens={thoughtMeta.breakdown.output}
+                pricing={thoughtMeta.pricing}
+                providerCost={thoughtMeta.providerCost}
+              >
+                {#snippet children()}{formatCostUsd(thoughtMeta.cost)}{/snippet}
+              </CostTooltip>
             {/if}
             {#if thoughtMeta.durationLabel}
               <span class="text-border">·</span>
