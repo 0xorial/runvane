@@ -106,6 +106,29 @@ test("long detail texts clamp to a dimmed preview with expand/collapse", async (
   await expect(context.getByTestId("block-expand").first()).toBeVisible();
 });
 
+test("cost pill: hovering tokens shows the usage breakdown, hovering price shows cost", async ({
+  app,
+  request,
+}) => {
+  await app.chat.gotoNew(await defaultAgentId(request));
+  await app.sidebar.runProbeTime();
+  await app.chat.transcript.waitForProbeComplete();
+
+  const pill = app.page.getByTestId("conversation-cost").first();
+  await pill.getByTestId("conversation-cost-tokens").hover();
+  const popover = app.page.getByTestId("cost-popover");
+  await expect(popover).toBeVisible();
+  await expect(popover).toHaveAttribute("data-popover-mode", "tokens");
+  await expect(popover).toContainText("per-model usage");
+  await expect(popover).toContainText("/ out");
+
+  // Moving to the price target retargets the open popover to the cost view
+  // (stub models have no pricing, so the price target is the set-pricing button).
+  await pill.getByRole("button").hover();
+  await expect(popover).toHaveAttribute("data-popover-mode", "cost");
+  await expect(popover).toContainText("per-model cost");
+});
+
 test("clicking a collapsed row opens the right panel even when it was hidden", async ({ app, request }) => {
   await app.chat.gotoNew(await defaultAgentId(request));
   await app.sidebar.runProbeTime();

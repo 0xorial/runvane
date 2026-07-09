@@ -4,9 +4,9 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import { createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
-  import { formatCostUsd, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
+  import { formatCostUsd, resolveStreamTokenBreakdown, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
   import { buildThoughtTripletsById } from "@/lib/thoughtTriplets";
-  import { isThoughtStreamEntry, type ChatEntry, type ThoughtStreamEntry } from "@/protocol/chatEntry";
+  import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import { formatDurationMs } from "@/utils/formatDurationMs";
   import { formatExactChatTime } from "@/utils/formatRelativeChatTime";
@@ -14,6 +14,7 @@
   import { notifyError } from "@/utils/toast";
   import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
   import Icon from "@/components/ui/Icon.svelte";
+  import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import RowIcon from "./RowIcon.svelte";
   import ThoughtTripletExpanded from "./rows/ThoughtTripletExpanded.svelte";
 
@@ -74,22 +75,26 @@
   const capabilitiesQuery = createModelCapabilitiesQuery();
   const pricingByModel = $derived(pricingFromCapabilities(capabilitiesQuery.data));
 
-  // The stage sections below carry the full token breakdown; this line is the
-  // at-a-glance summary the collapsed row also shows.
-  function thoughtMetaLine(s: ThoughtStreamEntry, createdAtIso: string): string {
+  // At-a-glance line above the stage sections; the token count carries the
+  // same hover breakdown (in/cached/out) as everywhere else via TokenTooltip.
+  const thoughtMeta = $derived.by(() => {
+    const s = stream;
+    if (!s) return null;
     const model = String(s.llm?.model || "").trim();
     const provider = String(s.llm?.providerId || "").trim();
+    const breakdown = resolveStreamTokenBreakdown(s);
     const total = streamTotalTokens(s);
     const cost = streamCostUsd(s, pricingByModel.get(model));
-    const parts = [
-      provider && model ? `${provider}/${model}` : model || "",
-      total > 0 ? formatTokenCount(total) : "",
-      cost !== null ? formatCostUsd(cost) : "",
-      s.thoughtMs != null ? formatDurationMs(s.thoughtMs) : "",
-      formatExactChatTime(createdAtIso),
-    ];
-    return parts.filter(Boolean).join(" · ");
-  }
+    return {
+      modelLabel: provider && model ? `${provider}/${model}` : model || "",
+      breakdown,
+      total,
+      cost,
+      pricing: pricingByModel.get(model),
+      providerCost: s.provider_cost ?? null,
+      durationLabel: s.thoughtMs != null ? formatDurationMs(s.thoughtMs) : "",
+    };
+  });
 
   // ---- tool details ----------------------------------------------------------
 
@@ -250,7 +255,33 @@
       </div>
     {:else if prepEntry && stream}
       <div class="space-y-3 text-xs">
-        <div class="font-mono text-[10px] text-muted-foreground">{thoughtMetaLine(stream, prepEntry.createdAt)}</div>
+        {#if thoughtMeta}
+          <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+            {#if thoughtMeta.modelLabel}<span>{thoughtMeta.modelLabel}</span>{/if}
+            {#if thoughtMeta.total > 0}
+              <span class="text-border">·</span>
+              <TokenTooltip
+                promptTokens={thoughtMeta.breakdown.input}
+                cachedTokens={thoughtMeta.breakdown.cached}
+                completionTokens={thoughtMeta.breakdown.output}
+                pricing={thoughtMeta.pricing}
+                providerCost={thoughtMeta.providerCost}
+              >
+                {#snippet children()}{formatTokenCount(thoughtMeta.total)}{/snippet}
+              </TokenTooltip>
+            {/if}
+            {#if thoughtMeta.cost !== null}
+              <span class="text-border">·</span>
+              <span>{formatCostUsd(thoughtMeta.cost)}</span>
+            {/if}
+            {#if thoughtMeta.durationLabel}
+              <span class="text-border">·</span>
+              <span>{thoughtMeta.durationLabel}</span>
+            {/if}
+            <span class="text-border">·</span>
+            <span>{formatExactChatTime(prepEntry.createdAt)}</span>
+          </div>
+        {/if}
         {#each THOUGHT_STAGES as stage (stage)}
           <div>
             <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{stage}</div>
