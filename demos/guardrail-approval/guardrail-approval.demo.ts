@@ -1,8 +1,4 @@
-import {
-  GUARDED_AGENT_ID,
-  PROBE_MESSAGE,
-  STUB_GUARDRAIL_FLAG_REASON,
-} from "../../tests/e2e/harness/client";
+import { GUARDED_AGENT_ID, PROBE_MESSAGE } from "../../tests/e2e/harness/client";
 import { stubLlmConfigure, stubLlmReset, type StubModelScript } from "../../tests/e2e/harness/stub-llm";
 import { E2E_LLM_TIMEOUT_MS } from "../../tests/e2e/timeouts";
 import { beat, expect, test } from "../_shared/demo-test";
@@ -20,7 +16,8 @@ const FINAL_PLANNER_MS = 600;
 const TOOL_PARAMS = "{}";
 
 const TITLE = "Time inquiry";
-const GUARDRAIL_REPLY = JSON.stringify({ verdict: "flag", reason: STUB_GUARDRAIL_FLAG_REASON });
+const GUARDRAIL_REASON = "Agent policy requires human review before tools run in this environment.";
+const GUARDRAIL_REPLY = JSON.stringify({ verdict: "flag", reason: GUARDRAIL_REASON });
 const TOOL_ROUND = plannerToolCall(
   "Let me check the current time.",
   "get_current_time",
@@ -62,7 +59,7 @@ test("guardrail-approval", async ({ app, request }) => {
   await app.chat.transcript.waitForToolState("requested", 0, E2E_LLM_TIMEOUT_MS);
   const tool = app.chat.transcript.toolRow();
   await expect(tool).toContainText("Guardrail flagged");
-  await expect(tool).toContainText(STUB_GUARDRAIL_FLAG_REASON);
+  await expect(tool).toContainText(GUARDRAIL_REASON);
   await beat(700);
 
   await demoClick(app.page, tool.getByTestId("tool-approve-button"));

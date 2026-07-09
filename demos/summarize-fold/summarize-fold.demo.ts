@@ -1,4 +1,4 @@
-import { defaultAgentId, STUB_SUMMARIZE_REPLY } from "../../tests/e2e/harness/client";
+import { defaultAgentId } from "../../tests/e2e/harness/client";
 import { stubLlmConfigure, stubLlmReset, type StubModelScript } from "../../tests/e2e/harness/stub-llm";
 import { E2E_LLM_TIMEOUT_MS } from "../../tests/e2e/timeouts";
 import { beat, expect, test } from "../_shared/demo-test";
@@ -24,6 +24,12 @@ const REPLY_TWO = plannerReply(
   "Add the caching angle the user asked for.",
 );
 
+// The fold's summarize call is a regular completion on the agent model — the
+// third queued reply feeds it, so the recorded checkpoint shows a real
+// summary instead of the stub matcher's e2e placeholder text.
+const FOLD_SUMMARY =
+  "The user asked how to cut API latency. We covered connection pooling, payload slimming and regional routing, then added edge caching: idempotent GETs cached at CDN edges with short TTLs and per-tenant cache keys.";
+
 const STUB_SCRIPT: StubModelScript[] = [
   { responses: [{ text: TITLE, streamMs: streamMsPerToken(TITLE, TITLE_MS) }] },
   {
@@ -31,6 +37,7 @@ const STUB_SCRIPT: StubModelScript[] = [
     responses: [
       { text: REPLY_ONE, streamMs: streamMsPerToken(REPLY_ONE, PLANNER_MS) },
       { text: REPLY_TWO, streamMs: streamMsPerToken(REPLY_TWO, PLANNER_MS) },
+      { text: FOLD_SUMMARY, streamMs: streamMsPerToken(FOLD_SUMMARY, PLANNER_MS) },
     ],
   },
 ];
@@ -60,7 +67,7 @@ test("summarize-fold", async ({ app, request }) => {
 
   const foldRow = app.chat.transcript.userMessageRow(1);
   await demoClick(app.page, foldRow.getByTestId("fold-from-here"));
-  await app.chat.transcript.waitForCheckpointSummary(STUB_SUMMARIZE_REPLY, E2E_LLM_TIMEOUT_MS);
+  await app.chat.transcript.waitForCheckpointSummary(FOLD_SUMMARY, E2E_LLM_TIMEOUT_MS);
   await app.chat.transcript.expectTranscriptContains(MSG_ONE);
   await app.chat.transcript.expectTranscriptNotContains(MSG_TWO);
   await beat(1500);
