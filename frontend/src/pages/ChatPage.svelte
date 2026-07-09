@@ -56,14 +56,30 @@
     switchToBranch: (branchEntryId) => session.switchToBranch(branchEntryId),
     siblingsOf: (entryId) => session.store.siblingsOf(entryId),
     toggleEntryDetail: (entryId) => {
-      detailEntryId = detailEntryId === entryId ? null : entryId;
+      detailEntryId = effectiveDetailEntryId === entryId ? null : entryId;
       if (detailEntryId) onShowRightSidebar();
     },
-    getOpenDetailEntryId: () => detailEntryId,
+    getOpenDetailEntryId: () => effectiveDetailEntryId,
   });
 
   const activePathEntries = $derived(session.activePathEntries.map((row$) => row$.get()));
   const activePathEntryById = $derived(new Map(activePathEntries.map((entry) => [entry.id, entry])));
+
+  // A branch switch can take the selected row's subtree off the active path
+  // (context reprocess, try-model, selector paging). The selection then
+  // follows to the sibling chosen at the same fork — same parent, same type —
+  // and closes when nothing equivalent remains, so the panel never points at
+  // an off-path entry.
+  const effectiveDetailEntryId = $derived.by(() => {
+    const id = detailEntryId;
+    if (!id || activePathEntryById.has(id)) return id;
+    const selected = session.allEntries.find((row$) => row$.id === id)?.get();
+    if (!selected || selected.isSide) return null;
+    const replacement = activePathEntries.find(
+      (entry) => entry.parentId === selected.parentId && entry.type === selected.type && !entry.isSide,
+    );
+    return replacement ? replacement.id : null;
+  });
   const tripletStreamIdByThoughtId = $derived.by(() => {
     const map = new Map<string, string>();
     for (const entry of activePathEntries) {
@@ -160,10 +176,10 @@
       <ResizablePaneHandle withHandle />
       <Pane defaultSize={26} minSize={16} maxSize={45} class="min-h-0 min-w-0 overflow-hidden">
         <aside class="h-full min-h-0 overflow-y-auto border-l border-border bg-sidebar">
-          {#if detailEntryId && conversationId}
+          {#if effectiveDetailEntryId && conversationId}
             <EntryDetailPanel
               {conversationId}
-              entryId={detailEntryId}
+              entryId={effectiveDetailEntryId}
               allEntries={session.allEntries}
               activePathEntries={session.activePathEntries}
               onClose={() => (detailEntryId = null)}

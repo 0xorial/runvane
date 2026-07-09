@@ -17,6 +17,7 @@
   import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
   import CostTooltip from "@/components/ui/CostTooltip.svelte";
   import Icon from "@/components/ui/Icon.svelte";
+  import Spinner from "@/components/ui/Spinner.svelte";
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import RowIcon from "./RowIcon.svelte";
   import ThoughtTripletExpanded from "./rows/ThoughtTripletExpanded.svelte";
@@ -373,7 +374,11 @@
         {/each}
       </div>
     {:else if prepEntry}
-      <p class="text-xs text-muted-foreground">This thought has no reasoning stream on the active path.</p>
+      <!-- Selection just followed a branch switch and the new stream hasn't
+           streamed in yet — sub-second transient, never an end state. -->
+      <div class="flex items-center justify-center p-6">
+        <Spinner size={14} />
+      </div>
     {:else}
       <p class="text-xs text-muted-foreground">No details for this entry type.</p>
     {/if}

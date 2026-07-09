@@ -158,6 +158,10 @@ test("try model branch from the details panel", async ({ app, request }) => {
   await expect(
     app.chat.transcript.prepareRow("Title generation").getByTestId("branch-selector"),
   ).toHaveCount(0);
+  // The open details panel follows to the new branch's prepare.
+  await expect(app.chat.transcript.detailPanel.getByText("Raw response")).toBeVisible({
+    timeout: E2E_LLM_TIMEOUT_MS,
+  });
 });
 
 test("branch on context reprocess", async ({ app, request }) => {
@@ -178,4 +182,8 @@ test("branch on context reprocess", async ({ app, request }) => {
   await expect(app.chat.transcript.prepareRow("Decision planning", 0).getByTestId("branch-selector")).toBeVisible({
     timeout: E2E_LLM_TIMEOUT_MS,
   });
+  // The details selection follows the branch switch to the replacing sibling
+  // prepare — never a "no stream on this branch" dead end.
+  await expect(panel).toContainText("Decision planning");
+  await expect(panel.getByText("Raw response")).toBeVisible({ timeout: E2E_LLM_TIMEOUT_MS });
 });
