@@ -1,8 +1,9 @@
 <script lang="ts">
   import Icon from "@/components/ui/Icon.svelte";
 
+  // Light is the default; dark only when the user explicitly chose it.
   let dark = $state(
-    typeof localStorage !== "undefined" ? localStorage.getItem("theme") !== "light" : true,
+    typeof localStorage !== "undefined" ? localStorage.getItem("theme") === "dark" : false,
   );
 
   $effect(() => {
