@@ -76,7 +76,7 @@
   }
   nav.toc a:hover { color: var(--fg); background: var(--accent-soft); }
 
-  main { padding-bottom: 40px; }
+  main { padding-bottom: 72px; }
   section.demo { padding: 56px 0 8px; scroll-margin-top: 64px; }
   .demo-head { display: flex; align-items: baseline; gap: 14px; }
   .demo-head .num { font: 600 13px/1 ui-monospace, monospace; color: var(--accent); letter-spacing: .08em; }
@@ -89,8 +89,6 @@
   }
   video { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; cursor: pointer; }
 
-  footer { border-top: 1px solid var(--line); margin-top: 56px; padding: 28px 0 48px; color: var(--muted); font-size: 14.5px; }
-  footer p { max-width: 56em; }
   .hint { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
 </style>
 </head>
@@ -213,13 +211,6 @@
   </section>
 
 </main>
-
-<footer>
-  <div class="wrap">
-    <p>Every clip is a real end-to-end recording: the actual app, driven by Playwright against a scripted stub LLM, so runs are deterministic and reproducible — re-record any of them with <code>npm run demos</code>.</p>
-    <p><a href="https://github.com/0xorial/runvane">github.com/0xorial/runvane</a> · MIT © Timur Seitosmanov</p>
-  </div>
-</footer>
 
 <script>
   // Videos ship with native controls (no-JS / reduced-motion fallback); with JS
