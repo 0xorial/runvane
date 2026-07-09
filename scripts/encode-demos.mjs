@@ -85,20 +85,35 @@ export function encodeDemo(webm, name) {
 export function encodeAll(filter = "") {
   let videos = findVideos(demoOutputDir);
   if (filter) videos = videos.filter((webm) => demoName(webm).includes(filter));
+  // A sibling error-context.md means Playwright failed that demo — the video
+  // shows a broken run and must never reach the published site.
+  const failed = videos
+    .filter((webm) => existsSync(path.join(path.dirname(webm), "error-context.md")))
+    .map(demoName);
+  const encoded = [];
   for (const webm of videos) {
     const n = demoName(webm);
+    if (failed.includes(n)) {
+      console.error(`✗ ${n}: recording FAILED — skipping encode (fix the demo and re-record)`);
+      continue;
+    }
     console.log(`Encoding ${n}…`);
     encodeDemo(webm, n);
+    encoded.push(n);
   }
-  return videos.map(demoName);
+  return { encoded, failed };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const names = encodeAll(process.argv[2]?.trim() || "");
-  if (!names.length) {
+  const { encoded, failed } = encodeAll(process.argv[2]?.trim() || "");
+  if (!encoded.length && !failed.length) {
     console.error("No demo masters found — run `npm run demos` first.");
     process.exit(1);
   }
-  console.log(`\n✓ Encoded ${names.length} demo(s) to ${path.relative(repoRoot, siteDemoDir)}/`);
-  for (const n of names) console.log(`  - ${n}`);
+  console.log(`\n✓ Encoded ${encoded.length} demo(s) to ${path.relative(repoRoot, siteDemoDir)}/`);
+  for (const n of encoded) console.log(`  - ${n}`);
+  if (failed.length) {
+    console.error(`\n✗ ${failed.length} failed recording(s) NOT encoded: ${failed.join(", ")}`);
+    process.exit(1);
+  }
 }

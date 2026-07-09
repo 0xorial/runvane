@@ -50,8 +50,13 @@ test("multi-model-compare", async ({ app, request }) => {
   await app.chat.transcript.waitForAssistantReply(E2E_LLM_TIMEOUT_MS);
   await beat(900);
 
+  // Try-model lives in the details panel now — open it from the collapsed row.
   const row = app.chat.transcript.prepareRow("Decision planning", 0);
-  await demoClick(app.page, row.getByTestId("thought-prepare-try-model"));
+  await demoClick(app.page, row.getByTestId("thought-collapsed-row"));
+  const tryModel = app.chat.transcript.detailPanel.getByTestId("thought-prepare-try-model");
+  await expect(tryModel).toBeVisible();
+  await beat(600);
+  await demoClick(app.page, tryModel);
   const listbox = app.page.getByRole("listbox");
   await expect(listbox).toBeVisible();
   const reprocessDone = app.page.waitForResponse(
