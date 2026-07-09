@@ -136,6 +136,7 @@
           {@const cfg = getToolConfig(name)}
           {@const on = cfg.policy !== "off"}
           {@const expanded = !!expandedTools[name] && on}
+          {@const location = row.location === "target" || row.location === "harness" ? String(row.location) : null}
           <tr>
             <td>
               {#if on}
@@ -152,10 +153,34 @@
                     <Icon name="chevron-right" class="h-3.5 w-3.5 text-muted-foreground" />
                   {/if}
                   <code>{name}</code>
+                  {#if location}
+                    <span
+                      class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide {location === 'target'
+                        ? 'bg-teal-500/15 text-teal-600'
+                        : 'bg-violet-500/15 text-violet-600'}"
+                      title={location === "target" ? "Runs in the target sandbox" : "Runs in the harness sandbox"}
+                      data-testid="settings-tool-location"
+                      data-tool-location={location}
+                    >
+                      {location}
+                    </span>
+                  {/if}
                 </button>
               {:else}
                 <div class="inline-flex items-center gap-2 pl-5">
                   <code class="text-muted-foreground">{name}</code>
+                  {#if location}
+                    <span
+                      class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide opacity-60 {location === 'target'
+                        ? 'bg-teal-500/15 text-teal-600'
+                        : 'bg-violet-500/15 text-violet-600'}"
+                      title={location === "target" ? "Runs in the target sandbox" : "Runs in the harness sandbox"}
+                      data-testid="settings-tool-location"
+                      data-tool-location={location}
+                    >
+                      {location}
+                    </span>
+                  {/if}
                 </div>
               {/if}
             </td>
