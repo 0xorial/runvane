@@ -21,6 +21,7 @@ import type {
   PostConversationMessageAcceptedResponse,
 } from "../../../backend/src/contracts/conversations";
 import type { ConversationCategorizationConfig } from "../../../backend/src/contracts/conversation-config";
+import { validateGetToolRunsResponse, type GetToolRunsResponse } from "../../../backend/src/contracts/tool-runs";
 import { validateConversationCategorizationConfig } from "../../../backend/src/contracts/conversation-config";
 import {
   validateConversationRowResponse,
@@ -308,6 +309,12 @@ export async function retryToolInvocation(
     `/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/retry`,
     {},
   );
+}
+
+export function getToolRuns(conversationId: string, entryId: string): Promise<GetToolRunsResponse> {
+  return getJson(
+    `/api/conversations/${encodeURIComponent(conversationId)}/tool-invocations/${encodeURIComponent(entryId)}/runs`,
+  ).then(validateGetToolRunsResponse);
 }
 
 export async function denyToolInvocation(

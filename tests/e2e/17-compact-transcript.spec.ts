@@ -28,6 +28,11 @@ test("finished tool collapses to a dimmed one-liner with elapsed time; details o
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Arguments");
   await expect(panel).toContainText("Result");
+  // Per-attempt execution records (with their persisted logs) load in place.
+  const runs = panel.getByTestId("tool-runs-section");
+  await expect(runs).toBeVisible();
+  await expect(runs).toContainText("attempt 1");
+  await expect(runs).toContainText("done");
 
   // Clicking the selected row again closes the details and Activity returns.
   await tool.click();

@@ -1583,6 +1583,7 @@ export const ToolRunScalarFieldEnum = {
   parametersJson: 'parametersJson',
   resultJson: 'resultJson',
   error: 'error',
+  outputLog: 'outputLog',
   startedAt: 'startedAt',
   finishedAt: 'finishedAt',
   elapsedMs: 'elapsedMs',

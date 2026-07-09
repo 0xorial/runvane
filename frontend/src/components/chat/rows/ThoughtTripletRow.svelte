@@ -166,7 +166,6 @@
               </span>
             </button>
             <span class="flex shrink-0 items-center gap-0.5 text-muted-foreground">
-              <TryModelBranchButton prepareEntry={prep} {stream} {conversationId} />
               <BranchSelector entryId={prep.id} />
               <BranchSelector entryId={stream.id} />
               {#if actionStep}<BranchSelector entryId={actionStep.id} />{/if}

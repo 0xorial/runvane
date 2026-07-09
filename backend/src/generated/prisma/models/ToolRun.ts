@@ -46,6 +46,7 @@ export type ToolRunMinAggregateOutputType = {
   retryOfRunId: string | null
   status: string | null
   error: string | null
+  outputLog: string | null
   startedAt: Date | null
   finishedAt: Date | null
   elapsedMs: number | null
@@ -63,6 +64,7 @@ export type ToolRunMaxAggregateOutputType = {
   retryOfRunId: string | null
   status: string | null
   error: string | null
+  outputLog: string | null
   startedAt: Date | null
   finishedAt: Date | null
   elapsedMs: number | null
@@ -82,6 +84,7 @@ export type ToolRunCountAggregateOutputType = {
   parametersJson: number
   resultJson: number
   error: number
+  outputLog: number
   startedAt: number
   finishedAt: number
   elapsedMs: number
@@ -111,6 +114,7 @@ export type ToolRunMinAggregateInputType = {
   retryOfRunId?: true
   status?: true
   error?: true
+  outputLog?: true
   startedAt?: true
   finishedAt?: true
   elapsedMs?: true
@@ -128,6 +132,7 @@ export type ToolRunMaxAggregateInputType = {
   retryOfRunId?: true
   status?: true
   error?: true
+  outputLog?: true
   startedAt?: true
   finishedAt?: true
   elapsedMs?: true
@@ -147,6 +152,7 @@ export type ToolRunCountAggregateInputType = {
   parametersJson?: true
   resultJson?: true
   error?: true
+  outputLog?: true
   startedAt?: true
   finishedAt?: true
   elapsedMs?: true
@@ -253,6 +259,7 @@ export type ToolRunGroupByOutputType = {
   parametersJson: runtime.JsonValue
   resultJson: runtime.JsonValue | null
   error: string | null
+  outputLog: string | null
   startedAt: Date
   finishedAt: Date | null
   elapsedMs: number | null
@@ -295,6 +302,7 @@ export type ToolRunWhereInput = {
   parametersJson?: Prisma.JsonFilter<"ToolRun">
   resultJson?: Prisma.JsonNullableFilter<"ToolRun">
   error?: Prisma.StringNullableFilter<"ToolRun"> | string | null
+  outputLog?: Prisma.StringNullableFilter<"ToolRun"> | string | null
   startedAt?: Prisma.DateTimeFilter<"ToolRun"> | Date | string
   finishedAt?: Prisma.DateTimeNullableFilter<"ToolRun"> | Date | string | null
   elapsedMs?: Prisma.IntNullableFilter<"ToolRun"> | number | null
@@ -314,6 +322,7 @@ export type ToolRunOrderByWithRelationInput = {
   parametersJson?: Prisma.SortOrder
   resultJson?: Prisma.SortOrderInput | Prisma.SortOrder
   error?: Prisma.SortOrderInput | Prisma.SortOrder
+  outputLog?: Prisma.SortOrderInput | Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   elapsedMs?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -336,6 +345,7 @@ export type ToolRunWhereUniqueInput = Prisma.AtLeast<{
   parametersJson?: Prisma.JsonFilter<"ToolRun">
   resultJson?: Prisma.JsonNullableFilter<"ToolRun">
   error?: Prisma.StringNullableFilter<"ToolRun"> | string | null
+  outputLog?: Prisma.StringNullableFilter<"ToolRun"> | string | null
   startedAt?: Prisma.DateTimeFilter<"ToolRun"> | Date | string
   finishedAt?: Prisma.DateTimeNullableFilter<"ToolRun"> | Date | string | null
   elapsedMs?: Prisma.IntNullableFilter<"ToolRun"> | number | null
@@ -355,6 +365,7 @@ export type ToolRunOrderByWithAggregationInput = {
   parametersJson?: Prisma.SortOrder
   resultJson?: Prisma.SortOrderInput | Prisma.SortOrder
   error?: Prisma.SortOrderInput | Prisma.SortOrder
+  outputLog?: Prisma.SortOrderInput | Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   elapsedMs?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -382,6 +393,7 @@ export type ToolRunScalarWhereWithAggregatesInput = {
   parametersJson?: Prisma.JsonWithAggregatesFilter<"ToolRun">
   resultJson?: Prisma.JsonNullableWithAggregatesFilter<"ToolRun">
   error?: Prisma.StringNullableWithAggregatesFilter<"ToolRun"> | string | null
+  outputLog?: Prisma.StringNullableWithAggregatesFilter<"ToolRun"> | string | null
   startedAt?: Prisma.DateTimeWithAggregatesFilter<"ToolRun"> | Date | string
   finishedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"ToolRun"> | Date | string | null
   elapsedMs?: Prisma.IntNullableWithAggregatesFilter<"ToolRun"> | number | null
@@ -401,6 +413,7 @@ export type ToolRunCreateInput = {
   parametersJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
+  outputLog?: string | null
   startedAt: Date | string
   finishedAt?: Date | string | null
   elapsedMs?: number | null
@@ -420,6 +433,7 @@ export type ToolRunUncheckedCreateInput = {
   parametersJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
+  outputLog?: string | null
   startedAt: Date | string
   finishedAt?: Date | string | null
   elapsedMs?: number | null
@@ -439,6 +453,7 @@ export type ToolRunUpdateInput = {
   parametersJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  outputLog?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   elapsedMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
@@ -458,6 +473,7 @@ export type ToolRunUncheckedUpdateInput = {
   parametersJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  outputLog?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   elapsedMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
@@ -477,6 +493,7 @@ export type ToolRunCreateManyInput = {
   parametersJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
+  outputLog?: string | null
   startedAt: Date | string
   finishedAt?: Date | string | null
   elapsedMs?: number | null
@@ -496,6 +513,7 @@ export type ToolRunUpdateManyMutationInput = {
   parametersJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  outputLog?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   elapsedMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
@@ -515,6 +533,7 @@ export type ToolRunUncheckedUpdateManyInput = {
   parametersJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   resultJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  outputLog?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   finishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   elapsedMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
@@ -534,6 +553,7 @@ export type ToolRunCountOrderByAggregateInput = {
   parametersJson?: Prisma.SortOrder
   resultJson?: Prisma.SortOrder
   error?: Prisma.SortOrder
+  outputLog?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
   elapsedMs?: Prisma.SortOrder
@@ -556,6 +576,7 @@ export type ToolRunMaxOrderByAggregateInput = {
   retryOfRunId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   error?: Prisma.SortOrder
+  outputLog?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
   elapsedMs?: Prisma.SortOrder
@@ -573,6 +594,7 @@ export type ToolRunMinOrderByAggregateInput = {
   retryOfRunId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   error?: Prisma.SortOrder
+  outputLog?: Prisma.SortOrder
   startedAt?: Prisma.SortOrder
   finishedAt?: Prisma.SortOrder
   elapsedMs?: Prisma.SortOrder
@@ -603,6 +625,7 @@ export type ToolRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   parametersJson?: boolean
   resultJson?: boolean
   error?: boolean
+  outputLog?: boolean
   startedAt?: boolean
   finishedAt?: boolean
   elapsedMs?: boolean
@@ -622,6 +645,7 @@ export type ToolRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   parametersJson?: boolean
   resultJson?: boolean
   error?: boolean
+  outputLog?: boolean
   startedAt?: boolean
   finishedAt?: boolean
   elapsedMs?: boolean
@@ -641,6 +665,7 @@ export type ToolRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   parametersJson?: boolean
   resultJson?: boolean
   error?: boolean
+  outputLog?: boolean
   startedAt?: boolean
   finishedAt?: boolean
   elapsedMs?: boolean
@@ -660,6 +685,7 @@ export type ToolRunSelectScalar = {
   parametersJson?: boolean
   resultJson?: boolean
   error?: boolean
+  outputLog?: boolean
   startedAt?: boolean
   finishedAt?: boolean
   elapsedMs?: boolean
@@ -667,7 +693,7 @@ export type ToolRunSelectScalar = {
   updatedAt?: boolean
 }
 
-export type ToolRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "conversationId" | "chatEntryId" | "agentId" | "toolId" | "attempt" | "retryOfRunId" | "status" | "parametersJson" | "resultJson" | "error" | "startedAt" | "finishedAt" | "elapsedMs" | "createdAt" | "updatedAt", ExtArgs["result"]["toolRun"]>
+export type ToolRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "conversationId" | "chatEntryId" | "agentId" | "toolId" | "attempt" | "retryOfRunId" | "status" | "parametersJson" | "resultJson" | "error" | "outputLog" | "startedAt" | "finishedAt" | "elapsedMs" | "createdAt" | "updatedAt", ExtArgs["result"]["toolRun"]>
 
 export type $ToolRunPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "ToolRun"
@@ -687,6 +713,10 @@ export type $ToolRunPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     parametersJson: runtime.JsonValue
     resultJson: runtime.JsonValue | null
     error: string | null
+    /**
+     * Streamed progress log (stdout, streamed tokens, …), tail-capped.
+     */
+    outputLog: string | null
     startedAt: Date
     finishedAt: Date | null
     elapsedMs: number | null
@@ -1126,6 +1156,7 @@ export interface ToolRunFieldRefs {
   readonly parametersJson: Prisma.FieldRef<"ToolRun", 'Json'>
   readonly resultJson: Prisma.FieldRef<"ToolRun", 'Json'>
   readonly error: Prisma.FieldRef<"ToolRun", 'String'>
+  readonly outputLog: Prisma.FieldRef<"ToolRun", 'String'>
   readonly startedAt: Prisma.FieldRef<"ToolRun", 'DateTime'>
   readonly finishedAt: Prisma.FieldRef<"ToolRun", 'DateTime'>
   readonly elapsedMs: Prisma.FieldRef<"ToolRun", 'Int'>

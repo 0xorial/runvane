@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { getTools, retryToolInvocation } from "@/api/client";
+  import { getTools, getToolRuns, retryToolInvocation } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
   import { createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
@@ -20,6 +20,7 @@
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import RowIcon from "./RowIcon.svelte";
   import ThoughtTripletExpanded from "./rows/ThoughtTripletExpanded.svelte";
+  import TryModelBranchButton from "./rows/thoughtTriplet/TryModelBranchButton.svelte";
 
   let {
     conversationId,
@@ -150,6 +151,16 @@
   const retryable = $derived(toolEntry?.state === "error" && toolEntry.result?.permission_state === "allow");
   let retrying = $state(false);
 
+  // Transient progress streamed onto the row while the tool runs (chatSessionStore).
+  const liveOutput = $derived((entry as unknown as { liveOutput?: string } | null)?.liveOutput ?? "");
+  // Per-attempt execution records incl. the persisted progress log. Keyed on
+  // the entry's state so reaching a terminal state refetches the final log.
+  const runsQuery = createQuery(() => ({
+    queryKey: ["tool-runs", conversationId, entryId, toolEntry?.state ?? "none"],
+    queryFn: () => getToolRuns(conversationId, entryId),
+    enabled: toolEntry != null,
+  }));
+
   async function onRetryClick(): Promise<void> {
     if (!toolEntry || retrying) return;
     retrying = true;
@@ -259,10 +270,48 @@
             </CollapsibleBlock>
           </div>
         {/if}
+        {#if toolEntry.state === "running" && liveOutput}
+          <div>
+            <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Live output</span>
+            <pre
+              class="scrollbar-thin mt-1 max-h-60 overflow-auto rounded bg-background p-2 font-mono text-[11px] text-secondary-foreground"
+              data-testid="detail-live-output">{liveOutput}</pre>
+          </div>
+        {/if}
+        {#if (runsQuery.data?.runs.length ?? 0) > 0}
+          <div data-testid="tool-runs-section">
+            <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Runs</span>
+            <div class="mt-1 space-y-2">
+              {#each runsQuery.data?.runs ?? [] as run (run.id)}
+                <div class="rounded border border-border/60">
+                  <div class="flex items-center gap-2 rounded-t border-b border-border/40 bg-secondary/40 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    <span>attempt {run.attempt}</span>
+                    <span class={run.status === "error" || run.status === "aborted" ? "text-destructive/80" : ""}>
+                      {run.status}
+                    </span>
+                    {#if run.elapsedMs != null}<span>{formatDurationMs(run.elapsedMs)}</span>{/if}
+                    <span class="ml-auto">{formatExactChatTime(run.startedAt)}</span>
+                  </div>
+                  {#if run.error}
+                    <div class="px-2 py-1 text-[11px] text-destructive">{run.error}</div>
+                  {/if}
+                  {#if run.outputLog}
+                    <CollapsibleBlock class="p-1">
+                      <pre class="overflow-x-auto whitespace-pre-wrap break-words rounded bg-background p-2 font-mono text-[11px] text-secondary-foreground">{run.outputLog}</pre>
+                    </CollapsibleBlock>
+                  {:else}
+                    <div class="px-2 py-1 text-[10px] italic text-muted-foreground/70">no log output</div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {:else if prepEntry && stream}
       <div class="space-y-3 text-xs">
         {#if thoughtMeta}
+          <div class="flex items-start justify-between gap-2">
           <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
             {#if thoughtMeta.modelLabel}<span>{thoughtMeta.modelLabel}</span>{/if}
             {#if thoughtMeta.total > 0}
@@ -295,6 +344,10 @@
             {/if}
             <span class="text-border">·</span>
             <span>{formatExactChatTime(prepEntry.createdAt)}</span>
+          </div>
+          <span class="shrink-0 text-muted-foreground">
+            <TryModelBranchButton prepareEntry={prepEntry} {stream} {conversationId} />
+          </span>
           </div>
         {/if}
         {#each THOUGHT_STAGES as stage (stage)}

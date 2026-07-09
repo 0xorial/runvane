@@ -593,11 +593,16 @@ export class RunToolService implements OnModuleInit {
     // leave the entry stranded in `running` — record it as `error` either way.
     let output: unknown = null;
     let toolError: unknown = null;
+    // Progress deltas also accumulate into the run's persisted log (the SSE
+    // stream itself is transient); keep the TAIL when a run is chatty.
+    const LOG_CAP = 200_000;
+    let outputLog = '';
     try {
       scope.throwIfAborted();
       // Live progress (stdout, streamed tokens, …) → the running tool row.
       const onProgress = (delta: string): void => {
         if (!delta) return;
+        outputLog = (outputLog + delta).slice(-LOG_CAP);
         this.hub.publish(input.conversationId, {
           type: SseType.TOOL_INVOCATION_PROGRESS,
           chatEntryId: entryId,
@@ -661,6 +666,7 @@ export class RunToolService implements OnModuleInit {
             status: aborted ? 'aborted' : 'error',
             result: envelope,
             error: detail,
+            outputLog,
             finishedAt,
             elapsedMs: timing.elapsed_ms,
           })
@@ -699,7 +705,7 @@ export class RunToolService implements OnModuleInit {
     });
     if (runId) {
       await this.toolRuns
-        .finishRun({ id: runId, status: 'done', result: envelope, finishedAt, elapsedMs: timing.elapsed_ms })
+        .finishRun({ id: runId, status: 'done', result: envelope, outputLog, finishedAt, elapsedMs: timing.elapsed_ms })
         .catch(() => undefined);
     }
     this.hub.publish(input.conversationId, {

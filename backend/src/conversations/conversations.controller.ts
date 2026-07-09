@@ -27,6 +27,8 @@ import {
 } from '../contracts/conversations.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
+import { ToolRunsRepo } from '../db/repositories/tool-runs.repo.js';
+import { GetToolRunsResponseSchema } from '../contracts/tool-runs.js';
 import { SseHubService } from '../sse/sse-hub.service.js';
 import { publishConversationUpdated, toConversationSseRow } from '../sse/sse-helpers.js';
 import { ConversationsService } from './conversations.service.js';
@@ -58,6 +60,7 @@ export class ConversationsController {
     private readonly conversationProcessor: ConversationProcessorService,
     private readonly conversationsRepo: ConversationsRepo,
     private readonly chatEntries: ChatEntriesRepo,
+    private readonly toolRuns: ToolRunsRepo,
     private readonly hub: SseHubService,
     private readonly categorizer: ConversationCategorizerService,
   ) {}
@@ -349,6 +352,29 @@ export class ConversationsController {
       if (detail.startsWith('entry not found')) throw new NotFoundException(detail);
       throw new BadRequestException(detail);
     }
+  }
+
+  @Get(':conversationId/tool-invocations/:entryId/runs')
+  @ValidateResponse(GetToolRunsResponseSchema)
+  async listToolRuns(
+    @Param('conversationId') conversationId: string,
+    @Param('entryId') entryId: string,
+  ) {
+    const exists = await this.conversations.get(conversationId);
+    if (!exists) throw new NotFoundException('conversation not found');
+    const runs = await this.toolRuns.listForEntry(conversationId, entryId);
+    return {
+      runs: runs.map((run) => ({
+        id: run.id,
+        attempt: run.attempt,
+        status: run.status,
+        error: run.error,
+        outputLog: run.outputLog,
+        startedAt: run.startedAt.toISOString(),
+        finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
+        elapsedMs: run.elapsedMs,
+      })),
+    };
   }
 
   @Post(':conversationId/tool-invocations/:entryId/approve')

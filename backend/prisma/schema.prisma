@@ -185,6 +185,8 @@ model ToolRun {
   parametersJson Json      @map("parameters_json")
   resultJson     Json?     @map("result_json")
   error          String?
+  /// Streamed progress log (stdout, streamed tokens, …), tail-capped.
+  outputLog      String?   @map("output_log")
   startedAt      DateTime  @map("started_at")
   finishedAt     DateTime? @map("finished_at")
   elapsedMs      Int?      @map("elapsed_ms")

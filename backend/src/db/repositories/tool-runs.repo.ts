@@ -16,6 +16,8 @@ export type ToolRunRow = {
   parameters: Record<string, unknown>;
   result: unknown;
   error: string | null;
+  /** Streamed progress log (stdout, streamed tokens, …), tail-capped. */
+  outputLog: string | null;
   startedAt: Date;
   finishedAt: Date | null;
   elapsedMs: number | null;
@@ -66,6 +68,7 @@ export class ToolRunsRepo {
     status: Exclude<ToolRunStatus, 'running'>;
     result?: unknown;
     error?: string;
+    outputLog?: string;
     finishedAt: Date;
     elapsedMs: number;
   }): Promise<void> {
@@ -75,6 +78,7 @@ export class ToolRunsRepo {
         status: args.status,
         resultJson: args.result === undefined ? undefined : JSON.parse(JSON.stringify(args.result)),
         error: args.error ?? null,
+        outputLog: args.outputLog?.length ? args.outputLog : null,
         finishedAt: args.finishedAt,
         elapsedMs: args.elapsedMs,
       },
@@ -119,6 +123,7 @@ function toRow(row: {
   parametersJson: unknown;
   resultJson: unknown;
   error: string | null;
+  outputLog: string | null;
   startedAt: Date;
   finishedAt: Date | null;
   elapsedMs: number | null;
@@ -137,6 +142,7 @@ function toRow(row: {
     parameters: params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {},
     result: result ?? null,
     error: row.error,
+    outputLog: row.outputLog,
     startedAt: row.startedAt,
     finishedAt: row.finishedAt,
     elapsedMs: row.elapsedMs,

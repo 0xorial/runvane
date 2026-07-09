@@ -128,15 +128,18 @@ test("branch on user message reprocess", async ({ app, request }) => {
   await app.chat.transcript.waitForBranchSelectors(1);
 });
 
-test("try model branch from prepare step chip", async ({ app, request }) => {
+test("try model branch from the details panel", async ({ app, request }) => {
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
   await app.sidebar.runProbeTime();
   await app.chat.transcript.waitForProbeComplete();
   await app.chat.transcript.expectNoBranchSelectors();
 
+  // The collapsed row itself carries no try-model affordance — details do.
   const row = app.chat.transcript.prepareRow("Decision planning", 0);
-  const tryModel = row.getByTestId("thought-prepare-try-model");
+  await expect(row.getByTestId("thought-prepare-try-model")).toHaveCount(0);
+  await app.chat.transcript.openThoughtDetails("Decision planning", 0);
+  const tryModel = app.chat.transcript.detailPanel.getByTestId("thought-prepare-try-model");
   await expect(tryModel).toBeVisible();
   await tryModel.hover();
   await expect(app.page.getByRole("tooltip", { name: "Try with different model" })).toBeVisible();
