@@ -89,8 +89,8 @@ test("attachment summary mode runs summarize-attachment thought", async ({ app, 
   await app.chat.userInput.send();
   await app.chat.transcript.waitForPrepareTitle("Summarize attachment");
   await app.chat.transcript.waitForAssistantReply();
-  await app.chat.transcript.expandThoughtStep("Summarize attachment", "reasoning");
-  await expect(app.chat.transcript.prepareRow("Summarize attachment")).toContainText(STUB_ATTACHMENT_SUMMARY_REPLY);
+  await app.chat.transcript.openThoughtDetails("Summarize attachment");
+  await expect(app.chat.transcript.detailPanel).toContainText(STUB_ATTACHMENT_SUMMARY_REPLY);
 });
 
 test("attachment summary follow-up queries full file via ask_attachment", async ({ app, request }) => {
@@ -159,13 +159,13 @@ test("branch on context reprocess", async ({ app, request }) => {
   await app.chat.transcript.waitForProbeComplete();
   await app.chat.transcript.expectNoBranchSelectors();
 
-  await app.chat.transcript.expandThoughtStep("Decision planning", "context", 0);
-  const row = app.chat.transcript.prepareRow("Decision planning", 0);
-  await row.getByRole("button", { name: "Edit" }).click();
+  await app.chat.transcript.openThoughtDetails("Decision planning", 0);
+  const panel = app.chat.transcript.detailPanel;
+  await panel.locator('[data-thought-stage="context"]').getByRole("button", { name: "Edit" }).click();
   const reprocessDone = app.page.waitForResponse(
     (res) => res.url().includes("/reprocess-context") && res.status() === 202,
   );
-  await row.getByTestId("thought-context-apply").click();
+  await panel.getByTestId("thought-context-apply").click();
   await reprocessDone;
   await expect(app.chat.transcript.prepareRow("Decision planning", 0).getByTestId("branch-selector")).toBeVisible({
     timeout: E2E_LLM_TIMEOUT_MS,

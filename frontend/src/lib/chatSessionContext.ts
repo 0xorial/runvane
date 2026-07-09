@@ -10,6 +10,9 @@ export type ChatSessionContext = {
   setActiveLeaf: (entryId: string) => Promise<void>;
   switchToBranch: (branchEntryId: string) => Promise<void>;
   siblingsOf: (entryId: string) => LinkedChatEntry[];
+  /** Open the right-panel details view for a collapsed transcript row; same id again closes it. */
+  toggleEntryDetail: (entryId: string) => void;
+  getOpenDetailEntryId: () => string | null;
 };
 
 const CHAT_SESSION_KEY = Symbol("chatSession");

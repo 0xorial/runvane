@@ -130,6 +130,7 @@
                 onToggleSidebar={() => (chatSidebarVisible = !chatSidebarVisible)}
                 rightSidebarVisible={chatRightSidebarVisible}
                 onToggleRightSidebar={() => (chatRightSidebarVisible = !chatRightSidebarVisible)}
+                onShowRightSidebar={() => (chatRightSidebarVisible = true)}
                 settingsPressed={$isSettingsRoute}
               />
             </main>

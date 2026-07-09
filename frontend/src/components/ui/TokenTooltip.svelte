@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ModelPricing } from "@/lib/costEstimation";
   import { portal } from "@/lib/portal";
+  import { formatCostUsd } from "@/lib/providerCost";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import type { Snippet } from "svelte";
 
@@ -33,13 +34,6 @@
       (completionTokens / 1_000_000) * pricing.outCostPer1m
     );
   });
-
-  function formatCostUsd(usd: number): string {
-    if (usd === 0) return "$0.00";
-    if (usd < 0.000001) return "<$0.000001";
-    if (usd < 0.01) return `$${usd.toFixed(6).replace(/0+$/, "").replace(/\.$/, ".00")}`;
-    return `$${usd.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".00")}`;
-  }
 
   function show(): void {
     const rect = anchor?.getBoundingClientRect();

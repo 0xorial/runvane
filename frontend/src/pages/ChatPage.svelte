@@ -5,6 +5,7 @@
   import ChatTitlePanel from "@/components/chat/ChatTitlePanel.svelte";
   import ForkedFromBanner from "@/components/chat/ForkedFromBanner.svelte";
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
+  import EntryDetailPanel from "@/components/chat/EntryDetailPanel.svelte";
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
   import { isThoughtStreamEntry } from "@/protocol/chatEntry";
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
@@ -20,6 +21,7 @@
     onToggleSidebar,
     rightSidebarVisible,
     onToggleRightSidebar,
+    onShowRightSidebar,
     settingsPressed,
   }: {
     conversationId: string | null;
@@ -28,6 +30,7 @@
     onToggleSidebar: () => void;
     rightSidebarVisible: boolean;
     onToggleRightSidebar: () => void;
+    onShowRightSidebar: () => void;
     settingsPressed: boolean;
   } = $props();
 
@@ -43,12 +46,20 @@
   let alignSeq = 0;
   let composerTextareaRef = $state<HTMLTextAreaElement | null>(null);
   const selectedAgentId = $derived(agentIdFromSearch(search));
+  // Collapsed transcript rows (finished thoughts/tools) open their full
+  // details in the right pane, sharing it with the branches panel.
+  let detailEntryId = $state<string | null>(null);
   setChatSessionContext({
     getConversationId: () => conversationId,
     getActivePathEntries: () => session.activePathEntries,
     setActiveLeaf: (entryId) => session.setActiveLeaf(entryId),
     switchToBranch: (branchEntryId) => session.switchToBranch(branchEntryId),
     siblingsOf: (entryId) => session.store.siblingsOf(entryId),
+    toggleEntryDetail: (entryId) => {
+      detailEntryId = detailEntryId === entryId ? null : entryId;
+      if (detailEntryId) onShowRightSidebar();
+    },
+    getOpenDetailEntryId: () => detailEntryId,
   });
 
   const activePathEntries = $derived(session.activePathEntries.map((row$) => row$.get()));
@@ -103,6 +114,7 @@
     if (id === lastConversationId) return;
     lastConversationId = id;
     if (alignAnchor && alignAnchor.conversationId !== id) alignAnchor = null;
+    detailEntryId = null;
   });
 
   $effect(() => {
@@ -148,21 +160,31 @@
       <ResizablePaneHandle withHandle />
       <Pane defaultSize={26} minSize={16} maxSize={45} class="min-h-0 min-w-0 overflow-hidden">
         <aside class="h-full min-h-0 overflow-y-auto border-l border-border bg-sidebar">
-          <ConversationBranchesPanel
-            {conversationId}
-            allEntries={session.allEntries}
-            activePathEntries={session.activePathEntries}
-            switchToBranch={session.switchToBranch}
-            onAnchorEntrySelected={(entryId) => {
-              if (!conversationId) return;
-              alignAnchor = {
-                id: resolveVisibleAnchorEntryId(entryId),
-                conversationId,
-                token: ++alignSeq,
-                source: "branch",
-              };
-            }}
-          />
+          {#if detailEntryId && conversationId}
+            <EntryDetailPanel
+              {conversationId}
+              entryId={detailEntryId}
+              allEntries={session.allEntries}
+              activePathEntries={session.activePathEntries}
+              onClose={() => (detailEntryId = null)}
+            />
+          {:else}
+            <ConversationBranchesPanel
+              {conversationId}
+              allEntries={session.allEntries}
+              activePathEntries={session.activePathEntries}
+              switchToBranch={session.switchToBranch}
+              onAnchorEntrySelected={(entryId) => {
+                if (!conversationId) return;
+                alignAnchor = {
+                  id: resolveVisibleAnchorEntryId(entryId),
+                  conversationId,
+                  token: ++alignSeq,
+                  source: "branch",
+                };
+              }}
+            />
+          {/if}
         </aside>
       </Pane>
     </PaneGroup>

@@ -5,8 +5,9 @@
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import { createAgentsQuery, createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
   import { getChatSessionContext, type ThoughtStage } from "@/lib/chatSessionContext";
-  import { resolveStreamTokenBreakdown, streamTotalTokens } from "@/lib/providerCost";
+  import { formatCostUsd, resolveStreamTokenBreakdown, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
   import { formatTokenCount } from "@/utils/formatTokenCount";
+  import { formatDurationMs } from "@/utils/formatDurationMs";
   import { estimateTokenCount } from "@/utils/estimateTokenCount";
   import BranchSelector from "../BranchSelector.svelte";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
@@ -33,6 +34,7 @@
   const session = getChatSessionContext();
   let expanded = $state<ThoughtStage | null>(null);
   const pricingByModel = $derived(pricingFromCapabilities(capabilitiesQuery.data));
+  const detailOpen = $derived(session.getOpenDetailEntryId() === prepareEntry.id);
 
   const activeEntriesById = $derived.by(() => {
     const map = new Map<string, ChatEntry>();
@@ -126,6 +128,51 @@
   {@const actionLabel = actionMeta.usesTool ? `call ${actionMeta.toolName ?? "tool"}` : "Reply"}
   {@const reasonFailed = stream.status === "failed" || stream.status === "cancelled"}
   {@const reasonMeta = reasonMetaParts(stream)}
+  {@const finished = (stream.status ?? "running") !== "running"}
+  {#if finished}
+    <!-- Compact view: finished thoughts dim down to one line; clicking it
+         opens the full stage details in the right-hand panel. -->
+    {@const costUsd = streamCostUsd(stream, reasonMeta.pricing)}
+    {@const durationLabel = stream.thoughtMs != null ? formatDurationMs(stream.thoughtMs) : ""}
+    <ChatThreadIndent class="py-0 mb-1">
+      {#snippet children()}
+        <div class="my-0 border-l-2 border-border/40 pl-3">
+          <div class="flex items-center gap-1 py-0.5 text-[11px]">
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left transition-colors hover:bg-secondary/60 {detailOpen
+                ? 'bg-secondary/70 text-foreground'
+                : 'text-muted-foreground/60 hover:text-muted-foreground'}"
+              data-testid="thought-collapsed-row"
+              title="Show details"
+              onclick={() => session.toggleEntryDetail(prep.id)}
+            >
+              {#if reasonFailed}
+                <RowIcon name="alert" class="h-3 w-3 shrink-0" />
+              {:else}
+                <RowIcon name="sparkles" class="h-3 w-3 shrink-0 opacity-50" />
+              {/if}
+              <span class="truncate font-medium">{contextTitle}</span>
+              <span class="shrink-0 opacity-70">→ {actionLabel}</span>
+              <span class="ml-auto flex shrink-0 items-center gap-2 pl-2 font-mono text-[10px]">
+                {#if reasonMeta.totalTokens > 0}<span>{formatTokenCount(reasonMeta.totalTokens)}</span>{/if}
+                {#if costUsd !== null}<span>{formatCostUsd(costUsd)}</span>{/if}
+                {#if durationLabel}<span>{durationLabel}</span>{/if}
+                {#if reasonMeta.showModel}<span class="max-w-[14rem] truncate">{reasonMeta.model}</span>{/if}
+                {#if reasonMeta.status}<span class="text-destructive/80">{reasonMeta.status}</span>{/if}
+              </span>
+            </button>
+            <span class="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+              <TryModelBranchButton prepareEntry={prep} {stream} {conversationId} />
+              <BranchSelector entryId={prep.id} />
+              <BranchSelector entryId={stream.id} />
+              {#if actionStep}<BranchSelector entryId={actionStep.id} />{/if}
+            </span>
+          </div>
+        </div>
+      {/snippet}
+    </ChatThreadIndent>
+  {:else}
   <ChatThreadIndent class="py-0 mb-1">
     {#snippet children()}
       <div class="my-0 border-l-2 border-border/60 pl-3">
@@ -197,6 +244,7 @@
       </div>
     {/snippet}
   </ChatThreadIndent>
+  {/if}
 {:else if prepareEntry.type === "thought-prepare"}
   {@const prep = prepareEntry as ThoughtPrepareEntry}
   {@const contextTitle = String(prep.title ?? "").trim() || "Preparation"}

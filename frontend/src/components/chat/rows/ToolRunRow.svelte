@@ -1,8 +1,10 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { approveToolInvocation, denyToolInvocation, getTools, retryToolInvocation } from "@/api/client";
+  import { approveToolInvocation, denyToolInvocation, getTools } from "@/api/client";
   import { queryKeys } from "@/hooks/queries/keys";
   import type { ToolInvocationEntry } from "@/protocol/chatEntry";
+  import { getChatSessionContext } from "@/lib/chatSessionContext";
+  import { formatDurationMs } from "@/utils/formatDurationMs";
   import { notifyError } from "@/utils/toast";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
@@ -10,14 +12,22 @@
 
   let { entry, conversationId }: { entry: ToolInvocationEntry; conversationId: string } = $props();
 
+  const session = getChatSessionContext();
   let toggled = $state<boolean | null>(null);
   let approving = $state(false);
   let denying = $state(false);
-  let retrying = $state(false);
   let editingParams = $state(false);
   let paramsDraft = $state("");
   let paramsError = $state<string | null>(null);
   const expanded = $derived(toggled ?? (entry.state === "requested" || entry.state === "running"));
+  // Terminal runs collapse to a dimmed one-liner; full details live in the
+  // right-hand panel (click to open). Active runs keep the full card.
+  const terminal = $derived(entry.state === "done" || entry.state === "denied" || entry.state === "error");
+  const detailOpen = $derived(session.getOpenDetailEntryId() === entry.id);
+  const elapsedLabel = $derived.by(() => {
+    const ms = entry.result?.timing?.elapsed_ms;
+    return typeof ms === "number" ? formatDurationMs(ms) : "";
+  });
 
   // The stored parameters payload carries planner bookkeeping; the user edits
   // (and reads) only the real tool params.
@@ -71,32 +81,29 @@
   });
   const paramsText = $derived(stringifyMaybe(cleanParams));
   const outputText = $derived(entry.result?.output != null ? stringifyMaybe(entry.result.output) : "");
-  const errorText = $derived(entry.result?.error ?? "");
   // Transient live output streamed while the tool runs (see chatSessionStore).
   const liveOutput = $derived((entry as unknown as { liveOutput?: string }).liveOutput ?? "");
+  // Terminal states show their outcome plainly (the guardrail reason lives in
+  // the details panel); only a pending approval leads with the guardrail flag.
   const statusLabel = $derived(
-    guardrailReason
-      ? "Guardrail flagged"
+    entry.state === "requested"
+      ? guardrailReason
+        ? "Guardrail flagged"
+        : "Needs approval"
       : entry.state === "resolving"
         ? "Resolving arguments"
-        : entry.state === "requested"
-          ? "Needs approval"
-          : entry.state === "running"
-            ? "Running"
-            : entry.state === "done"
-              ? "Done"
-              : entry.state === "denied"
-                ? "Denied"
-                : "Failed",
+        : entry.state === "running"
+          ? "Running"
+          : entry.state === "done"
+            ? "Done"
+            : entry.state === "denied"
+              ? "Denied"
+              : "Failed",
   );
+  // Card styling for the two active looks (terminal states render the
+  // collapsed one-liner instead, never the card).
   const borderClass = $derived(
-    entry.state === "requested"
-      ? "border-warning/40 bg-warning/5"
-      : entry.state === "running" || entry.state === "resolving"
-        ? "border-primary/30 bg-primary/5"
-        : entry.state === "denied"
-          ? "border-muted-foreground/20 bg-secondary/30"
-          : "bg-secondary/50",
+    entry.state === "requested" ? "border-warning/40 bg-warning/5" : "border-primary/30 bg-primary/5",
   );
 
   async function onApproveClick(): Promise<void> {
@@ -111,23 +118,6 @@
       notifyError(e instanceof Error ? e.message : "Failed to approve tool");
     } finally {
       approving = false;
-    }
-  }
-
-  // Retry applies to genuine execution failures only; blocked entries (forbid,
-  // tool-not-found) also persist as `error` but never ran and must keep zero
-  // affordances (their envelope carries permission_state ≠ 'allow').
-  const retryable = $derived(entry.state === "error" && entry.result?.permission_state === "allow");
-
-  async function onRetryClick(): Promise<void> {
-    if (!conversationId || retrying) return;
-    retrying = true;
-    try {
-      await retryToolInvocation(conversationId, entry.id);
-    } catch (e) {
-      notifyError(e instanceof Error ? e.message : "Failed to retry tool");
-    } finally {
-      retrying = false;
     }
   }
 
@@ -151,6 +141,61 @@
 
 <ChatThreadIndent>
   {#snippet children()}
+    {#if terminal}
+      <!-- Compact view: one dimmed line; clicking it opens the details panel. -->
+      <button
+        type="button"
+        class="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-[11px] transition-colors hover:bg-secondary/60 {detailOpen
+          ? 'bg-secondary/70 text-foreground'
+          : 'text-muted-foreground/70 hover:text-muted-foreground'}"
+        data-testid="tool-invocation-row"
+        data-tool-state={entry.state}
+        data-collapsed="true"
+        title="Show details"
+        onclick={() => session.toggleEntryDetail(entry.id)}
+      >
+        {#if entry.state === "error"}
+          <RowIcon name="alert" class="h-3 w-3 shrink-0 opacity-70" />
+        {:else}
+          <RowIcon name="wrench" class="h-3 w-3 shrink-0 opacity-50" />
+        {/if}
+        <span class="truncate font-mono">{toolName}</span>
+        {#if entry.parametersEdited}
+          <span
+            class="rounded bg-warning/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-warning/80"
+            title="Parameters were edited by the user before approval — the executed call differs from what the model requested"
+            data-testid="tool-edited-badge"
+          >
+            edited
+          </span>
+        {/if}
+        {#if (entry.attempt ?? 1) > 1}
+          <span
+            class="rounded bg-primary/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-primary/80"
+            title="This tool was retried — {entry.attempt} execution attempts so far"
+            data-testid="tool-attempt-badge"
+          >
+            attempt {entry.attempt}
+          </span>
+        {/if}
+        {#if toolLocation}
+          <span
+            class="rounded px-1 py-px text-[9px] font-medium uppercase tracking-wide opacity-70 {toolLocation === 'target'
+              ? 'bg-teal-500/10 text-teal-600'
+              : 'bg-violet-500/10 text-violet-600'}"
+            title={locationTitle}
+            data-testid="tool-location"
+            data-tool-location={toolLocation}
+          >
+            {toolLocation === "target" ? "target" : "harness"}
+          </span>
+        {/if}
+        <span class="ml-auto flex shrink-0 items-center gap-2 font-mono text-[10px]">
+          {#if elapsedLabel}<span>{elapsedLabel}</span>{/if}
+          <span class={entry.state === "error" ? "text-destructive/80" : ""}>{statusLabel}</span>
+        </span>
+      </button>
+    {:else}
     <div class="overflow-hidden rounded-md border {borderClass}" data-testid="tool-invocation-row" data-tool-state={entry.state}>
       <button
         type="button"
@@ -213,33 +258,6 @@
             <div class="flex items-start gap-1.5 rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning">
               <span class="font-semibold">Guardrail:</span>
               <span>{guardrailReason}</span>
-            </div>
-          {/if}
-          {#if entry.state === "error" && errorText}
-            <div class="rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
-              <span class="font-semibold">Error:</span> {errorText}
-            </div>
-          {/if}
-          {#if retryable}
-            <div class="pt-1">
-              <button
-                type="button"
-                data-testid="tool-retry-button"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  void onRetryClick();
-                }}
-                disabled={!conversationId || retrying}
-                class="flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
-              >
-                <Icon name="rotate-cw" class="h-3 w-3 shrink-0" />
-                {retrying ? "Retrying…" : "Retry"}
-              </button>
-            </div>
-          {/if}
-          {#if entry.state === "denied"}
-            <div class="rounded-md bg-secondary/60 px-2.5 py-2 text-xs text-muted-foreground">
-              <span class="font-semibold">Denied</span> — this tool was not run.
             </div>
           {/if}
           <div>
@@ -326,5 +344,6 @@
         </div>
       {/if}
     </div>
+    {/if}
   {/snippet}
 </ChatThreadIndent>

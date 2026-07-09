@@ -346,13 +346,14 @@ test("tool approval: editing rag params before approving is audited in the trans
     await tool.getByTestId("tool-approve-button").click();
     await app.chat.transcript.waitForToolState("done");
 
-    // The pre-edit must be obvious: badge without expanding…
+    // The pre-edit must be obvious: badge right on the collapsed line…
     await expect(tool.getByTestId("tool-edited-badge")).toBeVisible();
-    // …and both the edited and the original arguments when expanded.
-    await tool.locator("button").first().click();
-    await expect(tool).toContainText("Arguments (edited by you)");
-    await expect(tool).toContainText("edited by user");
-    await expect(tool.getByTestId("tool-original-params")).toContainText("database migration prisma");
+    // …and both the edited and the original arguments in the details panel.
+    await tool.click();
+    const panel = app.chat.transcript.detailPanel;
+    await expect(panel).toContainText("Arguments (edited by you)");
+    await expect(panel).toContainText("edited by user");
+    await expect(panel.getByTestId("tool-original-params")).toContainText("database migration prisma");
   } finally {
     await request.put(`${base}/api/agents/${agentId}`, {
       data: { name: agent.name, default_llm_configuration: original },

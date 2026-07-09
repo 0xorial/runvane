@@ -165,23 +165,21 @@ export class ChatTranscript {
       .nth(index);
   }
 
-  async expandThoughtStep(
-    prepareTitle: string,
-    step: "context" | "reasoning" | "action",
-    index = 0,
-  ): Promise<void> {
-    const row = this.prepareRow(prepareTitle, index);
-    await row.getByTestId(`thought-step-${step}`).click();
+  /** The right-hand details panel a collapsed thought/tool row opens into. */
+  get detailPanel(): Locator {
+    return this.root.getByTestId("entry-detail-panel");
   }
 
-  async expectThoughtPanel(
-    prepareTitle: string,
-    stage: "context" | "reasoning" | "action",
-    index = 0,
-  ): Promise<void> {
-    const panel = this.prepareRow(prepareTitle, index).getByTestId("thought-step-panel");
-    await expect(panel).toBeVisible();
-    await expect(panel).toHaveAttribute("data-thought-stage", stage);
+  /** Click a finished (collapsed) thought row to open its details panel. */
+  async openThoughtDetails(prepareTitle: string, index = 0): Promise<void> {
+    await this.prepareRow(prepareTitle, index).getByTestId("thought-collapsed-row").click();
+    await expect(this.detailPanel).toBeVisible();
+  }
+
+  async expectThoughtPanel(stage: "context" | "reasoning" | "action"): Promise<void> {
+    await expect(
+      this.detailPanel.locator(`[data-testid="thought-step-panel"][data-thought-stage="${stage}"]`),
+    ).toBeVisible();
   }
 
   async waitForBranchSelectors(minCount = 1, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
