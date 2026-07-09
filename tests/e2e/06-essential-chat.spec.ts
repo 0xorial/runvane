@@ -150,6 +150,11 @@ test("try model branch from prepare step chip", async ({ app, request }) => {
   await modelOption.click();
   await reprocessDone;
   await expect(row.getByTestId("branch-selector")).toBeVisible({ timeout: E2E_LLM_TIMEOUT_MS });
+  // Side thoughts anchored at the same user message must NOT inherit the
+  // planner's fork (they are not alternatives at that fork).
+  await expect(
+    app.chat.transcript.prepareRow("Title generation").getByTestId("branch-selector"),
+  ).toHaveCount(0);
 });
 
 test("branch on context reprocess", async ({ app, request }) => {

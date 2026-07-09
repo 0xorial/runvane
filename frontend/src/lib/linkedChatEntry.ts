@@ -162,6 +162,10 @@ export function childEntries(lookup: ChatEntryLookup, parentId: string | null): 
 export function siblingsOf(lookup: ChatEntryLookup, entryId: string): LinkedChatEntry[] {
   const entry = lookup.getById(entryId);
   if (!entry) return [];
+  // A side-lane entry hangs off its anchor for display only — it is not an
+  // alternative at that fork, so it must not inherit (or page) the anchor's
+  // spine branches.
+  if (entry.isSide) return [];
   return childEntries(lookup, entry.parentId);
 }
 
