@@ -1,6 +1,6 @@
 import { buildPlannerSyntaxRegistry, PLAINTEXT_SYNTAX_NAME } from './plannerSyntax/index.js';
 import { plainTextPlannerOutput } from './plannerSyntax/plannerOutput.js';
-import { argsToToolRequest } from './plannerSyntax/functionCall.js';
+import { argsToToolRequest, extractArgsNote } from './plannerSyntax/functionCall.js';
 import { getCompletionText, getCompletionToolCalls } from '../../llmProviders/types.js';
 import type { LlmCompletion } from '../../llmProviders/types.js';
 
@@ -54,10 +54,12 @@ export function parsePlannerCompletion(
   completion: LlmCompletion,
   onJsonParseFailed?: (reply: string) => void,
 ): ParsedPlannerOutput {
-  const native = getCompletionToolCalls(completion).map((call) => ({
-    toolName: call.toolName,
-    toolRequest: argsToToolRequest(call.args),
-  }));
+  const native = getCompletionToolCalls(completion).map((call) => {
+    // The advertised schemas carry an optional `tool_note` (display-only) —
+    // pull it out so it reaches the UI instead of the tool's strict params.
+    const { note, args } = extractArgsNote(call.args);
+    return { toolName: call.toolName, toolRequest: argsToToolRequest(args), ...(note ? { note } : {}) };
+  });
   // Empty/plaintext content is expected when the model answers via native tool
   // calls, so don't raise the "parse failed" diagnostic in that case.
   const fromText = parsePlannerOutput(getCompletionText(completion), native.length > 0 ? undefined : onJsonParseFailed);

@@ -38,8 +38,8 @@
   // The stored parameters payload carries planner bookkeeping; the user edits
   // (and reads) only the real tool params.
   const cleanParams = $derived.by(() => {
-    const { tool_request, source, __tool_batch, ...params } = entry.parameters as Record<string, unknown>;
-    void tool_request; void source; void __tool_batch;
+    const { tool_request, tool_note, source, __tool_batch, ...params } = entry.parameters as Record<string, unknown>;
+    void tool_request; void tool_note; void source; void __tool_batch;
     return params;
   });
 

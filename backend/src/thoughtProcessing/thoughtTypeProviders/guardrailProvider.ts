@@ -25,6 +25,7 @@ export type GuardrailProviderInput = {
   toolEntryId: string;
   params: Record<string, unknown>;
   toolRequest?: string;
+  toolNote?: string;
   guardrailConfig: GuardrailConfig;
   plannerFollowup: { mode: 'continue' | 'finalize' };
   toolBatch?: ToolBatchRef;
@@ -129,6 +130,7 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
         toolEntryId: input.toolEntryId,
         params: input.params,
         toolRequest: input.toolRequest,
+        ...(input.toolNote ? { toolNote: input.toolNote } : {}),
         plannerFollowup: input.plannerFollowup,
         ...(verdict.verdict === 'flag' ? { guardrailFlagReason: verdict.reason } : {}),
         ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),

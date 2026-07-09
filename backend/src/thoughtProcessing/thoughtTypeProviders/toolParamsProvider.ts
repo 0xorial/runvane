@@ -21,6 +21,8 @@ export type ToolParamsInput = {
   toolAiDescription: string;
   toolParamsSchema: unknown;
   toolRequest: string;
+  /** The planner's few-word purpose line for this call (shown in the UI). */
+  toolNote?: string;
   plannerFollowup: { mode: 'continue' | 'finalize' };
   toolBatch?: ToolBatchRef;
   paramsContextNote?: string;
@@ -132,6 +134,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           toolEntryId: input.toolEntryId,
           params,
           toolRequest: input.toolRequest,
+          ...(input.toolNote ? { toolNote: input.toolNote } : {}),
           plannerFollowup: input.plannerFollowup,
           ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
           ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),
@@ -237,6 +240,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
           toolEntryId: input.toolEntryId,
           params,
           toolRequest: input.toolRequest,
+          ...(input.toolNote ? { toolNote: input.toolNote } : {}),
           guardrailConfig: input.guardrailConfig,
           plannerFollowup: input.plannerFollowup,
           mainLlm: llm,
@@ -256,6 +260,7 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
         toolEntryId: input.toolEntryId,
         params,
         toolRequest: input.toolRequest,
+        ...(input.toolNote ? { toolNote: input.toolNote } : {}),
         plannerFollowup: input.plannerFollowup,
         ...(input.toolBatch ? { toolBatch: input.toolBatch } : {}),
         ...(input.toolOverrides ? { toolOverrides: input.toolOverrides } : {}),

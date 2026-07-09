@@ -45,7 +45,7 @@ describe('stubLlm.helpers', () => {
     const reply = pickStubReply(request);
     expect(reply).toBe(stubProbeTimePlannerFirstRound());
     expect(JSON.parse(reply).tool_requests).toEqual([
-      { tool_name: 'get_current_time', tool_request: 'current server time' },
+      { tool_name: 'get_current_time', tool_request: 'current server time', note: 'check the current time' },
     ]);
   });
 

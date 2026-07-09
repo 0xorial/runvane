@@ -116,8 +116,8 @@
   });
   const cleanParams = $derived.by(() => {
     if (!toolEntry) return {};
-    const { tool_request, source, __tool_batch, ...params } = toolEntry.parameters as Record<string, unknown>;
-    void tool_request; void source; void __tool_batch;
+    const { tool_request, tool_note, source, __tool_batch, ...params } = toolEntry.parameters as Record<string, unknown>;
+    void tool_request; void tool_note; void source; void __tool_batch;
     return params;
   });
   const toolStatusLabel = $derived.by(() => {

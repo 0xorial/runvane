@@ -6,6 +6,21 @@
  */
 import type { ParsedPlannerOutput } from './plannerOutput.js';
 
+/**
+ * Split the display note out of call arguments. Every planner-facing tool
+ * schema advertises an optional `tool_note` (see withToolNoteProperty), so a
+ * model calling via native function-calling — or writing [direct args] JSON —
+ * delivers its few-word purpose line inside the args; it is not a real tool
+ * argument and must not stay among them.
+ */
+export function extractArgsNote(args: unknown): { note?: string; args: unknown } {
+  const obj = asRecord(args);
+  if (!obj || typeof obj.tool_note !== 'string') return { args };
+  const { tool_note, ...rest } = obj;
+  const note = tool_note.trim().slice(0, 120);
+  return note ? { note, args: rest } : { args: rest };
+}
+
 /** Render call arguments into the free-text request the params step consumes. */
 export function argsToToolRequest(args: unknown): string {
   if (args == null) return '';
@@ -59,7 +74,10 @@ export function extractFunctionCalls(root: unknown): ParsedPlannerOutput['toolRe
       return;
     }
     const toolName = pickName(obj);
-    if (toolName) out.push({ toolName, toolRequest: argsToToolRequest(pickArgs(obj)) });
+    if (toolName) {
+      const { note, args } = extractArgsNote(pickArgs(obj));
+      out.push({ toolName, toolRequest: argsToToolRequest(args), ...(note ? { note } : {}) });
+    }
   };
   visit(root);
   return out;

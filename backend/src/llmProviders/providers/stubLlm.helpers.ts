@@ -219,7 +219,9 @@ export function stubProbeTimePlannerFirstRound(): string {
   return JSON.stringify({
     assistant_thinking: 'User asked for the time; call get_current_time.',
     assistant_output: 'Let me check the current time.',
-    tool_requests: [{ tool_name: 'get_current_time', tool_request: 'current server time' }],
+    tool_requests: [
+      { tool_name: 'get_current_time', tool_request: 'current server time', note: 'check the current time' },
+    ],
     followup: 'continue',
   });
 }

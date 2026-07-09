@@ -98,12 +98,13 @@ function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[
   parts.push(tools.length > 0 ? `${toolsHeader}\n${tools.map(formatToolLine).join('\n')}` : 'Tools: (none)');
   parts.push(
     'Reply with one JSON object (preferred — it is the only format that lets you set assistant_output and followup explicitly):\n' +
-      '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string}], "followup": "finalize"|"continue"}\n' +
+      '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string, "note": string}], "followup": "finalize"|"continue"}\n' +
       '`assistant_thinking` is a brief summary of your thoughts and plans for the next step. ' +
       '`assistant_output` is the user-facing text of your response. ' +
       '`tool_requests` is an array of tool requests. ' +
       '`followup` is the mode for the next step: "finalize" if you need to finalize the conversation, "continue" if you need to continue the conversation. ' +
       '`tool_request` is a natural-language brief (except for [direct args] tools, where it must be the literal JSON arguments). ' +
+      '`note` is 3-6 plain words shown to the user next to the call, saying what it is for (e.g. "check current server time"). ' +
       'Use "continue" only if you need tool results before replying.\n' +
       'Code fences or surrounding prose are fine. If that JSON is impractical, you may instead write your reply as prose and ' +
       'express tool calls in any common format (e.g. <tool_call>{"name": ..., "arguments": ...}</tool_call> or [TOOL_CALLS] [...]); ' +

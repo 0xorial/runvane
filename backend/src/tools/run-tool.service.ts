@@ -41,6 +41,8 @@ export type RunToolInput = {
   toolEntryId: string;
   params: unknown;
   toolRequest?: string;
+  /** The planner's few-word purpose line, re-stamped onto parameters for the UI. */
+  toolNote?: string;
   approvalGranted?: boolean;
   plannerFollowup?: { mode: 'continue' | 'finalize' };
   /**
@@ -250,8 +252,9 @@ export class RunToolService implements OnModuleInit {
 
     // Strip the planner-meta keys toParametersPayload() added to recover the
     // real tool params; the tool's strict param schema rejects extras.
-    const { tool_request, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
+    const { tool_request, tool_note, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
     const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
+    const toolNote = typeof tool_note === 'string' ? tool_note : undefined;
     const toolBatch = parseToolBatch(__tool_batch);
 
     // Approve-with-edits: run the user's params, keep the model's on record.
@@ -302,6 +305,7 @@ export class RunToolService implements OnModuleInit {
       // decide whether to continue or finalize.
       plannerFollowup: { mode: 'continue' },
       ...(toolRequest ? { toolRequest } : {}),
+      ...(toolNote ? { toolNote } : {}),
       ...(toolBatch ? { toolBatch } : {}),
       ...(toolOverrides ? { toolOverrides } : {}),
     };
@@ -348,8 +352,9 @@ export class RunToolService implements OnModuleInit {
     const tool = this.tools.get(entry.toolId);
     if (!tool) throw new Error(`retry: unknown tool ${entry.toolId}`);
 
-    const { tool_request, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
+    const { tool_request, tool_note, source: _source, __tool_batch, ...requestedParams } = entry.parameters;
     const toolRequest = typeof tool_request === 'string' ? tool_request : undefined;
+    const toolNote = typeof tool_note === 'string' ? tool_note : undefined;
     // The batch stamp stays with the entry: the fan-in derives pending state
     // from the chat history, so while the retry runs its wave counts as
     // pending again, and its completion re-checks the whole wave.
@@ -380,6 +385,7 @@ export class RunToolService implements OnModuleInit {
       // The batch already continued once; this re-reaction is user-intended.
       forceContinuation: true,
       ...(toolRequest ? { toolRequest } : {}),
+      ...(toolNote ? { toolNote } : {}),
       ...(toolBatch ? { toolBatch } : {}),
       ...(toolOverrides ? { toolOverrides } : {}),
     };
@@ -850,6 +856,7 @@ export class RunToolService implements OnModuleInit {
       out.tool_request = input.toolRequest;
       out.source = 'planner_tool_request';
     }
+    if (input.toolNote) out.tool_note = input.toolNote;
     // Persist the fan-out batch on the entry so an approve/deny in a later
     // request can resolve this member against the same batch. Stripped before
     // the tool's strict param schema re-parses (see approveAndRun).

@@ -8,7 +8,10 @@
 /** Canonical parsed planner reply: prose to show plus any requested tool calls. */
 export type ParsedPlannerOutput = {
   assistantOutput: string;
-  toolRequests: Array<{ toolName: string; toolRequest: string }>;
+  /** `note`: the model's few-word purpose line for the call ("check current
+   *  server time"), emitted in the same completion — the JSON dialect carries
+   *  it; function-call dialects have no slot for it. */
+  toolRequests: Array<{ toolName: string; toolRequest: string; note?: string }>;
   followup: 'continue' | 'finalize';
 };
 
@@ -162,16 +165,37 @@ export function parseJsonValueStrict(text: string): unknown {
   }
 }
 
-/** Read `tool_requests: [{ tool_name, tool_request }]` from a parsed JSON object. */
+/** Read `tool_requests: [{ tool_name, tool_request, note? }]` from a parsed JSON object. */
 export function toolRequestsFromJson(obj: Record<string, unknown>): ParsedPlannerOutput['toolRequests'] {
   if (!Array.isArray(obj.tool_requests)) return [];
   return obj.tool_requests
     .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
     .map((item) => {
-      const row = item as { tool_name?: unknown; tool_request?: unknown };
+      const row = item as { tool_name?: unknown; tool_request?: unknown; note?: unknown };
+      let note = typeof row.note === 'string' ? row.note.trim().slice(0, 120) : '';
+      let toolRequest = typeof row.tool_request === 'string' ? row.tool_request : '';
+      // [direct args] requests are params JSON; a model may deliver the note
+      // inside them via the advertised `tool_note` slot instead of `note`.
+      if (!note && (toolRequest.trimStart().startsWith('{'))) {
+        try {
+          const parsed = JSON.parse(toolRequest) as unknown;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const inner = parsed as Record<string, unknown>;
+            if (typeof inner.tool_note === 'string' && inner.tool_note.trim()) {
+              note = inner.tool_note.trim().slice(0, 120);
+              const { tool_note, ...rest } = inner;
+              void tool_note;
+              toolRequest = JSON.stringify(rest);
+            }
+          }
+        } catch {
+          // not valid JSON — leave the request as-is
+        }
+      }
       return {
         toolName: typeof row.tool_name === 'string' ? row.tool_name.trim() : '',
-        toolRequest: typeof row.tool_request === 'string' ? row.tool_request : '',
+        toolRequest,
+        ...(note ? { note } : {}),
       };
     })
     .filter((x) => x.toolName.length > 0);

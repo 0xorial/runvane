@@ -15,10 +15,10 @@ test("finished tool collapses to a dimmed one-liner with elapsed time; details o
 
   const tool = app.chat.transcript.toolRow();
   await expect(tool).toHaveAttribute("data-collapsed", "true");
-  // The collapsed line keeps name + the planner's request brief + timing +
-  // timestamp, but no expanded body.
+  // The collapsed line keeps name + the planner's note + timing + timestamp,
+  // but no expanded body.
   await expect(tool).toContainText("Done");
-  await expect(tool).toContainText("current server time");
+  await expect(tool).toContainText("check the current time");
   await expect(tool).toContainText(/\d+(\.\d+)?(ms|s)/);
   await expect(tool).toContainText("just now");
   await expect(tool).not.toContainText("Arguments");

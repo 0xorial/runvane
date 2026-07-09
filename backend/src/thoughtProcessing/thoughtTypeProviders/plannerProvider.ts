@@ -15,6 +15,7 @@ import {
 } from '../../sse/sse-helpers.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmToolSpec } from '../../llmProviders/types.js';
 import { resolveSeparateParamsResolution, resolveToolConfig } from '../../tools/resolve-tool-config.js';
+import { withToolNoteProperty } from '../../tools/toolParamEnvelope.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripPrepareInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext, isParseableToolParamsJson } from '../lib/toolParamsPrompt.js';
@@ -146,7 +147,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     for (const name of enabledToolIds) {
       const tool = this.tools.get(name);
       if (!tool) continue;
-      specs.push({ name, description: tool.getAiDescription(), paramsSchema: tool.getParamsSchema() });
+      specs.push({ name, description: tool.getAiDescription(), paramsSchema: withToolNoteProperty(tool.getParamsSchema()) });
     }
     return specs;
   }
@@ -181,7 +182,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
         operations: tool ? extractToolOperations(tool.getParamsSchema()) : [],
         // Direct-args tools need their schema in the prompt: the model writes
         // the literal JSON args itself, no resolver fills them in.
-        ...(direct.has(name) && tool ? { directParamsSchema: tool.getParamsSchema() } : {}),
+        ...(direct.has(name) && tool ? { directParamsSchema: withToolNoteProperty(tool.getParamsSchema()) } : {}),
       };
     });
   }
@@ -236,7 +237,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     // Route every member up front so a repaired request (direct-args tool given
     // non-JSON) is explicit on the thought's call-tool step, never silent.
     let dispatchPlans: Array<{
-      requested: { toolName: string; toolRequest: string };
+      requested: { toolName: string; toolRequest: string; note?: string };
       route: 'resolution' | 'direct' | 'repair';
     }> = [];
     let agent: AgentEntity | null = null;
@@ -280,7 +281,11 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
         this.chatEntries.appendToolInvocation(input.conversationId, {
           toolId: plan.requested.toolName,
           state: 'resolving',
-          parameters: { tool_request: plan.requested.toolRequest, __tool_batch: toolBatch },
+          parameters: {
+            tool_request: plan.requested.toolRequest,
+            ...(plan.requested.note ? { tool_note: plan.requested.note } : {}),
+            __tool_batch: toolBatch,
+          },
           parentId,
         }),
       );
@@ -311,7 +316,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     args: {
       input: PlannerInput;
       agent: AgentEntity;
-      requested: { toolName: string; toolRequest: string };
+      requested: { toolName: string; toolRequest: string; note?: string };
       /** Routing decided in runDecision: 'repair' = direct-args tool whose
        *  request wasn't JSON, degraded to the resolution thought. */
       route: 'resolution' | 'direct' | 'repair';
@@ -338,6 +343,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       toolAiDescription: tool.getAiDescription(),
       toolParamsSchema: tool.getParamsSchema(),
       toolRequest: args.requested.toolRequest,
+      ...(args.requested.note ? { toolNote: args.requested.note } : {}),
       plannerFollowup: { mode: args.followup },
       toolBatch: args.toolBatch,
       ...(paramsContextNote ? { paramsContextNote } : {}),
@@ -486,7 +492,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
 function toPlannerParseResult(parsed: ParsedPlannerOutput): PlannerParseResult {
   const out: AgenticPlannerOutput = {
     tool_calls: [],
-    tool_requests: parsed.toolRequests.map((t) => ({ tool_name: t.toolName, request: t.toolRequest })),
+    tool_requests: parsed.toolRequests.map((t) => ({ tool_name: t.toolName, request: t.toolRequest, ...(t.note ? { note: t.note } : {}) })),
     followup: parsed.followup,
   };
   if (parsed.assistantOutput) out.assistant_output = parsed.assistantOutput;

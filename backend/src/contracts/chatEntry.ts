@@ -59,6 +59,8 @@ export type AgenticToolCall = z.infer<typeof AgenticToolCallSchema>;
 export const AgenticToolRequestSchema = z.object({
   tool_name: z.string(),
   request: z.string(),
+  /** The model's few-word purpose line for this call, emitted with the call. */
+  note: z.string().optional(),
 });
 export type AgenticToolRequest = z.infer<typeof AgenticToolRequestSchema>;
 
