@@ -91,29 +91,36 @@
   <button
     type="button"
     data-testid={`sidebar-conversation-${conversation.id}`}
-    class="min-w-0 flex-1 py-2 pr-2.5 text-left {enableMultiSelect ? 'pl-0.5' : 'pl-2.5'}"
+    class="min-w-0 flex-1 py-1.5 pr-2.5 text-left {enableMultiSelect ? 'pl-0.5' : 'pl-2.5'}"
     onclick={() => {
       if (multiSelectMode) toggleConversationSelected(conversation.id, !selected);
       else selectConversation(conversation.id);
     }}
   >
-    <div class="flex items-center gap-2">
-      <Icon name="message-square" class="h-3 w-3 shrink-0" />
-      <span class="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
-        {conversation.title || "Untitled"}
-      </span>
-      {#if conversation.groupPinned}
-        <Icon name="lock" class="h-3 w-3 shrink-0 text-muted-foreground" />
-      {/if}
+    <!-- One wrapping row: the title chunk grows (and truncates) so the
+         time/cost cluster sits right-aligned beside it; below ~10rem of
+         title space the cluster wraps onto its own line instead. -->
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <div class="flex min-w-[10rem] max-w-full flex-auto items-center gap-2">
+        <Icon name="message-square" class="h-3 w-3 shrink-0" />
+        <span class="truncate font-medium text-foreground/90 group-hover/row:text-foreground">
+          {conversation.title || "Untitled"}
+        </span>
+        {#if conversation.groupPinned}
+          <Icon name="lock" class="h-3 w-3 shrink-0 text-muted-foreground" />
+        {/if}
+      </div>
+      <div class="flex min-w-0 flex-none items-center gap-x-2 text-[10px] text-muted-foreground">
+        {#if stamp}
+          <span class="truncate" title={stampExact}>{stamp}</span>
+        {/if}
+        <ConversationCostDisplay
+          usageByModel={conversation.tokenUsageByModel ?? []}
+          {pricingByModel}
+          class="bg-transparent px-0 py-0 text-[10px]"
+        />
+      </div>
     </div>
-    {#if stamp}
-      <span class="ml-5.5 mt-0.5 block truncate text-[10px] text-muted-foreground" title={stampExact}>{stamp}</span>
-    {/if}
-    <ConversationCostDisplay
-      usageByModel={conversation.tokenUsageByModel ?? []}
-      {pricingByModel}
-      class="ml-5.5 mt-0.5 bg-transparent px-0 py-0 text-[10px]"
-    />
   </button>
   {#if !multiSelectMode}
     <button

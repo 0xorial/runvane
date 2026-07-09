@@ -81,6 +81,7 @@
   let placement = $state<"top" | "bottom">("bottom");
   let pos = $state({ x: 0, y: 0 });
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
+  let openTimer: ReturnType<typeof setTimeout> | null = null;
 
   function place(): void {
     const r = anchorEl?.getBoundingClientRect();
@@ -93,17 +94,29 @@
     pos = { x, y: enoughBelow ? r.bottom + 4 : r.top - 4 };
   }
 
+  // Open on INTENT, not transit: the pill sits inline in every sidebar row,
+  // so a zero-delay popover sprays over neighbouring rows (and swallows their
+  // clicks) whenever the mouse crosses the list. A short dwell gates it;
+  // once open, re-entering anchor or popover keeps it open with no delay.
   function show(): void {
     if (summary.state === "empty") return;
     if (hideTimer) {
       clearTimeout(hideTimer);
       hideTimer = null;
     }
-    place();
-    open = true;
+    if (open || openTimer) return;
+    openTimer = setTimeout(() => {
+      openTimer = null;
+      place();
+      open = true;
+    }, 300);
   }
 
   function scheduleHide(): void {
+    if (openTimer) {
+      clearTimeout(openTimer);
+      openTimer = null;
+    }
     if (hideTimer) clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
       open = false;
