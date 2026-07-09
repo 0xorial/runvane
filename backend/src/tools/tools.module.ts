@@ -4,7 +4,6 @@ import { ModelPresetsModule } from '../model-presets/model-presets.module.js';
 import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
 import { ApiTool } from './builtins/api/tool.js';
 import { ConversationsTool } from './builtins/conversations/tool.js';
-import { CurlTool } from './builtins/curl/tool.js';
 import { RagTool } from './builtins/rag/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
@@ -26,7 +25,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
   providers: [
     GetCurrentTimeTool,
     TodoWriteTool,
-    CurlTool,
     FilesystemTool,
     FilesystemIndexStore,
     FilesystemIndexTool,
@@ -45,7 +43,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
       inject: [
         GetCurrentTimeTool,
         TodoWriteTool,
-        CurlTool,
         FilesystemTool,
         FilesystemIndexTool,
         RagTool,
