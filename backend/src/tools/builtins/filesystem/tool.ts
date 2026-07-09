@@ -122,6 +122,7 @@ export class FilesystemTool extends BaseTool<FilesystemToolParams, FilesystemToo
   ): Promise<ReadFileResult | ListDirResult | GrepResult | StatResult> {
     const rules = parseFilesystemToolRules(context.toolRules ?? this.getDefaultRules());
     const targetPath = await resolveAllowedPath(params.path, rules.allowed_roots);
+    context.log?.(`${params.operation} ${targetPath}`);
 
     switch (params.operation) {
       case 'read_file':

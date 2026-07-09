@@ -83,6 +83,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
       return { query: params.query, count: 0, hits: [], note: 'No RAG storages configured for this agent.' };
     }
     const topK = Math.min(params.top_k ?? rules.top_k, rules.top_k);
+    context.log?.(`retrieving top ${topK} for "${params.query}" across ${rules.storages.length} storage(s), strategy ${rules.strategy}`);
     const retrieveInput = {
       storageIds: rules.storages,
       query: params.query,
@@ -93,6 +94,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
       rules.strategy === 'graph'
         ? await this.retriever.retrieveGraph({ ...retrieveInput, maxHops: rules.max_hops })
         : { hits: await this.retriever.retrieve(retrieveInput), graph: null };
+    context.log?.(`${hits.length} hit(s)`);
     // Full retrieval trace so a user can drill into what ran from the tool row.
     const searched = rules.storages.map(
       (id) => this.storages.getManifest(id)?.name ?? `${id} (missing)`,

@@ -36,10 +36,16 @@ export type ToolRunContext = {
   signal: AbortSignal;
   /**
    * Emit incremental progress (stdout, streamed tokens, …) for the live tool
-   * row while the tool runs. Ephemeral — not persisted; the final result is
-   * still the saved output. Optional so non-streaming callers/tests can omit it.
+   * row while the tool runs. Streams live and is persisted as the run's log.
+   * Optional so non-streaming callers/tests can omit it.
    */
   onProgress?: (delta: string) => void;
+  /**
+   * Timestamped tool activity line — `[11:10:10] connecting to …`. Rides the
+   * progress stream, so it shows live on the tool row and persists into the
+   * run's log. Prefer this over onProgress for step-by-step narration.
+   */
+  log?: (message: string) => void;
 };
 
 export abstract class BaseTool<TParams = unknown, TRules = Record<string, unknown>> {

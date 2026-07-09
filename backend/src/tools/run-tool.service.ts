@@ -610,6 +610,8 @@ export class RunToolService implements OnModuleInit {
           delta,
         });
       };
+      const log = (message: string): void =>
+        onProgress(`[${new Date().toISOString().slice(11, 19)}] ${message}\n`);
       output = await this.taskRegistry.run(
         {
           kind: 'tool',
@@ -626,6 +628,7 @@ export class RunToolService implements OnModuleInit {
               toolRules: parsedRules,
               signal: taskSignal,
               onProgress,
+              log,
             }),
           ),
       );

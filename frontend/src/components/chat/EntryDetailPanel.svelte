@@ -280,7 +280,7 @@
         {/if}
         {#if (runsQuery.data?.runs.length ?? 0) > 0}
           <div data-testid="tool-runs-section">
-            <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Runs</span>
+            <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Run log</span>
             <div class="mt-1 space-y-2">
               {#each runsQuery.data?.runs ?? [] as run (run.id)}
                 <div class="rounded border border-border/60">

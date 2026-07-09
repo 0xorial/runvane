@@ -74,6 +74,7 @@ export class WebSearchTool extends BaseTool<WebSearchParams, WebSearchRules> {
     else context.signal.addEventListener('abort', onParentAbort, { once: true });
 
     try {
+      context.log?.(`searching "${params.query}" via ${url.origin}`);
       const response = await fetch(url.toString(), {
         signal: controller.signal,
         headers: { accept: 'application/json' },
@@ -85,6 +86,7 @@ export class WebSearchTool extends BaseTool<WebSearchParams, WebSearchRules> {
         );
       }
       const body = (await response.json()) as SearxResponse;
+      context.log?.(`${(body.results ?? []).length} results, keeping ${Math.min((body.results ?? []).length, limit)}`);
       const results = (body.results ?? []).slice(0, limit).map((r) => ({
         title: r.title ?? '',
         url: r.url ?? '',

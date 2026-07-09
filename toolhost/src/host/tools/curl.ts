@@ -100,6 +100,7 @@ export const curlTool: TargetTool = {
     const p = params as CurlParams;
     const start = Date.now();
     const body = p.method === 'GET' || p.method === 'HEAD' ? undefined : p.body;
+    ctx.log(`${p.method} ${p.url} (timeout ${p.timeoutMs}ms)`);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), p.timeoutMs);
@@ -115,7 +116,10 @@ export const curlTool: TargetTool = {
         signal: controller.signal,
         redirect: p.followRedirects ? 'follow' : 'manual',
       });
+      if (response.url && response.url !== p.url) ctx.log(`redirected to ${response.url}`);
+      ctx.log(`${response.status} ${response.statusText} in ${Date.now() - start}ms`);
       const { bytes, truncated } = await readBodyCapped(response, p.maxResponseBytes);
+      ctx.log(`read ${bytes.length} bytes${truncated ? ' (truncated)' : ''}`);
       const headers: Record<string, string> = {};
       response.headers.forEach((value, key) => {
         headers[key] = value;

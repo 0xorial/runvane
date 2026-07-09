@@ -80,6 +80,7 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
       throw new Error(`delegate_to_llm: unknown provider '${params.provider_id}'`);
     }
 
+    context.log?.(`delegating to ${params.provider_id}/${params.model_name}`);
     // Fetch provider settings
     const providerSettings = await this.settingsRepo.getProviderSettings(params.provider_id);
     if (!providerSettings) {

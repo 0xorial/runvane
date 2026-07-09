@@ -106,6 +106,7 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
     const scrape = async (
       url: string,
     ): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; reason: string }> => {
+      context.log?.(`scraping ${url} as ${params.format} via headless browser`);
       const payload: Record<string, unknown> = { url, format: [params.format] };
       // proxyUrl is per-call in Steel (its PROXY_URL env is a no-op); this is what
       // routes browser egress through the exit-node tunnel.
@@ -121,6 +122,7 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
         return { ok: false, reason: body.message ?? body.error ?? `${response.status} ${response.statusText}` };
       }
       const raw = body.content?.[params.format] ?? '';
+      context.log?.(`${body.metadata?.statusCode ?? '?'} — ${raw.length} chars`);
       const truncated = raw.length > rules.maxResponseBytes;
       const content = truncated ? raw.slice(0, rules.maxResponseBytes) : raw;
       return {
@@ -171,6 +173,7 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
         // (service down, abort) falls through to the generic handling.
         const variant = isMidRequestDrop(error) ? wwwApexVariant(params.url) : null;
         if (!variant) throw error;
+        context.log?.(`connection dropped mid-scrape — waiting for browser relaunch, then retrying ${variant}`);
         await relaunchGrace();
         const second = await scrape(variant).catch(() => null);
         if (!second?.ok) throw error; // report the original drop
@@ -184,6 +187,7 @@ export class WebBrowseTool extends BaseTool<WebBrowseParams, WebBrowseRules> {
       // scrape — retry the sibling host once before giving up.
       const variant = isTlsSuspectScrapeFailure(first.reason) ? wwwApexVariant(params.url) : null;
       if (variant) {
+        context.log?.(`TLS-suspect failure (${first.reason}) — waiting for browser relaunch, then retrying ${variant}`);
         // The cert-rejected navigation crashes Steel's browser AND poisons its
         // connections for a few seconds (measured: immediate follow-ups get
         // ECONNRESET, +6s succeeds) — so the sibling attempt needs the same

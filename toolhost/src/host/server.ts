@@ -9,6 +9,8 @@ export type TargetToolContext = {
   signal: AbortSignal;
   /** Stream incremental output (stdout, partial results) to the live tool row. */
   onProgress: (delta: string) => void;
+  /** Timestamped activity line — `[11:10:10] connecting to …` — onto the same stream. */
+  log: (message: string) => void;
 };
 
 export type TargetTool = {
@@ -99,6 +101,7 @@ export class ToolHostServer {
         invocationId: msg.invocationId,
         signal: controller.signal,
         onProgress,
+        log: (message: string) => onProgress(`[${new Date().toISOString().slice(11, 19)}] ${message}\n`),
       });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);

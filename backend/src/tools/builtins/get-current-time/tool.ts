@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BaseTool, type ToolPolicy } from '../../base-tool.js';
+import { BaseTool, type ToolPolicy, type ToolRunContext } from '../../base-tool.js';
 import {
   getCurrentTimeParamsSchema,
   parseGetCurrentTimeToolParams,
@@ -50,7 +50,8 @@ export class GetCurrentTimeTool extends BaseTool<GetCurrentTimeToolParams, GetCu
     return parseGetCurrentTimeToolRules(raw);
   }
 
-  runTool(_params: GetCurrentTimeToolParams): unknown {
+  runTool(_params: GetCurrentTimeToolParams, context: ToolRunContext): unknown {
+    context.log?.('reading server clock');
     return { nowIso: new Date().toISOString() };
   }
 }
