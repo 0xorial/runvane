@@ -6,6 +6,7 @@
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import { formatCostUsd, resolveStreamTokenBreakdown, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
   import { buildThoughtTripletsById } from "@/lib/thoughtTriplets";
+  import { toolRequestBrief } from "@/lib/toolRequestBrief";
   import { actionMetaLabel } from "./rows/thoughtTriplet/meta";
   import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
@@ -199,6 +200,10 @@
       <div class="space-y-2 text-xs" data-tool-state={toolEntry.state}>
         {#if toolMetaLine}
           <div class="font-mono text-[10px] text-muted-foreground">{toolMetaLine}</div>
+        {/if}
+        {#if toolRequestBrief(toolEntry)}
+          <!-- The planner's own words for what this call is for (same LLM turn as the call). -->
+          <div class="text-[11px] italic text-muted-foreground">“{toolRequestBrief(toolEntry)}”</div>
         {/if}
         {#if guardrailReason}
           <div class="flex items-start gap-1.5 rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning">

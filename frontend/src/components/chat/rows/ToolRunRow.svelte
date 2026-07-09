@@ -4,6 +4,7 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import type { ToolInvocationEntry } from "@/protocol/chatEntry";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
+  import { toolRequestBrief } from "@/lib/toolRequestBrief";
   import { formatDurationMs } from "@/utils/formatDurationMs";
   import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import { notifyError } from "@/utils/toast";
@@ -32,6 +33,7 @@
   });
   const createdStamp = $derived(formatRelativeChatTime(entry.createdAt));
   const createdExact = $derived(formatExactChatTime(entry.createdAt));
+  const brief = $derived(toolRequestBrief(entry));
 
   // The stored parameters payload carries planner bookkeeping; the user edits
   // (and reads) only the real tool params.
@@ -163,7 +165,10 @@
         {:else}
           <RowIcon name="wrench" class="h-3 w-3 shrink-0 opacity-50" />
         {/if}
-        <span class="truncate font-mono">{toolName}</span>
+        <span class="shrink-0 font-mono">{toolName}</span>
+        {#if brief}
+          <span class="min-w-0 flex-1 truncate opacity-80" title={brief}>{brief}</span>
+        {/if}
         {#if entry.parametersEdited}
           <span
             class="rounded bg-warning/10 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-warning/80"
@@ -214,7 +219,10 @@
         {:else}
           <RowIcon name="wrench" class="h-3 w-3 shrink-0 text-primary" />
         {/if}
-        <span class="font-mono font-medium text-foreground">{toolName}</span>
+        <span class="shrink-0 font-mono font-medium text-foreground">{toolName}</span>
+        {#if brief}
+          <span class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={brief}>{brief}</span>
+        {/if}
         {#if entry.parametersEdited}
           <span
             class="rounded bg-warning/15 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-warning"
