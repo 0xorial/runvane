@@ -6,6 +6,7 @@
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import { formatCostUsd, resolveStreamTokenBreakdown, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
   import { buildThoughtTripletsById } from "@/lib/thoughtTriplets";
+  import { actionMetaLabel } from "./rows/thoughtTriplet/meta";
   import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import { formatDurationMs } from "@/utils/formatDurationMs";
@@ -283,10 +284,25 @@
           </div>
         {/if}
         {#each THOUGHT_STAGES as stage (stage)}
-          <div>
-            <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{stage}</div>
-            <ThoughtTripletExpanded {stage} prepareEntry={prepEntry} {stream} {actionEntry} {conversationId} />
-          </div>
+          {@const stageIcon =
+            stage === "context"
+              ? ("file" as const)
+              : stage === "reasoning"
+                ? ("sparkles" as const)
+                : actionMetaLabel(actionEntry, stream).usesTool
+                  ? ("wrench" as const)
+                  : ("message" as const)}
+          <!-- No overflow-hidden here: it would become the sticky context for
+               the Show-less chips inside and pin them uselessly. -->
+          <section class="rounded-md border border-border/70">
+            <div class="flex items-center gap-1.5 rounded-t-md border-b border-border/60 bg-secondary/50 px-2.5 py-1.5">
+              <RowIcon name={stageIcon} class="h-3 w-3 shrink-0 text-primary" />
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{stage}</span>
+            </div>
+            <div class="px-2.5 pb-2.5">
+              <ThoughtTripletExpanded {stage} prepareEntry={prepEntry} {stream} {actionEntry} {conversationId} />
+            </div>
+          </section>
         {/each}
       </div>
     {:else if prepEntry}
