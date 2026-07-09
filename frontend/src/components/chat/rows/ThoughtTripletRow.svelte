@@ -8,6 +8,7 @@
   import { formatCostUsd, resolveStreamTokenBreakdown, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import { formatDurationMs } from "@/utils/formatDurationMs";
+  import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import { estimateTokenCount } from "@/utils/estimateTokenCount";
   import BranchSelector from "../BranchSelector.svelte";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
@@ -134,6 +135,7 @@
          opens the full stage details in the right-hand panel. -->
     {@const costUsd = streamCostUsd(stream, reasonMeta.pricing)}
     {@const durationLabel = stream.thoughtMs != null ? formatDurationMs(stream.thoughtMs) : ""}
+    {@const createdStamp = formatRelativeChatTime(prep.createdAt)}
     <ChatThreadIndent class="py-0 mb-1">
       {#snippet children()}
         <div class="my-0 border-l-2 border-border/40 pl-3">
@@ -160,6 +162,7 @@
                 {#if durationLabel}<span>{durationLabel}</span>{/if}
                 {#if reasonMeta.showModel}<span class="max-w-[14rem] truncate">{reasonMeta.model}</span>{/if}
                 {#if reasonMeta.status}<span class="text-destructive/80">{reasonMeta.status}</span>{/if}
+                {#if createdStamp}<span class="opacity-70" title={formatExactChatTime(prep.createdAt)}>{createdStamp}</span>{/if}
               </span>
             </button>
             <span class="flex shrink-0 items-center gap-0.5 text-muted-foreground">

@@ -15,9 +15,10 @@ test("finished tool collapses to a dimmed one-liner with elapsed time; details o
 
   const tool = app.chat.transcript.toolRow();
   await expect(tool).toHaveAttribute("data-collapsed", "true");
-  // The collapsed line keeps name + timing but no expanded body.
+  // The collapsed line keeps name + timing + timestamp but no expanded body.
   await expect(tool).toContainText("Done");
   await expect(tool).toContainText(/\d+(\.\d+)?(ms|s)/);
+  await expect(tool).toContainText("just now");
   await expect(tool).not.toContainText("Arguments");
 
   await tool.click();
@@ -39,6 +40,7 @@ test("finished thought collapses to one line and opens all stage details", async
 
   const row = app.chat.transcript.prepareRow("Decision planning", 0);
   await expect(row.getByTestId("thought-collapsed-row")).toBeVisible();
+  await expect(row.getByTestId("thought-collapsed-row")).toContainText("just now");
   await expect(row.getByTestId("thought-step-context")).toHaveCount(0);
 
   await app.chat.transcript.openThoughtDetails("Decision planning", 0);

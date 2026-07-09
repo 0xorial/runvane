@@ -5,6 +5,7 @@
   import type { ToolInvocationEntry } from "@/protocol/chatEntry";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
   import { formatDurationMs } from "@/utils/formatDurationMs";
+  import { formatExactChatTime, formatRelativeChatTime } from "@/utils/formatRelativeChatTime";
   import { notifyError } from "@/utils/toast";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
@@ -29,6 +30,8 @@
     const ms = entry.result?.timing?.elapsed_ms;
     return typeof ms === "number" ? formatDurationMs(ms) : "";
   });
+  const createdStamp = $derived(formatRelativeChatTime(entry.createdAt));
+  const createdExact = $derived(formatExactChatTime(entry.createdAt));
 
   // The stored parameters payload carries planner bookkeeping; the user edits
   // (and reads) only the real tool params.
@@ -194,6 +197,7 @@
         <span class="ml-auto flex shrink-0 items-center gap-2 font-mono text-[10px]">
           {#if elapsedLabel}<span>{elapsedLabel}</span>{/if}
           <span class={entry.state === "error" ? "text-destructive/80" : ""}>{statusLabel}</span>
+          {#if createdStamp}<span class="opacity-70" title={createdExact}>{createdStamp}</span>{/if}
         </span>
       </button>
     {:else}

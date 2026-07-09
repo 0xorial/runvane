@@ -9,6 +9,7 @@
   import { isThoughtStreamEntry, type ChatEntry, type ThoughtStreamEntry } from "@/protocol/chatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import { formatDurationMs } from "@/utils/formatDurationMs";
+  import { formatExactChatTime } from "@/utils/formatRelativeChatTime";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import { notifyError } from "@/utils/toast";
   import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
@@ -75,7 +76,7 @@
 
   // The stage sections below carry the full token breakdown; this line is the
   // at-a-glance summary the collapsed row also shows.
-  function thoughtMetaLine(s: ThoughtStreamEntry): string {
+  function thoughtMetaLine(s: ThoughtStreamEntry, createdAtIso: string): string {
     const model = String(s.llm?.model || "").trim();
     const provider = String(s.llm?.providerId || "").trim();
     const total = streamTotalTokens(s);
@@ -85,6 +86,7 @@
       total > 0 ? formatTokenCount(total) : "",
       cost !== null ? formatCostUsd(cost) : "",
       s.thoughtMs != null ? formatDurationMs(s.thoughtMs) : "",
+      formatExactChatTime(createdAtIso),
     ];
     return parts.filter(Boolean).join(" · ");
   }
@@ -123,12 +125,14 @@
   });
   const toolMetaLine = $derived.by(() => {
     if (!toolEntry) return "";
-    const ms = toolEntry.result?.timing?.elapsed_ms;
+    const timing = toolEntry.result?.timing;
+    const startedAt = timing?.started_at ?? toolEntry.createdAt;
     const parts = [
       toolStatusLabel,
-      typeof ms === "number" ? formatDurationMs(ms) : "",
+      typeof timing?.elapsed_ms === "number" ? formatDurationMs(timing.elapsed_ms) : "",
       (toolEntry.attempt ?? 1) > 1 ? `attempt ${toolEntry.attempt}` : "",
       toolLocation ? `${toolLocation} sandbox` : "",
+      formatExactChatTime(startedAt),
     ];
     return parts.filter(Boolean).join(" · ");
   });
@@ -246,7 +250,7 @@
       </div>
     {:else if prepEntry && stream}
       <div class="space-y-3 text-xs">
-        <div class="font-mono text-[10px] text-muted-foreground">{thoughtMetaLine(stream)}</div>
+        <div class="font-mono text-[10px] text-muted-foreground">{thoughtMetaLine(stream, prepEntry.createdAt)}</div>
         {#each THOUGHT_STAGES as stage (stage)}
           <div>
             <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{stage}</div>
