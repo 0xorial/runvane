@@ -66,6 +66,33 @@ test("a pending tool keeps the full card; collapsing happens only once terminal"
   await expect(tool.getByTestId("tool-approve-button")).toHaveCount(0);
 });
 
+test("long detail texts clamp to a dimmed preview with expand/collapse", async ({ app, request }) => {
+  await app.chat.gotoNew(await defaultAgentId(request));
+  // A long user message lands verbatim in the planner prompt, making the
+  // details-panel Prompt section tall enough to trigger the clamp.
+  await app.chat.userInput.typeMessage(`clamp probe ${"lorem ipsum dolor sit amet ".repeat(150)}`);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForAssistantReply();
+
+  await app.chat.transcript.openThoughtDetails("Decision planning", 0);
+  const context = app.chat.transcript.detailPanel.locator('[data-thought-stage="context"]');
+  const clip = context.getByTestId("block-clip").first();
+  const expand = context.getByTestId("block-expand").first();
+  await expect(expand).toBeVisible();
+  const clamped = await clip.boundingBox();
+  expect(clamped!.height).toBeLessThanOrEqual(160);
+
+  await expand.click();
+  await expect(context.getByTestId("block-expand")).toHaveCount(0);
+  const collapse = context.getByTestId("block-collapse");
+  await expect(collapse).toBeVisible();
+  const full = await clip.boundingBox();
+  expect(full!.height).toBeGreaterThan(300);
+
+  await collapse.click();
+  await expect(context.getByTestId("block-expand").first()).toBeVisible();
+});
+
 test("clicking a collapsed row opens the right panel even when it was hidden", async ({ app, request }) => {
   await app.chat.gotoNew(await defaultAgentId(request));
   await app.sidebar.runProbeTime();

@@ -11,6 +11,7 @@
   import { formatDurationMs } from "@/utils/formatDurationMs";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import { notifyError } from "@/utils/toast";
+  import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
   import Icon from "@/components/ui/Icon.svelte";
   import RowIcon from "./RowIcon.svelte";
   import ThoughtTripletExpanded from "./rows/ThoughtTripletExpanded.svelte";
@@ -222,18 +223,24 @@
           <span class="text-[10px] uppercase tracking-wider text-muted-foreground">
             {toolEntry.parametersEdited ? "Arguments (edited by you)" : "Arguments"}
           </span>
-          <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{stringifyMaybe(cleanParams)}</pre>
+          <CollapsibleBlock class="mt-1">
+            <pre class="overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{stringifyMaybe(cleanParams)}</pre>
+          </CollapsibleBlock>
         </div>
         {#if toolEntry.parametersEdited && toolEntry.originalParameters}
           <div>
             <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Original arguments (as requested by the model)</span>
-            <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-muted-foreground" data-testid="tool-original-params">{stringifyMaybe(toolEntry.originalParameters)}</pre>
+            <CollapsibleBlock class="mt-1">
+              <pre class="overflow-x-auto rounded bg-background p-2 font-mono text-xs text-muted-foreground" data-testid="tool-original-params">{stringifyMaybe(toolEntry.originalParameters)}</pre>
+            </CollapsibleBlock>
           </div>
         {/if}
         {#if toolEntry.result?.output != null}
           <div>
             <span class="text-[10px] uppercase tracking-wider text-muted-foreground">Result</span>
-            <pre class="scrollbar-thin mt-1 max-h-96 overflow-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{stringifyMaybe(toolEntry.result.output)}</pre>
+            <CollapsibleBlock class="mt-1" collapsedMaxPx={240}>
+              <pre class="overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{stringifyMaybe(toolEntry.result.output)}</pre>
+            </CollapsibleBlock>
           </div>
         {/if}
       </div>

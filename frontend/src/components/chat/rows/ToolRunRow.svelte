@@ -8,6 +8,7 @@
   import { notifyError } from "@/utils/toast";
   import ChatThreadIndent from "../ChatThreadIndent.svelte";
   import RowIcon from "../RowIcon.svelte";
+  import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
   import Icon from "@/components/ui/Icon.svelte";
 
   let { entry, conversationId }: { entry: ToolInvocationEntry; conversationId: string } = $props();
@@ -290,7 +291,9 @@
                 <div class="mt-1 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive" data-testid="tool-params-error">{paramsError}</div>
               {/if}
             {:else}
-              <pre class="mt-1 overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{paramsText}</pre>
+              <CollapsibleBlock class="mt-1">
+                <pre class="overflow-x-auto rounded bg-background p-2 font-mono text-xs text-secondary-foreground">{paramsText}</pre>
+              </CollapsibleBlock>
             {/if}
           </div>
           {#if entry.parametersEdited && entry.originalParameters}

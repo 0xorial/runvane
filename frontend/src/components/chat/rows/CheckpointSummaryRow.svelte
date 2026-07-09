@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CheckpointSummaryEntry } from "@/protocol/chatEntry";
+  import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
   import CopyButton from "@/components/ui/CopyButton.svelte";
   import MarkdownContent from "@/components/ui/MarkdownContent.svelte";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
@@ -90,7 +91,9 @@
         {/if}
       </div>
       {#if entry.summaryText}
-        <MarkdownContent content={entry.summaryText} />
+        <CollapsibleBlock>
+          <MarkdownContent content={entry.summaryText} />
+        </CollapsibleBlock>
       {/if}
     </div>
   {/snippet}
