@@ -20,23 +20,22 @@ test("tool row shows a harness/target location badge", async ({ app, request }) 
   await expect(badge).toHaveText(/harness/i);
 });
 
-// The agent settings tool table shows the same location badge per tool, so
-// where a tool executes is visible while configuring it — not only after a
-// run. `curl` lives in the tool-host (target); the probe tool is harness.
-test("agent settings tool list shows harness/target badges", async ({ app, request }) => {
+// The agent settings tool table is split by execution location, so where a
+// tool runs is visible while configuring it — not only after a run. `curl`
+// lives in the tool-host (target section); the probe tool is harness.
+test("agent settings groups tools into harness and target sections", async ({ app, request }) => {
   const agentId = await defaultAgentId(request);
   await app.page.goto(`/settings/agents?agent=${encodeURIComponent(agentId)}`, {
     waitUntil: "domcontentloaded",
   });
 
-  const rowFor = (tool: string) =>
-    app.page.locator("tr").filter({ has: app.page.locator(`code:text-is("${tool}")`) });
+  const harness = app.page.getByTestId("tool-section-harness");
+  const target = app.page.getByTestId("tool-section-target");
+  await expect(harness.getByText("Harness tools")).toBeVisible();
+  await expect(target.getByText("Target sandbox tools")).toBeVisible();
 
-  const probeBadge = rowFor("get_current_time").getByTestId("settings-tool-location");
-  await expect(probeBadge).toBeVisible();
-  await expect(probeBadge).toHaveAttribute("data-tool-location", "harness");
-
-  const curlBadge = rowFor("curl").getByTestId("settings-tool-location");
-  await expect(curlBadge).toBeVisible();
-  await expect(curlBadge).toHaveAttribute("data-tool-location", "target");
+  await expect(harness.locator('code:text-is("get_current_time")')).toBeVisible();
+  await expect(target.locator('code:text-is("curl")')).toBeVisible();
+  await expect(target.locator('code:text-is("get_current_time")')).toHaveCount(0);
+  await expect(harness.locator('code:text-is("curl")')).toHaveCount(0);
 });
