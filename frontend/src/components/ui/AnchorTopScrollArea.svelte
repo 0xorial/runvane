@@ -42,15 +42,34 @@
   let tries = 0;
 
   const BOTTOM_STICK_THRESHOLD_PX = 8;
-  let stickToBottom = $state(true);
+  // The follow decision is derived per growth-tick from the GEOMETRY BEFORE
+  // the change (was the user's position at the then-bottom?), never from
+  // scroll-event state: scroll handlers observe layout later than the writes
+  // that caused them, so state kept there detaches on pin-vs-growth races and
+  // on the align animation's transit frames (the expanded-tool-request bug:
+  // the follow silently died around a send, and later growth — a tool card
+  // expanding for approval — stayed below the fold). A fresh send-align
+  // reserves a spacer that makes the anchored position the bottom, so the
+  // follow hands off naturally: growth first consumes the reservation (view
+  // anchored, no movement), then pins downward.
+  let prevScrollHeight = 0;
+  let prevClientHeight = 0;
 
-  function isScrolledToBottom(scroll: HTMLElement): boolean {
-    return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= BOTTOM_STICK_THRESHOLD_PX;
+  function wasAtBottomBefore(scroll: HTMLElement): boolean {
+    if (prevScrollHeight === 0) return true; // first observation: fresh view sticks
+    return prevScrollHeight - scroll.scrollTop - prevClientHeight <= BOTTOM_STICK_THRESHOLD_PX;
   }
 
-  function handleScroll(): void {
+  function notePinBaseline(): void {
     if (!scrollEl) return;
-    stickToBottom = isScrolledToBottom(scrollEl);
+    prevScrollHeight = scrollEl.scrollHeight;
+    prevClientHeight = scrollEl.clientHeight;
+  }
+
+  function pinToBottom(): void {
+    if (!scrollEl) return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+    notePinBaseline();
   }
 
   /** Stop the align loop only — a smooth-scroll already underway keeps going. */
@@ -162,8 +181,7 @@
     cancelAlignRaf();
     lastAnchorId = null;
     clearSpacer();
-    stickToBottom = true;
-    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+    pinToBottom();
   });
 
   // Aligning is an EVENT (token bump on send / branch pick), never state sync:
@@ -204,7 +222,21 @@
     if (!scroll || !content) return;
 
     const observer = new ResizeObserver(() => {
-      if (stickToBottom) scroll.scrollTop = scroll.scrollHeight;
+      const follow = wasAtBottomBefore(scroll);
+      // The reserved spacer only exists so the anchor can reach the viewport
+      // top while the content below it is still short. As real content
+      // arrives below the anchor (streaming reply, a tool card expanding for
+      // approval), the reservation must shrink accordingly — otherwise the
+      // transcript keeps phantom space under the last row and "bottom" stops
+      // being the bottom. Safe against the align's own two-phase spacer
+      // write: the spacer div sits OUTSIDE the observed content (no feedback
+      // loop), and the align's scroll target depends only on content above
+      // the anchor.
+      if (lastAnchorId) updateSpacer(lastAnchorId);
+      void tick().then(() => {
+        if (follow) pinToBottom();
+        else notePinBaseline();
+      });
     });
     observer.observe(content);
     return () => observer.disconnect();
@@ -220,9 +252,11 @@
     if (!scroll) return;
 
     const observer = new ResizeObserver(() => {
+      const follow = wasAtBottomBefore(scroll);
       if (lastAnchorId && rafRef == null) updateSpacer(lastAnchorId);
       void tick().then(() => {
-        if (stickToBottom && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+        if (follow) pinToBottom();
+        else notePinBaseline();
       });
     });
     observer.observe(scroll);
@@ -230,7 +264,7 @@
   });
 </script>
 
-<div bind:this={scrollEl} class={className} data-testid={testId} onscroll={handleScroll}>
+<div bind:this={scrollEl} class={className} data-testid={testId}>
   <div bind:this={contentEl} class="relative flex min-h-full flex-col gap-0">
     {@render children()}
   </div>

@@ -1,5 +1,5 @@
 import { Locator } from "@playwright/test";
-import { defaultAgentId, USER_MSG_HELLO } from "./harness/client";
+import { defaultAgentId, GUARDED_AGENT_ID, PROBE_MESSAGE, USER_MSG_HELLO } from "./harness/client";
 import { expect, test } from "./fixtures";
 
 const runE2e = process.env.RUN_E2E_TESTS === "1";
@@ -33,6 +33,49 @@ test("transcript follows new content to the bottom when the user is already at t
   await expect
     .poll(() => container.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
     .toBeLessThanOrEqual(8);
+});
+
+// A tool that parks in `requested` renders EXPANDED (approval affordances +
+// arguments block) — tall content landing around the send-time align. The
+// align's smooth scroll fires ordinary scroll events on its way to the
+// anchor; deriving stickiness from those transient frames used to detach the
+// bottom-follow permanently, so growth arriving after the align (streaming
+// deltas, the expanded card) stayed below the fold.
+test("bottom-follow survives the send-align: post-align growth stays visible", async ({ app }) => {
+  await app.page.setViewportSize({ width: 1280, height: 500 });
+  await app.chat.gotoNew(GUARDED_AGENT_ID);
+  await app.chat.userInput.typeMessage(PROBE_MESSAGE);
+  await app.chat.userInput.send();
+  await app.chat.transcript.waitForToolState("requested");
+
+  const container = app.chat.transcript.container;
+  const tool = app.chat.transcript.toolRow();
+  await expect(tool.getByTestId("tool-approve-button")).toBeVisible();
+  // Let the send-align animation finish (bounded: ≤~500ms start + 200ms run).
+  await app.page.waitForTimeout(800);
+
+  // Post-align growth (streaming deltas, a tool card expanding) first
+  // consumes the align's reserved spacer, then the follow pins the bottom.
+  // With follow-state corrupted around the align — the historical bug — this
+  // growth ends below the fold instead.
+  const spacer = await container.evaluate((el) =>
+    Math.round((el.lastElementChild as HTMLElement).getBoundingClientRect().height),
+  );
+  await growContentBy(container, spacer + 300);
+
+  await expect
+    .poll(() => container.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight), {
+      timeout: 5_000,
+    })
+    .toBeLessThanOrEqual(8);
+
+  // The reservation must have been consumed by the real content, so the
+  // pinned bottom is the true bottom.
+  await expect
+    .poll(() =>
+      container.evaluate((el) => (el.lastElementChild as HTMLElement).getBoundingClientRect().height),
+    )
+    .toBeLessThanOrEqual(1);
 });
 
 test("reloading a conversation lands at the bottom without re-running the send-time anchoring", async ({
