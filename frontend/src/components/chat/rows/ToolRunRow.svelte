@@ -143,13 +143,13 @@
   }
 </script>
 
-<ChatThreadIndent>
+<ChatThreadIndent class={terminal ? "py-0" : ""}>
   {#snippet children()}
     {#if terminal}
       <!-- Compact view: one dimmed line; clicking it opens the details panel. -->
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-md px-3 py-1 text-left text-[11px] transition-colors hover:bg-secondary/60 {detailOpen
+        class="flex w-full items-center gap-2 rounded px-3 py-0.5 text-left text-[11px] transition-colors hover:bg-secondary/60 {detailOpen
           ? 'bg-secondary/70 text-foreground'
           : 'text-muted-foreground/70 hover:text-muted-foreground'}"
         data-testid="tool-invocation-row"

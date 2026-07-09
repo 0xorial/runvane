@@ -136,13 +136,13 @@
     {@const costUsd = streamCostUsd(stream, reasonMeta.pricing)}
     {@const durationLabel = stream.thoughtMs != null ? formatDurationMs(stream.thoughtMs) : ""}
     {@const createdStamp = formatRelativeChatTime(prep.createdAt)}
-    <ChatThreadIndent class="py-0 mb-1">
+    <ChatThreadIndent class="py-0">
       {#snippet children()}
         <div class="my-0 border-l-2 border-border/40 pl-3">
-          <div class="flex items-center gap-1 py-0.5 text-[11px]">
+          <div class="flex items-center gap-1 text-[11px]">
             <button
               type="button"
-              class="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left transition-colors hover:bg-secondary/60 {detailOpen
+              class="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-0.5 text-left transition-colors hover:bg-secondary/60 {detailOpen
                 ? 'bg-secondary/70 text-foreground'
                 : 'text-muted-foreground/60 hover:text-muted-foreground'}"
               data-testid="thought-collapsed-row"
