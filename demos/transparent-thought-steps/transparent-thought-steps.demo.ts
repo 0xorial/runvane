@@ -56,23 +56,33 @@ test("transparent-thought-steps", async ({ app, request }) => {
   await app.chat.transcript.waitForProbeComplete(E2E_LLM_TIMEOUT_MS);
   await beat(500);
 
-  await demoClick(app.page, app.chat.transcript.prepareRow("Title generation").getByTestId("thought-step-context"));
-  await expect(app.chat.transcript.prepareRow("Title generation").getByTestId("thought-step-panel")).toBeVisible();
-  await beat(700);
+  // Each collapsed thought opens its full context / reasoning / action
+  // breakdown in the right-hand details panel.
+  const panel = app.chat.transcript.detailPanel;
+  await demoClick(
+    app.page,
+    app.chat.transcript.prepareRow("Title generation").getByTestId("thought-collapsed-row"),
+  );
+  await expect(panel.getByText("Raw response")).toBeVisible();
+  await beat(900);
 
-  const plan0 = app.chat.transcript.prepareRow("Decision planning", 0);
-  await demoClick(app.page, plan0.getByTestId("thought-step-context"));
-  await beat(600);
-  await demoClick(app.page, plan0.getByTestId("thought-step-reasoning"));
-  await expect(plan0.getByText("Raw response")).toBeVisible();
-  await beat(700);
+  await demoClick(
+    app.page,
+    app.chat.transcript.prepareRow("Decision planning", 0).getByTestId("thought-collapsed-row"),
+  );
+  await expect(panel.getByText("Raw response")).toBeVisible();
+  await beat(900);
 
-  const params = app.chat.transcript.prepareRow("Resolve tool parameters");
-  await demoClick(app.page, params.getByTestId("thought-step-reasoning"));
-  await beat(700);
+  await demoClick(
+    app.page,
+    app.chat.transcript.prepareRow("Resolve tool parameters").getByTestId("thought-collapsed-row"),
+  );
+  await beat(900);
 
-  const plan1 = app.chat.transcript.prepareRow("Decision planning", 1);
-  await demoClick(app.page, plan1.getByTestId("thought-step-reasoning"));
-  await expect(plan1.getByText("Raw response")).toBeVisible();
+  await demoClick(
+    app.page,
+    app.chat.transcript.prepareRow("Decision planning", 1).getByTestId("thought-collapsed-row"),
+  );
+  await expect(panel.getByText("Raw response")).toBeVisible();
   await beat(1200);
 });

@@ -66,8 +66,8 @@ test("attachment-summary", async ({ app, request }) => {
   await beat(400);
 
   const summarize = app.chat.transcript.prepareRow("Summarize attachment");
-  await demoClick(app.page, summarize.getByTestId("thought-step-reasoning"));
-  await expect(summarize).toContainText("purple crystalline");
+  await demoClick(app.page, summarize.getByTestId("thought-collapsed-row"));
+  await expect(app.chat.transcript.detailPanel).toContainText("purple crystalline");
   await beat(700);
 
   await demoClick(app.page, composer);
@@ -80,8 +80,8 @@ test("attachment-summary", async ({ app, request }) => {
   await expect(askTool).toContainText("ask_attachment");
   await askTool.scrollIntoViewIfNeeded();
   await beat(400);
-  await demoClick(app.page, askTool.getByRole("button", { expanded: false }));
-  await expect(askTool).toContainText("deep violet");
+  await demoClick(app.page, askTool);
+  await expect(app.chat.transcript.detailPanel).toContainText("deep violet");
   await beat(1400);
 
   await expect(app.chat.transcript.container).toContainText("Cool violet", { timeout: E2E_LLM_TIMEOUT_MS });

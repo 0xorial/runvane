@@ -1,7 +1,7 @@
 import { defaultAgentId } from "../../tests/e2e/harness/client";
 import { stubLlmConfigure, stubLlmReset } from "../../tests/e2e/harness/stub-llm";
 import { E2E_LLM_TIMEOUT_MS } from "../../tests/e2e/timeouts";
-import { beat, test } from "../_shared/demo-test";
+import { beat, expect, test } from "../_shared/demo-test";
 import { demoClick, demoKeyOn, demoTypeInto, installDemoOverlay } from "../_shared/overlay";
 import { plannerReply } from "../_shared/planner";
 
@@ -37,9 +37,10 @@ test("transparent-runtime", async ({ app, request }) => {
   await app.chat.transcript.waitForAssistantReply(E2E_LLM_TIMEOUT_MS);
   await beat(500);
 
+  // The collapsed planning row opens the full details (prompt, reasoning,
+  // action) in the right-hand panel.
   const row = app.chat.transcript.prepareRow("Decision planning", 0);
-  await demoClick(app.page, row.getByTestId("thought-step-context"));
-  await beat(800);
-  await demoClick(app.page, row.getByTestId("thought-step-reasoning"));
-  await beat(800);
+  await demoClick(app.page, row.getByTestId("thought-collapsed-row"));
+  await expect(app.chat.transcript.detailPanel).toBeVisible();
+  await beat(1600);
 });
