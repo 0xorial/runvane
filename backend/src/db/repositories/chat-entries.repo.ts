@@ -352,6 +352,17 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     return rows.length > 0;
   }
 
+  /** Thought entries stranded in `running` (their process died) — boot-sweep input. */
+  async listRunningThoughtEntries(): Promise<Array<{ id: string; conversationId: string; type: string }>> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT id, conversation_id AS conversationId, type
+       FROM chat_entries
+       WHERE type IN ('thought-prepare', 'thought_stream', 'thought-action')
+         AND json_extract(payload_json, '$.status') = 'running'`,
+    )) as Array<{ id: string; conversationId: string; type: string }>;
+    return rows;
+  }
+
   /** Tool invocations stranded in `running` (their process died) — boot-sweep input. */
   async listRunningToolInvocations(): Promise<Array<{ id: string; conversationId: string; toolId: string }>> {
     const rows = (await this.prisma.$queryRawUnsafe(

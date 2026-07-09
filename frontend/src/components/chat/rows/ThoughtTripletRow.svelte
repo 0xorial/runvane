@@ -250,6 +250,7 @@
 {:else if prepareEntry.type === "thought-prepare"}
   {@const prep = prepareEntry as ThoughtPrepareEntry}
   {@const contextTitle = String(prep.title ?? "").trim() || "Preparation"}
+  {@const prepFailed = prep.status === "failed" || prep.status === "cancelled"}
   <ChatThreadIndent class="py-0 mb-1">
     {#snippet children()}
       <div class="my-0 border-l-2 border-border/60 pl-3">
@@ -258,9 +259,13 @@
             {#snippet icon()}<RowIcon name="file" />{/snippet}
           </StepChip>
           <Icon name="arrow-right" class="h-3 w-3 self-center opacity-60" />
-          <StepChip label="" meta="reasoning…" active={false} onclick={() => undefined}>
+          <StepChip label="" meta={prepFailed ? (prep.status ?? "failed") : "reasoning…"} active={false} onclick={() => undefined}>
             {#snippet icon()}
-              <span class="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" aria-hidden="true"></span>
+              {#if prepFailed}
+                <RowIcon name="alert" />
+              {:else}
+                <span class="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" aria-hidden="true"></span>
+              {/if}
             {/snippet}
           </StepChip>
         </div>

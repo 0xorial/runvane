@@ -48,7 +48,7 @@ describeLive('tool fan-out fan-in (integration)', () => {
     baseUrl = app.baseUrl;
     registerMockTools(app.app, controller);
     defaultAgentId = await getDefaultAgentId(baseUrl);
-    guardedAgentId = await getAgentIdByName(baseUrl, 'e2e guarded');
+    guardedAgentId = await getAgentIdByName(baseUrl, 'Guarded assistant');
   }, 30_000);
 
   beforeEach(() => {

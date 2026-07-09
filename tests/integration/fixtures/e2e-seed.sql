@@ -78,7 +78,7 @@ INSERT INTO agents (
 )
 VALUES (
   'e2e00000-0000-4000-8000-000000000002',
-  'e2e guarded',
+  'Guarded assistant',
   '',
   '{"provider_id":"stub","model_name":"stub","guardrail":{"provider_id":"stub","model_name":"stub"},"tools":{"get_current_time":{"policy":"ask","guardrail":true}}}',
   NULL,
@@ -107,7 +107,7 @@ INSERT INTO agents (
 )
 VALUES (
   'e2e00000-0000-4000-8000-000000000003',
-  'e2e forbid tool',
+  'Restricted assistant',
   '',
   '{"provider_id":"stub","model_name":"stub","tools":{"get_current_time":{"policy":"off"}}}',
   NULL,

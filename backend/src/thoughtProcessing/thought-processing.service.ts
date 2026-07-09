@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { LlmProviderSettingsRepo } from '../db/repositories/llm-provider-settings.repo.js';
@@ -30,7 +30,8 @@ import { ReasonStep } from './steps/reasonStep.js';
 type AnyThoughtProvider = ThoughtTypeProvider<any>;
 
 @Injectable()
-export class ThoughtProcessingService {
+export class ThoughtProcessingService implements OnModuleInit {
+  private readonly logger = new Logger(ThoughtProcessingService.name);
   private readonly providers: AnyThoughtProvider[];
 
   constructor(
@@ -60,6 +61,30 @@ export class ThoughtProcessingService {
       summarizeAttachmentProvider,
       guardrailProvider,
     ];
+  }
+
+  /**
+   * Boot sweep: a thought that was `running` when the process died can never
+   * settle — the UI would spin forever and the turn looks stuck. Mark the
+   * stranded prepare/stream/action entries cancelled with a visible reason;
+   * the details panel's Retry (failed/cancelled streams) takes it from there.
+   * Mirrors RunToolService's zombie tool sweep.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const zombies = await this.chatEntries.listRunningThoughtEntries();
+      for (const zombie of zombies) {
+        await this.chatEntries.mergeEntryPayload(zombie.conversationId, zombie.id, {
+          status: 'cancelled',
+          error: 'The backend restarted while this thought was running. Retry it from the details panel.',
+        });
+      }
+      if (zombies.length > 0) {
+        this.logger.warn(`boot sweep: ${zombies.length} thought entr(ies) stranded in running marked cancelled`);
+      }
+    } catch (error) {
+      this.logger.error('thought boot sweep failed', error instanceof Error ? error.stack : String(error));
+    }
   }
 
   /** Active LLM reference, resolved once per run and threaded into the start* methods. */
