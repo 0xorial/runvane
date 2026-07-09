@@ -43,7 +43,7 @@ Personal AI chat client focused on local-first control, flexible orchestration, 
 
 ## Demos
 
-**▶ [Watch the demos](https://0xorial.github.io/runvane/)** — full-quality video recordings of the real app, driven end-to-end against a scripted stub LLM. Click any thumbnail below to jump to its clip.
+**▶ [Watch the demos](https://0xorial.github.io/runvane/)**
 
 | | |
 | --- | --- |
