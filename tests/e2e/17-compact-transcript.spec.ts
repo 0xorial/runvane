@@ -89,6 +89,17 @@ test("long detail texts clamp to a dimmed preview with expand/collapse", async (
   const full = await clip.boundingBox();
   expect(full!.height).toBeGreaterThan(300);
 
+  // Scroll into the middle of the expanded block: the collapse chip is sticky,
+  // so it must stay inside the visible panel instead of sitting at the block's
+  // far end.
+  await app.chat.transcript.detailPanel.locator(".overflow-y-auto").first().evaluate((el) => {
+    el.scrollTop = 200;
+  });
+  const chipBox = await collapse.boundingBox();
+  const viewport = app.page.viewportSize()!;
+  expect(chipBox!.y).toBeGreaterThan(0);
+  expect(chipBox!.y).toBeLessThan(viewport.height);
+
   await collapse.click();
   await expect(context.getByTestId("block-expand").first()).toBeVisible();
 });

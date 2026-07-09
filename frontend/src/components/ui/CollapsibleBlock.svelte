@@ -18,8 +18,16 @@
   const FADE_PX = 56;
 
   let expanded = $state(false);
+  let rootEl = $state<HTMLDivElement | null>(null);
   let innerEl = $state<HTMLDivElement | null>(null);
   let overflowing = $state(false);
+
+  // Collapsing from deep inside a tall block would otherwise leave the scroll
+  // position stranded past the (now 150px) content.
+  function collapse(): void {
+    expanded = false;
+    requestAnimationFrame(() => rootEl?.scrollIntoView({ block: "nearest" }));
+  }
 
   // Measured on the inner (unclamped) content: the clip box keeps its own size
   // while collapsed, so watching it would miss content growth (streaming text).
@@ -45,7 +53,7 @@
   );
 </script>
 
-<div class={className}>
+<div bind:this={rootEl} class={className}>
   <div class="relative">
     <div class="overflow-hidden" style={clampStyle} data-testid="block-clip">
       <div bind:this={innerEl}>{@render children()}</div>
@@ -69,13 +77,16 @@
     {/if}
   </div>
   {#if overflowing && expanded}
-    <div class="flex justify-center pt-0.5">
+    <!-- Sticky: floats at the scrollport bottom while any of the expanded
+         block is still below the fold, so collapsing never requires
+         scrolling to the end first. -->
+    <div class="pointer-events-none sticky bottom-1 z-10 flex justify-center pt-0.5">
       <button
         type="button"
-        class="rounded-full border border-border/60 bg-secondary/90 px-2 py-px text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+        class="pointer-events-auto rounded-full border border-border/60 bg-secondary/90 px-2 py-px text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:text-foreground"
         data-testid="block-collapse"
         aria-label="Collapse content"
-        onclick={() => (expanded = false)}
+        onclick={collapse}
       >
         Show less
       </button>
