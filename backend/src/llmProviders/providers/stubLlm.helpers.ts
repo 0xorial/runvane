@@ -246,7 +246,21 @@ export function stubIsGraphExtractionRequest(blob: string): boolean {
   return /You extract a knowledge graph/i.test(blob);
 }
 
+/** Matched on the llm graph builder's summarize prompt (entity-description
+ *  merge pass). Deterministic constant — tests never depend on its wording. */
+export function stubIsGraphSummarizeRequest(blob: string): boolean {
+  return /merge fragmented descriptions/i.test(blob);
+}
+
+export const STUB_GRAPH_SUMMARY_REPLY = 'Merged entity description (stub).';
+
 export function stubGraphExtractionReply(blob: string): string {
+  // Gleaning round (the builder's "anything MISSED?" re-prompt): the fixture
+  // annotations already yielded everything on the first pass, so the stub
+  // reports nothing new — which also exercises the builder's early-stop.
+  if (/MISSED in the previous extraction/i.test(blob)) {
+    return JSON.stringify({ entities: [], relations: [] });
+  }
   const parts = blob.split(/\[chunk (\d+)\]/);
   const chunks: Array<{ index: number; text: string }> = [];
   for (let i = 1; i + 1 < parts.length; i += 2) {
@@ -685,6 +699,7 @@ export function pickStubReply(request: LlmRequest): string {
     return '{}';
   }
   if (stubIsGraphExtractionRequest(blob)) return stubGraphExtractionReply(blob);
+  if (stubIsGraphSummarizeRequest(blob)) return STUB_GRAPH_SUMMARY_REPLY;
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;

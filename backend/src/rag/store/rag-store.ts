@@ -232,18 +232,26 @@ export class RagStore {
 
   /**
    * Replace one source item's contribution to the knowledge graph. Nodes are
-   * global (deduplicated by `nodeKey`) and merged on conflict — the longer
-   * description wins, an empty type never overwrites a set one. Edges and
-   * mentions carry per-source provenance so a re-ingest of one item replaces
-   * exactly its own rows; nodes left without any mention or edge are pruned.
+   * global (deduplicated by `nodeKey`) and merged on conflict — an empty type
+   * never overwrites a set one, and distinct description fragments accumulate
+   * " | "-joined (capped) rather than last/longest-wins, so an entity seen
+   * across many sources keeps what each said about it. The ingest-time
+   * summarize pass condenses fragments that grow past a threshold (see
+   * `nodesWithLongDescriptions`). Edges and mentions carry per-source
+   * provenance so a re-ingest of one item replaces exactly its own rows;
+   * nodes left without any mention or edge are pruned.
    */
   replaceSourceGraph(ref: { sourceType: string; sourceId: string }, graph: SourceGraphInput): void {
     const upsertNode = this.db.prepare(
       `INSERT INTO graph_nodes(key, name, type, description) VALUES(?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET
          type        = CASE WHEN excluded.type <> '' THEN excluded.type ELSE graph_nodes.type END,
-         description = CASE WHEN length(excluded.description) > length(graph_nodes.description)
-                            THEN excluded.description ELSE graph_nodes.description END`,
+         description = CASE
+           WHEN excluded.description = '' THEN graph_nodes.description
+           WHEN graph_nodes.description = '' THEN excluded.description
+           WHEN instr(graph_nodes.description, excluded.description) > 0 THEN graph_nodes.description
+           ELSE substr(graph_nodes.description || ' | ' || excluded.description, 1, 4000)
+         END`,
     );
     const nodeIdByKey = this.db.prepare(`SELECT id FROM graph_nodes WHERE key = ?`);
     const insEdge = this.db.prepare(
@@ -310,6 +318,25 @@ export class RagStore {
       }
     }
     return [...out.values()];
+  }
+
+  /** Nodes whose accumulated description grew past `minChars` — candidates for
+   *  the ingest-time summarize pass. Longest first, bounded by `limit`. */
+  nodesWithLongDescriptions(minChars: number, limit: number): StoredGraphNode[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, name, type, description FROM graph_nodes
+         WHERE length(description) > ?
+         ORDER BY length(description) DESC
+         LIMIT ?`,
+      )
+      .all(minChars, limit) as Array<{ id: number; name: string; type: string; description: string }>;
+    return rows.map((row) => ({ ...row, id: Number(row.id) }));
+  }
+
+  /** Overwrite one node's description (with the summarize pass result). */
+  setNodeDescription(nodeId: number, description: string): void {
+    this.db.prepare(`UPDATE graph_nodes SET description = ? WHERE id = ?`).run(description.trim(), nodeId);
   }
 
   /** All edges touching any of the given nodes, with node names joined in. */

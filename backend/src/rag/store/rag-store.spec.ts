@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { RagStore } from './rag-store.js';
-import type { StorageManifest } from './rag-store.types.js';
+import type { StorageManifest, StoredGraphNode } from './rag-store.types.js';
 import { l2normalize } from '../vector.js';
 
 const MANIFEST: StorageManifest = {
@@ -137,6 +137,38 @@ describe('RagStore', () => {
       // 'beta' from b.md merged into the existing 'Beta': type kept, description filled.
       expect(beta?.type).toBe('queue');
       expect(beta?.description).toBe('a work queue');
+    });
+
+    it('accumulates distinct description fragments; summarize pass can rewrite them', () => {
+      seedGraph();
+      const describeAlpha = (description: string): void =>
+        store.replaceSourceGraph(
+          { sourceType: 'files', sourceId: 'c' },
+          {
+            nodes: [{ name: 'ALPHA', description }],
+            edges: [],
+            mentions: [{ node: 'ALPHA', chunkIndex: 0 }],
+          },
+        );
+      store.replaceSource({ sourceType: 'files', sourceId: 'c', contentHash: 'h3' }, [
+        { chunkIndex: 0, text: 'alpha again', metadata: {}, embedding: [0, 0, 1] },
+      ]);
+      const alphaNode = (): StoredGraphNode | undefined =>
+        store
+          .nodesMentionedIn([{ sourceType: 'files', sourceId: 'c', chunkIndex: 0 }])
+          .find((n) => n.name.toLowerCase() === 'alpha');
+
+      // A new fragment appends; an already-contained fragment does not re-append.
+      describeAlpha('handles ingress');
+      expect(alphaNode()?.description).toBe('the alpha service | handles ingress');
+      describeAlpha('handles ingress');
+      expect(alphaNode()?.description).toBe('the alpha service | handles ingress');
+
+      // Accumulated nodes surface for the summarize pass and can be rewritten.
+      expect(store.nodesWithLongDescriptions(20, 10).map((n) => n.name)).toContain('Alpha');
+      const alpha = alphaNode()!;
+      store.setNodeDescription(alpha.id, 'Alpha: the ingress service.');
+      expect(alphaNode()?.description).toBe('Alpha: the ingress service.');
     });
 
     it('walks mentions → edges → neighbor chunks across sources', () => {

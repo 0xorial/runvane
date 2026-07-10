@@ -147,7 +147,6 @@
         embeddingProviderId: providerId.trim(),
         embeddingModel: model.trim(),
         sourceParams,
-        // Both builders (llm, lightrag) take the same provider/model params.
         graph: graphBuilder
           ? {
               builder: graphBuilder,
@@ -545,13 +544,6 @@
         <span class="font-semibold">Watch sources</span>
         <span class="text-muted-foreground">(auto-index on change)</span>
       </label>
-      {#if graphBuilder === "lightrag"}
-        <p class="col-span-2 -mt-1 text-[11px] text-muted-foreground" data-testid="rag-lightrag-hint">
-          Runs the LightRAG library locally as a Python sidecar. Needs <code>python3</code> (≥3.10) on the
-          backend; the first ingest bootstraps a private venv once (~1 min). The provider must be
-          OpenAI-compatible.
-        </p>
-      {/if}
       {#if graphBuilder !== ""}
         <div class="grid grid-cols-2 gap-2.5">
           <label class="flex flex-col gap-1 text-xs">

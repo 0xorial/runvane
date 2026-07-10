@@ -20,6 +20,11 @@ export type IngestOptions = {
   onProgress?: (progress: IngestProgress) => void;
 };
 
+/** A node description longer than this triggers the summarize pass… */
+const SUMMARIZE_MIN_CHARS = 1200;
+/** …bounded per ingest run so one run can't turn into unbounded LLM spend. */
+const SUMMARIZE_MAX_PER_RUN = 50;
+
 /**
  * Builds/refreshes one storage's RAG database: enumerate the entity source →
  * chunk → embed → upsert by content hash. Unchanged items are skipped and
@@ -150,6 +155,36 @@ export class IngestionService {
       if (!present.has(sourceId)) {
         store.deleteSource(source.type, sourceId);
         removed += 1;
+      }
+    }
+
+    // Entity-merge discipline (the LightRAG idea): nodes seen across many
+    // sources accumulate " | "-joined description fragments in the store;
+    // condense the ones that grew past the threshold into one coherent
+    // description. Bounded per run; a failed node is skipped and retried by
+    // whichever future ingest still finds it long. Spend lands in the same
+    // graph usage tally as extraction.
+    if (graphBuilder?.summarizeNodeDescription && graphConfig) {
+      for (const node of store.nodesWithLongDescriptions(SUMMARIZE_MIN_CHARS, SUMMARIZE_MAX_PER_RUN)) {
+        options.signal?.throwIfAborted();
+        try {
+          const { description, usage } = await graphBuilder.summarizeNodeDescription(
+            { name: node.name, type: node.type, description: node.description, params: graphConfig.params },
+            options.signal,
+          );
+          if (usage) {
+            graphLlmCalls += usage.llmCalls;
+            graphPromptTokens += usage.promptTokens;
+            graphCompletionTokens += usage.completionTokens;
+            if (usage.costUsd !== null) graphCostUsd = (graphCostUsd ?? 0) + usage.costUsd;
+          }
+          if (description.trim()) store.setNodeDescription(node.id, description);
+        } catch (error) {
+          options.signal?.throwIfAborted();
+          this.logger.warn(
+            `ingest ${storageId}: description summarize failed for '${node.name}': ${String(error)}`,
+          );
+        }
       }
     }
 
