@@ -336,7 +336,8 @@
                 pricing={thoughtMeta.pricing}
                 providerCost={thoughtMeta.providerCost}
               >
-                {#snippet children()}{formatCostUsd(thoughtMeta.cost)}{/snippet}
+                <!-- Guarded non-null at 'cost !== null' above; the snippet closure loses the narrowing. -->
+                {#snippet children()}{formatCostUsd(thoughtMeta.cost ?? 0)}{/snippet}
               </CostTooltip>
             {/if}
             {#if thoughtMeta.durationLabel}

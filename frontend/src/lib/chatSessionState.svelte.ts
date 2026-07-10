@@ -74,6 +74,7 @@ function buildOptimisticUserEntry(
     conversationIndex: -1,
     createdAt: new Date().toISOString(),
     parentId,
+    isSide: false,
     text: input.text,
     agentId: input.agentId,
     ...(input.llm ? { llm: input.llm } : {}),

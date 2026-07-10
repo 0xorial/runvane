@@ -15,6 +15,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
       conversationIndex: index,
       createdAt: new Date().toISOString(),
       parentId: null,
+      isSide: false,
       text: "",
     };
   }
@@ -47,6 +48,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
       conversationIndex: index,
       createdAt,
       parentId: typeof raw.parentId === "string" ? raw.parentId : null,
+      isSide: false,
       text,
       agentId,
     };
@@ -58,6 +60,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
     conversationIndex: index,
     createdAt,
     parentId: typeof raw.parentId === "string" ? raw.parentId : null,
+    isSide: false,
     text,
   };
 }
