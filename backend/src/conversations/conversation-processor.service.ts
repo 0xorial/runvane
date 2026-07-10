@@ -15,7 +15,10 @@ import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProv
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import type { ChatAttachment } from '../contracts/chatEntry.js';
+import type { RagOverride, RetrievalHit, RetrievalQuery } from '../contracts/retrieval.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
+import { RetrieverService } from '../rag/retrieval/retriever.service.js';
+import { StorageRegistry } from '../rag/store/storage-registry.service.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ConversationCategorizerService } from './conversation-categorizer.service.js';
@@ -54,6 +57,8 @@ export class ConversationProcessorService implements OnModuleInit {
     private readonly pendingMsgs: PendingMessagesRepo,
     private readonly categorizer: ConversationCategorizerService,
     private readonly contextInjection: ContextInjectionService,
+    private readonly retriever: RetrieverService,
+    private readonly storageRegistry: StorageRegistry,
   ) {}
 
   /**
@@ -489,6 +494,17 @@ export class ConversationProcessorService implements OnModuleInit {
           const injected = await this.injectContextFiles(conversationId, body.agentId, userEntry.id);
           if (injected) spineTip = injected.id;
         }
+        // Forced retrieval: also awaited and spine-chained — the planner must
+        // anchor after the retrieval entry so the hits are in its input DAG.
+        if (userPayload.overrides?.rag) {
+          const retrieval = await this.runForcedRetrieval(
+            conversationId,
+            spineTip,
+            body.message,
+            userPayload.overrides.rag,
+          );
+          if (retrieval) spineTip = retrieval.id;
+        }
         const categorize = isFirstMessage && (await this.categorizer.shouldCategorize(conversationId));
         this.startThoughts({
           conversationId,
@@ -569,6 +585,85 @@ export class ConversationProcessorService implements OnModuleInit {
       );
       return null;
     }
+  }
+
+  /**
+   * Forced retrieval (docs/rag-revamp-plan.md): the user opted this message
+   * into grounding via `overrides.rag`, so retrieval ALWAYS executes — this
+   * is the harness-driven pipeline, distinct from the model-driven `rag`
+   * tool. The record is a `retrieval` spine entry appended after the user
+   * message (before the planner thought starts), pending → done/failed; the
+   * planner anchors after it and reads the hits from the immutable entry
+   * DAG, so reprocess replays the same grounding without re-retrieving.
+   * A retrieval failure resolves the entry to 'failed' and the turn
+   * continues — visibly ungrounded, never silently.
+   */
+  private async runForcedRetrieval(
+    conversationId: string,
+    parentId: string,
+    messageText: string,
+    override: RagOverride,
+  ): Promise<{ id: string } | null> {
+    // v1 is verbatim-only: the message text is the embedding query. Mode
+    // 'preplanned' (a rag-planning thought composes the queries) lands in
+    // phase 2b and degrades to verbatim until then.
+    const queries: RetrievalQuery[] = [{ text: messageText, origin: 'verbatim' }];
+    const storageNames = override.storages.map(
+      (id) => this.storageRegistry.getManifest(id)?.name ?? `${id} (missing)`,
+    );
+    let created: { id: string };
+    try {
+      created = await this.chatEntries.appendRetrievalEntry(conversationId, {
+        parentId,
+        source: 'rag',
+        queries,
+        storages: storageNames,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `forced retrieval: could not append entry for conversation ${conversationId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+    await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+    try {
+      const topK = override.top_k ?? 8;
+      const hits: RetrievalHit[] = [];
+      const seen = new Set<string>();
+      for (const query of queries) {
+        const found = await this.retriever.retrieve({
+          storageIds: query.storages ?? override.storages,
+          query: query.text,
+          topK,
+        });
+        for (const hit of found) {
+          // Multiple queries can resurface the same chunk; keep the best-scored
+          // first occurrence (retrieve() returns hits sorted by score).
+          const key = `${hit.storageId}|${hit.sourceId}|${hit.chunkIndex}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          hits.push({
+            storage: hit.storageName,
+            source:
+              typeof hit.metadata.relativePath === 'string' ? hit.metadata.relativePath : hit.sourceId,
+            chunkIndex: hit.chunkIndex,
+            score: Number(hit.score.toFixed(4)),
+            origin: hit.origin,
+            text: hit.text,
+          });
+        }
+      }
+      await this.chatEntries.completeRetrievalEntry(conversationId, created.id, { hits });
+    } catch (error) {
+      this.logger.warn(
+        `forced retrieval failed for conversation ${conversationId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await this.chatEntries.completeRetrievalEntry(conversationId, created.id, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+    return created;
   }
 
   /**

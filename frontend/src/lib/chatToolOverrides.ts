@@ -1,5 +1,26 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
+import type { RagOverride } from "../../../backend/src/contracts/retrieval";
 import type { UserMessageOverrides } from "../../../backend/src/contracts/user-message-overrides";
+
+/** Draft state for the per-message forced-retrieval override (`overrides.rag`). */
+export type ChatRagDraft = {
+  enabled: boolean;
+  /** Storage ids to ground the next message in. */
+  storages: string[];
+  topK?: number;
+};
+
+export const EMPTY_RAG_DRAFT: ChatRagDraft = { enabled: false, storages: [] };
+
+export function compileRagOverride(draft: ChatRagDraft): RagOverride | undefined {
+  if (!draft.enabled || draft.storages.length === 0) return undefined;
+  return { storages: [...draft.storages], ...(draft.topK ? { top_k: draft.topK } : {}) };
+}
+
+export function ragDraftFromStoredOverride(rag: RagOverride | undefined): ChatRagDraft {
+  if (!rag) return { ...EMPTY_RAG_DRAFT };
+  return { enabled: true, storages: [...rag.storages], ...(rag.top_k ? { topK: rag.top_k } : {}) };
+}
 
 export type ToolOverrideUiMode = "inherit" | "off" | "ask" | "allow" | "custom";
 
@@ -30,10 +51,14 @@ export function draftHasOverrides(draft: ChatToolDraft): boolean {
   return Object.values(draft).some((entry) => entry.mode !== "inherit");
 }
 
-export function compileUserMessageOverrides(draft: ChatToolDraft): UserMessageOverrides | undefined {
+export function compileUserMessageOverrides(
+  draft: ChatToolDraft,
+  ragDraft?: ChatRagDraft,
+): UserMessageOverrides | undefined {
   const tools = compileChatToolOverrides(draft);
-  if (!tools) return undefined;
-  return { version: 1, tools };
+  const rag = ragDraft ? compileRagOverride(ragDraft) : undefined;
+  if (!tools && !rag) return undefined;
+  return { version: 1, ...(tools ? { tools } : {}), ...(rag ? { rag } : {}) };
 }
 
 function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {

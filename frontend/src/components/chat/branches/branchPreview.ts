@@ -35,6 +35,13 @@ export function entryPreview(entry: ChatEntry): string {
       ? `Preinjected ${injectedCount} file${injectedCount === 1 ? "" : "s"}`
       : "No context files found";
   }
+  if (entry.type === "retrieval") {
+    if (entry.state === "pending") return "Retrieving…";
+    if (entry.state === "failed") return "Retrieval failed";
+    return entry.hits.length > 0
+      ? `Retrieved ${entry.hits.length} excerpt${entry.hits.length === 1 ? "" : "s"}`
+      : "Retrieval found nothing";
+  }
   if (entry.type === "thought_stream" && entry.thoughtType === "summarize_attachment") {
     const name = String(entry.filename ?? "").trim();
     const status = displayStatus(String(entry.status || "running").trim());
@@ -57,6 +64,7 @@ export function entryIconName(
   if (entry.type === "tool-invocation") return "wrench";
   if (entry.type === "thought-prepare") return "file";
   if (entry.type === "context-injection") return "file";
+  if (entry.type === "retrieval") return "file";
   if (isThoughtStreamEntry(entry)) return "sparkles";
   if (entry.type === "thought-action") {
     const toolName = String(entry.toolName || "").trim();

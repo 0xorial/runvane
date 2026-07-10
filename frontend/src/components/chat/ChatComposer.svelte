@@ -13,7 +13,7 @@
   import QueuedMessageChips from "./QueuedMessageChips.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
   import { compileUserMessageOverrides } from "@/lib/chatToolOverrides";
-  import { getChatToolDraft } from "@/lib/chatToolDraft.svelte";
+  import { getChatRagDraft, getChatToolDraft } from "@/lib/chatToolDraft.svelte";
   import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
   let {
@@ -81,7 +81,7 @@
     const clientRequestId = crypto.randomUUID();
     const agentId = effectiveAgentId;
     const { llm, modelPresetId } = agentSelection;
-    const overrides = compileUserMessageOverrides(getChatToolDraft());
+    const overrides = compileUserMessageOverrides(getChatToolDraft(), getChatRagDraft());
     const sendOpts = {
       ...(mode.steer ? { steer: true as const } : {}),
       ...(mode.enqueue ? { enqueue: true as const } : {}),

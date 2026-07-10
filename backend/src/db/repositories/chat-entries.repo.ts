@@ -11,6 +11,7 @@ import type { UserMessageOverrides } from '../../contracts/user-message-override
 import type { LlmRef } from '../../contracts/llm.js';
 import type { ThoughtType } from '../../contracts/chatEntry.js';
 import type { PreinjectedFileRecord } from '../../contracts/preinject.js';
+import type { RetrievalHit, RetrievalQuery } from '../../contracts/retrieval.js';
 import { PrismaService } from '../prisma.service.js';
 import { StreamCursorService } from '../stream-cursor.service.js';
 import type { ThoughtStepStatus } from './chat-entries.types.js';
@@ -203,6 +204,48 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       payload: { files: input.files, content: input.content },
     });
     return { id: row.id };
+  }
+
+  /**
+   * Start a forced-retrieval record (state 'pending'). The payload is
+   * schema-complete from this first insert — `hits` starts empty and the
+   * done/failed update only fills optionals — so a snapshot read landing
+   * mid-retrieval always maps.
+   */
+  async appendRetrievalEntry(
+    conversationId: string,
+    input: {
+      parentId: string | null;
+      source: 'rag';
+      queries: RetrievalQuery[];
+      storages: string[];
+    },
+  ): Promise<{ id: string }> {
+    const row = await this.appendEntry(conversationId, {
+      type: 'retrieval',
+      parentId: input.parentId,
+      payload: {
+        source: input.source,
+        state: 'pending',
+        queries: input.queries,
+        storages: input.storages,
+        hits: [],
+      },
+    });
+    return { id: row.id };
+  }
+
+  /** Resolve a pending retrieval entry to done (with hits) or failed. */
+  async completeRetrievalEntry(
+    conversationId: string,
+    entryId: string,
+    result: { hits: RetrievalHit[] } | { error: string },
+  ): Promise<void> {
+    await this.mergeEntryPayload(
+      conversationId,
+      entryId,
+      'hits' in result ? { state: 'done', hits: result.hits } : { state: 'failed', error: result.error },
+    );
   }
 
   async appendThoughtActionEntry(

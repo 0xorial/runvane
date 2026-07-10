@@ -2,14 +2,18 @@ import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import { get, writable } from "svelte/store";
 import {
+  type ChatRagDraft,
   type ChatToolDraft,
   type ChatToolDraftEntry,
   type ToolOverrideUiMode,
+  EMPTY_RAG_DRAFT,
   draftFromStoredOverrides,
   draftHasOverrides,
+  ragDraftFromStoredOverride,
 } from "./chatToolOverrides";
 
 const draftStore = writable<ChatToolDraft>({});
+const ragDraftStore = writable<ChatRagDraft>({ ...EMPTY_RAG_DRAFT });
 const selectedToolForEditStore = writable<string | null>(null);
 export const chatToolDraftRevision = writable(0);
 
@@ -25,12 +29,21 @@ export function getChatToolDraft(): ChatToolDraft {
   return get(draftStore);
 }
 
+export function getChatRagDraft(): ChatRagDraft {
+  return get(ragDraftStore);
+}
+
+export function setChatRagDraft(next: ChatRagDraft): void {
+  ragDraftStore.set({ ...next, storages: [...next.storages] });
+  touchDraft();
+}
+
 export function getSelectedToolForEdit(): string | null {
   return get(selectedToolForEditStore);
 }
 
 export function chatToolDraftHasOverrides(): boolean {
-  return draftHasOverrides(get(draftStore));
+  return draftHasOverrides(get(draftStore)) || get(ragDraftStore).enabled;
 }
 
 export function getToolDraftEntry(toolName: string): ChatToolDraftEntry {
@@ -85,20 +98,26 @@ function draftsEqual(a: ChatToolDraft, b: ChatToolDraft): boolean {
 
 export function resetChatToolDraft(): void {
   const draft = get(draftStore);
-  const hadOverrides = draftHasOverrides(draft);
+  const hadOverrides = draftHasOverrides(draft) || get(ragDraftStore).enabled;
   const hadSelection = get(selectedToolForEditStore) !== null;
   if (!hadOverrides && !hadSelection) return;
   draftStore.set({});
+  ragDraftStore.set({ ...EMPTY_RAG_DRAFT });
   selectedToolForEditStore.set(null);
   touchDraft();
 }
 
 export function seedChatToolDraftFromUserMessage(entry: UserMessageEntry | null): void {
   const next = draftFromStoredOverrides(entry?.overrides?.tools);
+  const nextRag = ragDraftFromStoredOverride(entry?.overrides?.rag);
   const draft = get(draftStore);
-  const changed = !draftsEqual(draft, next) || get(selectedToolForEditStore) !== null;
+  const changed =
+    !draftsEqual(draft, next) ||
+    JSON.stringify(get(ragDraftStore)) !== JSON.stringify(nextRag) ||
+    get(selectedToolForEditStore) !== null;
   if (!changed) return;
   draftStore.set(next);
+  ragDraftStore.set(nextRag);
   selectedToolForEditStore.set(null);
   touchDraft();
 }

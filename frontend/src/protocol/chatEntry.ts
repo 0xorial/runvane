@@ -10,6 +10,7 @@ export type {
   LlmDecision,
   LlmDecisionTool,
   LlmDecisionUserResponse,
+  RetrievalEntry,
   ThoughtActionEntry,
   ThoughtPrepareEntry,
   ThoughtStreamEntry,
@@ -18,6 +19,8 @@ export type {
   ToolState,
   UserMessageEntry,
 } from "../../../backend/src/contracts/chatEntry.js";
+
+export type { RagOverride, RetrievalHit, RetrievalQuery } from "../../../backend/src/contracts/retrieval.js";
 
 export type {
   AgentPreinjectConfig,

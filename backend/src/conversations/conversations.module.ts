@@ -12,6 +12,7 @@ import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/tho
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import { ToolParamsThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
+import { RagModule } from '../rag/rag.module.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { ToolsModule } from '../tools/tools.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
@@ -21,7 +22,7 @@ import { ConversationsController } from './conversations.controller.js';
 import { ConversationsService } from './conversations.service.js';
 
 @Module({
-  imports: [DatabaseModule, ToolsModule, UploadsModule],
+  imports: [DatabaseModule, ToolsModule, UploadsModule, RagModule],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ProviderCostBreakdownSchema } from './provider-cost.js';
 import { LlmRefSchema } from './llm.js';
+import { RetrievalHitSchema, RetrievalQuerySchema } from './retrieval.js';
 import { UserMessageOverridesSchema } from './user-message-overrides.js';
 import { PreinjectedFileRecordSchema } from './preinject.js';
 
@@ -267,6 +268,29 @@ export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
 });
 export type ContextInjectionEntry = z.infer<typeof ContextInjectionEntrySchema>;
 
+/**
+ * Harness-driven context fetch, recorded on the spine right after the user
+ * message it grounds (before the planner thought starts). NOT a tool
+ * invocation — tool rows assert the model chose them; this retrieval was
+ * forced by the user (`overrides.rag`) and executed by the harness.
+ * `source` names the corpus kind: future grounding sources (attachment
+ * recall, conversation memory) reuse this entry type with another source,
+ * not a new entry kind. The initial insert is schema-complete with
+ * state 'pending' and hits [] (the snapshot mapper must be able to serve
+ * every committed state); the done/failed update only fills optionals.
+ */
+export const RetrievalEntrySchema = ChatEntryBaseSchema.extend({
+  type: z.literal('retrieval'),
+  source: z.literal('rag'),
+  state: z.enum(['pending', 'done', 'failed']),
+  queries: z.array(RetrievalQuerySchema),
+  /** Display names of the storages searched. */
+  storages: z.array(z.string()),
+  hits: z.array(RetrievalHitSchema),
+  error: z.string().optional(),
+});
+export type RetrievalEntry = z.infer<typeof RetrievalEntrySchema>;
+
 // ---- Union ----
 
 export const ChatEntrySchema = z.discriminatedUnion('type', [
@@ -278,5 +302,6 @@ export const ChatEntrySchema = z.discriminatedUnion('type', [
   AssistantMessageEntrySchema,
   CheckpointSummaryEntrySchema,
   ContextInjectionEntrySchema,
+  RetrievalEntrySchema,
 ]);
 export type ChatEntry = z.infer<typeof ChatEntrySchema>;

@@ -4,12 +4,14 @@ import type {
   ChatEntryBase,
   CheckpointSummaryEntry,
   ContextInjectionEntry,
+  RetrievalEntry,
   ThoughtStepStatus,
   ThoughtStreamEntry,
   ThoughtType,
 } from '../../contracts/chatEntry.js';
 import { ChatAttachmentSchema, ThoughtTypeSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
 import { PreinjectedFileRecordSchema } from '../../contracts/preinject.js';
+import { RetrievalHitSchema, RetrievalQuerySchema } from '../../contracts/retrieval.js';
 import { ProviderCostBreakdownSchema } from '../../contracts/provider-cost.js';
 import { LlmRefSchema, type LlmRef } from '../../contracts/llm.js';
 import { UserMessageOverridesSchema } from '../../contracts/user-message-overrides.js';
@@ -49,6 +51,8 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
       return mapCheckpointSummary(base, payload, ctx);
     case 'context-injection':
       return mapContextInjection(base, payload, ctx);
+    case 'retrieval':
+      return mapRetrieval(base, payload, ctx);
     default:
       throw new Error(`${ctx}: unknown chat entry type`);
   }
@@ -76,6 +80,21 @@ function mapContextInjection(base: ChatEntryBase, payload: Record<string, unknow
   const p = ContextInjectionPayloadSchema.safeParse(payload);
   if (!p.success) throw new Error(`${ctx}: ${p.error.message}`);
   return { ...base, type: 'context-injection', ...p.data };
+}
+
+const RetrievalPayloadSchema = z.object({
+  source: z.literal('rag'),
+  state: z.enum(['pending', 'done', 'failed']),
+  queries: z.array(RetrievalQuerySchema),
+  storages: z.array(z.string()),
+  hits: z.array(RetrievalHitSchema),
+  error: z.string().optional(),
+});
+
+function mapRetrieval(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): RetrievalEntry {
+  const p = RetrievalPayloadSchema.safeParse(payload);
+  if (!p.success) throw new Error(`${ctx}: ${p.error.message}`);
+  return { ...base, type: 'retrieval', ...p.data };
 }
 
 function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {

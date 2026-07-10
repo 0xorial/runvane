@@ -120,6 +120,15 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
         if (injected.length > 0) lines.push(`<context-files injected="${injected.join(', ')}" />`);
         break;
       }
+      case 'retrieval': {
+        // The fold only needs to record THAT grounding happened and from
+        // where — the excerpts themselves are turn-local context.
+        const sources = [...new Set(e.hits.map((h) => h.source))];
+        lines.push(
+          `<retrieved-context storages="${e.storages.join(', ')}" state="${e.state}" sources="${sources.join(', ')}" />`,
+        );
+        break;
+      }
       case 'thought_stream':
         // The summarize-attachment stream carries the persisted summary text —
         // fold it in as the user-visible attachment summary. Other thought

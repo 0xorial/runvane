@@ -1,12 +1,15 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
   import { getTools } from "@/api/client";
+  import { getRagStorages } from "@/api/ragClient";
   import { createAgentsQuery } from "@/hooks/queries/referenceData";
   import { queryKeys } from "@/hooks/queries/keys";
   import { agentIdFromSearch } from "@/lib/router";
   import {
     chatToolDraftRevision,
+    getChatRagDraft,
     resetChatToolDraft,
+    setChatRagDraft,
     chatToolDraftHasOverrides,
   } from "@/lib/chatToolDraft.svelte";
   import { effectiveAgentToolMode } from "@/lib/chatToolOverrides";
@@ -16,6 +19,9 @@
   import ToolTriStateControl from "./ToolTriStateControl.svelte";
 
   const CHAT_TOOLS_HINT = "Inherited from agent, applied to the next message you send in this chat.";
+  const RAG_HINT =
+    "Ground the next message: retrieval over the selected storages always runs before the agent plans, " +
+    "and is recorded as a retrieval step in the transcript.";
 
   let { search }: { search: string } = $props();
 
@@ -26,6 +32,28 @@
     queryKey: queryKeys.tools,
     queryFn: getTools,
   }));
+  const ragStoragesQuery = createQuery(() => ({
+    queryKey: ["rag-storages"],
+    queryFn: getRagStorages,
+  }));
+  const ragStorages = $derived(ragStoragesQuery.data ?? []);
+  const ragDraft = $derived.by(() => {
+    void $chatToolDraftRevision;
+    return getChatRagDraft();
+  });
+
+  function toggleRagEnabled(): void {
+    const draft = getChatRagDraft();
+    setChatRagDraft({ ...draft, enabled: !draft.enabled });
+  }
+
+  function toggleRagStorage(id: string): void {
+    const draft = getChatRagDraft();
+    const storages = draft.storages.includes(id)
+      ? draft.storages.filter((x) => x !== id)
+      : [...draft.storages, id];
+    setChatRagDraft({ ...draft, storages });
+  }
 
   const agentId = $derived.by(() => {
     const fromUrl = agentIdFromSearch(search);
@@ -161,6 +189,58 @@
       >
         Reset
       </button>
+    {/if}
+  </div>
+  <div class="shrink-0 border-b border-sidebar-border px-2.5 py-1.5" data-testid="chat-rag-panel">
+    <div class="flex items-center gap-1.5">
+      <label class="flex min-w-0 items-center gap-1.5 text-[11px] text-foreground">
+        <input
+          type="checkbox"
+          data-testid="chat-rag-toggle"
+          checked={ragDraft.enabled}
+          onchange={toggleRagEnabled}
+        />
+        <span class="font-semibold">Force retrieval</span>
+      </label>
+      <HintTooltip content={RAG_HINT} side="bottom">
+        <button
+          type="button"
+          class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold leading-none text-muted-foreground ring-1 ring-border hover:bg-secondary/60 hover:text-foreground"
+          aria-label={RAG_HINT}
+        >
+          ?
+        </button>
+      </HintTooltip>
+    </div>
+    {#if ragDraft.enabled}
+      {#if ragStorages.length === 0}
+        <p class="px-1 pt-1 text-[11px] text-muted-foreground">
+          No RAG storages configured (Settings → RAG storages).
+        </p>
+      {:else}
+        <ul class="mt-1 space-y-0.5">
+          {#each ragStorages as storage (storage.id)}
+            <li>
+              <label class="flex items-center gap-1.5 px-1 text-[11px] text-foreground">
+                <input
+                  type="checkbox"
+                  data-testid="chat-rag-storage"
+                  data-storage-name={storage.name}
+                  checked={ragDraft.storages.includes(storage.id)}
+                  onchange={() => toggleRagStorage(storage.id)}
+                />
+                <span class="min-w-0 truncate font-mono" title={storage.name}>{storage.name}</span>
+                <span class="shrink-0 text-muted-foreground">({storage.counts.chunks} chunks)</span>
+              </label>
+            </li>
+          {/each}
+        </ul>
+        {#if ragDraft.storages.length === 0}
+          <p class="px-1 pt-1 text-[11px] text-muted-foreground">
+            Pick at least one storage to ground the next message.
+          </p>
+        {/if}
+      {/if}
     {/if}
   </div>
   <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 py-1.5">

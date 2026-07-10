@@ -9,6 +9,7 @@
   import TodoWriteRow from "./rows/TodoWriteRow.svelte";
   import CheckpointSummaryRow from "./rows/CheckpointSummaryRow.svelte";
   import ContextInjectionRow from "./rows/ContextInjectionRow.svelte";
+  import RetrievalRow from "./rows/RetrievalRow.svelte";
   import UserMessageRow from "./rows/UserMessageRow.svelte";
 
   let {
@@ -55,5 +56,7 @@
     <CheckpointSummaryRow {entry} />
   {:else if entry.type === "context-injection"}
     <ContextInjectionRow {entry} />
+  {:else if entry.type === "retrieval"}
+    <RetrievalRow {entry} />
   {/if}
 {/if}
