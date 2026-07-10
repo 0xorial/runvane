@@ -250,9 +250,11 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     if (patch.action !== undefined) payload.action = patch.action;
     if (patch.toolName !== undefined) payload.toolName = patch.toolName;
     if (patch.error !== undefined) payload.error = patch.error;
+    const payloadJson = JSON.stringify(payload);
+    this.assertServableRow({ ...row, payload_json: payloadJson });
     await this.mutateEntry({
       sql: `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ? AND type = 'thought-action'`,
-      args: [JSON.stringify(payload), conversationId, entryId],
+      args: [payloadJson, conversationId, entryId],
     });
   }
 
@@ -378,20 +380,17 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     conversationId: string,
     input: { id: string; text: string },
   ): Promise<void> {
-    const existing = (await this.prisma.$queryRawUnsafe(
-      `SELECT 1 AS present
-       FROM chat_entries
-       WHERE conversation_id = ? AND id = ? AND type = 'assistant-message'
-       LIMIT 1`,
-      conversationId,
-      input.id,
-    )) as Array<{ present: number }>;
-    if (existing.length === 0) throw new Error(`assistant-message not found: ${input.id}`);
+    const row = await this.fetchEntryRow(conversationId, input.id);
+    if (!row || row.type !== 'assistant-message') {
+      throw new Error(`assistant-message not found: ${input.id}`);
+    }
+    const payloadJson = JSON.stringify({ text: input.text });
+    this.assertServableRow({ ...row, payload_json: payloadJson });
     await this.mutateEntry({
       sql: `UPDATE chat_entries
          SET payload_json = ?
          WHERE conversation_id = ? AND id = ? AND type = 'assistant-message'`,
-      args: [JSON.stringify({ text: input.text }), conversationId, input.id],
+      args: [payloadJson, conversationId, input.id],
     });
   }
 

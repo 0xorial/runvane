@@ -1,4 +1,5 @@
 import type { ChatAttachment, ChatEntry, ToolInvocationEntry } from '../../contracts/chatEntry.js';
+import { ChatEntrySchema } from '../../contracts/chatEntry.js';
 import { rowToChatEntry } from './chat-entry.mapper.js';
 import { PrismaService } from '../prisma.service.js';
 import { StreamCursorService } from '../stream-cursor.service.js';
@@ -63,11 +64,41 @@ export class ChatEntriesBaseRepo {
     return next;
   }
 
+  /**
+   * Tripwire: refuse to commit a row the snapshot read path can't serve back.
+   * Runs the would-be row through `rowToChatEntry` and the `ChatEntrySchema`
+   * contract — the same two validators every snapshot/response passes through
+   * — so a typed-but-incomplete payload fails the write with the cause
+   * attached, instead of surfacing later as a dead /stream when a snapshot
+   * happens to read the row (the attachment-summary flake class of bug).
+   */
+  protected assertServableRow(row: ChatEntryDbRow): void {
+    try {
+      ChatEntrySchema.parse(rowToChatEntry(row));
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `chat-entry write rejected (type '${row.type}', id ${row.id}): row would break snapshot reads — ${cause}`,
+      );
+    }
+  }
+
   protected async appendEntry(conversationId: string, input: AppendInput): Promise<AppendedRow> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     const parentId = input.parentId;
     const payloadJson = JSON.stringify(input.payload);
+    this.assertServableRow({
+      id,
+      conversation_id: conversationId,
+      // The real index is computed inside the INSERT; any number maps fine.
+      conversation_index: 0,
+      parent_id: parentId,
+      is_side: input.isSide ? 1 : 0,
+      type: input.type,
+      payload_json: payloadJson,
+      created_at: new Date(createdAt),
+    });
     // One atomic batch: the index is computed by a scalar subquery inside the
     // INSERT itself, and the cursor bump rides the same txn — its value is this
     // mutation's seq and the snapshot watermark, born from the commit, so
@@ -326,9 +357,11 @@ export class ChatEntriesBaseRepo {
     if (!row) throw new Error(`chat entry not found: ${entryId}`);
     const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     Object.assign(payload, patch);
+    const payloadJson = JSON.stringify(payload);
+    this.assertServableRow({ ...row, payload_json: payloadJson });
     return this.mutateEntry({
       sql: `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ?`,
-      args: [JSON.stringify(payload), conversationId, entryId],
+      args: [payloadJson, conversationId, entryId],
     });
   }
 
