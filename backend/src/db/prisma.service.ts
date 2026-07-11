@@ -20,6 +20,22 @@ const DB_DIAG = process.env.RUNVANE_DB_DIAG === '1';
 const DB_DIAG_ALL = process.env.RUNVANE_DB_DIAG_ALL === '1';
 const DB_DIAG_SLOW_MS = Number(process.env.RUNVANE_DB_DIAG_SLOW_MS ?? '100');
 
+/**
+ * Hard ceiling on how long any transaction may stay open. SQLite has no row
+ * locks: an open write transaction holds the database-wide writer lock, and
+ * better-sqlite3 waits for that lock synchronously — blocking the entire event
+ * loop for up to busy_timeout. Batch transactions execute synchronously and so
+ * cannot overstay; the only shape that can is an interactive transaction held
+ * across an `await`, which is exactly the shape this repo bans.
+ *
+ * Verified against Prisma 7.8 (probe, 2026-07-11): `transactionOptions.timeout`
+ * rolls the transaction back and releases the writer lock AT the deadline, but
+ * the `$transaction` promise itself only rejects once the (possibly stuck)
+ * callback settles — a callback awaiting something that never resolves would
+ * never surface the error. installTxOpenGuard() closes that gap.
+ */
+const TX_MAX_OPEN_MS = 2_000;
+
 // One shared monotonic clock stamped on every diag line so transaction
 // lifecycles can be placed on a single timeline and correlated.
 const CLOCK0 = performance.now();
@@ -45,7 +61,49 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       adapter: new PrismaBetterSqlite3({
         url: process.env.DATABASE_URL ?? 'file:./prisma/backend.sqlite',
       }),
+      // Prisma-enforced half of the TX_MAX_OPEN_MS guard: rollback + writer
+      // lock release at the deadline (see the constant's doc for the probe).
+      transactionOptions: { timeout: TX_MAX_OPEN_MS, maxWait: TX_MAX_OPEN_MS },
     });
+    this.installTxOpenGuard();
+  }
+
+  /**
+   * Always-on tripwire for the banned pattern (interactive transaction held
+   * open across `await`s): rejects the caller AT the TX_MAX_OPEN_MS deadline —
+   * by which point Prisma has already rolled the transaction back and released
+   * SQLite's writer lock — instead of whenever the stuck callback settles.
+   * Batch transactions pass through untouched: better-sqlite3 runs them
+   * synchronously, so they cannot be held open across the event loop.
+   */
+  private installTxOpenGuard(): void {
+    const orig = this.$transaction.bind(this) as (...a: unknown[]) => Promise<unknown>;
+    (this as unknown as { $transaction: unknown }).$transaction = (arg: unknown, opts?: unknown) => {
+      if (typeof arg !== 'function') return orig(arg, opts);
+      // Captured before the work starts, so the rejection names the call site
+      // that opened the transaction, not this wrapper.
+      const openedHere = new Error(
+        `interactive transaction open for more than ${TX_MAX_OPEN_MS}ms — Prisma has rolled it back. ` +
+          'On SQLite an open write transaction holds the database-wide writer lock; do not hold a ' +
+          'transaction across awaits — precompute and use a batch $transaction([...]) instead.',
+      );
+      return new Promise((resolve, reject) => {
+        // Small grace period so Prisma's own, more specific expiry error wins
+        // whenever the callback is still making (failing) progress.
+        const timer = setTimeout(() => reject(openedHere), TX_MAX_OPEN_MS + 250);
+        timer.unref();
+        orig(arg, opts).then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (error: unknown) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        );
+      });
+    };
   }
 
   async onModuleInit(): Promise<void> {

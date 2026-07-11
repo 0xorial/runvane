@@ -26,14 +26,19 @@ const BUMP_CURSOR_SQL = `UPDATE stream_cursor SET value = value + 1 WHERE id = 0
 
 /**
  * All writes here use Prisma's BATCH transaction (`$transaction([...])`), never
- * the interactive callback form. A batch executes as one engine-side request
- * wrapped in BEGIN/COMMIT — atomic, held only for the statements' own duration.
- * Interactive transactions stay open across engine↔JS round-trips and are
- * subject to a known engine deadlock under concurrency (prisma/prisma#11750,
- * prisma-engines#2811): the commit's internal read-lock queues behind another
- * transaction's start write-lock while everyone else waits on the SQLite write
- * lock the stuck commit holds — freezing the engine for the 5s busy_timeout.
- * Do not reintroduce `$transaction(async (tx) => …)` on these paths.
+ * the interactive callback form. A batch runs synchronously through the
+ * better-sqlite3 adapter as one BEGIN/COMMIT — atomic, held only for the
+ * statements' own duration, and physically unable to stay open across an
+ * `await`. That last property is the point: SQLite has no row locks, so an
+ * open write transaction holds the database-wide writer lock, and one held
+ * across an await stalls every write in the app (and, on the Prisma 6 Rust
+ * engine, could deadlock the engine outright — hit here 2026-06, fixed by
+ * removing interactive transactions; that engine is gone since Prisma 7).
+ * Transactions provide atomicity here, not mutual exclusion: two concurrent
+ * read-decide-write sequences both commit cleanly and still fork the tree,
+ * which is why serialization comes from the per-conversation append lock
+ * below. PrismaService additionally enforces TX_MAX_OPEN_MS (rollback + throw
+ * at the deadline) should the interactive form ever sneak back in.
  */
 type SqlStatement = { sql: string; args: readonly unknown[] };
 
