@@ -123,7 +123,9 @@
   </button>
   {#if draft.enabled}
     {#if storages.length === 0}
-      <span class="text-[11px] text-muted-foreground">no storages configured (Settings → RAG)</span>
+      <a href="/settings/rag" class="text-[11px] text-primary underline-offset-4 hover:underline">
+        no storages configured — set up RAG ↗
+      </a>
     {:else}
       {#each storages as storage (storage.id)}
         {@const selected = draft.storages.includes(storage.id)}
@@ -141,18 +143,18 @@
           {storage.name}
         </button>
       {/each}
+      <button
+        type="button"
+        data-testid="chat-rag-mode"
+        title={MODE_HINT[draft.mode === "preplanned" ? "preplanned" : "verbatim"]}
+        onclick={toggleMode}
+        class="{chipBase} text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
+      >
+        {draft.mode === "preplanned" ? "planned" : "verbatim"}
+      </button>
+      <span class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground" data-testid="retrieval-preview">
+        {previewLabel}
+      </span>
     {/if}
-    <button
-      type="button"
-      data-testid="chat-rag-mode"
-      title={MODE_HINT[draft.mode === "preplanned" ? "preplanned" : "verbatim"]}
-      onclick={toggleMode}
-      class="{chipBase} text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
-    >
-      {draft.mode === "preplanned" ? "planned" : "verbatim"}
-    </button>
-    <span class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground" data-testid="retrieval-preview">
-      {previewLabel}
-    </span>
   {/if}
 </div>
