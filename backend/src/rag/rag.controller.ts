@@ -11,18 +11,27 @@ import {
   Query,
 } from '@nestjs/common';
 import { createZodDto } from 'nestjs-zod';
-import { CreateStorageSchema, RagDebugQuerySchema, UpdateStorageSchema } from './contracts/rag.js';
+import {
+  CreateStorageSchema,
+  RagDebugQuerySchema,
+  type RetrievePreviewResult,
+  RetrievePreviewSchema,
+  UpdateStorageSchema,
+} from './contracts/rag.js';
 import { EmbeddingsService } from './embeddings/embeddings.service.js';
 import { EntitySourceRegistry } from './sources/entity-source.registry.js';
+import { ForcedRetrievalService } from './retrieval/forced-retrieval.service.js';
 import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
 import { IngestRunner } from './ingestion/ingest-runner.service.js';
 import { RagWatchService } from './watch/rag-watch.service.js';
+import { estimateContextTokens, formatRetrievalContext } from './retrieval/retrieval-context.js';
 import { RetrieverService } from './retrieval/retriever.service.js';
 import { StorageRegistry } from './store/storage-registry.service.js';
 
 class CreateStorageDto extends createZodDto(CreateStorageSchema) {}
 class UpdateStorageDto extends createZodDto(UpdateStorageSchema) {}
 class RagDebugQueryDto extends createZodDto(RagDebugQuerySchema) {}
+class RetrievePreviewDto extends createZodDto(RetrievePreviewSchema) {}
 
 /**
  * The separate RAG ingestion + management surface. Builds/queries the RAG
@@ -39,7 +48,29 @@ export class RagController {
     private readonly embeddings: EmbeddingsService,
     private readonly graphBuilders: GraphBuilderRegistry,
     private readonly watcher: RagWatchService,
+    private readonly forcedRetrieval: ForcedRetrievalService,
   ) {}
+
+  /**
+   * Composer preview for forced retrieval: runs the same retrieval a send with
+   * `overrides.rag` would run and formats the same planner context block, so
+   * `estimatedTokens` is computed from the exact text the model would receive.
+   */
+  @Post('retrieve/preview')
+  async retrievePreview(@Body() body: RetrievePreviewDto): Promise<RetrievePreviewResult> {
+    const hits = await this.forcedRetrieval.run(
+      [{ text: body.query, origin: 'verbatim' }],
+      body.storages,
+      body.topK,
+    );
+    const block = formatRetrievalContext({
+      storages: this.forcedRetrieval.storageNames(body.storages),
+      queries: [{ text: body.query }],
+      state: 'done',
+      hits,
+    });
+    return { hits, estimatedTokens: estimateContextTokens(block) };
+  }
 
   /** Available RAGable entity types (files, later conversations/facts). */
   @Get('sources')

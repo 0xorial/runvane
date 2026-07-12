@@ -17,11 +17,6 @@ export function compileRagOverride(draft: ChatRagDraft): RagOverride | undefined
   return { storages: [...draft.storages], ...(draft.topK ? { top_k: draft.topK } : {}) };
 }
 
-export function ragDraftFromStoredOverride(rag: RagOverride | undefined): ChatRagDraft {
-  if (!rag) return { ...EMPTY_RAG_DRAFT };
-  return { enabled: true, storages: [...rag.storages], ...(rag.top_k ? { topK: rag.top_k } : {}) };
-}
-
 export type ToolOverrideUiMode = "inherit" | "off" | "ask" | "allow" | "custom";
 
 export type ExplicitToolOverrideMode = Exclude<ToolOverrideUiMode, "inherit">;

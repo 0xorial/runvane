@@ -47,6 +47,30 @@ export const RagDebugQuerySchema = z
   .strict();
 export type RagDebugQueryBody = z.infer<typeof RagDebugQuerySchema>;
 
+/** Body for the composer's forced-retrieval preview (same shape a send with
+ *  `overrides.rag` would run: verbatim query over the selected storages). */
+export const RetrievePreviewSchema = z
+  .object({
+    query: z.string().min(1),
+    storages: z.array(z.string().min(1)).min(1),
+    topK: z.number().finite().int().min(1).max(50).optional(),
+  })
+  .strict();
+export type RetrievePreviewBody = z.infer<typeof RetrievePreviewSchema>;
+
+export type RetrievePreviewResult = {
+  hits: Array<{
+    storage: string;
+    source: string;
+    chunkIndex: number;
+    score: number;
+    origin: 'seed' | 'graph';
+    text: string;
+  }>;
+  /** ~tokens of the exact context block the planner would receive (chars/4). */
+  estimatedTokens: number;
+};
+
 export type IngestResult = {
   storageId: string;
   added: number;

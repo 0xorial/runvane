@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import path from 'node:path';
 import { DatabaseModule } from '../db/database.module.js';
 import { EmbeddingsService } from './embeddings/embeddings.service.js';
+import { ForcedRetrievalService } from './retrieval/forced-retrieval.service.js';
 import { GRAPH_BUILDERS } from './graph/graph-builder.js';
 import { GraphBuilderRegistry } from './graph/graph-builder.registry.js';
 import { IngestRunner } from './ingestion/ingest-runner.service.js';
@@ -50,10 +51,12 @@ import { RAG_DATA_DIR, StorageRegistry } from './store/storage-registry.service.
     IngestRunner,
     RagWatchService,
     RetrieverService,
+    ForcedRetrievalService,
   ],
   exports: [
     StorageRegistry,
     RetrieverService,
+    ForcedRetrievalService,
     IngestionService,
     IngestRunner,
     RagWatchService,

@@ -6,6 +6,7 @@ import type {
   RagStorageInfo,
   RagQueryHit,
   RagRetrieveResult,
+  RetrievePreviewResult,
   IngestResult,
   StorageGraphConfig,
 } from "../../../backend/src/rag/contracts/rag";
@@ -16,6 +17,7 @@ export type {
   RagQueryHit,
   RagGraphContext,
   RagRetrieveResult,
+  RetrievePreviewResult,
   IngestResult,
   StorageGraphConfig,
 } from "../../../backend/src/rag/contracts/rag";
@@ -80,4 +82,14 @@ export function queryRagStorage(
     topK,
     strategy,
   }) as Promise<RagRetrieveResult>;
+}
+
+/** Composer preview: same retrieval + planner-block token estimate a send
+ *  with `overrides.rag` would produce. */
+export function previewForcedRetrieval(input: {
+  query: string;
+  storages: string[];
+  topK?: number;
+}): Promise<RetrievePreviewResult> {
+  return sendJson("/api/rag/retrieve/preview", "POST", input) as Promise<RetrievePreviewResult>;
 }

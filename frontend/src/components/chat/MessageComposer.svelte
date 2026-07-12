@@ -21,6 +21,7 @@
     onFileInputChange,
     queuedSlot,
     attachmentsSlot,
+    retrievalSlot,
     textareaRef = $bindable(null),
   }: {
     conversationId?: string | null;
@@ -36,6 +37,9 @@
     onFileInputChange?: (files: File[]) => void;
     queuedSlot?: import("svelte").Snippet;
     attachmentsSlot?: import("svelte").Snippet;
+    /** Rendered inside the input container, above the textarea; receives the
+     * current draft text (drives the forced-retrieval live preview). */
+    retrievalSlot?: import("svelte").Snippet<[string]>;
     textareaRef?: HTMLTextAreaElement | null;
   } = $props();
 
@@ -95,6 +99,9 @@
     <div
       class="flex flex-col gap-0 rounded-2xl border border-border/80 bg-card/70 p-1.5 shadow-sm transition-[box-shadow,border-color] focus-within:border-primary/35 focus-within:shadow-[0_0_0_1px_hsl(var(--primary)/0.22)] dark:bg-card/55 dark:focus-within:border-primary/40"
     >
+      {#if retrievalSlot}
+        {@render retrievalSlot(value)}
+      {/if}
       <textarea
         bind:this={textareaRef}
         use:focusOnFirstFrame

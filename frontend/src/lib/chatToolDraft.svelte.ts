@@ -9,7 +9,6 @@ import {
   EMPTY_RAG_DRAFT,
   draftFromStoredOverrides,
   draftHasOverrides,
-  ragDraftFromStoredOverride,
 } from "./chatToolOverrides";
 
 const draftStore = writable<ChatToolDraft>({});
@@ -43,7 +42,9 @@ export function getSelectedToolForEdit(): string | null {
 }
 
 export function chatToolDraftHasOverrides(): boolean {
-  return draftHasOverrides(get(draftStore)) || get(ragDraftStore).enabled;
+  // Deliberately excludes the rag draft: forced retrieval is a single-shot
+  // composer action, not a tools-panel policy override.
+  return draftHasOverrides(get(draftStore));
 }
 
 export function getToolDraftEntry(toolName: string): ChatToolDraftEntry {
@@ -108,16 +109,14 @@ export function resetChatToolDraft(): void {
 }
 
 export function seedChatToolDraftFromUserMessage(entry: UserMessageEntry | null): void {
+  // Tool overrides are a policy — they re-seed from the branch's last user
+  // message. The rag draft deliberately does NOT: forced retrieval is a
+  // single-shot action on the message being composed.
   const next = draftFromStoredOverrides(entry?.overrides?.tools);
-  const nextRag = ragDraftFromStoredOverride(entry?.overrides?.rag);
   const draft = get(draftStore);
-  const changed =
-    !draftsEqual(draft, next) ||
-    JSON.stringify(get(ragDraftStore)) !== JSON.stringify(nextRag) ||
-    get(selectedToolForEditStore) !== null;
+  const changed = !draftsEqual(draft, next) || get(selectedToolForEditStore) !== null;
   if (!changed) return;
   draftStore.set(next);
-  ragDraftStore.set(nextRag);
   selectedToolForEditStore.set(null);
   touchDraft();
 }

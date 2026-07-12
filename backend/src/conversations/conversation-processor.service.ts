@@ -15,10 +15,9 @@ import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProv
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import type { ChatAttachment } from '../contracts/chatEntry.js';
-import type { RagOverride, RetrievalHit, RetrievalQuery } from '../contracts/retrieval.js';
+import type { RagOverride, RetrievalQuery } from '../contracts/retrieval.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
-import { RetrieverService } from '../rag/retrieval/retriever.service.js';
-import { StorageRegistry } from '../rag/store/storage-registry.service.js';
+import { ForcedRetrievalService } from '../rag/retrieval/forced-retrieval.service.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ConversationCategorizerService } from './conversation-categorizer.service.js';
@@ -57,8 +56,7 @@ export class ConversationProcessorService implements OnModuleInit {
     private readonly pendingMsgs: PendingMessagesRepo,
     private readonly categorizer: ConversationCategorizerService,
     private readonly contextInjection: ContextInjectionService,
-    private readonly retriever: RetrieverService,
-    private readonly storageRegistry: StorageRegistry,
+    private readonly forcedRetrieval: ForcedRetrievalService,
   ) {}
 
   /**
@@ -608,9 +606,7 @@ export class ConversationProcessorService implements OnModuleInit {
     // 'preplanned' (a rag-planning thought composes the queries) lands in
     // phase 2b and degrades to verbatim until then.
     const queries: RetrievalQuery[] = [{ text: messageText, origin: 'verbatim' }];
-    const storageNames = override.storages.map(
-      (id) => this.storageRegistry.getManifest(id)?.name ?? `${id} (missing)`,
-    );
+    const storageNames = this.forcedRetrieval.storageNames(override.storages);
     let created: { id: string };
     try {
       created = await this.chatEntries.appendRetrievalEntry(conversationId, {
@@ -627,32 +623,9 @@ export class ConversationProcessorService implements OnModuleInit {
     }
     await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
     try {
-      const topK = override.top_k ?? 8;
-      const hits: RetrievalHit[] = [];
-      const seen = new Set<string>();
-      for (const query of queries) {
-        const found = await this.retriever.retrieve({
-          storageIds: query.storages ?? override.storages,
-          query: query.text,
-          topK,
-        });
-        for (const hit of found) {
-          // Multiple queries can resurface the same chunk; keep the best-scored
-          // first occurrence (retrieve() returns hits sorted by score).
-          const key = `${hit.storageId}|${hit.sourceId}|${hit.chunkIndex}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          hits.push({
-            storage: hit.storageName,
-            source:
-              typeof hit.metadata.relativePath === 'string' ? hit.metadata.relativePath : hit.sourceId,
-            chunkIndex: hit.chunkIndex,
-            score: Number(hit.score.toFixed(4)),
-            origin: hit.origin,
-            text: hit.text,
-          });
-        }
-      }
+      // Same code path as the composer's preview endpoint, so what the user
+      // saw before sending is what the turn records.
+      const hits = await this.forcedRetrieval.run(queries, override.storages, override.top_k);
       await this.chatEntries.completeRetrievalEntry(conversationId, created.id, { hits });
     } catch (error) {
       this.logger.warn(

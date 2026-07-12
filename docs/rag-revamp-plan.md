@@ -84,6 +84,16 @@ never rendered into the tool description or system prompt — they live in
 server-side rules and message-lane entries only, so mid-conversation storage
 changes never invalidate the provider prompt prefix.
 
+**D10 — Forced retrieval is a single-shot composer action, not a policy.**
+The control lives in a bar above the message input (not the chat-tools panel):
+it applies to the message being composed, resets after send, and is never
+re-seeded from conversation history — unlike tool overrides, which are sticky
+policy. Because retrieval is cheap, the bar previews interactively while the
+user types: a debounced `POST /api/rag/retrieve/preview` runs the SAME code
+path a send would (`ForcedRetrievalService`) and formats the SAME planner
+block (`formatRetrievalContext`), so the shown "N excerpts · ~X tok" is the
+actual injection cost, not an approximation of a different pipeline.
+
 ## Retrieval entry contract (sketch)
 
 ```ts
@@ -108,8 +118,8 @@ changes never invalidate the provider prompt prefix.
 
 `overrides.rag = { storages: string[], top_k?, mode: 'verbatim' | 'preplanned' }`
 on the user message (existing per-message overrides mechanism). Presence of
-the key is the force signal. Composer: storage-picker chips, defaults from the
-agent's rag rules, sticky per conversation.
+the key is the force signal. Composer: storage-picker chips in the bar above
+the input, single-shot per D10 (reset after send, no re-seeding).
 
 ## Phases
 

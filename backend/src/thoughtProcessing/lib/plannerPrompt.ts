@@ -1,4 +1,5 @@
 import type { ChatEntry, ThoughtStreamEntry } from '../../contracts/chatEntry.js';
+import { formatRetrievalContext } from '../../rag/retrieval/retrieval-context.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 import { stripToolParamEnvelope } from '../../tools/toolParamEnvelope.js';
 
@@ -197,23 +198,9 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
  * what came back; it must never silently proceed as if it wasn't.
  */
 function retrievalAsContext(entry: Extract<ChatEntry, { type: 'retrieval' }>): string {
-  const queries = entry.queries.map((q) => `"${q.text}"`).join(', ');
-  const header = `[User-requested retrieval over storage(s): ${entry.storages.join(', ') || 'none'} — query: ${queries}]`;
-  if (entry.state === 'failed') {
-    return `${header}\nRetrieval FAILED: ${entry.error ?? 'unknown error'}. Answer from the conversation or say what is missing; do not pretend the storages were consulted.`;
-  }
-  if (entry.state === 'pending') {
-    // Unreachable in the normal flow (the entry resolves before the planner
-    // starts), but a replayed/interrupted turn can surface one.
-    return `${header}\nRetrieval did not complete for this message.`;
-  }
-  if (entry.hits.length === 0) {
-    return `${header}\nNo relevant content was found. Say so if the answer depends on it; do not invent grounding.`;
-  }
-  const blocks = entry.hits.map(
-    (hit, i) => `--- [${i + 1}] ${hit.storage} / ${hit.source} (score ${hit.score})\n${hit.text}`,
-  );
-  return `${header}\nGround your answer in these excerpts where relevant and name the sources you used:\n${blocks.join('\n')}`;
+  // Shared with the composer's preview endpoint so the pre-send token estimate
+  // is computed from the exact block the planner receives.
+  return formatRetrievalContext(entry);
 }
 
 function entryToMessages(

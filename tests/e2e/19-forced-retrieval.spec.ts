@@ -172,7 +172,31 @@ test("zero hits stay visible: empty storage yields done + no hits, and the plann
   }
 });
 
-test("chat tools panel toggle sends the override and the transcript shows the retrieval row", async ({
+test("preview endpoint returns the hits and token estimate a send would inject", async ({ request }) => {
+  test.setTimeout(25_000);
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const storageId = await createStorage(request, `e2e-forced-preview-${Date.now()}`, docs);
+  try {
+    const res = await request.post(`${apiBaseUrl()}/api/rag/retrieve/preview`, {
+      data: { query: DB_QUESTION, storages: [storageId] },
+    });
+    expect(res.ok()).toBeTruthy();
+    const preview = (await res.json()) as {
+      hits: Array<{ source: string; origin: string }>;
+      estimatedTokens: number;
+    };
+    expect(preview.hits.length).toBeGreaterThan(0);
+    expect(preview.hits[0]!.source).toBe("db.md");
+    // The estimate covers the full planner block (header + excerpts), so it
+    // must exceed a bare header's worth of tokens.
+    expect(preview.estimatedTokens).toBeGreaterThan(50);
+  } finally {
+    await deleteStorage(request, storageId);
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("composer bar: toggle + storage chip preview the injection, send records it, and the draft resets", async ({
   app,
   request,
 }) => {
@@ -184,11 +208,16 @@ test("chat tools panel toggle sends the override and the transcript shows the re
   try {
     await app.chat.gotoNew(agentId);
 
-    // Enable forced retrieval and pick the storage in the sidebar panel.
-    await app.page.getByTestId("chat-rag-toggle").check();
-    await app.page.locator(`[data-testid="chat-rag-storage"][data-storage-name="${name}"]`).check();
+    // Enable forced retrieval and pick the storage in the bar above the input.
+    await app.page.getByTestId("chat-rag-toggle").click();
+    await app.page.locator(`[data-testid="chat-rag-storage"][data-storage-name="${name}"]`).click();
 
+    // Live preview: typing runs the actual retrieval (debounced) and reports
+    // what a send right now would inject.
     await app.chat.userInput.typeMessage(DB_QUESTION);
+    const previewText = app.page.getByTestId("retrieval-preview");
+    await expect(previewText).toContainText(/excerpts? · ~\d+ tok/, { timeout: 10_000 });
+
     await app.chat.userInput.send();
 
     const row = app.page.getByTestId("retrieval-row");
@@ -197,6 +226,9 @@ test("chat tools panel toggle sends the override and the transcript shows the re
     await row.getByRole("button").first().click();
     await expect(row.getByTestId("retrieval-hit-source").first()).toHaveText("db.md");
     await expect(row.getByTestId("retrieval-query-origin").first()).toHaveText("verbatim");
+
+    // Single-shot: the toggle switched itself off after sending.
+    await expect(app.page.getByTestId("chat-rag-toggle")).toHaveAttribute("aria-pressed", "false");
   } finally {
     await deleteStorage(request, storageId);
     await rm(docs, { recursive: true, force: true });

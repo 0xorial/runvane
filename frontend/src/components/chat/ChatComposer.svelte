@@ -12,8 +12,9 @@
   import MessageComposer from "./MessageComposer.svelte";
   import QueuedMessageChips from "./QueuedMessageChips.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
-  import { compileUserMessageOverrides } from "@/lib/chatToolOverrides";
-  import { getChatRagDraft, getChatToolDraft } from "@/lib/chatToolDraft.svelte";
+  import { compileUserMessageOverrides, EMPTY_RAG_DRAFT } from "@/lib/chatToolOverrides";
+  import { getChatRagDraft, getChatToolDraft, setChatRagDraft } from "@/lib/chatToolDraft.svelte";
+  import RetrievalActionBar from "./RetrievalActionBar.svelte";
   import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
   let {
@@ -74,6 +75,12 @@
     selectedFiles = [...selectedFiles, ...wrapped];
   }
 
+  /** Forced retrieval is single-shot: it applies to the message just sent and
+   * switches itself off, instead of persisting as a policy for the chat. */
+  function consumeRagDraft(): void {
+    if (getChatRagDraft().enabled) setChatRagDraft({ ...EMPTY_RAG_DRAFT });
+  }
+
   async function onSend(mode: MessageSendMode): Promise<void> {
     if (!canSend || sending) return;
     sending = true;
@@ -110,6 +117,7 @@
           clientRequestId,
           sendOpts,
         );
+        consumeRagDraft();
         return;
       }
 
@@ -134,6 +142,7 @@
           clientRequestId,
           sendOpts,
         );
+        consumeRagDraft();
         onSent?.(`sent-${clientRequestId}`, cid);
         replacePath(`/chat/${encodeURIComponent(cid)}${search}`);
         return;
@@ -163,6 +172,7 @@
           optimistic.clientRequestId,
           sendOpts,
         );
+        consumeRagDraft();
       }
     } catch (err) {
       console.error("[ChatComposer] send failed", err);
@@ -188,6 +198,9 @@
   onPasteFiles={addFiles}
   onFileInputChange={addFiles}
 >
+  {#snippet retrievalSlot(text: string)}
+    <RetrievalActionBar {text} />
+  {/snippet}
   {#snippet queuedSlot()}
     {#if conversationId && pendingMessages.length > 0}
       <QueuedMessageChips
