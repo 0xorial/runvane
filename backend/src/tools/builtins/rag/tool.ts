@@ -33,10 +33,17 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
 
   getAiDescription(): string {
     return (
-      'Semantic retrieval over the agent\'s configured RAG storages, plus source management. ' +
+      "Semantic retrieval over the agent's configured RAG storages, plus source management. " +
+      'Routing: use this tool for CONCEPTUAL recall over indexed prose — questions about meaning, ' +
+      'topics, or "where is X discussed". For exact identifiers, error strings, or symbol lookups, ' +
+      'prefer grep/file tools on the working tree: embeddings rank paraphrases, not literals. ' +
       'operation "query" (default): returns the most relevant indexed chunks with source and ' +
       'similarity score; with the "graph" strategy, results may add knowledge-graph-connected ' +
       'chunks (origin "graph") and a graph block of entities/relations. ' +
+      'operation "list_storages": orient before searching — what is indexed, how big, from which ' +
+      'roots; pass `storage` to also list its sources. ' +
+      'operation "read_source": full text of one indexed source when the top chunks are not ' +
+      'enough context — address it by the `source` label from a query hit. ' +
       'operation "suggest_sources": explore a base directory and get candidate folders worth ' +
       'indexing (file counts + samples) — judge them yourself, nothing is added automatically. ' +
       'operation "add_source": add root folders to a configured storage and re-index it ' +
@@ -74,6 +81,8 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
 
   async runTool(params: RagToolParams, context: ToolRunContext): Promise<unknown> {
     const rules = parseRagToolRules(context.toolRules ?? this.getDefaultRules());
+    if (params.operation === 'list_storages') return this.listStorages(params, rules);
+    if (params.operation === 'read_source') return this.readSource(params, rules);
     if (params.operation === 'suggest_sources') return this.suggestSources(params);
     if (params.operation === 'add_source') return this.addSource(params, rules, context);
     if (params.operation === 'create_storage') return this.createStorage(params, rules, context);
@@ -124,6 +133,88 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
           }
         : {}),
     };
+  }
+
+  /**
+   * Orientation: the storages this agent may search, with live counts and
+   * roots — returned as a tool RESULT, never rendered into the description
+   * (cache-safety, plan doc D9). With `storage`, also lists its sources.
+   */
+  private listStorages(params: RagToolParams, rules: RagToolRules): unknown {
+    const configured = rules.storages
+      .map((id) => {
+        const manifest = this.storages.getManifest(id);
+        if (!manifest) return { id, missing: true as const };
+        const store = this.storages.open(id);
+        const counts = store?.counts();
+        return {
+          id: manifest.id,
+          name: manifest.name,
+          sources: counts?.sources ?? 0,
+          chunks: counts?.chunks ?? 0,
+          graph: manifest.graph ? { nodes: counts?.nodes ?? 0, edges: counts?.edges ?? 0 } : null,
+          roots: Array.isArray(manifest.sourceParams.roots)
+            ? (manifest.sourceParams.roots as unknown[]).map(String)
+            : [],
+        };
+      })
+      .filter(Boolean);
+    const wanted = params.storage?.trim();
+    let sourceListing: unknown;
+    if (wanted) {
+      const manifest = rules.storages
+        .map((id) => this.storages.getManifest(id))
+        .find((m) => m && (m.id === wanted || m.name === wanted));
+      if (!manifest) throw new Error(`rag: storage '${wanted}' is not among this agent's storages`);
+      sourceListing = {
+        storage: manifest.name,
+        sources: this.storages.open(manifest.id)?.listSources() ?? [],
+      };
+    }
+    return {
+      operation: 'list_storages',
+      count: configured.length,
+      storages: configured,
+      ...(sourceListing ? { source_listing: sourceListing } : {}),
+      ...(configured.length === 0 ? { note: 'No RAG storages configured for this agent.' } : {}),
+    };
+  }
+
+  /** Full text of one indexed source — the follow-up when query hits show the
+   *  right document but the chunks alone are not enough context. */
+  private readSource(params: RagToolParams, rules: RagToolRules): unknown {
+    const ref = params.source?.trim();
+    if (!ref) throw new Error('rag: operation "read_source" needs the `source` parameter');
+    const configured = rules.storages
+      .map((id) => this.storages.getManifest(id))
+      .filter((m): m is NonNullable<typeof m> => m !== null);
+    if (configured.length === 0) {
+      throw new Error('rag: no storages configured for this agent');
+    }
+    const wanted = params.storage?.trim();
+    const candidates = wanted
+      ? configured.filter((m) => m.id === wanted || m.name === wanted)
+      : configured;
+    if (wanted && candidates.length === 0) {
+      throw new Error(`rag: storage '${wanted}' is not among this agent's storages`);
+    }
+    for (const manifest of candidates) {
+      const found = this.storages.open(manifest.id)?.readSource(ref);
+      if (found) {
+        return {
+          operation: 'read_source',
+          storage: manifest.name,
+          source: found.label,
+          chars: found.text.length,
+          ...(found.truncated ? { truncated: true } : {}),
+          text: found.text,
+        };
+      }
+    }
+    throw new Error(
+      `rag: source '${ref}' not found in ${wanted ? `storage '${wanted}'` : "this agent's storages"} — ` +
+        'use the `source` label from a query hit or list_storages',
+    );
   }
 
   /** Explore a base dir and return candidate roots — the model judges them. */

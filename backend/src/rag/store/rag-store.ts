@@ -230,6 +230,48 @@ export class RagStore {
     };
   }
 
+  /** Indexed sources with their display label (relativePath when the chunks
+   *  carry one, else the raw source id) — the rag tool's orientation surface. */
+  listSources(limit = 200): Array<{ sourceId: string; label: string; chunks: number }> {
+    const rows = this.db
+      .prepare(
+        `SELECT s.source_id AS sourceId, s.chunk_count AS chunks,
+                (SELECT json_extract(c.metadata_json, '$.relativePath') FROM chunks c
+                 WHERE c.source_type = s.source_type AND c.source_id = s.source_id LIMIT 1) AS rel
+         FROM sources s ORDER BY s.source_id ASC LIMIT ?`,
+      )
+      .all(limit) as Array<{ sourceId: string; chunks: number; rel: string | null }>;
+    return rows.map((r) => ({ sourceId: r.sourceId, label: r.rel ?? r.sourceId, chunks: Number(r.chunks) }));
+  }
+
+  /** Full text of one indexed source (chunks re-joined in order), addressed by
+   *  source id or by the relativePath label hits/listSources expose. */
+  readSource(
+    ref: string,
+    maxChars = 24_000,
+  ): { sourceId: string; label: string; text: string; truncated: boolean } | null {
+    const rows = this.db
+      .prepare(
+        `SELECT source_id AS sourceId, chunk_index, text, metadata_json FROM chunks
+         WHERE source_id = ? OR json_extract(metadata_json, '$.relativePath') = ?
+         ORDER BY source_id ASC, chunk_index ASC`,
+      )
+      .all(ref, ref) as Array<{ sourceId: string; chunk_index: number; text: string; metadata_json: string }>;
+    if (rows.length === 0) return null;
+    // A ref could in theory label multiple sources: keep the first.
+    const sourceId = rows[0]!.sourceId;
+    const mine = rows.filter((r) => r.sourceId === sourceId);
+    const rel = safeParseObject(mine[0]!.metadata_json).relativePath;
+    const text = mine.map((r) => r.text).join('\n');
+    const truncated = text.length > maxChars;
+    return {
+      sourceId,
+      label: typeof rel === 'string' ? rel : sourceId,
+      text: truncated ? text.slice(0, maxChars) : text,
+      truncated,
+    };
+  }
+
   /**
    * Replace one source item's contribution to the knowledge graph. Nodes are
    * global (deduplicated by `nodeKey`) and merged on conflict — an empty type

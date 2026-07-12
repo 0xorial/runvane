@@ -10,10 +10,13 @@ import { z } from 'zod';
 export const RagToolParamsSchema = z
   .object({
     operation: z
-      .enum(['query', 'suggest_sources', 'add_source', 'create_storage'])
+      .enum(['query', 'list_storages', 'read_source', 'suggest_sources', 'add_source', 'create_storage'])
       .default('query')
       .describe(
-        'query: semantic retrieval (default). suggest_sources: explore a base directory and list ' +
+        'query: semantic retrieval (default). list_storages: orient — the storages this agent can ' +
+          'search, with counts and roots (pass `storage` to also list its indexed sources). ' +
+          'read_source: full text of one indexed source (by the `source` label a query hit or ' +
+          'list_storages returned). suggest_sources: explore a base directory and list ' +
           'indexable candidate folders. add_source: add root folders to a configured storage and re-index. ' +
           'create_storage: create a new storage from the agent-configured defaults (name + optional roots) ' +
           'when no suitable storage exists.',
@@ -45,7 +48,15 @@ export const RagToolParamsSchema = z
       .string()
       .min(1)
       .optional()
-      .describe('add_source: target storage name or id; defaults to the only configured storage.'),
+      .describe(
+        'add_source/read_source: target storage name or id; defaults to the only configured storage. ' +
+          "list_storages: when set, the response also lists that storage's indexed sources.",
+      ),
+    source: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('read_source: the source to read — the `source` label from a query hit or list_storages.'),
     roots: z
       .array(z.string().min(1))
       .optional()

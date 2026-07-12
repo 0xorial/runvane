@@ -351,6 +351,51 @@ export function stubRagSourcesPlanner(request: LlmRequest): string {
 }
 
 /**
+ * Drives the orientation e2e: a user message with RAG_ORIENT_MARKER plus
+ * `storage=<name> source=<label>` makes the planner (1) list_storages with the
+ * source listing, (2) read_source the given label, then (3) finalize.
+ */
+export const RAG_ORIENT_MARKER = '__rag_orient_probe__';
+export const STUB_RAG_ORIENT_REPLY = 'Oriented: listed the storages and read the full source.';
+
+export function stubIsRagOrientConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(RAG_ORIENT_MARKER);
+}
+
+export function stubRagOrientPlanner(request: LlmRequest): string {
+  const text = stubUserText(request);
+  const storage = text.match(/storage=(\S+)/)?.[1] ?? '';
+  const source = text.match(/source=(\S+)/)?.[1] ?? '';
+  const results = stubCountToolResults(request);
+  if (results === 0) {
+    return JSON.stringify({
+      assistant_thinking: 'Orient over the indexed storages first.',
+      assistant_output: 'Checking what is indexed.',
+      tool_requests: [
+        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'list_storages', storage }) },
+      ],
+      followup: 'continue',
+    });
+  }
+  if (results === 1) {
+    return JSON.stringify({
+      assistant_thinking: 'The chunks alone are not enough — read the whole source.',
+      assistant_output: 'Reading the full document.',
+      tool_requests: [
+        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'read_source', storage, source }) },
+      ],
+      followup: 'continue',
+    });
+  }
+  return JSON.stringify({
+    assistant_thinking: 'Storage listing and full source in hand.',
+    assistant_output: STUB_RAG_ORIENT_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+/**
  * Drives the create-storage e2e: a user message with RAG_CREATE_MARKER plus
  * `base=<dir> name=<storage>` makes the planner (1) explore the base,
  * (2) create a storage named `<storage>` with `<base>/docs` as its root,
@@ -739,6 +784,7 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
     if (stubIsRagSourcesConversation(request)) return stubRagSourcesPlanner(request);
     if (stubIsRagCreateConversation(request)) return stubRagCreatePlanner(request);
+    if (stubIsRagOrientConversation(request)) return stubRagOrientPlanner(request);
     if (stubIsRagProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubRagPlannerFinalize() : stubRagPlannerFirstRound();
     }

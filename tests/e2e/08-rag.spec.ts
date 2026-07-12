@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Page } from "@playwright/test";
-import { RAG_PROBE_MESSAGE, apiBaseUrl, defaultAgentId } from "./harness/client";
+import { RAG_PROBE_MESSAGE, apiBaseUrl, defaultAgentId, getConversationEntries } from "./harness/client";
 import { expect, test } from "./fixtures";
 
 const runE2e = process.env.RUN_E2E_TESTS === "1";
@@ -309,6 +309,84 @@ test("RAG chat: the agent explores a base and adds sources via the rag tool", as
     }
   } finally {
     await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("RAG chat: the agent orients with list_storages and reads a full source", async ({ app, request }) => {
+  test.setTimeout(30_000);
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const baseUrl = apiBaseUrl();
+  const name = `e2e-orient-${Date.now()}`;
+  try {
+    const createRes = await request.post(`${baseUrl}/api/rag/storages`, {
+      data: {
+        name,
+        entitySource: "files",
+        embeddingProviderId: "stub",
+        embeddingModel: "stub-embed",
+        sourceParams: { roots: [docs] },
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const storage = (await createRes.json()) as { id: string };
+    expect((await request.post(`${baseUrl}/api/rag/storages/${storage.id}/ingest`, { data: {} })).ok()).toBeTruthy();
+
+    const agentId = await defaultAgentId(request);
+    const agent = (await (await request.get(`${baseUrl}/api/agents/${agentId}`)).json()) as {
+      name: string;
+      default_llm_configuration: Record<string, unknown> | null;
+    };
+    const original = agent.default_llm_configuration ?? null;
+    const tools = { ...((original?.tools as Record<string, unknown>) ?? {}) };
+    tools.rag = { policy: "allow", rules: { storages: [storage.id], top_k: 8, strategy: "simple" } };
+    try {
+      expect(
+        (
+          await request.put(`${baseUrl}/api/agents/${agentId}`, {
+            data: { name: agent.name, default_llm_configuration: { ...(original ?? {}), tools } },
+          })
+        ).ok(),
+      ).toBeTruthy();
+
+      // The stub planner lists the storages (with the source listing), reads
+      // db.md in full, then finalizes.
+      await app.chat.gotoNew(agentId);
+      await app.chat.userInput.typeMessage(`__rag_orient_probe__ storage=${name} source=db.md what is indexed?`);
+      await app.chat.userInput.send();
+      await expect(app.chat.transcript.assistantMessage).toContainText(
+        "listed the storages and read the full source",
+        { timeout: 20_000 },
+      );
+
+      const conversationId = app.page.url().match(/\/chat\/([^/?#]+)/)?.[1] ?? "";
+      expect(conversationId).not.toHaveLength(0);
+      const entries = (await getConversationEntries(request, conversationId)) as unknown as Array<{
+        type: string;
+        parameters?: Record<string, unknown>;
+        result?: unknown;
+      }>;
+      const toolCalls = entries.filter((e) => e.type === "tool-invocation");
+      const listCall = toolCalls.find((e) => JSON.stringify(e.parameters ?? {}).includes("list_storages"));
+      const readCall = toolCalls.find((e) => JSON.stringify(e.parameters ?? {}).includes("read_source"));
+      expect(listCall).toBeTruthy();
+      expect(readCall).toBeTruthy();
+      // list_storages: the storage row (name + counts) and, because `storage`
+      // was passed, its indexed sources.
+      const listPayload = JSON.stringify(listCall!.result ?? {});
+      expect(listPayload).toContain(name);
+      expect(listPayload).toContain("db.md");
+      // read_source: the FULL document text, not a chunk excerpt.
+      const readPayload = JSON.stringify(readCall!.result ?? {});
+      expect(readPayload).toContain("managed by Prisma");
+      expect(readPayload).toContain("update the schema");
+    } finally {
+      await request.put(`${baseUrl}/api/agents/${agentId}`, {
+        data: { name: agent.name, default_llm_configuration: original },
+      });
+      await request.delete(`${baseUrl}/api/rag/storages/${storage.id}`);
+    }
+  } finally {
+    await rm(docs, { recursive: true, force: true });
   }
 });
 

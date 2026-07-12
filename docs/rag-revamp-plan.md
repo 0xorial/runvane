@@ -141,13 +141,19 @@ the input, single-shot per D10 (reset after send, no re-seeding).
 4. **Tool reframe**: `list_storages` + `read_source` operations; routing
    guidance in descriptions (grep for identifiers/exact strings — semantic
    search for conceptual recall over indexed prose); drop the fanout comment.
+   DONE — list_storages returns the agent's storages with live counts/roots as
+   a tool RESULT (never in the description, D9), optionally with one storage's
+   source listing; read_source re-joins a source's chunks in order (addressed
+   by the `source` label hits expose, 24k-char cap with a truncation flag).
 5. **Eval, then decide** (D7): graph strategy's fate and any dual-level
    retrieval investment.
 
 ## Open questions
 
-- Tool rename (`rag` → `semantic_search`?): agent configs key rules under
-  `tools.rag`; renaming needs a config migration. Deferred to phase 4 decision.
+- Tool rename (`rag` → `semantic_search`?): RESOLVED — keep `rag`. Agent
+  configs key rules under `tools.rag` and a rename buys only a nicer label for
+  the price of a config migration; the routing guidance now lives in the tool
+  description instead.
 - Small-corpus fast path: when selected storages total under N tokens, inject
   everything instead of top-k. Worth doing; N and where it lives (executor vs
   planning provider) TBD.

@@ -7,8 +7,7 @@ import { StorageGraphSchema } from '../../../rag/contracts/rag.js';
  * storages the agent retrieves from. `strategy` 'graph' walks the storages'
  * knowledge graphs (≤ `max_hops`) from the vector seeds and adds
  * connected-but-lexically-far chunks plus an entity/relation context block;
- * it needs storages ingested with a graph builder ('fanout' query-expansion
- * lands in a later phase).
+ * it needs storages ingested with a graph builder.
  */
 export const RagToolRulesSchema = z
   .object({
