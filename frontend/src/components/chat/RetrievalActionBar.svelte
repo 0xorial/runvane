@@ -34,6 +34,18 @@
     setChatRagDraft({ ...current, storages: next });
   }
 
+  const MODE_HINT: Record<string, string> = {
+    verbatim: "Verbatim: your message text is the search query.",
+    preplanned:
+      "Planned: a small model turns your message into targeted queries at send time " +
+      "(the preview below still searches verbatim, so treat it as approximate).",
+  };
+
+  function toggleMode(): void {
+    const current = getChatRagDraft();
+    setChatRagDraft({ ...current, mode: current.mode === "preplanned" ? "verbatim" : "preplanned" });
+  }
+
   type Preview =
     | { status: "idle" }
     | { status: "loading" }
@@ -78,9 +90,12 @@
     if (preview.status === "error") return "preview failed";
     if (preview.status === "done") {
       const noun = preview.hits === 1 ? "excerpt" : "excerpts";
+      // Preplanned queries only exist at send time; the preview searches
+      // verbatim, so mark it as approximate.
+      const approx = draft.mode === "preplanned" ? "≈ " : "";
       return preview.hits === 0
-        ? `no matches · injects ~${preview.tokens} tok`
-        : `${preview.hits} ${noun} · ~${preview.tokens} tok`;
+        ? `${approx}no matches · injects ~${preview.tokens} tok`
+        : `${approx}${preview.hits} ${noun} · ~${preview.tokens} tok`;
     }
     return "";
   });
@@ -127,6 +142,15 @@
         </button>
       {/each}
     {/if}
+    <button
+      type="button"
+      data-testid="chat-rag-mode"
+      title={MODE_HINT[draft.mode === "preplanned" ? "preplanned" : "verbatim"]}
+      onclick={toggleMode}
+      class="{chipBase} text-muted-foreground hover:bg-secondary/45 hover:text-foreground"
+    >
+      {draft.mode === "preplanned" ? "planned" : "verbatim"}
+    </button>
     <span class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground" data-testid="retrieval-preview">
       {previewLabel}
     </span>

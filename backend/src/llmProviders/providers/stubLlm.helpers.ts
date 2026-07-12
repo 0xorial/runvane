@@ -103,6 +103,15 @@ export function stubIsGuardrailRequest(blob: string): boolean {
   return /Tool name:/i.test(blob) && /Respond with JSON only/i.test(blob);
 }
 
+/** Matches RAG_PLANNING_SYSTEM_PROMPT (ragPlanningProvider.ts). */
+export function stubIsRagPlanningRequest(blob: string): boolean {
+  return /compose retrieval queries/i.test(blob);
+}
+
+/** Two planned queries: distinct bag-of-words targets exercise dedupe, and
+ *  the first one still ranks db.md on top in the forced-retrieval e2e. */
+export const STUB_RAG_PLANNING_REPLY = '{"queries":["SQLite database migrations Prisma","schema update"]}';
+
 export function stubIsSummarizeAttachmentRequest(blob: string): boolean {
   return /You summarize a single attachment/i.test(blob);
 }
@@ -700,6 +709,7 @@ export function pickStubReply(request: LlmRequest): string {
   }
   if (stubIsGraphExtractionRequest(blob)) return stubGraphExtractionReply(blob);
   if (stubIsGraphSummarizeRequest(blob)) return STUB_GRAPH_SUMMARY_REPLY;
+  if (stubIsRagPlanningRequest(blob)) return STUB_RAG_PLANNING_REPLY;
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;

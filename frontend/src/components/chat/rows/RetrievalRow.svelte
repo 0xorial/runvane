@@ -9,6 +9,8 @@
   const expanded = $derived(toggled ?? false);
 
   const summary = $derived.by(() => {
+    // Preplanned mode appends the entry before its queries exist.
+    if (entry.state === "pending" && entry.queries.length === 0) return "Planning retrieval…";
     if (entry.state === "pending") return "Retrieving…";
     if (entry.state === "failed") return "Retrieval failed";
     if (entry.hits.length === 0) return "Retrieval found nothing relevant";

@@ -7,6 +7,7 @@ import { ReasonStep } from '../thoughtProcessing/steps/reasonStep.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { CategorizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { GuardrailThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/guardrailProvider.js';
+import { RagPlanningThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/ragPlanningProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
@@ -39,6 +40,7 @@ import { ConversationsService } from './conversations.service.js';
     SummarizeThoughtTypeProvider,
     SummarizeAttachmentThoughtTypeProvider,
     GuardrailThoughtTypeProvider,
+    RagPlanningThoughtTypeProvider,
     RunToolService,
     ContextInjectionService,
   ],

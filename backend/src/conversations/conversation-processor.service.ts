@@ -12,6 +12,7 @@ import { ThoughtProcessingService } from '../thoughtProcessing/thought-processin
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { CategorizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
+import { RagPlanningThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/ragPlanningProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import type { ChatAttachment } from '../contracts/chatEntry.js';
@@ -50,6 +51,7 @@ export class ConversationProcessorService implements OnModuleInit {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
     private readonly summarizeProvider: SummarizeThoughtTypeProvider,
     private readonly summarizeAttachmentProvider: SummarizeAttachmentThoughtTypeProvider,
+    private readonly ragPlanningProvider: RagPlanningThoughtTypeProvider,
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
@@ -494,14 +496,31 @@ export class ConversationProcessorService implements OnModuleInit {
         }
         // Forced retrieval: also awaited and spine-chained — the planner must
         // anchor after the retrieval entry so the hits are in its input DAG.
+        let plannerDeferred = false;
         if (userPayload.overrides?.rag) {
-          const retrieval = await this.runForcedRetrieval(
-            conversationId,
-            spineTip,
-            body.message,
-            userPayload.overrides.rag,
-          );
-          if (retrieval) spineTip = retrieval.id;
+          const rag = userPayload.overrides.rag;
+          const hasSummaryAttachments = (attachments ?? []).some((a) => a.mode === 'summary');
+          // Preplanned + summary attachments would need a second planner gate
+          // (the attachment barrier owns the start today), so that combination
+          // degrades to verbatim.
+          if (rag.mode === 'preplanned' && !hasSummaryAttachments) {
+            const entry = await this.beginPreplannedRetrieval({
+              conversationId,
+              parentId: spineTip,
+              messageText: body.message,
+              override: rag,
+              scope,
+              llm,
+            });
+            if (entry) {
+              spineTip = entry.id;
+              plannerDeferred = true;
+            }
+          }
+          if (!plannerDeferred) {
+            const retrieval = await this.runForcedRetrieval(conversationId, spineTip, body.message, rag);
+            if (retrieval) spineTip = retrieval.id;
+          }
         }
         const categorize = isFirstMessage && (await this.categorizer.shouldCategorize(conversationId));
         this.startThoughts({
@@ -514,6 +533,7 @@ export class ConversationProcessorService implements OnModuleInit {
           scope,
           llm,
           titleLlm,
+          deferPlanner: plannerDeferred,
         });
       } finally {
         scope.rootDone();
@@ -602,9 +622,8 @@ export class ConversationProcessorService implements OnModuleInit {
     messageText: string,
     override: RagOverride,
   ): Promise<{ id: string } | null> {
-    // v1 is verbatim-only: the message text is the embedding query. Mode
-    // 'preplanned' (a rag-planning thought composes the queries) lands in
-    // phase 2b and degrades to verbatim until then.
+    // Verbatim: the message text is the embedding query. (Preplanned mode goes
+    // through beginPreplannedRetrieval; it lands here only as its degrade path.)
     const queries: RetrievalQuery[] = [{ text: messageText, origin: 'verbatim' }];
     const storageNames = this.forcedRetrieval.storageNames(override.storages);
     let created: { id: string };
@@ -622,21 +641,108 @@ export class ConversationProcessorService implements OnModuleInit {
       return null;
     }
     await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+    await this.executeRetrievalIntoEntry(conversationId, created.id, queries, override);
+    return created;
+  }
+
+  /**
+   * Preplanned forced retrieval (plan doc D5): append the retrieval entry with
+   * no queries yet, run a `rag_planning` side thought anchored to it, and
+   * continue the turn — execute the retrieval, then start the planner — when
+   * the plan arrives. The continuation is once-guarded and the provider's
+   * settle hook also fires it with `null` (verbatim fallback), so a crashed or
+   * unparseable planning call can never strand the turn: planning shapes HOW
+   * we search, never WHETHER. Returns null when the entry can't be appended —
+   * the caller then falls back to the plain verbatim path.
+   */
+  private async beginPreplannedRetrieval(args: {
+    conversationId: string;
+    parentId: string;
+    messageText: string;
+    override: RagOverride;
+    scope: LifecycleScope;
+    llm: LlmRef;
+  }): Promise<{ id: string } | null> {
+    const { conversationId, override, scope, llm } = args;
+    const storageNames = this.forcedRetrieval.storageNames(override.storages);
+    let created: { id: string };
     try {
-      // Same code path as the composer's preview endpoint, so what the user
-      // saw before sending is what the turn records.
+      created = await this.chatEntries.appendRetrievalEntry(conversationId, {
+        parentId: args.parentId,
+        source: 'rag',
+        queries: [],
+        storages: storageNames,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `preplanned retrieval: could not append entry for conversation ${conversationId} — degrading to verbatim: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+    await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+
+    let delivered = false;
+    const continueTurn = (planned: RetrievalQuery[] | null): void => {
+      if (delivered) return;
+      delivered = true;
+      const queries: RetrievalQuery[] = planned ?? [{ text: args.messageText, origin: 'verbatim' }];
+      // Spawned on the scope (not a bare promise) so the run stays "processing"
+      // until the retrieval resolves and the planner is started.
+      scope.spawn(async () => {
+        await this.executeRetrievalIntoEntry(conversationId, created.id, queries, override);
+        if (scope.signal.aborted) return;
+        void this.thoughtProcessing.startThought({
+          provider: this.plannerProvider,
+          conversationId,
+          scope,
+          anchorParentId: created.id,
+          lane: 'spine',
+          llm,
+        });
+      });
+    };
+
+    void this.thoughtProcessing.startThought({
+      provider: this.ragPlanningProvider,
+      conversationId,
+      scope,
+      anchorParentId: created.id,
+      lane: 'side',
+      llm,
+      input: {
+        conversationId,
+        retrievalEntryId: created.id,
+        messageText: args.messageText,
+        storageNames,
+        onPlanned: continueTurn,
+      },
+    });
+    return created;
+  }
+
+  /** Run the queries and resolve the retrieval entry — shared by the verbatim
+   *  and preplanned paths (and, transitively, the composer preview, via
+   *  ForcedRetrievalService). Failures resolve the entry as failed and keep
+   *  the turn going. */
+  private async executeRetrievalIntoEntry(
+    conversationId: string,
+    entryId: string,
+    queries: RetrievalQuery[],
+    override: RagOverride,
+  ): Promise<void> {
+    try {
       const hits = await this.forcedRetrieval.run(queries, override.storages, override.top_k);
-      await this.chatEntries.completeRetrievalEntry(conversationId, created.id, { hits });
+      await this.chatEntries.completeRetrievalEntry(conversationId, entryId, { hits, queries });
     } catch (error) {
       this.logger.warn(
         `forced retrieval failed for conversation ${conversationId}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      await this.chatEntries.completeRetrievalEntry(conversationId, created.id, {
+      await this.chatEntries.completeRetrievalEntry(conversationId, entryId, {
         error: error instanceof Error ? error.message : String(error),
+        queries,
       });
     }
-    await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
-    return created;
+    await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, entryId);
   }
 
   /**
@@ -664,6 +770,10 @@ export class ConversationProcessorService implements OnModuleInit {
     scope: LifecycleScope;
     llm: LlmRef;
     titleLlm: LlmRef;
+    /** Preplanned forced retrieval owns the planner start (its continuation
+     * fires once the retrieval entry resolves) — never combined with summary
+     * attachments, which have their own barrier-owned start. */
+    deferPlanner?: boolean;
   }): void {
     // Title / categorize / attachment summaries are side thoughts anchored to
     // the user message: they run concurrently without touching the spine, so
@@ -690,14 +800,16 @@ export class ConversationProcessorService implements OnModuleInit {
     }
     const summaryAttachments = args.attachments.filter((a) => a.mode === 'summary');
     if (summaryAttachments.length === 0) {
-      void this.thoughtProcessing.startThought({
-        provider: this.plannerProvider,
-        conversationId: args.conversationId,
-        scope: args.scope,
-        anchorParentId: args.plannerAnchorId,
-        lane: 'spine',
-        llm: args.llm,
-      });
+      if (!args.deferPlanner) {
+        void this.thoughtProcessing.startThought({
+          provider: this.plannerProvider,
+          conversationId: args.conversationId,
+          scope: args.scope,
+          anchorParentId: args.plannerAnchorId,
+          lane: 'spine',
+          llm: args.llm,
+        });
+      }
       return;
     }
     const peersDone = createBatchBarrier(summaryAttachments.length);

@@ -8,13 +8,20 @@ export type ChatRagDraft = {
   /** Storage ids to ground the next message in. */
   storages: string[];
   topK?: number;
+  /** 'verbatim' (default): the message text is the query.
+   *  'preplanned': a rag-planning thought composes the queries at send time. */
+  mode?: "verbatim" | "preplanned";
 };
 
 export const EMPTY_RAG_DRAFT: ChatRagDraft = { enabled: false, storages: [] };
 
 export function compileRagOverride(draft: ChatRagDraft): RagOverride | undefined {
   if (!draft.enabled || draft.storages.length === 0) return undefined;
-  return { storages: [...draft.storages], ...(draft.topK ? { top_k: draft.topK } : {}) };
+  return {
+    storages: [...draft.storages],
+    ...(draft.topK ? { top_k: draft.topK } : {}),
+    ...(draft.mode === "preplanned" ? { mode: "preplanned" as const } : {}),
+  };
 }
 
 export type ToolOverrideUiMode = "inherit" | "off" | "ask" | "allow" | "custom";

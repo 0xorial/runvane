@@ -36,6 +36,7 @@ export function entryPreview(entry: ChatEntry): string {
       : "No context files found";
   }
   if (entry.type === "retrieval") {
+    if (entry.state === "pending" && entry.queries.length === 0) return "Planning retrieval…";
     if (entry.state === "pending") return "Retrieving…";
     if (entry.state === "failed") return "Retrieval failed";
     return entry.hits.length > 0

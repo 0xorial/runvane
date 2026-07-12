@@ -153,6 +153,7 @@ export const ThoughtTypeSchema = z.enum([
   'summarize_attachment',
   'guardrail',
   'categorize',
+  'rag_planning',
 ]);
 export type ThoughtType = z.infer<typeof ThoughtTypeSchema>;
 

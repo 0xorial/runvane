@@ -235,17 +235,18 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     return { id: row.id };
   }
 
-  /** Resolve a pending retrieval entry to done (with hits) or failed. */
+  /** Resolve a pending retrieval entry to done (with hits) or failed.
+   *  `queries` records what was actually searched — the preplanned flow
+   *  appends the entry before its queries exist and fills them here. */
   async completeRetrievalEntry(
     conversationId: string,
     entryId: string,
-    result: { hits: RetrievalHit[] } | { error: string },
+    result: ({ hits: RetrievalHit[] } | { error: string }) & { queries?: RetrievalQuery[] },
   ): Promise<void> {
-    await this.mergeEntryPayload(
-      conversationId,
-      entryId,
-      'hits' in result ? { state: 'done', hits: result.hits } : { state: 'failed', error: result.error },
-    );
+    await this.mergeEntryPayload(conversationId, entryId, {
+      ...('hits' in result ? { state: 'done', hits: result.hits } : { state: 'failed', error: result.error }),
+      ...(result.queries ? { queries: result.queries } : {}),
+    });
   }
 
   async appendThoughtActionEntry(

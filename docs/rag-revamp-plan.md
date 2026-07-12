@@ -127,7 +127,17 @@ the input, single-shot per D10 (reset after send, no re-seeding).
 2. **`retrieval` entry + verbatim path** (D2, D3, D4, D8): contract → mapper →
    repo → frontend union → plannerPrompt rendering; processor path; overrides
    schema + composer chips; e2e (stub embeddings).
-3. **rag-planning provider** (D5): additive; `mode: 'preplanned'`.
+3. **rag-planning provider** (D5): additive; `mode: 'preplanned'`. DONE —
+   implementation notes: the `rag_planning` thought runs in the side lane
+   anchored to the pending retrieval entry (which is appended with
+   `queries: []`; the UI shows "Planning retrieval…"); the processor owns the
+   continuation (execute retrieval → start planner, scope-spawned and
+   once-guarded), and the provider's settle hook delivers `null` on any crash
+   so the turn degrades to verbatim instead of stranding — planning shapes HOW,
+   never WHETHER. Planning runs on the main agent LLM (grounding quality over
+   latency; revisit if it hurts). Preplanned + summary attachments degrades to
+   verbatim (the attachment barrier owns the planner start). The composer
+   preview stays verbatim in this mode and is labeled approximate (≈).
 4. **Tool reframe**: `list_storages` + `read_source` operations; routing
    guidance in descriptions (grep for identifiers/exact strings — semantic
    search for conceptual recall over indexed prose); drop the fanout comment.
@@ -141,4 +151,6 @@ the input, single-shot per D10 (reset after send, no re-seeding).
 - Small-corpus fast path: when selected storages total under N tokens, inject
   everything instead of top-k. Worth doing; N and where it lives (executor vs
   planning provider) TBD.
-- Preplanned mode's model choice: agent-level preset vs hardcoded cheap model.
+- Preplanned mode's model choice: RESOLVED for now — the main agent LLM (query
+  quality directly bounds grounding quality). Make it configurable if latency
+  or cost complaints show up.

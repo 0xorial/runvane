@@ -83,6 +83,7 @@ async function postRagMessage(
   agentId: string,
   storageId: string,
   message: string,
+  mode?: "verbatim" | "preplanned",
 ): Promise<string> {
   const createRes = await request.post(`${apiBaseUrl()}/api/conversations`, {
     data: { title: "e2e forced retrieval" },
@@ -90,7 +91,11 @@ async function postRagMessage(
   expect(createRes.ok()).toBeTruthy();
   const { id } = (await createRes.json()) as { id: string };
   const msgRes = await request.post(`${apiBaseUrl()}/api/conversations/${encodeURIComponent(id)}/messages`, {
-    data: { message, agentId, overrides: { rag: { storages: [storageId] } } },
+    data: {
+      message,
+      agentId,
+      overrides: { rag: { storages: [storageId], ...(mode ? { mode } : {}) } },
+    },
   });
   expect(msgRes.ok()).toBeTruthy();
   return id;
@@ -162,6 +167,50 @@ test("zero hits stay visible: empty storage yields done + no hits, and the plann
           const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
           const planner = entries.find((e) => e.type === "thought_stream" && e.thoughtType === "planner");
           return planner?.llmRequest?.includes("No relevant content was found") ?? false;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+  } finally {
+    await deleteStorage(request, storageId);
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("preplanned mode: a rag_planning thought composes the queries, retrieval records them as planned", async ({
+  request,
+}) => {
+  test.setTimeout(25_000);
+  const agentId = await defaultAgentId(request);
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const storageId = await createStorage(request, `e2e-preplanned-${Date.now()}`, docs);
+  try {
+    const conversationId = await postRagMessage(request, agentId, storageId, DB_QUESTION, "preplanned");
+
+    await expect
+      .poll(async () => (await retrievalEntryOf(request, conversationId))?.state ?? "missing", {
+        timeout: 15_000,
+      })
+      .toBe("done");
+    const entry = (await retrievalEntryOf(request, conversationId))!;
+    // The stub planning reply (STUB_RAG_PLANNING_REPLY) is two planned queries.
+    expect(entry.queries.map((q) => q.origin)).toEqual(["planned", "planned"]);
+    expect(entry.queries[0]!.text).toBe("SQLite database migrations Prisma");
+    expect(entry.hits.length).toBeGreaterThan(0);
+    expect(entry.hits[0]!.source).toBe("db.md");
+
+    // The planning thought is visible in the transcript, and the planner
+    // still anchors after the retrieval entry (its prompt carries the hits).
+    const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
+    const planning = entries.find((e) => e.type === "thought_stream" && e.thoughtType === "rag_planning");
+    expect(planning).toBeTruthy();
+    await expect
+      .poll(
+        async () => {
+          const all = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
+          const planner = all.find((e) => e.type === "thought_stream" && e.thoughtType === "planner");
+          const prompt = planner?.llmRequest ?? "";
+          return prompt.includes("[User-requested retrieval") && prompt.includes("managed by Prisma");
         },
         { timeout: 15_000 },
       )
