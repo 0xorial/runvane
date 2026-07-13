@@ -24,6 +24,7 @@
 
   let pickerOpen = $state(false);
   let isRebranching = $state(false);
+  let iconButton = $state<HTMLButtonElement | null>(null);
   // Scope of the model override: true (default) threads it through the whole
   // turn like a user-message override; false runs only this one LLM call on it.
   let applyDownstream = $state(true);
@@ -56,6 +57,7 @@
 <div class="relative inline-flex items-center">
   <HintTooltip content={HINT} side="top">
     <button
+      bind:this={iconButton}
       type="button"
       data-testid="thought-try-model"
       class="inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 {!canRebranch ? 'pointer-events-none' : ''}"
@@ -73,43 +75,42 @@
     </button>
   </HintTooltip>
   {#if pickerOpen}
-    <div class="absolute right-0 top-full z-20 mt-1 w-56" role="presentation" onclick={(e) => e.stopPropagation()}>
-      <ModelDropdown
-        value=""
-        placeholder="Choose model…"
-        searchPlaceholder="Search model"
-        initialOpen={true}
-        groups={modelGroups}
-        disabled={isRebranching}
-        buttonClass="min-h-[26px] text-xs"
-        onOpenChange={(open) => {
-          if (!open) pickerOpen = false;
-        }}
-        onChange={(model, providerId) => void rebranchWithModel(model, providerId)}
-      >
-        {#snippet header()}
-          <div class="flex rounded-md border border-border/70 p-0.5 text-[11px]">
-            <button
-              type="button"
-              data-testid="try-model-scope-downstream"
-              class="flex-1 rounded px-2 py-1 transition-colors {applyDownstream ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}"
-              title="The chosen model threads through the rest of this turn, like setting it on the user message."
-              onclick={() => (applyDownstream = true)}
-            >
-              Downstream
-            </button>
-            <button
-              type="button"
-              data-testid="try-model-scope-single"
-              class="flex-1 rounded px-2 py-1 transition-colors {applyDownstream ? 'text-muted-foreground hover:text-foreground' : 'bg-secondary font-medium text-foreground'}"
-              title="Only this single LLM call uses the chosen model; the continuation reverts to the inherited model."
-              onclick={() => (applyDownstream = false)}
-            >
-              This call
-            </button>
-          </div>
-        {/snippet}
-      </ModelDropdown>
-    </div>
+    <!-- Panel-only picker anchored to the icon itself — no intermediate
+         "Choose model…" trigger block. -->
+    <ModelDropdown
+      externalAnchor={iconButton}
+      value=""
+      searchPlaceholder="Search model"
+      initialOpen={true}
+      groups={modelGroups}
+      disabled={isRebranching}
+      onOpenChange={(open) => {
+        if (!open) pickerOpen = false;
+      }}
+      onChange={(model, providerId) => void rebranchWithModel(model, providerId)}
+    >
+      {#snippet header()}
+        <div class="flex rounded-md border border-border/70 p-0.5 text-[11px]">
+          <button
+            type="button"
+            data-testid="try-model-scope-downstream"
+            class="flex-1 rounded px-2 py-1 transition-colors {applyDownstream ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+            title="The chosen model threads through the rest of this turn, like setting it on the user message."
+            onclick={() => (applyDownstream = true)}
+          >
+            Downstream
+          </button>
+          <button
+            type="button"
+            data-testid="try-model-scope-single"
+            class="flex-1 rounded px-2 py-1 transition-colors {applyDownstream ? 'text-muted-foreground hover:text-foreground' : 'bg-secondary font-medium text-foreground'}"
+            title="Only this single LLM call uses the chosen model; the continuation reverts to the inherited model."
+            onclick={() => (applyDownstream = false)}
+          >
+            This call
+          </button>
+        </div>
+      {/snippet}
+    </ModelDropdown>
   {/if}
 </div>

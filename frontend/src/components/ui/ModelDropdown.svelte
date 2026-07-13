@@ -34,6 +34,7 @@
     buttonClass = "",
     initialOpen = false,
     onOpenChange,
+    externalAnchor = null,
   }: {
     value: string;
     onChange: (value: string, groupId?: string) => void;
@@ -47,6 +48,10 @@
     buttonClass?: string;
     initialOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
+    /** Panel-only mode: anchor the portaled panel to this element instead of
+     *  rendering the built-in trigger button (e.g. an icon button that opens
+     *  the picker directly). Pair with `initialOpen` + `onOpenChange`. */
+    externalAnchor?: HTMLElement | null;
   } = $props();
 
   // Capturing only the prop's initial value is the intent (it seeds local state).
@@ -56,6 +61,7 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let anchor = $state<HTMLButtonElement | null>(null);
   let panel = $state<HTMLDivElement | null>(null);
+  const anchorEl = $derived(externalAnchor ?? anchor);
 
   $effect(() => {
     if (disabled) open = false;
@@ -75,7 +81,7 @@
     function onDocMouseDown(event: MouseEvent): void {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (anchor?.contains(target) || panel?.contains(target)) return;
+      if (anchorEl?.contains(target) || panel?.contains(target)) return;
       open = false;
     }
 
@@ -112,33 +118,35 @@
   });
 </script>
 
-<div class="relative">
-  <button
-    bind:this={anchor}
-    type="button"
-    class="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground {disabled
-      ? 'cursor-not-allowed opacity-55'
-      : ''} {buttonClass}"
-    {disabled}
-    onclick={() => {
-      open = !open;
-    }}
-  >
-    <span class="min-w-0 flex-1 truncate whitespace-nowrap {!selectedLabel ? 'text-muted-foreground' : ''}">
-      {selectedLabel || placeholder}
-    </span>
-    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground transition-transform duration-150 {open ? 'rotate-180' : ''}" aria-hidden="true">
-      <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </span>
-  </button>
-</div>
+{#if !externalAnchor}
+  <div class="relative">
+    <button
+      bind:this={anchor}
+      type="button"
+      class="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground {disabled
+        ? 'cursor-not-allowed opacity-55'
+        : ''} {buttonClass}"
+      {disabled}
+      onclick={() => {
+        open = !open;
+      }}
+    >
+      <span class="min-w-0 flex-1 truncate whitespace-nowrap {!selectedLabel ? 'text-muted-foreground' : ''}">
+        {selectedLabel || placeholder}
+      </span>
+      <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground transition-transform duration-150 {open ? 'rotate-180' : ''}" aria-hidden="true">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </span>
+    </button>
+  </div>
+{/if}
 
 {#if open}
   <div
     use:portal
-    use:popupPosition={{ anchor, minWidthFromAnchor: true }}
+    use:popupPosition={{ anchor: anchorEl, minWidthFromAnchor: !externalAnchor }}
     bind:this={panel}
     class="fixed z-[1500] flex w-fit max-w-[min(90vw,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
     role="listbox"
