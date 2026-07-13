@@ -26,6 +26,10 @@
   // The full response text, de-chunked — the same content as the raw view but
   // reassembled from the provider's streamed chunks. Hidden when identical to raw.
   const assembled = $derived(String(entry.assembledResponse || "").trim());
+  // Edit the RESPONSE, not the transport: when the provider streamed chunks,
+  // `llmResponse` is the raw chunk JSON and the assembled text is what the
+  // decision step actually parses — that is the editable surface.
+  const editSource = $derived(assembled || response);
 
   let isEditing = $state(false);
   let isSaving = $state(false);
@@ -33,7 +37,7 @@
   let editedResponse = $state("");
 
   $effect(() => {
-    if (!isEditing) editedResponse = response;
+    if (!isEditing) editedResponse = editSource;
   });
 
   const tokenBreakdown = $derived(resolveStreamTokenBreakdown(entry));
@@ -45,9 +49,9 @@
   const providerId = $derived(String(entry.llm?.providerId ?? "").trim());
   const model = $derived(String(entry.llm?.model ?? "").trim());
   const modelLabel = $derived(providerId && model ? `${providerId}/${model}` : "unknown");
-  const canEdit = $derived(response.length > 0);
+  const canEdit = $derived(editSource.length > 0);
   const canApply = $derived(editedResponse.trim().length > 0 && !isSaving);
-  const hasChanges = $derived(editedResponse.trim() !== response.trim());
+  const hasChanges = $derived(editedResponse.trim() !== editSource);
   const canRetry = $derived(entry.status === "failed" || entry.status === "cancelled");
 
   async function applyEdit(): Promise<void> {
@@ -89,7 +93,7 @@
   }
 
   function cancelEdit(): void {
-    editedResponse = response;
+    editedResponse = editSource;
     isEditing = false;
   }
 
