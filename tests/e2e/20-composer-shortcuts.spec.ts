@@ -31,6 +31,10 @@ test("Enter sends and Shift+Enter inserts a newline", async ({ app, request }) =
 });
 
 test("while the agent runs, Enter enqueues and Ctrl+Shift+Enter steers", async ({ app, request }) => {
+  // Two full turns + keyboard interaction under suite load: the default 8s
+  // budget is too tight, and the busy window must outlast both key presses
+  // (the steer abort ends the streamed turn early on the happy path anyway).
+  test.setTimeout(30_000);
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
   // First turn on default stub replies (title and planner race for the shared
@@ -41,7 +45,7 @@ test("while the agent runs, Enter enqueues and Ctrl+Shift+Enter steers", async (
 
   // Second turn: only the planner consumes the queue — a slow streamed reply
   // keeps the agent visibly running while we exercise the shortcuts.
-  await stubLlmConfigure(request, [{ responses: [{ text: "streaming slowly ".repeat(60), streamMs: 40 }] }]);
+  await stubLlmConfigure(request, [{ responses: [{ text: "streaming slowly ".repeat(120), streamMs: 50 }] }]);
   await app.chat.userInput.typeMessage("long running turn");
   await app.chat.userInput.send();
   const textarea = app.page.getByTestId("chat-user-input");

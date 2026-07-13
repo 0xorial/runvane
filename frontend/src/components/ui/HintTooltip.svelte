@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { popupPosition } from "@/lib/popupPosition";
+  import { portal } from "@/lib/portal";
   import type { Snippet } from "svelte";
 
   let {
@@ -16,15 +18,11 @@
 
   let open = $state(false);
   let anchor = $state<HTMLSpanElement | null>(null);
-  let pos = $state({ x: 0, y: 0 });
   let showTimer: ReturnType<typeof setTimeout> | undefined;
 
   function show(): void {
     clearTimeout(showTimer);
     showTimer = setTimeout(() => {
-      const rect = anchor?.getBoundingClientRect();
-      if (!rect) return;
-      pos = { x: rect.left, y: side === "top" ? rect.top : rect.bottom };
       open = true;
     }, showDelayMs);
   }
@@ -52,12 +50,15 @@
 
 {#if open}
   <span
-    class="pointer-events-none fixed z-[1500] max-w-[min(16rem,calc(100vw-1rem))] whitespace-normal rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11px] leading-snug text-popover-foreground shadow-md {side ===
-    'top'
-      ? '-translate-y-full -mt-1'
-      : 'mt-1'}"
-    style:left="{pos.x}px"
-    style:top="{pos.y}px"
+    use:portal
+    use:popupPosition={{
+      anchor,
+      align: "center",
+      gap: 4,
+      prefer: side === "top" ? "above" : "below",
+      fitHeight: false,
+    }}
+    class="pointer-events-none fixed z-[1500] block max-w-[min(16rem,calc(100vw-1rem))] whitespace-normal rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11px] leading-snug text-popover-foreground shadow-md"
     role="tooltip"
   >
     {content}

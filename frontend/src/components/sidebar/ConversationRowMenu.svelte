@@ -38,6 +38,27 @@
 
   let panel = $state<HTMLDivElement | null>(null);
   let moveSubOpen = $state(false);
+  let subAnchor = $state<HTMLElement | null>(null);
+  let subPanel = $state<HTMLDivElement | null>(null);
+  // The submenu is portaled, so crossing the gap between trigger and submenu
+  // briefly leaves both — a short close delay keeps hover traversal alive.
+  let subCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function openSub(): void {
+    if (subCloseTimer) {
+      clearTimeout(subCloseTimer);
+      subCloseTimer = null;
+    }
+    moveSubOpen = true;
+  }
+
+  function scheduleSubClose(): void {
+    if (subCloseTimer) clearTimeout(subCloseTimer);
+    subCloseTimer = setTimeout(() => {
+      moveSubOpen = false;
+      subCloseTimer = null;
+    }, 120);
+  }
 
   function close(): void {
     moveSubOpen = false;
@@ -52,7 +73,7 @@
     function onDocMouseDown(event: MouseEvent): void {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (anchor.contains(target) || panel?.contains(target)) return;
+      if (anchor.contains(target) || panel?.contains(target) || subPanel?.contains(target)) return;
       close();
     }
     document.addEventListener("mousedown", onDocMouseDown);
@@ -83,26 +104,27 @@
       <button class="block w-full px-3 py-1.5 text-left hover:bg-muted" onclick={() => { close(); renameConversation(conversation); }}>
         Rename
       </button>
-      <div
-        role="group"
-        class="relative"
-        onmouseenter={() => (moveSubOpen = true)}
-        onmouseleave={() => (moveSubOpen = false)}
-      >
+      <div role="group" onmouseenter={openSub} onmouseleave={scheduleSubClose}>
         <button
+          bind:this={subAnchor}
           type="button"
           class="flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-muted"
-          onclick={() => (moveSubOpen = !moveSubOpen)}
+          onclick={() => (moveSubOpen ? (moveSubOpen = false) : openSub())}
         >
           Move to group
           <span class="text-muted-foreground">›</span>
         </button>
         {#if moveSubOpen}
           <div
+            use:portal
+            use:popupPosition={{ anchor: subAnchor, axis: "horizontal", gap: 2 }}
+            bind:this={subPanel}
             role="menu"
             tabindex="-1"
-            class="absolute left-full top-0 z-10 ml-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
+            class="fixed z-[1500] min-w-[10rem] overflow-y-auto rounded-md border border-border bg-popover py-1 text-xs shadow-md"
             onmousedown={(e) => e.stopPropagation()}
+            onmouseenter={openSub}
+            onmouseleave={scheduleSubClose}
           >
             <button
               class="block w-full px-3 py-1.5 text-left hover:bg-muted"

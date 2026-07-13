@@ -3,6 +3,8 @@
   import { getTasksSnapshot, ensureTasksStream } from "@/lib/tasksStore.svelte";
   import { notifyError } from "@/utils/toast";
   import { onMount } from "svelte";
+  import { popupPosition } from "@/lib/popupPosition";
+  import { portal } from "@/lib/portal";
   import Icon from "@/components/ui/Icon.svelte";
   import TaskGroup from "./TaskGroup.svelte";
 
@@ -11,6 +13,7 @@
   let open = $state(false);
   let tick = $state(0);
   let root = $state<HTMLDivElement | null>(null);
+  let panel = $state<HTMLDivElement | null>(null);
 
   onMount(() => {
     ensureTasksStream();
@@ -24,7 +27,9 @@
     if (!open) return;
     function onDocMouseDown(event: MouseEvent): void {
       const target = event.target;
-      if (!(target instanceof Node) || !root?.contains(target)) open = false;
+      if (!(target instanceof Node)) return;
+      if (root?.contains(target) || panel?.contains(target)) return;
+      open = false;
     }
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
@@ -74,7 +79,12 @@
     {#if active}<span class="tabular-nums">{total}</span>{/if}
   </button>
   {#if open}
-    <div class="absolute right-0 top-full z-[1400] mt-1.5 w-80 rounded-lg border border-border bg-popover p-0 shadow-xl">
+    <div
+      use:portal
+      use:popupPosition={{ anchor: root, align: "end", gap: 6 }}
+      bind:this={panel}
+      class="fixed z-[1500] flex w-80 flex-col overflow-hidden rounded-lg border border-border bg-popover p-0 shadow-xl"
+    >
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
         <span class="text-xs font-medium text-foreground">
           Tasks <span class="ml-1 text-muted-foreground">({total})</span>

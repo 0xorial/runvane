@@ -3,6 +3,8 @@
   import NewGroupDialog from "./NewGroupDialog.svelte";
   import type { ConversationGroupRow } from "../../../../backend/src/contracts/conversations";
   import { renameConversation } from "@/api/client";
+  import { popupPosition } from "@/lib/popupPosition";
+  import { portal } from "@/lib/portal";
   import { notifyError } from "@/utils/toast";
 
   let {
@@ -28,6 +30,28 @@
   let newGroupDialogOpen = $state(false);
   let newGroupName = $state("");
   let root = $state<HTMLDivElement | null>(null);
+  let menuPanel = $state<HTMLDivElement | null>(null);
+  let subAnchor = $state<HTMLElement | null>(null);
+  let subPanel = $state<HTMLDivElement | null>(null);
+  // The submenu is portaled, so crossing the gap between trigger and submenu
+  // briefly leaves both — a short close delay keeps hover traversal alive.
+  let subCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function openSub(): void {
+    if (subCloseTimer) {
+      clearTimeout(subCloseTimer);
+      subCloseTimer = null;
+    }
+    moveSubOpen = true;
+  }
+
+  function scheduleSubClose(): void {
+    if (subCloseTimer) clearTimeout(subCloseTimer);
+    subCloseTimer = setTimeout(() => {
+      moveSubOpen = false;
+      subCloseTimer = null;
+    }, 120);
+  }
 
   $effect(() => {
     if (!moveOpen) {
@@ -36,7 +60,9 @@
     }
     function onDocMouseDown(event: MouseEvent): void {
       const target = event.target;
-      if (!(target instanceof Node) || !root?.contains(target)) moveOpen = false;
+      if (!(target instanceof Node)) return;
+      if (root?.contains(target) || menuPanel?.contains(target) || subPanel?.contains(target)) return;
+      moveOpen = false;
     }
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
@@ -119,9 +145,12 @@
       </button>
       {#if moveOpen}
         <div
+          use:portal
+          use:popupPosition={{ anchor: root, align: "end", gap: 4 }}
+          bind:this={menuPanel}
           role="menu"
           tabindex="-1"
-          class="absolute right-0 top-full z-20 mt-1 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
+          class="fixed z-[1500] min-w-[10rem] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md"
         >
           <button
             type="button"
@@ -131,25 +160,26 @@
           >
             No group
           </button>
-          <div
-            role="group"
-            class="relative"
-            onmouseenter={() => (moveSubOpen = true)}
-            onmouseleave={() => (moveSubOpen = false)}
-          >
+          <div role="group" onmouseenter={openSub} onmouseleave={scheduleSubClose}>
             <button
+              bind:this={subAnchor}
               type="button"
               class="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-muted"
-              onclick={() => (moveSubOpen = !moveSubOpen)}
+              onclick={() => (moveSubOpen ? (moveSubOpen = false) : openSub())}
             >
               Move to group
               <span class="text-muted-foreground">›</span>
             </button>
             {#if moveSubOpen}
               <div
+                use:portal
+                use:popupPosition={{ anchor: subAnchor, axis: "horizontal", prefer: "left", gap: 2 }}
+                bind:this={subPanel}
                 role="menu"
                 tabindex="-1"
-                class="absolute right-full top-0 z-30 mr-0.5 min-w-[10rem] rounded-md border border-border bg-popover py-1 shadow-md"
+                class="fixed z-[1500] min-w-[10rem] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md"
+                onmouseenter={openSub}
+                onmouseleave={scheduleSubClose}
               >
                 {#each knownGroups as group (group.id)}
                   <button

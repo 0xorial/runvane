@@ -1,6 +1,8 @@
 <script lang="ts">
   import AgentIcon from "@/components/ui/AgentIcon.svelte";
   import Icon from "@/components/ui/Icon.svelte";
+  import { popupPosition } from "@/lib/popupPosition";
+  import { portal } from "@/lib/portal";
   import { getAgentColor } from "./agentColors";
   import { AGENT_ICONS } from "./agentIcons";
 
@@ -17,11 +19,13 @@
   } = $props();
 
   let open = $state(false);
+  let anchor = $state<HTMLButtonElement | null>(null);
   const color = $derived(getAgentColor(colorId));
 </script>
 
 <div class="relative">
   <button
+    bind:this={anchor}
     type="button"
     {disabled}
     title="Agent icon"
@@ -35,7 +39,9 @@
   </button>
   {#if open && !disabled}
     <div
-      class="absolute left-0 top-full z-[1400] mt-1 rounded-lg border border-border bg-popover p-2 shadow-xl"
+      use:portal
+      use:popupPosition={{ anchor, gap: 4 }}
+      class="fixed z-[1500] overflow-y-auto rounded-lg border border-border bg-popover p-2 shadow-xl"
       role="menu"
     >
       <div class="grid grid-cols-5 gap-1">

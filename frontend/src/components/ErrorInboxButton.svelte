@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { popupPosition } from "@/lib/popupPosition";
+  import { portal } from "@/lib/portal";
   import { dismissAllToasts, dismissToast, subscribeToastStore, type ToastItem } from "@/utils/toast";
 
   let open = $state(false);
+  let anchor = $state<HTMLButtonElement | null>(null);
   let items = $state<ToastItem[]>([]);
 
   $effect(() => subscribeToastStore((next) => (items = next)));
@@ -12,6 +15,7 @@
 
 <div class="relative">
   <button
+    bind:this={anchor}
     type="button"
     class="relative inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground {count > 0
       ? 'border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100'
@@ -28,7 +32,11 @@
     {/if}
   </button>
   {#if open}
-    <div class="absolute right-0 top-full z-[1400] mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl">
+    <div
+      use:portal
+      use:popupPosition={{ anchor, align: "end", gap: 4 }}
+      class="fixed z-[1500] flex w-80 flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+    >
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
         <strong class="text-sm">Error notifications</strong>
         <button
