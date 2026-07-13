@@ -34,7 +34,7 @@ type Allowed = 'always' | 'ask' | 'never';
  * after every tool has reached a terminal state (done / error / denied). A
  * controllable mock tool lets each spec decide the resolution order and outcome
  * without relying on real timers; the planner is observed via its
- * `thought-prepare` entries ("Decision planning"), of which there must be two —
+ * `thought` entries ("Decision planning"), of which there must be two —
  * the initial fan-out and the single continuation.
  */
 describeLive('tool fan-out fan-in (integration)', () => {
@@ -84,7 +84,7 @@ describeLive('tool fan-out fan-in (integration)', () => {
   }
 
   const plannerCount = (entries: ChatEntryRow[]): number =>
-    entries.filter((e) => e.type === 'thought-prepare' && e.title === PLANNER_TITLE).length;
+    entries.filter((e) => e.type === 'thought' && e.title === PLANNER_TITLE).length;
 
   const findTool = (entries: ChatEntryRow[], name: string): ChatEntryRow | undefined =>
     entries.find((e) => e.type === 'tool-invocation' && e.toolId === name);
@@ -355,7 +355,7 @@ describeLive('tool fan-out fan-in (integration)', () => {
         .sort((a, b) => a.conversationIndex - b.conversationIndex)
         .at(-1)!;
       const continuation = entries.filter(
-        (e) => e.type === 'thought-prepare' && e.title === PLANNER_TITLE,
+        (e) => e.type === 'thought' && e.title === PLANNER_TITLE,
       )[1];
       expect(continuation?.parentId).toBe(tail.id);
 
@@ -407,7 +407,7 @@ describeLive('tool fan-out fan-in (integration)', () => {
 
     const plannerModels = (entries: ChatEntryRow[]): string[] =>
       entries
-        .filter((e) => e.type === 'thought-prepare' && e.title === PLANNER_TITLE)
+        .filter((e) => e.type === 'thought' && e.title === PLANNER_TITLE)
         .map((e) => e.llm?.model ?? '');
 
     it('every approved → continuation keeps the message model, not the agent default', async () => {

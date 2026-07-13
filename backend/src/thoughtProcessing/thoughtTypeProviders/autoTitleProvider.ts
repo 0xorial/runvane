@@ -52,8 +52,8 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
   });
 
   onLlmEvent = (_input: AutoTitleInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   runDecision = async (input: AutoTitleInput, ctx: ThoughtContext, completion: LlmCompletion): Promise<void> => {
@@ -69,13 +69,13 @@ export class AutoTitleThoughtTypeProvider implements ThoughtTypeProvider<AutoTit
   };
 
   private async completeThoughtAction(ctx: ThoughtContext, summary: string): Promise<void> {
-    if (!ctx.thoughtActionEntryId) return;
+    if (!ctx.thoughtEntryId) return;
     // Custom summary/action only — status is flipped by DecisionStep.
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
       summary,
       action: 'final_answer',
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 }
 

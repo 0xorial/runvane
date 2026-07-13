@@ -56,8 +56,8 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
   });
 
   onLlmEvent = (_input: ToolParamsInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   runDecision = async (
@@ -275,27 +275,27 @@ export class ToolParamsThoughtTypeProvider implements ThoughtTypeProvider<ToolPa
     toolName: string,
     parsedParams: Record<string, unknown>,
   ): Promise<void> {
-    if (!ctx.thoughtActionEntryId) return;
+    if (!ctx.thoughtEntryId) return;
     // Custom summary/action only — status is flipped by DecisionStep.
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
       summary: `Resolved parameters for ${toolName}`,
       action: 'tool_call',
       toolName,
     });
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtActionEntryId, {
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtEntryId, {
       resolvedParameters: parsedParams,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 
   private async markActionFailed(ctx: ThoughtContext, detail: string): Promise<void> {
-    if (!ctx.thoughtActionEntryId) return;
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    if (!ctx.thoughtEntryId) return;
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
       status: 'failed',
       summary: detail,
       action: 'failed',
       error: detail,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 }

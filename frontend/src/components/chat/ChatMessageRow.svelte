@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
-  import type { ThoughtTripletRefs } from "@/lib/thoughtTriplets";
+  import type { ChatEntry } from "@/protocol/chatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import AssistantMessageRow from "./rows/AssistantMessageRow.svelte";
-  import ThoughtTripletRow from "./rows/ThoughtTripletRow.svelte";
+  import ThoughtRow from "./rows/ThoughtRow.svelte";
   import ToolRunRow from "./rows/ToolRunRow.svelte";
   import TodoWriteRow from "./rows/TodoWriteRow.svelte";
   import CheckpointSummaryRow from "./rows/CheckpointSummaryRow.svelte";
@@ -15,11 +14,9 @@
   let {
     entry$,
     conversationId,
-    thoughtTripletsById,
   }: {
     entry$: ObservableItem<LinkedChatEntry>;
     conversationId: string;
-    thoughtTripletsById: ReadonlyMap<string, ThoughtTripletRefs>;
   } = $props();
 
   let entry = $state<ChatEntry | null>(null);
@@ -36,16 +33,8 @@
 {#if entry}
   {#if entry.type === "user-message"}
     <UserMessageRow {entry} {conversationId} />
-  {:else if entry.type === "thought-prepare"}
-    {@const refs = thoughtTripletsById.get(entry.thoughtId)}
-    <ThoughtTripletRow
-      prepareEntry={entry}
-      {conversationId}
-      streamEntry$={refs?.streamEntry$}
-      actionEntry={refs?.actionEntry ?? null}
-    />
-  {:else if isThoughtStreamEntry(entry) || entry.type === "thought-action"}
-    <!-- rendered inside prepare-anchored triplet -->
+  {:else if entry.type === "thought"}
+    <ThoughtRow {entry} {conversationId} />
   {:else if entry.type === "assistant-message"}
     <AssistantMessageRow {entry} {conversationId} />
   {:else if entry.type === "tool-invocation" && entry.toolId === "todo_write"}

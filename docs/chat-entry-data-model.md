@@ -26,15 +26,22 @@ Conversation linkage:
 
 - `user-message`
 - `assistant-message`
-- `planner_llm_stream`
-- `title_llm_stream`
-- `thought-prepare`
-- `thought-action`
+- `thought`
 - `tool-invocation`
+- `checkpoint-summary`
+- `context-injection`
+- `retrieval`
 
 Shared top-level (outside payload) for all entries:
 
-- `id`, `conversation_id`, `conversation_index`, `parent_id`, `type`, `created_at`
+- `id`, `conversation_id`, `conversation_index`, `parent_id`, `is_side`, `type`, `created_at`
+
+History: thoughts used to be a three-row triplet (`thought-prepare` /
+`thought_stream` / `thought-action`, glued by a `thoughtId` payload key) and
+before that per-thought stream types (`planner_llm_stream`, …). The
+`thought_stream_unify` migration collapsed the stream types; the
+`thought_merge` migration (2026-07-13) collapsed the triplet into the single
+`thought` type below. See `docs/thought-merge-plan.md`.
 
 ## `payload_json` Shapes
 
@@ -42,60 +49,52 @@ Shared top-level (outside payload) for all entries:
 
 - `text: string`
 - `agentId: string`
-- optional: `llmProviderId`, `llmModel`, `modelPresetId`
-- optional: `attachments[]`
+- optional: `llm`, `modelPresetId`, `attachments[]`, `overrides`
 
 ### `assistant-message`
 
 - `text: string`
 
-### `planner_llm_stream`
+### `thought`
 
-- `thoughtId: string` (required)
-- `llmRequest: string`
-- `llmResponse: string`
-- `thoughtMs: number | null`
-- `decision: object | null`
-- `status: "running" | "completed" | "failed" | "cancelled"`
-- optional: `error`, `llmModel`, token usage fields (`promptTokens`, `cachedPromptTokens`, `completionTokens`)
-- optional: `parseResult`
+One row per thought — the prepared request, the streamed LLM cycle, and the
+decision merge onto the same payload as the stages run:
 
-### `title_llm_stream`
-
-- same core shape as `planner_llm_stream`
-- includes `thoughtId` and status/error/token fields
-
-### `thought-prepare`
-
-- `thoughtId: string` (required)
-- `requestText: string`
-- fixed status semantics: completed prepare step
-- optional: `title`, `llmModel`
-
-### `thought-action`
-
-- `thoughtId: string` (required)
-- `status: "running" | "completed" | "failed" | "cancelled"`
-- optional: `summary`, `action`, `toolName`, `error`, `parseResult`
+- `thoughtType: "planner" | "title" | "tool_params" | "summarize" | "summarize_attachment" | "guardrail" | "categorize" | "rag_planning"` (required)
+- `stage: "prepare" | "reason" | "decide"` (required — deepest stage started)
+- `status: "running" | "completed" | "failed" | "cancelled"` (required — one
+  status for the whole thought; a completed prepare is `stage: 'reason'` with
+  `status: 'running'`, and a failure keeps `stage` pointing at where it struck)
+- prepare outputs: `llmRequest` (the display/edit surface — exactly what hits
+  the wire), `title`, `llm`, `inputJson` (server-only reprocess snapshot,
+  stripped from GET/SSE)
+- reason outputs: `llmResponse`, `assembledResponse`, `thinkingText`,
+  `thoughtMs`, token/cost fields (`promptTokens`, `cachedPromptTokens`,
+  `completionTokens`, `provider_cost`, `provider_cost_breakdown`)
+- decision outputs: `decision`, `parseResult`, `summary`, `action`, `toolName`
+- fork metadata (reprocess siblings only): `forkOf` (source thought id),
+  `forkPoint: "context" | "reason"` — `context` means the request was edited
+  or re-run on another model; `reason` means the request was kept verbatim and
+  the response was replaced (only the decision ran). The request is **copied**
+  at fork time, never referenced.
+- `summarize_attachment` extras: `attachmentId` + `userMessageId` (mapper-required),
+  `filename`, `mimeType`, `sizeBytes`, `summaryText`
+- optional: `error`
 
 ### `tool-invocation`
 
 - `toolId: string`
-- `state: "requested" | "running" | "done" | "error"`
+- `state: "resolving" | "requested" | "running" | "done" | "error" | "denied"`
 - `parameters: object`
 - `result: unknown`
 
 ## Relationship Model
 
-There are 2 linkage layers:
-
-- **Tree linkage** via `parent_id` (branch structure and active lineage).
-- **Thought grouping** via `payload_json.thoughtId` (ties `thought-prepare` + stream + `thought-action`).
-
-Important:
-
-- `thoughtId` is a logical group key in payload, not a DB foreign key.
-- `parent_id` and `active_leaf_entry_id` are logical references (not enforced FK constraints).
+- **Tree linkage** via `parent_id` (branch structure and active lineage) —
+  the only grouping layer; a thought is one row, so there is no payload-level
+  thought grouping anymore.
+- `parent_id` and `default_view_leaf_entry_id` are logical references (not
+  enforced FK constraints).
 
 ## Read Behavior
 
@@ -130,10 +129,10 @@ History note: the June 2026 interactive-transaction freeze happened on the Prism
 
 For the `what is the time?` probe flow, expected order is:
 
-1. auto title thought (3 steps)
-2. planner thought (3 steps)
+1. auto title thought (side lane, anchored at the user message)
+2. planner thought
 3. realtime assistant feedback starts streaming
-4. tool parameter preparation thought (3 steps)
-5. tool call
-6. planner thought (3 steps)
+4. tool call (pre-created on the spine at dispatch)
+5. tool parameter resolution thought (side lane, anchored at the tool entry)
+6. planner continuation thought (anchored at the batch tail)
 7. final assistant feedback streams and completes

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { reprocessThoughtContext } from "@/api/client";
-  import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+  import type { ThoughtEntry } from "@/protocol/chatEntry";
   import ModelDropdown from "@/components/ui/ModelDropdown.svelte";
   import ZodJsonEditor from "@/components/ui/ZodJsonEditor.svelte";
   import { createLlmProvidersQuery } from "@/hooks/queries/referenceData";
@@ -12,12 +12,10 @@
   import ReadOnlySection from "../ReadOnlySection.svelte";
 
   let {
-    prepareEntry,
-    stream,
+    entry,
     conversationId,
   }: {
-    prepareEntry: ThoughtPrepareEntry;
-    stream: ThoughtStreamEntry;
+    entry: ThoughtEntry;
     conversationId: string;
   } = $props();
 
@@ -29,9 +27,9 @@
   let isSaving = $state(false);
   let promptValid = $state(false);
 
-  const prompt = $derived((prepareEntry.requestText ?? stream.llmRequest ?? "").trim());
-  const currentProviderId = $derived(String(prepareEntry.llm?.providerId ?? stream.llm?.providerId ?? "").trim());
-  const currentModel = $derived(String(prepareEntry.llm?.model ?? stream.llm?.model ?? "").trim());
+  const prompt = $derived((entry.llmRequest ?? "").trim());
+  const currentProviderId = $derived(String(entry.llm?.providerId ?? "").trim());
+  const currentModel = $derived(String(entry.llm?.model ?? "").trim());
 
   let editedPrompt = $state("");
   let selectedProviderId = $state("");
@@ -57,7 +55,7 @@
     if (!canApply) return;
     isSaving = true;
     try {
-      const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
+      const result = await reprocessThoughtContext(conversationId, entry.id, {
         editedRequestText: editedPrompt.trim(),
         llm: { providerId: selectedProviderId.trim(), model: selectedModel.trim() },
       });

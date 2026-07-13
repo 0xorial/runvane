@@ -17,7 +17,7 @@ import type { LlmCompletion, LlmRequest, LlmStreamEvent, LlmToolSpec } from '../
 import { resolveSeparateParamsResolution, resolveToolConfig } from '../../tools/resolve-tool-config.js';
 import { withToolNoteProperty } from '../../tools/toolParamEnvelope.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
-import { stripPrepareInputJson } from '../inputSnapshot.js';
+import { stripThoughtInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext, isParseableToolParamsJson } from '../lib/toolParamsPrompt.js';
 import { buildPlannerMessages, describeToolChange, extractToolOperations, type PlannerToolInfo } from '../lib/plannerPrompt.js';
 import {
@@ -79,7 +79,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     // in the summarize_attachment streams anchored on this branch so the
     // prompt builder can render summary text in place of raw attachments.
     const sideSummaries = await this.sideSummaryStreams(conversationId, lineage);
-    const entries = [...lineage, ...sideSummaries].map(stripPrepareInputJson);
+    const entries = [...lineage, ...sideSummaries].map(stripThoughtInputJson);
     const anchorUserMessage = [...entries].reverse().find((entry) => entry.type === 'user-message');
     if (!anchorUserMessage) throw new Error(`planner requires a user-message in conversation ${conversationId}`);
     const agentId = anchorUserMessage.agentId;
@@ -153,19 +153,16 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   }
 
   /**
-   * `summarize_attachment` thought streams whose thought is anchored to an
-   * entry on the given lineage (stream → prepare → anchor). Branch-correct:
-   * a summary produced for a sibling branch's user message never leaks in.
+   * `summarize_attachment` thought entries anchored to an entry on the given
+   * lineage (thought → anchor). Branch-correct: a summary produced for a
+   * sibling branch's user message never leaks in.
    */
   private async sideSummaryStreams(conversationId: string, lineage: ChatEntry[]): Promise<ChatEntry[]> {
     const lineageIds = new Set(lineage.map((e) => e.id));
     const side = await this.chatEntries.listSideEntries(conversationId);
-    const byId = new Map(side.map((e) => [e.id, e]));
     return side.filter((e) => {
-      if (e.type !== 'thought_stream' || e.thoughtType !== 'summarize_attachment') return false;
-      const prepare = e.parentId ? byId.get(e.parentId) : undefined;
-      const anchorId = prepare?.parentId ?? null;
-      return anchorId !== null && lineageIds.has(anchorId);
+      if (e.type !== 'thought' || e.thoughtType !== 'summarize_attachment') return false;
+      return e.parentId !== null && lineageIds.has(e.parentId);
     });
   }
 
@@ -188,13 +185,13 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   }
 
   onLlmEvent = (input: PlannerInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    if (!publishStreamFieldDelta(this.hub, input.conversationId, ctx.streamEntryId, event)) return;
+    if (!ctx.thoughtEntryId) return;
+    if (!publishStreamFieldDelta(this.hub, input.conversationId, ctx.thoughtEntryId, event)) return;
     if (event.type !== 'text_delta') return;
     // Only the visible answer (text_delta) feeds the live assistant-message
     // mirror; thinking_delta is surfaced on the stream entry alone.
-    const streamEntryId = ctx.streamEntryId;
-    const state = this.ensureState(streamEntryId);
+    const thoughtEntryId = ctx.thoughtEntryId;
+    const state = this.ensureState(thoughtEntryId);
     state.reconstructedReply += event.delta;
 
     const extracted = extractAssistantPreviewFromStream(state.reconstructedReply);
@@ -214,11 +211,11 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     completion: LlmCompletion,
     scope: LifecycleScope,
   ): Promise<void> => {
-    if (!ctx.streamEntryId) throw new Error('planner runDecision requires ctx.streamEntryId');
-    const streamEntryId = ctx.streamEntryId;
-    const state = this.liveStreamState.get(streamEntryId);
+    if (!ctx.thoughtEntryId) throw new Error('planner runDecision requires ctx.thoughtEntryId');
+    const thoughtEntryId = ctx.thoughtEntryId;
+    const state = this.liveStreamState.get(thoughtEntryId);
     if (state) await state.pending.catch(() => undefined);
-    this.liveStreamState.delete(streamEntryId);
+    this.liveStreamState.delete(thoughtEntryId);
 
     const parsed = parsePlannerCompletion(completion, (raw) =>
       this.logger.warn(`planner JSON parse failed — treating reply as plain text (${raw.length} chars)`),
@@ -397,8 +394,8 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     });
   }
 
-  private ensureState(streamEntryId: string): StreamState {
-    const existing = this.liveStreamState.get(streamEntryId);
+  private ensureState(thoughtEntryId: string): StreamState {
+    const existing = this.liveStreamState.get(thoughtEntryId);
     if (existing) return existing;
     const created: StreamState = {
       reconstructedReply: '',
@@ -406,7 +403,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       assistantEntryId: null,
       pending: Promise.resolve(),
     };
-    this.liveStreamState.set(streamEntryId, created);
+    this.liveStreamState.set(thoughtEntryId, created);
     return created;
   }
 
@@ -458,10 +455,10 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     parseResult: PlannerParseResult,
     decision: LlmDecision | null,
   ): Promise<void> {
-    if (!ctx.streamEntryId) throw new Error('persistStreamEntryDecision requires ctx.streamEntryId');
+    if (!ctx.thoughtEntryId) throw new Error('persistStreamEntryDecision requires ctx.thoughtEntryId');
     const patch: Record<string, unknown> = { parseResult, decision };
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 
   private async finalizeThoughtAction(
@@ -471,7 +468,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     parseResult: PlannerParseResult,
     repairedToolNames: string[] = [],
   ): Promise<void> {
-    if (!ctx.thoughtActionEntryId) return;
+    if (!ctx.thoughtEntryId) return;
     // A repaired request must be explicit on the call-tool step — the model
     // gave non-JSON args to a direct-args tool and the resolver stepped in.
     const repairNote =
@@ -480,12 +477,12 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
         : '';
     const summary = action === 'tool_call' ? `Queued tool call(s)${repairNote}` : assistantText || 'Completed';
     // Custom summary/action only — status is flipped by DecisionStep.
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
       summary,
       action,
     });
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtActionEntryId, { parseResult });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtEntryId, { parseResult });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 }
 

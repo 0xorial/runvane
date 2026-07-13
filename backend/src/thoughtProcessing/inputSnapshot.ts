@@ -39,15 +39,15 @@ const VISIBLE_SUMMARIZE_TYPES = new Set<ChatEntry['type']>([
   'checkpoint-summary',
 ]);
 
-export function stripPrepareInputJson(entry: ChatEntry): ChatEntry {
-  if (entry.type !== 'thought-prepare' || entry.inputJson === undefined) return entry;
+export function stripThoughtInputJson(entry: ChatEntry): ChatEntry {
+  if (entry.type !== 'thought' || entry.inputJson === undefined) return entry;
   const { inputJson: _removed, ...rest } = entry;
   return rest as ChatEntry;
 }
 
 /** API/SSE: inputJson is server-only reprocess metadata, not client payload. */
 export function toClientChatEntry(entry: ChatEntry): ChatEntry {
-  return stripPrepareInputJson(entry);
+  return stripThoughtInputJson(entry);
 }
 
 function isPlannerInput(input: unknown): input is PlannerInput {
@@ -73,7 +73,7 @@ function isSummarizeInput(input: unknown): input is SummarizeInput {
   );
 }
 
-export function serializeThoughtInput(input: unknown, prepareEntryId: string): string {
+export function serializeThoughtInput(input: unknown, thoughtEntryId: string): string {
   if (isPlannerInput(input)) {
     const snap: PlannerSnapshot = {
       v: SNAPSHOT_VERSION,
@@ -83,7 +83,7 @@ export function serializeThoughtInput(input: unknown, prepareEntryId: string): s
       systemPrompt: input.systemPrompt,
       enabledToolIds: input.enabledToolIds,
       ...(input.directToolIds ? { directToolIds: input.directToolIds } : {}),
-      leafEntryId: prepareEntryId,
+      leafEntryId: thoughtEntryId,
     };
     return JSON.stringify(snap);
   }
@@ -109,7 +109,7 @@ function legacyPlannerInput(input: unknown): PlannerInput | null {
     agentId: input.agentId,
     systemPrompt: input.systemPrompt,
     enabledToolIds: input.enabledToolIds,
-    entries: input.entries.map(stripPrepareInputJson),
+    entries: input.entries.map(stripThoughtInputJson),
   };
 }
 
@@ -118,7 +118,7 @@ async function hydratePlannerInput(
   snap: PlannerSnapshot,
 ): Promise<PlannerInput> {
   const entries = (await chatEntries.listChatEntriesFromLeaf(snap.conversationId, snap.leafEntryId)).map(
-    stripPrepareInputJson,
+    stripThoughtInputJson,
   );
   return {
     conversationId: snap.conversationId,
@@ -147,7 +147,7 @@ async function hydrateSummarizeInput(
   const rangeEntries = all
     .filter((entry) => entry.conversationIndex >= lo && entry.conversationIndex <= hi)
     .filter((entry) => VISIBLE_SUMMARIZE_TYPES.has(entry.type))
-    .map(stripPrepareInputJson);
+    .map(stripThoughtInputJson);
   return {
     conversationId: snap.conversationId,
     fromEntryId: snap.fromEntryId,

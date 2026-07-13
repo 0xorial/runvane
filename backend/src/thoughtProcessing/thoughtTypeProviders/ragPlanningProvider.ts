@@ -66,8 +66,8 @@ export class RagPlanningThoughtTypeProvider implements ThoughtTypeProvider<RagPl
   };
 
   onLlmEvent = (_input: RagPlanningProviderInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   runDecision = async (
@@ -93,14 +93,14 @@ export class RagPlanningThoughtTypeProvider implements ThoughtTypeProvider<RagPl
       this.logger.warn(`rag planning: JSON parse failed for "${raw.slice(0, 200)}" — verbatim fallback`);
     }
 
-    if (ctx.thoughtActionEntryId) {
-      await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    if (ctx.thoughtEntryId) {
+      await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
         summary: queries
           ? `Planned ${queries.length} ${queries.length === 1 ? 'query' : 'queries'}`
           : 'Unparseable plan — verbatim fallback',
         action: 'rag_plan',
       });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
     }
 
     if (!input.onPlanned) {

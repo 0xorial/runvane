@@ -78,7 +78,7 @@ test("mode 'all' injects every discovered file and the planner sees the content"
       .poll(
         async () => {
           const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
-          const planner = entries.find((e) => e.type === "thought_stream" && e.thoughtType === "planner");
+          const planner = entries.find((e) => e.type === "thought" && e.thoughtType === "planner");
           return planner?.llmRequest?.includes(README_MARKER) ?? false;
         },
         { timeout: 15_000 },

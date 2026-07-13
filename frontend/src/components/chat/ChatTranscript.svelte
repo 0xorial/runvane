@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { ObservableItem } from "@/utils/observableCollection";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
-  import { buildThoughtTripletsById, visibleTranscriptEntries } from "@/lib/thoughtTriplets";
   import AnchorTopScrollArea from "@/components/ui/AnchorTopScrollArea.svelte";
   import Spinner from "@/components/ui/Spinner.svelte";
   import AgentCardsEmptyState from "./AgentCardsEmptyState.svelte";
@@ -23,8 +22,7 @@
     alignToken?: number;
   } = $props();
 
-  const thoughtTripletsById = $derived(buildThoughtTripletsById(entries));
-  const visibleEntries = $derived(visibleTranscriptEntries(entries));
+  const visibleEntries = $derived(entries);
 </script>
 
 <AnchorTopScrollArea
@@ -37,7 +35,7 @@
   {#snippet children()}
     {#if conversationId && visibleEntries.length > 0}
       {#each visibleEntries as entry$ (entry$.id)}
-        <ObservableEntry {entry$} {conversationId} {thoughtTripletsById} />
+        <ObservableEntry {entry$} {conversationId} />
       {/each}
     {:else if conversationId && isSessionLoading && visibleEntries.length === 0}
       <div data-testid="chat-loading" class="flex min-h-[12rem] flex-1 items-center justify-center p-8">

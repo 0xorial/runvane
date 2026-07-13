@@ -175,7 +175,7 @@ export class ChatSessionStore {
         this.upsert(ev.entry);
         if (ev.entry.type === "checkpoint-summary") {
           this.setViewAnchor(ev.entry.id);
-        } else if (ev.entry.type === "thought-prepare" && ev.entry.title === "Summarize tail") {
+        } else if (ev.entry.type === "thought" && ev.entry.thoughtType === "summarize") {
           this.setViewAnchor(ev.entry.id);
         }
         return;

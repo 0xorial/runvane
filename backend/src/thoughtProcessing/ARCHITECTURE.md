@@ -39,16 +39,24 @@ Why a parent-pointer DAG instead of a flat list:
   (`UPDATE conversations SET default_view_leaf_entry_id = ?`), no row mutations.
 - Old branches stay queryable / re-selectable.
 
-## 2. Lazy entry creation per step
+## 2. One entry per thought, staged in place
 
-Each pipeline step (`prepareStep`, `reasonStep`, `decisionStep`) creates its own
-entries as it runs. We do **not** pre-allocate placeholder rows for a thought.
+A thought is a single `thought` entry (see `docs/thought-merge-plan.md`). The
+row is inserted schema-complete when the thought starts (`thoughtType`,
+`stage: 'prepare'`, `status: 'running'`, title, llm); each pipeline step
+(`prepareStep`, `reasonStep`, `decisionStep`) then merges its outputs onto the
+same row and advances `stage` (`prepare → reason → decide`). Only the settled
+decision — or a failure/cancel, wherever it struck — flips `status`.
 
 Consequences:
 
-- Activity panel fills in incrementally instead of flashing pre-empty rows.
-- A step that never runs (cancelled, error before start) leaves no orphan row.
-- The DB is always a faithful record of what actually happened.
+- Activity panel fills in incrementally on one row instead of streaming
+  three rows per thought.
+- A crashed thought is a row whose `stage` names where it died — the DB is
+  always a faithful record of what actually happened, at field level.
+- Reprocess forks are sibling thoughts carrying `forkOf` + `forkPoint`
+  (`'context'` = the request was edited/re-run, `'reason'` = the response was
+  replaced); the request is copied at fork time, never referenced.
 
 ## 3. `parentId` is always explicit
 
@@ -67,13 +75,13 @@ was the source of all branching races. Two rules:
 There is no shared mutable "chain tip". Every producer knows its causal parent
 and threads it explicitly:
 
-- A thought's own steps (prepare → stream → action → assistant message) are
-  strictly sequential; `ThoughtContext.cursorParentId` advances with each
-  append (`appendAtCursor`).
+- A thought's own appends (its single entry, then downstream tool entries /
+  assistant messages) are strictly sequential; `ThoughtContext.cursorParentId`
+  advances with each append (`appendAtCursor`).
 - `startThought` takes `anchorParentId` + `lane`. The processor anchors the
   planner at the user message (or the context-injection entry after it);
   the fan-in anchors the continuation at the batch tail; reprocess anchors at
-  the source entry's parent (a deliberate sibling branch).
+  the source thought's parent (a deliberate sibling branch).
 - The planner's decision **pre-creates every tool-invocation entry of a batch
   on the spine, in request order** (state `resolving`, or `requested`/
   `running` downstream). Params resolution, guardrails, approvals and the run
@@ -89,7 +97,7 @@ resolution and guardrail thoughts are bookkeeping anchored to a spine entry
 semantics everywhere — leaf walks (`walkToLatestLeaf`), fork counting, the
 frontend chosen path — so any number can run concurrently against the same
 anchor without ever forking the conversation. The planner input folds side
-`summarize_attachment` streams anchored on its lineage back in; other side
+`summarize_attachment` thoughts anchored on its lineage back in; other side
 thoughts contribute nothing to prompts.
 
 `LifecycleScope` is intentionally separate — it only handles execution
@@ -133,10 +141,12 @@ Every place that creates a sibling branch passes an explicit `parentId`:
   leaf at send time).
 - `reprocessUserMessage` — `parentId` = source user message's parent (sibling
   of the source).
-- `startReprocessContext` — fresh `thought-prepare` rooted at the original
-  prepare's parent.
-- `startReprocessReason` — fresh `planner_llm_stream` + `thought-action` rooted
-  at the original prepare entry.
+- `startReprocessContext` — sibling `thought` rooted at the source thought's
+  parent (`forkPoint: 'context'`; edited or copied request, reason + decision
+  run fresh).
+- `startReprocessReason` — sibling `thought` rooted at the source thought's
+  parent (`forkPoint: 'reason'`; request copied verbatim, response replaced,
+  only the decision runs).
 
 Everything else inside a running thought parents through `chain.append`, which
 serializes on the run's chain tip seeded by the entry point.

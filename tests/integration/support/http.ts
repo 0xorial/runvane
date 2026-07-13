@@ -229,22 +229,22 @@ export function assertProbeParentChain(entries: ChatEntryRow[], tipId: string): 
   // Title generation is a side-lane thought: anchored at the user message but
   // deliberately OFF the default-view path (side entries never participate in
   // branch semantics). Assert anchor + lane instead of path membership.
-  const titlePrepare = entries.find(
-    (entry) => entry.type === 'thought-prepare' && entry.title === 'Title generation',
+  const titleThought = entries.find(
+    (entry) => entry.type === 'thought' && entry.title === 'Title generation',
   );
-  if (!titlePrepare) {
-    throw new Error(`probe parent chain: missing title thought-prepare`);
+  if (!titleThought) {
+    throw new Error(`probe parent chain: missing title thought`);
   }
-  if (titlePrepare.parentId !== user.id) {
+  if (titleThought.parentId !== user.id) {
     throw new Error(
-      `probe parent chain: title prepare parentId=${titlePrepare.parentId}, expected user ${user.id}`,
+      `probe parent chain: title thought parentId=${titleThought.parentId}, expected user ${user.id}`,
     );
   }
-  if (!titlePrepare.isSide) {
-    throw new Error(`probe parent chain: title prepare must be side-lane (isSide)`);
+  if (!titleThought.isSide) {
+    throw new Error(`probe parent chain: title thought must be side-lane (isSide)`);
   }
-  if (path.some((entry) => entry.id === titlePrepare.id)) {
-    throw new Error(`probe parent chain: side-lane title prepare must not be on the default-view path`);
+  if (path.some((entry) => entry.id === titleThought.id)) {
+    throw new Error(`probe parent chain: side-lane title thought must not be on the default-view path`);
   }
 
   for (const entry of path) {
@@ -270,9 +270,9 @@ export function assertProbeShape(types: string[]): void {
     throw new Error(`probe shape: final assistant before tool-invocation in ${types.join(',')}`);
   }
 
-  const thoughtPrepares = types.filter((type) => type === 'thought-prepare').length;
-  if (thoughtPrepares < 4) {
-    throw new Error(`probe shape: expected >=4 thought-prepare, got ${thoughtPrepares}`);
+  const thoughtCount = types.filter((type) => type === 'thought').length;
+  if (thoughtCount < 4) {
+    throw new Error(`probe shape: expected >=4 thought, got ${thoughtCount}`);
   }
 }
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
+  import { isThoughtEntry, type ChatEntry } from "@/protocol/chatEntry";
   import { siblingsOf, type ChatEntryLookup } from "@/lib/linkedChatEntry";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
@@ -53,7 +53,7 @@
   const showToggle = $derived(isCollapsible);
   const iconName = $derived(entry ? entryIconName(entry) : "dot");
   const failedStream = $derived(
-    entry != null && isThoughtStreamEntry(entry) && (entry.status === "failed" || entry.status === "cancelled"),
+    entry != null && isThoughtEntry(entry) && (entry.status === "failed" || entry.status === "cancelled"),
   );
 </script>
 

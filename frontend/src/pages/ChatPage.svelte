@@ -7,7 +7,7 @@
   import ConversationBranchesPanel from "@/components/chat/ConversationBranchesPanel.svelte";
   import EntryDetailPanel from "@/components/chat/EntryDetailPanel.svelte";
   import ResizablePaneHandle from "@/components/ui/ResizablePaneHandle.svelte";
-  import { isThoughtStreamEntry } from "@/protocol/chatEntry";
+
   import { createChatSessionState } from "@/lib/chatSessionState.svelte";
   import { setChatSessionContext } from "@/lib/chatSessionContext";
   import { resolveLastPlannerLlmOnPath } from "@/lib/resolveLastPlannerLlm";
@@ -80,21 +80,6 @@
     );
     return replacement ? replacement.id : null;
   });
-  const tripletStreamIdByThoughtId = $derived.by(() => {
-    const map = new Map<string, string>();
-    for (const entry of activePathEntries) {
-      if (isThoughtStreamEntry(entry)) map.set(entry.thoughtId, entry.id);
-    }
-    return map;
-  });
-
-  function resolveVisibleAnchorEntryId(entryId: string): string {
-    const selected = activePathEntryById.get(entryId);
-    if (!selected) return entryId;
-    if (selected.type !== "thought-prepare" && selected.type !== "thought-action") return entryId;
-    return tripletStreamIdByThoughtId.get(selected.thoughtId) ?? entryId;
-  }
-
   const pathPlannerLlm = $derived(resolveLastPlannerLlmOnPath(activePathEntries));
 
   function handleSent(sentRowId: string, sentConversationId: string): void {
@@ -181,7 +166,6 @@
               {conversationId}
               entryId={effectiveDetailEntryId}
               allEntries={session.allEntries}
-              activePathEntries={session.activePathEntries}
               onClose={() => (detailEntryId = null)}
             />
           {:else}
@@ -192,12 +176,7 @@
               switchToBranch={session.switchToBranch}
               onAnchorEntrySelected={(entryId) => {
                 if (!conversationId) return;
-                alignAnchor = {
-                  id: resolveVisibleAnchorEntryId(entryId),
-                  conversationId,
-                  token: ++alignSeq,
-                  source: "branch",
-                };
+                alignAnchor = { id: entryId, conversationId, token: ++alignSeq, source: "branch" };
               }}
             />
           {/if}

@@ -40,22 +40,22 @@ export class DecisionStep {
   }
 
   /**
-   * Fallback action-entry status flip — runs after every successful
+   * Fallback status flip — runs after every successful
    * `provider.runDecision`. Providers can still set their own
    * `summary`/`action`/`status` inside `runDecision` (e.g. `autoTitle`
-   * sets `action: 'final_answer'`); this just guarantees the chip stops
+   * sets `action: 'final_answer'`); this just guarantees the thought stops
    * showing "running" when the decision is actually done.
    */
   private async markCompleted(ctx: ThoughtContext): Promise<void> {
-    if (!ctx.thoughtActionEntryId) return;
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    if (!ctx.thoughtEntryId) return;
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
       status: 'completed',
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 
   private async persistUsage(ctx: ThoughtContext, completion: LlmCompletion): Promise<void> {
-    if (!completion.usage || !ctx.streamEntryId) return;
+    if (!completion.usage || !ctx.thoughtEntryId) return;
     const { promptTokens, completionTokens, cachedPromptTokens } = completion.usage;
     const patch: Record<string, unknown> = {
       promptTokens,
@@ -63,8 +63,8 @@ export class DecisionStep {
       ...providerCostEntryFieldsFromUsage(completion.usage),
     };
     if (typeof cachedPromptTokens === 'number') patch.cachedPromptTokens = cachedPromptTokens;
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
     await this.conversations.addTokenUsage(ctx.conversationId, {
       promptTokens,
       cachedPromptTokens: cachedPromptTokens ?? 0,
@@ -75,17 +75,17 @@ export class DecisionStep {
   }
 
   private async markFailed(ctx: ThoughtContext, error: unknown, scope: LifecycleScope): Promise<void> {
-    const actionEntryId = ctx.thoughtActionEntryId;
-    if (!actionEntryId) return;
+    const thoughtEntryId = ctx.thoughtEntryId;
+    if (!thoughtEntryId) return;
     const cancelled = scope.signal.aborted || (error instanceof Error && error.name === 'AbortError');
     if (cancelled) return;
     const detail = error instanceof Error ? error.message : String(error);
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, actionEntryId, {
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, thoughtEntryId, {
       status: 'failed',
       action: 'failed',
       summary: detail,
       error: detail,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, actionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, thoughtEntryId);
   }
 }

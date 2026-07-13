@@ -128,19 +128,19 @@ function assertSseParentChainMatchesHttp(
     }
   }
   const user = httpEntries.find((row) => row.type === 'user-message');
-  const titlePrepare = httpEntries.find(
-    (row) => row.type === 'thought-prepare' && row.title === 'Title generation',
+  const titleThought = httpEntries.find(
+    (row) => row.type === 'thought' && row.title === 'Title generation',
   );
-  if (!user || !titlePrepare) throw new Error('probe SSE: missing user or title prepare in HTTP snapshot');
-  const sseTitle = sseById.get(titlePrepare.id);
-  if (!sseTitle) throw new Error('probe SSE: missing title prepare upsert');
+  if (!user || !titleThought) throw new Error('probe SSE: missing user or title thought in HTTP snapshot');
+  const sseTitle = sseById.get(titleThought.id);
+  if (!sseTitle) throw new Error('probe SSE: missing title thought upsert');
   if (sseTitle.parentId !== user.id) {
-    throw new Error(`probe SSE: title prepare parentId=${sseTitle.parentId}, expected user ${user.id}`);
+    throw new Error(`probe SSE: title thought parentId=${sseTitle.parentId}, expected user ${user.id}`);
   }
-  if (titlePrepare.parentId !== user.id) {
-    throw new Error(`probe HTTP: title prepare parentId=${titlePrepare.parentId}, expected user ${user.id}`);
+  if (titleThought.parentId !== user.id) {
+    throw new Error(`probe HTTP: title thought parentId=${titleThought.parentId}, expected user ${user.id}`);
   }
-  if (sseTitle.parentId !== titlePrepare.parentId) {
-    throw new Error('probe SSE: title prepare parentId diverged from HTTP after stream');
+  if (sseTitle.parentId !== titleThought.parentId) {
+    throw new Error('probe SSE: title thought parentId diverged from HTTP after stream');
   }
 }

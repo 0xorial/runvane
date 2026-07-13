@@ -106,7 +106,7 @@ describeLive('tool direct dispatch (integration)', () => {
     await waitForTool(conversationId, 'get_current_time', (t) => t.state === 'done');
     const entries = await listAllMessages(baseUrl, conversationId);
     const resolverThoughts = entries.filter(
-      (e) => e.type === 'thought-prepare' && (e as { title?: string }).title === 'Resolve tool parameters',
+      (e) => e.type === 'thought' && (e as { title?: string }).title === 'Resolve tool parameters',
     );
     expect(resolverThoughts.length).toBe(1); // prose args degraded to the resolver instead of failing
 
@@ -137,7 +137,7 @@ describeLive('tool direct dispatch (integration)', () => {
     const planningCount = async (): Promise<number> => {
       const entries = await listAllMessages(baseUrl, conversationId);
       return entries.filter(
-        (e) => e.type === 'thought-prepare' && (e as { title?: string }).title === 'Decision planning',
+        (e) => e.type === 'thought' && (e as { title?: string }).title === 'Decision planning',
       ).length;
     };
 

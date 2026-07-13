@@ -11,7 +11,6 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
 import { TaskRegistryService } from '../../tasks/task-registry.service.js';
 import { UploadsService } from '../../uploads/uploads.service.js';
-import { appendAtCursor } from '../types.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import type { PreparedReason } from './prepareStep.js';
 import { DecisionStep } from './decisionStep.js';
@@ -38,12 +37,8 @@ export class ReasonStep {
     scope: LifecycleScope,
   ): Promise<LlmCompletion> {
     scope.throwIfAborted();
-    const streamEntryId = ctx.streamEntryId ?? (await this.createStreamEntry(provider, ctx, input, prepared.display));
-    ctx.streamEntryId = streamEntryId;
-
-    if (!ctx.thoughtActionEntryId) {
-      ctx.thoughtActionEntryId = await this.createActionEntry(provider, ctx);
-    }
+    const thoughtEntryId = ctx.thoughtEntryId;
+    if (!thoughtEntryId) throw new Error('ReasonStep.run requires ctx.thoughtEntryId to be pre-allocated');
 
     return this.taskRegistry.run(
       {
@@ -54,19 +49,19 @@ export class ReasonStep {
       },
       async (taskSignal) => {
         const onAbort = () => {
-          void this.setStreamStatus(ctx, streamEntryId, 'cancelled');
+          void this.setThoughtStatus(ctx, thoughtEntryId, 'cancelled');
         };
         taskSignal.addEventListener('abort', onAbort, { once: true });
         try {
           taskSignal.throwIfAborted();
-          return await this.streamLlm(provider, input, ctx, prepared, streamEntryId, taskSignal);
+          return await this.streamLlm(provider, input, ctx, prepared, thoughtEntryId, taskSignal);
         } catch (error) {
           if (taskSignal.aborted) {
             await this.persistAbortedUsage(ctx, error);
             throw error;
           }
           const detail = error instanceof Error ? error.message : String(error);
-          await this.setStreamStatus(ctx, streamEntryId, 'failed', detail);
+          await this.setThoughtStatus(ctx, thoughtEntryId, 'failed', detail);
           throw error;
         } finally {
           taskSignal.removeEventListener('abort', onAbort);
@@ -75,57 +70,12 @@ export class ReasonStep {
     );
   }
 
-  private async createStreamEntry<TInput>(
-    provider: ThoughtTypeProvider<TInput>,
-    ctx: ThoughtContext,
-    input: TInput,
-    requestDisplay: string,
-  ): Promise<string> {
-    // Write the full payload (incl. any thoughtType-required `extra` fields such
-    // as `attachmentId`) in the initial insert. Splitting this into append +
-    // merge opened a window where a /stream snapshot could read a
-    // `summarize_attachment` entry before its `attachmentId` landed and fail
-    // deserialization, killing the SSE connection.
-    const extra = provider.streamEntryExtraPayload?.(input);
-    const created = await appendAtCursor(ctx, (parentId, isSide) =>
-      this.chatEntries.appendThoughtStreamEntry(ctx.conversationId, {
-        thoughtType: provider.thoughtType,
-        thoughtId: ctx.thoughtId,
-        parentId,
-        isSide,
-        status: 'running',
-        llm: ctx.llm,
-        llmRequest: requestDisplay,
-        extra: extra ?? undefined,
-      }),
-    );
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
-    return created.id;
-  }
-
-  private async createActionEntry<TInput>(
-    provider: ThoughtTypeProvider<TInput>,
-    ctx: ThoughtContext,
-  ): Promise<string> {
-    const created = await appendAtCursor(ctx, (parentId, isSide) =>
-      this.chatEntries.appendThoughtActionEntry(ctx.conversationId, {
-        thoughtId: ctx.thoughtId,
-        parentId,
-        isSide,
-        status: 'running',
-        summary: provider.initialActionSummary ?? 'Waiting for LLM output',
-      }),
-    );
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, created.id);
-    return created.id;
-  }
-
   private async streamLlm<TInput>(
     provider: ThoughtTypeProvider<TInput>,
     input: TInput,
     ctx: ThoughtContext,
     prepared: PreparedReason,
-    streamEntryId: string,
+    thoughtEntryId: string,
     signal: AbortSignal,
   ): Promise<LlmCompletion> {
     const llmProvider = this.llmProviders.get(ctx.llm.providerId);
@@ -212,8 +162,10 @@ export class ReasonStep {
             null,
             2,
           );
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, {
-      status: 'completed',
+    // Reason done = stage advance to 'decide'; the thought's status stays
+    // running until DecisionStep settles it.
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, thoughtEntryId, {
+      stage: 'decide',
       llmResponse: rawResponse,
       // Only stored when it differs from the raw view (i.e. the provider
       // streamed chunks).
@@ -221,7 +173,7 @@ export class ReasonStep {
       ...(thinkingText ? { thinkingText } : {}),
       thoughtMs: Date.now() - startedAt,
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, thoughtEntryId);
     return completion;
   }
 
@@ -234,15 +186,15 @@ export class ReasonStep {
     });
   }
 
-  private async setStreamStatus(
+  private async setThoughtStatus(
     ctx: ThoughtContext,
-    streamEntryId: string,
+    thoughtEntryId: string,
     status: 'failed' | 'cancelled',
     errorDetail?: string,
   ): Promise<void> {
     const patch: Record<string, unknown> = { status };
     if (errorDetail) patch.error = errorDetail;
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, streamEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, streamEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, thoughtEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, thoughtEntryId);
   }
 }

@@ -1,4 +1,4 @@
-import type { ChatEntry, ThoughtStreamEntry } from "../../../backend/src/contracts/chatEntry.js";
+import type { ChatEntry, ThoughtEntry } from "../../../backend/src/contracts/chatEntry.js";
 
 export type {
   AssistantMessageEntry,
@@ -11,9 +11,9 @@ export type {
   LlmDecisionTool,
   LlmDecisionUserResponse,
   RetrievalEntry,
-  ThoughtActionEntry,
-  ThoughtPrepareEntry,
-  ThoughtStreamEntry,
+  ThoughtEntry,
+  ThoughtForkPoint,
+  ThoughtStage,
   ThoughtType,
   ToolInvocationEntry,
   ToolState,
@@ -31,10 +31,10 @@ export type {
 } from "../../../backend/src/contracts/preinject.js";
 export { PREINJECT_FILE_TYPES } from "../../../backend/src/contracts/preinject.js";
 
-export function isPlannerThinkingEntry(e: ChatEntry): e is ThoughtStreamEntry {
-  return e.type === "thought_stream" && e.thoughtType === "planner";
+export function isPlannerThinkingEntry(e: ChatEntry): e is ThoughtEntry {
+  return e.type === "thought" && e.thoughtType === "planner";
 }
 
-export function isThoughtStreamEntry(e: ChatEntry): e is ThoughtStreamEntry {
-  return e.type === "thought_stream";
+export function isThoughtEntry(e: ChatEntry): e is ThoughtEntry {
+  return e.type === "thought";
 }

@@ -51,21 +51,22 @@ describeMaybe('stream cursor: every entry mutation advances the cursor (integrat
     expect(delta).toBeGreaterThan(0);
   }, 30_000);
 
-  it('thought-action and assistant-message edits advance the cursor', async () => {
+  it('thought and assistant-message edits advance the cursor', async () => {
     const conversationId = await createConversation(baseUrl);
     const user = await repo.appendUserMessage(conversationId, { text: 'hi', agentId, parentId: null });
 
-    const action = await repo.appendThoughtActionEntry(conversationId, {
-      thoughtId: 'thought-x',
+    const thought = await repo.appendThoughtEntry(conversationId, {
+      thoughtType: 'planner',
       parentId: user.id,
+      stage: 'decide',
       status: 'running',
     });
-    const actionDelta = await cursorDeltaAround(() =>
-      repo.updateThoughtAction(conversationId, action.id, { status: 'completed', summary: 'done' }),
+    const thoughtDelta = await cursorDeltaAround(() =>
+      repo.updateThoughtDecision(conversationId, thought.id, { status: 'completed', summary: 'done' }),
     );
-    expect(actionDelta).toBeGreaterThan(0);
+    expect(thoughtDelta).toBeGreaterThan(0);
 
-    const assistant = await repo.appendAssistantMessage(conversationId, { text: 'draft', parentId: action.id });
+    const assistant = await repo.appendAssistantMessage(conversationId, { text: 'draft', parentId: thought.id });
     const assistantDelta = await cursorDeltaAround(() =>
       repo.updateAssistantMessage(conversationId, { id: assistant.id, text: 'final' }),
     );

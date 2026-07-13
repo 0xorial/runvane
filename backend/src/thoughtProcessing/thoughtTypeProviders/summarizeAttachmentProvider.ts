@@ -70,7 +70,7 @@ export class SummarizeAttachmentThoughtTypeProvider implements ThoughtTypeProvid
     private readonly plannerProvider: PlannerThoughtTypeProvider,
   ) {}
 
-  streamEntryExtraPayload = (input: SummarizeAttachmentInput): Record<string, unknown> => ({
+  thoughtEntryExtraPayload = (input: SummarizeAttachmentInput): Record<string, unknown> => ({
     attachmentId: input.attachment.id,
     userMessageId: input.userMessageId,
     filename: input.attachment.name,
@@ -83,8 +83,8 @@ export class SummarizeAttachmentThoughtTypeProvider implements ThoughtTypeProvid
   });
 
   onLlmEvent = (_input: SummarizeAttachmentInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   /**
@@ -99,18 +99,18 @@ export class SummarizeAttachmentThoughtTypeProvider implements ThoughtTypeProvid
     completion: LlmCompletion,
     scope: LifecycleScope,
   ): Promise<void> => {
-    if (!ctx.streamEntryId) throw new Error('summarize-attachment runDecision requires ctx.streamEntryId');
+    if (!ctx.thoughtEntryId) throw new Error('summarize-attachment runDecision requires ctx.thoughtEntryId');
     const rawText = getCompletionText(completion).trim();
     const summaryText = rawText.length > 0 ? rawText : UNAVAILABLE_PLACEHOLDER;
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.streamEntryId, { summaryText });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.streamEntryId);
-    if (ctx.thoughtActionEntryId) {
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, ctx.thoughtEntryId, { summaryText });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
+    if (ctx.thoughtEntryId) {
       // Custom summary only — status is flipped by DecisionStep.
-      await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+      await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
         summary: `Summarized ${input.attachment.name}`,
         action: 'final_answer',
       });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
     }
     input.peersDone.signal(input.attachment.id);
     await input.peersDone.wait();

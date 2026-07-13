@@ -31,13 +31,13 @@ async function tokenUsageByListBatch(baseUrl: string, conversationId: string): P
   return body.conversations.find((c) => c.id === conversationId)?.tokenUsageByModel ?? [];
 }
 
-// Regression guard for the `thought_stream_unify` rename: streamed LLM entries
-// are now persisted as type `thought_stream`, which does NOT contain the
-// substring `llm_stream`. The per-model usage queries used to filter on
-// `type LIKE '%llm_stream%'`, so a freshly run conversation reported an empty
-// tokenUsageByModel — which surfaced in the UI as a permanent "set pricing"
-// badge with no model to name or locate, even when the model was priced.
-// Both the single-row GET and the bulk list path must count the usage.
+// Regression guard for entry-type renames: streamed LLM usage now lives on
+// `thought` entries (after `thought_stream_unify` and then `thought_merge`).
+// The per-model usage queries filter on the entry type — a stale predicate
+// makes a freshly run conversation report an empty tokenUsageByModel, which
+// surfaced in the UI as a permanent "set pricing" badge with no model to name
+// or locate, even when the model was priced. Both the single-row GET and the
+// bulk list path must count the usage.
 describeLive('token usage by model after a run (integration)', () => {
   let baseUrl: string;
   let agentId: string;
@@ -48,7 +48,7 @@ describeLive('token usage by model after a run (integration)', () => {
     agentId = await getDefaultAgentId(baseUrl);
   }, 30_000);
 
-  it('aggregates thought_stream token usage into tokenUsageByModel', async () => {
+  it('aggregates thought-entry token usage into tokenUsageByModel', async () => {
     const conversationId = await createConversation(baseUrl);
     await postProbeMessage(baseUrl, conversationId, agentId);
     await waitForProbeCompletion(baseUrl, conversationId);

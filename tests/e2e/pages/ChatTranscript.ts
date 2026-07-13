@@ -4,18 +4,18 @@ import { E2E_LLM_TIMEOUT_MS, E2E_UI_TIMEOUT_MS } from "../timeouts";
 
 export const PROBE_EXPECTED_ENTRY_TYPES = [
   "user-message",
-  "thought-prepare", // title (side lane, anchored at the user message)
-  "thought-prepare", // decision planning
+  "thought", // title (side lane, anchored at the user message)
+  "thought", // decision planning
   "assistant-message",
   // The tool entry is pre-created on the spine at dispatch; the params
   // resolution runs as a side thought anchored to it, so it renders after.
   "tool-invocation",
-  "thought-prepare", // resolve tool parameters (side lane)
-  "thought-prepare", // decision planning (continuation, anchored at the batch tail)
+  "thought", // resolve tool parameters (side lane)
+  "thought", // decision planning (continuation, anchored at the batch tail)
   "assistant-message",
 ] as const;
 
-export const PROBE_EXPECTED_PREPARE_TITLES = [
+export const PROBE_EXPECTED_THOUGHT_TITLES = [
   "Title generation",
   "Decision planning",
   "Resolve tool parameters",
@@ -24,7 +24,7 @@ export const PROBE_EXPECTED_PREPARE_TITLES = [
 
 export type ProbeTranscriptSnapshot = {
   entryTypes: string[];
-  prepareTitles: string[];
+  thoughtTitles: string[];
   userText: string;
   assistantText: string;
 };
@@ -88,21 +88,21 @@ export class ChatTranscript {
     const rows = this.entryRows();
     const count = await rows.count();
     const entryTypes: string[] = [];
-    const prepareTitles: string[] = [];
+    const thoughtTitles: string[] = [];
     for (let i = 0; i < count; i += 1) {
       const row = rows.nth(i);
       const type = await row.getAttribute("data-chat-entry-type");
       if (!type) throw new Error("transcript row missing data-chat-entry-type");
       entryTypes.push(type);
-      if (type === "thought-prepare") {
-        const title = await row.getAttribute("data-chat-prepare-title");
-        if (!title) throw new Error(`thought-prepare row ${i} missing data-chat-prepare-title`);
-        prepareTitles.push(title);
+      if (type === "thought") {
+        const title = await row.getAttribute("data-chat-thought-title");
+        if (!title) throw new Error(`thought row ${i} missing data-chat-thought-title`);
+        thoughtTitles.push(title);
       }
     }
     return {
       entryTypes,
-      prepareTitles,
+      thoughtTitles,
       userText: (await this.userMessage.innerText()).trim(),
       assistantText: (await this.assistantMessage.innerText()).trim(),
     };
@@ -112,7 +112,7 @@ export class ChatTranscript {
   async expectProbeSequence(timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<ProbeTranscriptSnapshot> {
     const snap = await this.snapshotProbeTranscript(timeoutMs);
     expect(snap.entryTypes).toEqual([...PROBE_EXPECTED_ENTRY_TYPES]);
-    expect(snap.prepareTitles).toEqual([...PROBE_EXPECTED_PREPARE_TITLES]);
+    expect(snap.thoughtTitles).toEqual([...PROBE_EXPECTED_THOUGHT_TITLES]);
     expect(snap.userText).toContain(PROBE_MESSAGE);
     expect(snap.assistantText.length).toBeGreaterThan(0);
     await this.expectNoBranchSelectors();
@@ -159,9 +159,9 @@ export class ChatTranscript {
     await expect(this.container).not.toContainText(text);
   }
 
-  prepareRow(title: string, index = 0): Locator {
+  thoughtRow(title: string, index = 0): Locator {
     return this.container
-      .locator(`[data-chat-entry-type="thought-prepare"][data-chat-prepare-title="${title}"]`)
+      .locator(`[data-chat-entry-type="thought"][data-chat-thought-title="${title}"]`)
       .nth(index);
   }
 
@@ -171,8 +171,8 @@ export class ChatTranscript {
   }
 
   /** Click a finished (collapsed) thought row to open its details panel. */
-  async openThoughtDetails(prepareTitle: string, index = 0): Promise<void> {
-    await this.prepareRow(prepareTitle, index).getByTestId("thought-collapsed-row").click();
+  async openThoughtDetails(thoughtTitle: string, index = 0): Promise<void> {
+    await this.thoughtRow(thoughtTitle, index).getByTestId("thought-collapsed-row").click();
     await expect(this.detailPanel).toBeVisible();
   }
 
@@ -202,7 +202,7 @@ export class ChatTranscript {
     return this.entry("user-message").nth(index);
   }
 
-  async waitForPrepareTitle(title: string, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
-    await expect(this.prepareRow(title)).toBeVisible({ timeout: timeoutMs });
+  async waitForThoughtTitle(title: string, timeoutMs = E2E_LLM_TIMEOUT_MS): Promise<void> {
+    await expect(this.thoughtRow(title)).toBeVisible({ timeout: timeoutMs });
   }
 }

@@ -129,7 +129,7 @@ test("overrides.rag runs retrieval before the planner; entry + planner prompt ca
       .poll(
         async () => {
           const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
-          const planner = entries.find((e) => e.type === "thought_stream" && e.thoughtType === "planner");
+          const planner = entries.find((e) => e.type === "thought" && e.thoughtType === "planner");
           const prompt = planner?.llmRequest ?? "";
           return prompt.includes("[User-requested retrieval") && prompt.includes("managed by Prisma");
         },
@@ -165,7 +165,7 @@ test("zero hits stay visible: empty storage yields done + no hits, and the plann
       .poll(
         async () => {
           const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
-          const planner = entries.find((e) => e.type === "thought_stream" && e.thoughtType === "planner");
+          const planner = entries.find((e) => e.type === "thought" && e.thoughtType === "planner");
           return planner?.llmRequest?.includes("No relevant content was found") ?? false;
         },
         { timeout: 15_000 },
@@ -202,13 +202,13 @@ test("preplanned mode: a rag_planning thought composes the queries, retrieval re
     // The planning thought is visible in the transcript, and the planner
     // still anchors after the retrieval entry (its prompt carries the hits).
     const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
-    const planning = entries.find((e) => e.type === "thought_stream" && e.thoughtType === "rag_planning");
+    const planning = entries.find((e) => e.type === "thought" && e.thoughtType === "rag_planning");
     expect(planning).toBeTruthy();
     await expect
       .poll(
         async () => {
           const all = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
-          const planner = all.find((e) => e.type === "thought_stream" && e.thoughtType === "planner");
+          const planner = all.find((e) => e.type === "thought" && e.thoughtType === "planner");
           const prompt = planner?.llmRequest ?? "";
           return prompt.includes("[User-requested retrieval") && prompt.includes("managed by Prisma");
         },

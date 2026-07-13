@@ -46,7 +46,7 @@ test("finished thought collapses to one line and opens all stage details", async
   await app.sidebar.runProbeTime();
   await app.chat.transcript.waitForProbeComplete();
 
-  const row = app.chat.transcript.prepareRow("Decision planning", 0);
+  const row = app.chat.transcript.thoughtRow("Decision planning", 0);
   await expect(row.getByTestId("thought-collapsed-row")).toBeVisible();
   await expect(row.getByTestId("thought-collapsed-row")).toContainText("just now");
   await expect(row.getByTestId("thought-step-context")).toHaveCount(0);

@@ -9,7 +9,7 @@ import type {
 } from '../../contracts/chatEntry.js';
 import type { UserMessageOverrides } from '../../contracts/user-message-overrides.js';
 import type { LlmRef } from '../../contracts/llm.js';
-import type { ThoughtType } from '../../contracts/chatEntry.js';
+import type { ThoughtForkPoint, ThoughtStage, ThoughtType } from '../../contracts/chatEntry.js';
 import type { PreinjectedFileRecord } from '../../contracts/preinject.js';
 import type { RetrievalHit, RetrievalQuery } from '../../contracts/retrieval.js';
 import { PrismaService } from '../prisma.service.js';
@@ -21,11 +21,12 @@ import { ChatEntriesBaseRepo } from './chat-entries-base.repo.js';
 const ID_IN_CHUNK = 500;
 
 // SQL predicate selecting entries that carry streamed LLM token usage. The
-// `thought_stream_unify` migration collapsed the per-stage `*_llm_stream` types
-// (planner_llm_stream, title_llm_stream, …) into a single `thought_stream`
-// type; older rows keep the legacy names, so match both. Token aggregation
-// downstream still drops any matched row that lacks a model or usage.
-const STREAM_USAGE_TYPE_SQL = "(type = 'thought_stream' OR type LIKE '%llm_stream%')";
+// `thought_merge` migration collapsed the prepare/stream/action triplet into a
+// single `thought` type (and `thought_stream_unify` before it rewrote the
+// legacy per-stage `*_llm_stream` types), so every row with usage is a
+// `thought`. Token aggregation downstream still drops any matched row that
+// lacks a model or usage.
+const STREAM_USAGE_TYPE_SQL = "(type = 'thought')";
 
 export type ToolInvocationState = ToolInvocationEntry['state'];
 
@@ -96,67 +97,49 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     };
   }
 
-  async appendThoughtPrepareEntry(
-    conversationId: string,
-    input: {
-      thoughtId: string;
-      parentId: string | null;
-      isSide?: boolean;
-      status?: ThoughtStepStatus;
-      requestText?: string;
-      title?: string;
-      llm?: LlmRef;
-    },
-  ): Promise<{ id: string }> {
-    const payload: Record<string, unknown> = {
-      thoughtId: input.thoughtId,
-      requestText: input.requestText ?? '',
-      status: input.status ?? 'running',
-    };
-    if (input.title) payload.title = input.title;
-    if (input.llm) payload.llm = input.llm;
-    const row = await this.appendEntry(conversationId, {
-      type: 'thought-prepare',
-      parentId: input.parentId,
-      isSide: input.isSide,
-      payload,
-    });
-    return { id: row.id };
-  }
-
-  async appendThoughtStreamEntry(
+  /**
+   * One row per thought: prepared request, LLM cycle, and decision fill in via
+   * payload merges as the stages run. The initial insert is schema-complete
+   * (`thoughtType` + `stage` + `status`); `extra` carries thought-type-specific
+   * fields the mapper *requires* for this `thoughtType` (e.g. `attachmentId`
+   * for `summarize_attachment`) — those MUST be present before any typed read
+   * can land, so pass them here (or merge them before the first publish).
+   */
+  async appendThoughtEntry(
     conversationId: string,
     input: {
       thoughtType: ThoughtType;
-      thoughtId: string;
       parentId: string | null;
       isSide?: boolean;
+      stage: ThoughtStage;
       status?: ThoughtStepStatus;
+      title?: string;
       llm?: LlmRef;
       llmRequest?: string;
-      /**
-       * Thought-type-specific payload fields that the mapper *requires* to be
-       * present for this `thoughtType` (e.g. `attachmentId` for
-       * `summarize_attachment`). These MUST be written in the initial insert:
-       * a snapshot read landing between insert and a later merge would
-       * otherwise see a typed-but-incomplete entry and fail to deserialize.
-       */
+      llmResponse?: string;
+      thoughtMs?: number;
+      summary?: string;
+      forkOf?: string;
+      forkPoint?: ThoughtForkPoint;
       extra?: Record<string, unknown>;
     },
   ): Promise<{ id: string }> {
     const payload: Record<string, unknown> = {
-      thoughtId: input.thoughtId,
       thoughtType: input.thoughtType,
-      llmRequest: input.llmRequest ?? '',
-      llmResponse: '',
-      thoughtMs: null,
-      decision: null,
+      stage: input.stage,
       status: input.status ?? 'running',
       ...(input.extra ?? {}),
     };
+    if (input.title) payload.title = input.title;
     if (input.llm) payload.llm = input.llm;
+    if (input.llmRequest !== undefined) payload.llmRequest = input.llmRequest;
+    if (input.llmResponse !== undefined) payload.llmResponse = input.llmResponse;
+    if (input.thoughtMs !== undefined) payload.thoughtMs = input.thoughtMs;
+    if (input.summary !== undefined) payload.summary = input.summary;
+    if (input.forkOf !== undefined) payload.forkOf = input.forkOf;
+    if (input.forkPoint !== undefined) payload.forkPoint = input.forkPoint;
     const row = await this.appendEntry(conversationId, {
-      type: 'thought_stream',
+      type: 'thought',
       parentId: input.parentId,
       isSide: input.isSide,
       payload,
@@ -249,31 +232,12 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     });
   }
 
-  async appendThoughtActionEntry(
-    conversationId: string,
-    input: {
-      thoughtId: string;
-      parentId: string | null;
-      isSide?: boolean;
-      status?: ThoughtStepStatus;
-      summary?: string;
-    },
-  ): Promise<{ id: string }> {
-    const payload: Record<string, unknown> = {
-      thoughtId: input.thoughtId,
-      status: input.status ?? 'running',
-    };
-    if (input.summary) payload.summary = input.summary;
-    const row = await this.appendEntry(conversationId, {
-      type: 'thought-action',
-      parentId: input.parentId,
-      isSide: input.isSide,
-      payload,
-    });
-    return { id: row.id };
-  }
-
-  async updateThoughtAction(
+  /**
+   * Decision-side patch on a thought entry (summary/action chip fields). A
+   * thin filter over `mergeEntryPayload` so callers can pass optional fields
+   * without leaking `undefined` keys into the payload.
+   */
+  async updateThoughtDecision(
     conversationId: string,
     entryId: string,
     patch: {
@@ -284,22 +248,14 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
       error?: string;
     },
   ): Promise<void> {
-    const row = await this.fetchEntryRow(conversationId, entryId);
-    if (!row || row.type !== 'thought-action') {
-      throw new Error(`thought-action entry not found: ${entryId}`);
-    }
-    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
-    if (patch.status) payload.status = patch.status;
-    if (patch.summary !== undefined) payload.summary = patch.summary;
-    if (patch.action !== undefined) payload.action = patch.action;
-    if (patch.toolName !== undefined) payload.toolName = patch.toolName;
-    if (patch.error !== undefined) payload.error = patch.error;
-    const payloadJson = JSON.stringify(payload);
-    this.assertServableRow({ ...row, payload_json: payloadJson });
-    await this.mutateEntry({
-      sql: `UPDATE chat_entries SET payload_json = ? WHERE conversation_id = ? AND id = ? AND type = 'thought-action'`,
-      args: [payloadJson, conversationId, entryId],
-    });
+    const merge: Record<string, unknown> = {};
+    if (patch.status) merge.status = patch.status;
+    if (patch.summary !== undefined) merge.summary = patch.summary;
+    if (patch.action !== undefined) merge.action = patch.action;
+    if (patch.toolName !== undefined) merge.toolName = patch.toolName;
+    if (patch.error !== undefined) merge.error = patch.error;
+    if (Object.keys(merge).length === 0) return;
+    await this.mergeEntryPayload(conversationId, entryId, merge);
   }
 
   async appendToolInvocation(
@@ -403,7 +359,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT id, conversation_id AS conversationId, type
        FROM chat_entries
-       WHERE type IN ('thought-prepare', 'thought_stream', 'thought-action')
+       WHERE type = 'thought'
          AND json_extract(payload_json, '$.status') = 'running'`,
     )) as Array<{ id: string; conversationId: string; type: string }>;
     return rows;

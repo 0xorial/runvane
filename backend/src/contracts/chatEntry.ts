@@ -104,46 +104,12 @@ export const UserMessageEntrySchema = ChatEntryBaseSchema.extend({
 });
 export type UserMessageEntry = z.infer<typeof UserMessageEntrySchema>;
 
-export const ThoughtPrepareEntrySchema = ChatEntryBaseSchema.extend({
-  type: z.literal('thought-prepare'),
-  thoughtId: z.string(),
-  status: ThoughtStepStatusSchema.optional(),
-  error: z.string().optional(),
-  requestText: z.string().optional(),
-  title: z.string().optional(),
-  llm: LlmRefSchema.optional(),
-  /**
-   * Server-only lean reprocess pointer (JSON). Rebuilt from the immutable
-   * entry DAG on reprocess — never returned on GET /messages or SSE.
-   */
-  inputJson: z.string().optional(),
-});
-export type ThoughtPrepareEntry = z.infer<typeof ThoughtPrepareEntrySchema>;
-
-const ThoughtStreamEntryBaseSchema = ChatEntryBaseSchema.extend({
-  thoughtId: z.string(),
-  llmRequest: z.string(),
-  llm: LlmRefSchema.optional(),
-  llmResponse: z.string().optional(),
-  // The full response text, de-chunked (raw view shows the provider chunks).
-  assembledResponse: z.string().optional(),
-  thinkingText: z.string().optional(),
-  thoughtMs: z.number().nullable().optional(),
-  decision: LlmDecisionSchema.nullable().optional(),
-  status: ThoughtStepStatusSchema.optional(),
-  error: z.string().optional(),
-  promptTokens: z.number().optional(),
-  cachedPromptTokens: z.number().optional(),
-  completionTokens: z.number().optional(),
-  provider_cost: z.number().optional(),
-  provider_cost_breakdown: ProviderCostBreakdownSchema.optional(),
-});
-
 /**
- * The kind of framework LLM cycle a thought stream represents. This — not the
- * chat-entry `type` — is the discriminant for which provider produced a stream
- * entry. Adding a new thought is one value here + one provider, with no new
- * entry type rippling through the contract, mapper, repo, and frontend union.
+ * The kind of framework LLM cycle a thought represents. This — not the
+ * chat-entry `type` — is the discriminant for which provider produced a
+ * thought entry. Adding a new thought is one value here + one provider, with
+ * no new entry type rippling through the contract, mapper, repo, and frontend
+ * union.
  */
 export const ThoughtTypeSchema = z.enum([
   'planner',
@@ -158,21 +124,76 @@ export const ThoughtTypeSchema = z.enum([
 export type ThoughtType = z.infer<typeof ThoughtTypeSchema>;
 
 /**
- * Single chat-entry type for every thought's LLM-call trace. The specific kind
- * is carried in `thoughtType`. Per-thoughtType extras are optional and only
- * populated for their owning thoughtType:
- *  - planner: `parseResult`
+ * Deepest pipeline stage this thought has STARTED. The pipeline is strictly
+ * sequential (prepare → reason → decide), so one stage + one `status` express
+ * every state the old per-step rows could: a completed prepare is
+ * `stage: 'reason'` (still running); only the finished decision — or a
+ * failure/cancel, wherever it struck — flips `status`.
+ */
+export const ThoughtStageSchema = z.enum(['prepare', 'reason', 'decide']);
+export type ThoughtStage = z.infer<typeof ThoughtStageSchema>;
+
+/**
+ * Which part of the source thought a reprocess fork changed.
+ * `context` — the prepared request was edited (or re-run on another model);
+ * reason + decision ran fresh. `reason` — the request was kept verbatim and
+ * the LLM response was replaced; only the decision ran.
+ */
+export const ThoughtForkPointSchema = z.enum(['context', 'reason']);
+export type ThoughtForkPoint = z.infer<typeof ThoughtForkPointSchema>;
+
+/**
+ * One entry per thought: the prepared request, the streamed LLM cycle, and
+ * the decision live on a single row, filled in by payload merges as the
+ * stages run. A crashed thought is a row whose `stage` names where it died.
+ *
+ * Reprocess forks are sibling thoughts: `forkOf` points at the source thought
+ * and `forkPoint` records which part changed. The request is copied at fork
+ * time (never referenced), so "same prepared input" holds by immutability.
+ *
+ * Per-thoughtType extras are optional and only populated for their owner:
+ *  - planner: `parseResult` / `decision`
  *  - summarize_attachment: `attachmentId` / `userMessageId` / `filename` /
- *    `mimeType` / `sizeBytes` / `summaryText`. The stream entry IS the
+ *    `mimeType` / `sizeBytes` / `summaryText`. The thought entry IS the
  *    persisted attachment summary (no separate output entry); `summaryText`
  *    lands on `runDecision`, the file metadata is stamped at creation for
  *    offline consumers (planner prompt, ask_attachment tool, UI).
  */
-export const ThoughtStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
-  type: z.literal('thought_stream'),
+export const ThoughtEntrySchema = ChatEntryBaseSchema.extend({
+  type: z.literal('thought'),
   thoughtType: ThoughtTypeSchema,
-  // planner
+  stage: ThoughtStageSchema,
+  status: ThoughtStepStatusSchema,
+  error: z.string().optional(),
+  title: z.string().optional(),
+  llm: LlmRefSchema.optional(),
+  /**
+   * Server-only lean reprocess pointer (JSON). Rebuilt from the immutable
+   * entry DAG on reprocess — never returned on GET /messages or SSE.
+   */
+  inputJson: z.string().optional(),
+  // Fork metadata (reprocess siblings only).
+  forkOf: z.string().optional(),
+  forkPoint: ThoughtForkPointSchema.optional(),
+  // Prepare output: the display/edit surface — exactly what hits the wire.
+  llmRequest: z.string().optional(),
+  // Reason outputs.
+  llmResponse: z.string().optional(),
+  // The full response text, de-chunked (raw view shows the provider chunks).
+  assembledResponse: z.string().optional(),
+  thinkingText: z.string().optional(),
+  thoughtMs: z.number().nullable().optional(),
+  promptTokens: z.number().optional(),
+  cachedPromptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+  provider_cost: z.number().optional(),
+  provider_cost_breakdown: ProviderCostBreakdownSchema.optional(),
+  // Decision outputs.
+  decision: LlmDecisionSchema.nullable().optional(),
   parseResult: PlannerParseResultSchema.optional(),
+  summary: z.string().optional(),
+  action: z.string().optional(),
+  toolName: z.string().optional(),
   // summarize_attachment
   attachmentId: z.string().optional(),
   userMessageId: z.string().optional(),
@@ -181,19 +202,7 @@ export const ThoughtStreamEntrySchema = ThoughtStreamEntryBaseSchema.extend({
   sizeBytes: z.number().optional(),
   summaryText: z.string().optional(),
 });
-export type ThoughtStreamEntry = z.infer<typeof ThoughtStreamEntrySchema>;
-
-export const ThoughtActionEntrySchema = ChatEntryBaseSchema.extend({
-  type: z.literal('thought-action'),
-  thoughtId: z.string(),
-  status: ThoughtStepStatusSchema,
-  summary: z.string().optional(),
-  action: z.string().optional(),
-  toolName: z.string().optional(),
-  error: z.string().optional(),
-  parseResult: PlannerParseResultSchema.optional(),
-});
-export type ThoughtActionEntry = z.infer<typeof ThoughtActionEntrySchema>;
+export type ThoughtEntry = z.infer<typeof ThoughtEntrySchema>;
 
 export const ToolPermissionSchema = z.enum(['allow', 'ask_user', 'forbid']);
 export type ToolPermission = z.infer<typeof ToolPermissionSchema>;
@@ -296,9 +305,7 @@ export type RetrievalEntry = z.infer<typeof RetrievalEntrySchema>;
 
 export const ChatEntrySchema = z.discriminatedUnion('type', [
   UserMessageEntrySchema,
-  ThoughtPrepareEntrySchema,
-  ThoughtStreamEntrySchema,
-  ThoughtActionEntrySchema,
+  ThoughtEntrySchema,
   ToolInvocationEntrySchema,
   AssistantMessageEntrySchema,
   CheckpointSummaryEntrySchema,

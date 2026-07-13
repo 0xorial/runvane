@@ -1,12 +1,12 @@
-import type { ChatEntry, ThoughtStreamEntry, ThoughtType } from '../contracts/chatEntry.js';
+import type { ChatEntry, ThoughtEntry, ThoughtType } from '../contracts/chatEntry.js';
 import type { LlmRef } from '../contracts/llm.js';
 import type { LifecycleScope } from '../conversations/lifecycle-scope.js';
 import type { LlmCompletion, LlmRequest, LlmStreamEvent } from '../llmProviders/types.js';
 
-export type { LlmRef, ThoughtStreamEntry, ThoughtType };
+export type { LlmRef, ThoughtEntry, ThoughtType };
 
-export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEntry {
-  return entry.type === 'thought_stream';
+export function isThoughtEntry(entry: ChatEntry): entry is ThoughtEntry {
+  return entry.type === 'thought';
 }
 
 /**
@@ -22,7 +22,6 @@ export function isThoughtStreamEntry(entry: ChatEntry): entry is ThoughtStreamEn
 export type ThoughtLane = 'spine' | 'side';
 
 export type ThoughtContext = {
-  thoughtId: string;
   conversationId: string;
   /** Model for THIS thought's own LLM call. */
   llm: LlmRef;
@@ -34,15 +33,19 @@ export type ThoughtContext = {
    * inherited one.
    */
   downstreamLlm: LlmRef;
-  prepareEntryId: string | null;
-  streamEntryId: string | null;
-  thoughtActionEntryId: string | null;
   /**
-   * Causal append cursor for THIS thought's entries: every append parents at
-   * the cursor and advances it, so the thought's steps form one contiguous
-   * run under the anchor the caller chose. There is no shared mutable tip —
-   * whoever starts a thought states, from its own causal knowledge, where the
-   * thought belongs.
+   * The thought's single entry: prepared request, LLM cycle, and decision all
+   * merge onto this row as the stages run. The entry id IS the thought
+   * identity.
+   */
+  thoughtEntryId: string | null;
+  /**
+   * Causal append cursor for entries this thought creates (its own row, then
+   * downstream tool invocations / assistant messages): every append parents
+   * at the cursor and advances it, so the thought's output forms one
+   * contiguous run under the anchor the caller chose. There is no shared
+   * mutable tip — whoever starts a thought states, from its own causal
+   * knowledge, where the thought belongs.
    */
   cursorParentId: string | null;
   lane: ThoughtLane;
@@ -77,17 +80,19 @@ export type ThoughtTypeProvider<TInput> = {
    * Returns the LLM request (messages, optional tools, response format).
    * Model is resolved at the LLM-config layer and passed to the provider
    * adapter separately, so it is intentionally absent from this shape.
-   * The display/edit surface on the prepare entry is the JSON.stringify
-   * of this request — what you see is exactly what hits the wire.
+   * The thought entry's `llmRequest` display/edit surface is the
+   * JSON.stringify of this request — what you see is exactly what hits the
+   * wire.
    */
   runPrepare: (input: TInput) => LlmRequest;
   /**
-   * Optional payload merged onto the stream entry at creation time. Lets
-   * provider-specific fields (e.g. `attachmentId` on the
-   * `summarize_attachment` thought stream) land on the stream entry without
-   * each provider re-implementing chain append.
+   * Optional thought-type-specific payload for the thought entry (e.g.
+   * `attachmentId` on `summarize_attachment`). Fields the mapper requires for
+   * the thoughtType must land before the first typed read: they are stamped
+   * in the initial insert when the input is passed up front, else merged
+   * together with the prepare result before the first publish.
    */
-  streamEntryExtraPayload?: (input: TInput) => Record<string, unknown>;
+  thoughtEntryExtraPayload?: (input: TInput) => Record<string, unknown>;
   onLlmEvent?: (input: TInput, ctx: ThoughtContext, event: LlmStreamEvent) => void;
   runDecision: (
     input: TInput,

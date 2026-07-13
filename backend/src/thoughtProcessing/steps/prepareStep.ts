@@ -26,20 +26,22 @@ export class PrepareStep {
     scope: LifecycleScope,
   ): Promise<PreparedReason> {
     scope.throwIfAborted();
-    const prepareEntryId = ctx.prepareEntryId;
-    if (!prepareEntryId) throw new Error('PrepareStep.run requires ctx.prepareEntryId to be pre-allocated');
+    const thoughtEntryId = ctx.thoughtEntryId;
+    if (!thoughtEntryId) throw new Error('PrepareStep.run requires ctx.thoughtEntryId to be pre-allocated');
     let prepared: PreparedReason;
     try {
       scope.throwIfAborted();
       const request = provider.runPrepare(input);
       prepared = { request, display: requestToDisplay(request) };
-      await this.chatEntries.mergeEntryPayload(ctx.conversationId, prepareEntryId, {
-        status: 'completed',
-        requestText: prepared.display,
+      // Prepare done = stage advance, not a status flip: the thought keeps
+      // running until its decision settles (or a failure strikes).
+      await this.chatEntries.mergeEntryPayload(ctx.conversationId, thoughtEntryId, {
+        stage: 'reason',
+        llmRequest: prepared.display,
       });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, prepareEntryId);
+      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, thoughtEntryId);
     } catch (error) {
-      await this.markFailed(ctx, prepareEntryId, error, scope);
+      await this.markFailed(ctx, thoughtEntryId, error, scope);
       throw error;
     }
     return prepared;
@@ -47,7 +49,7 @@ export class PrepareStep {
 
   private async markFailed(
     ctx: ThoughtContext,
-    prepareEntryId: string,
+    thoughtEntryId: string,
     error: unknown,
     scope: LifecycleScope,
   ): Promise<void> {
@@ -55,7 +57,7 @@ export class PrepareStep {
     const detail = error instanceof Error ? error.message : String(error);
     const patch: Record<string, unknown> = { status: cancelled ? 'cancelled' : 'failed' };
     if (!cancelled) patch.error = detail;
-    await this.chatEntries.mergeEntryPayload(ctx.conversationId, prepareEntryId, patch);
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, prepareEntryId);
+    await this.chatEntries.mergeEntryPayload(ctx.conversationId, thoughtEntryId, patch);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, thoughtEntryId);
   }
 }

@@ -1,5 +1,5 @@
 import { streamTotalTokens } from "@/lib/providerCost";
-import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
+import { isThoughtEntry, type ChatEntry } from "@/protocol/chatEntry";
 
 export function displayStatus(status: string): string {
   return status === "completed" ? "" : status;
@@ -11,20 +11,6 @@ export function entryPreview(entry: ChatEntry): string {
     return text.length > 0 ? text : "(empty message)";
   }
   if (entry.type === "tool-invocation") return `Tool: ${entry.toolId || "unknown"}`;
-  if (entry.type === "thought-prepare") {
-    const summary = String(entry.title || "").trim();
-    if (summary) return summary;
-    const model = String(entry.llm?.model || "").trim();
-    return model || "(context)";
-  }
-  if (entry.type === "thought-action") {
-    const status = displayStatus(String(entry.status || "running").trim());
-    const action = String(entry.action || "").trim();
-    const toolName = String(entry.toolName || "").trim();
-    const meta = [action, toolName].filter((x) => x.length > 0).join(" ");
-    const body = [status, meta].filter((x) => x.length > 0).join(" ");
-    return body ? `Decided: ${body}` : "Decided";
-  }
   if (entry.type === "checkpoint-summary") {
     const head = entry.summaryText.trim().split(/\s+/).slice(0, 12).join(" ");
     return head ? `Summary: ${head}…` : "Summary";
@@ -43,18 +29,24 @@ export function entryPreview(entry: ChatEntry): string {
       ? `Retrieved ${entry.hits.length} excerpt${entry.hits.length === 1 ? "" : "s"}`
       : "Retrieval found nothing";
   }
-  if (entry.type === "thought_stream" && entry.thoughtType === "summarize_attachment") {
+  if (!isThoughtEntry(entry)) return String((entry as ChatEntry).type);
+  if (entry.thoughtType === "summarize_attachment") {
     const name = String(entry.filename ?? "").trim();
-    const status = displayStatus(String(entry.status || "running").trim());
+    const status = displayStatus(String(entry.status || "").trim());
     return [status, name ? `Summarize: ${name}` : "Summarize attachment"].filter((x) => x.length > 0).join(" ");
   }
-  if (!isThoughtStreamEntry(entry)) return String((entry as ChatEntry).type);
-  const status = displayStatus(String(entry.status || "running").trim());
+  // Sibling thoughts can be reprocess forks — say which part changed so the
+  // branch list distinguishes "edited context" / "edited response" retries
+  // from ordinary continuations at the same parent.
+  const forkLabel =
+    entry.forkPoint === "reason" ? "edited response" : entry.forkPoint === "context" ? "edited context" : "";
+  const title = String(entry.title ?? "").trim();
+  const status = displayStatus(String(entry.status || "").trim());
   const totalTokens = streamTotalTokens(entry);
   const tokenLabel = totalTokens > 0 ? `${totalTokens} tok` : "";
   const model = String(entry.llm?.model || "").trim();
-  const meta = [model, tokenLabel].filter((x) => x.length > 0).join(" ");
-  return [status, meta].filter((x) => x.length > 0).join(" ");
+  const meta = [forkLabel, status, model, tokenLabel].filter((x) => x.length > 0).join(" · ");
+  return [title, meta].filter((x) => x.length > 0).join(" — ");
 }
 
 export function entryIconName(
@@ -63,15 +55,13 @@ export function entryIconName(
   if (entry.type === "user-message") return "user";
   if (entry.type === "assistant-message") return "bot";
   if (entry.type === "tool-invocation") return "wrench";
-  if (entry.type === "thought-prepare") return "file";
   if (entry.type === "context-injection") return "file";
   if (entry.type === "retrieval") return "file";
-  if (isThoughtStreamEntry(entry)) return "sparkles";
-  if (entry.type === "thought-action") {
+  if (isThoughtEntry(entry)) {
     const toolName = String(entry.toolName || "").trim();
     const action = String(entry.action || "").trim();
     const usesTool = Boolean(toolName) || action === "tool_call";
-    return usesTool ? "wrench" : "message";
+    return usesTool ? "wrench" : "sparkles";
   }
   return "dot";
 }

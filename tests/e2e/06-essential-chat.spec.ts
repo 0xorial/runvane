@@ -24,7 +24,7 @@ test("user message and title generation", async ({ app, request }) => {
   await app.chat.userInput.send();
   await app.chat.transcript.waitForUserMessage();
   await expect(app.chat.transcript.userMessage).toContainText(USER_MSG_HELLO);
-  await app.chat.transcript.waitForPrepareTitle("Title generation");
+  await app.chat.transcript.waitForThoughtTitle("Title generation");
 });
 
 test("tool invocation on probe path", async ({ app, request }) => {
@@ -87,7 +87,7 @@ test("attachment summary mode runs summarize-attachment thought", async ({ app, 
   await app.chat.userInput.setAttachmentMode("Summary");
   await app.chat.userInput.typeMessage(ATTACHMENT_MSG);
   await app.chat.userInput.send();
-  await app.chat.transcript.waitForPrepareTitle("Summarize attachment");
+  await app.chat.transcript.waitForThoughtTitle("Summarize attachment");
   await app.chat.transcript.waitForAssistantReply();
   await app.chat.transcript.openThoughtDetails("Summarize attachment");
   await expect(app.chat.transcript.detailPanel).toContainText(STUB_ATTACHMENT_SUMMARY_REPLY);
@@ -136,10 +136,10 @@ test("try model branch from the details panel", async ({ app, request }) => {
   await app.chat.transcript.expectNoBranchSelectors();
 
   // The collapsed row itself carries no try-model affordance — details do.
-  const row = app.chat.transcript.prepareRow("Decision planning", 0);
-  await expect(row.getByTestId("thought-prepare-try-model")).toHaveCount(0);
+  const row = app.chat.transcript.thoughtRow("Decision planning", 0);
+  await expect(row.getByTestId("thought-try-model")).toHaveCount(0);
   await app.chat.transcript.openThoughtDetails("Decision planning", 0);
-  const tryModel = app.chat.transcript.detailPanel.getByTestId("thought-prepare-try-model");
+  const tryModel = app.chat.transcript.detailPanel.getByTestId("thought-try-model");
   await expect(tryModel).toBeVisible();
   await tryModel.hover();
   await expect(app.page.getByRole("tooltip", { name: "Try with different model" })).toBeVisible();
@@ -156,7 +156,7 @@ test("try model branch from the details panel", async ({ app, request }) => {
   // Side thoughts anchored at the same user message must NOT inherit the
   // planner's fork (they are not alternatives at that fork).
   await expect(
-    app.chat.transcript.prepareRow("Title generation").getByTestId("branch-selector"),
+    app.chat.transcript.thoughtRow("Title generation").getByTestId("branch-selector"),
   ).toHaveCount(0);
   // The open details panel follows to the new branch's prepare.
   await expect(app.chat.transcript.detailPanel.getByText("Raw response")).toBeVisible({
@@ -179,7 +179,7 @@ test("branch on context reprocess", async ({ app, request }) => {
   );
   await panel.getByTestId("thought-context-apply").click();
   await reprocessDone;
-  await expect(app.chat.transcript.prepareRow("Decision planning", 0).getByTestId("branch-selector")).toBeVisible({
+  await expect(app.chat.transcript.thoughtRow("Decision planning", 0).getByTestId("branch-selector")).toBeVisible({
     timeout: E2E_LLM_TIMEOUT_MS,
   });
   // The details selection follows the branch switch to the replacing sibling

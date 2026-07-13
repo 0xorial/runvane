@@ -28,7 +28,7 @@ export type CategorizeInput = {
  * Classifies a conversation from its first user message and assigns it to a
  * group (creating the group when the category is new). Unlike auto-title there
  * is no separate output entry — `runDecision` writes the group on the
- * conversation and records the chosen category as the thought-action summary.
+ * conversation and records the chosen category as the decision summary.
  *
  * Gating (feature enabled, group not pinned, a first user message exists, and
  * at least one group already exists) lives in the trigger, not here: the
@@ -89,8 +89,8 @@ export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<Catego
   };
 
   onLlmEvent = (_input: CategorizeInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   runDecision = async (input: CategorizeInput, ctx: ThoughtContext, completion: LlmCompletion): Promise<void> => {
@@ -117,12 +117,12 @@ export class CategorizeThoughtTypeProvider implements ThoughtTypeProvider<Catego
   };
 
   private async completeThoughtAction(ctx: ThoughtContext, summary: string): Promise<void> {
-    if (!ctx.thoughtActionEntryId) return;
-    await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+    if (!ctx.thoughtEntryId) return;
+    await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
       summary,
       action: 'final_answer',
     });
-    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+    await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
   }
 }
 

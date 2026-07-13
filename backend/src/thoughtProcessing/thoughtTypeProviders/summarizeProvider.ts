@@ -50,8 +50,8 @@ export class SummarizeThoughtTypeProvider implements ThoughtTypeProvider<Summari
   });
 
   onLlmEvent = (_input: SummarizeInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   runDecision = async (
@@ -129,20 +129,15 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
         );
         break;
       }
-      case 'thought_stream':
-        // The summarize-attachment stream carries the persisted summary text —
-        // fold it in as the user-visible attachment summary. Other thought
-        // streams (planner/title/etc.) are internal plumbing; skip them.
+      case 'thought':
+        // The summarize-attachment thought carries the persisted summary text —
+        // fold it in as the user-visible attachment summary. Other thoughts
+        // (planner/title/etc.) are internal plumbing; skip them.
         if (e.thoughtType === 'summarize_attachment' && e.summaryText) {
           lines.push(
             `<attachment-summary filename="${e.filename ?? ''}" mime="${e.mimeType ?? ''}">\n${e.summaryText}\n</attachment-summary>`,
           );
         }
-        break;
-      // Remaining thought scaffolding is internal plumbing, not user-visible
-      // content; skip from the summary input.
-      case 'thought-prepare':
-      case 'thought-action':
         break;
       default: {
         const _exhaustive: never = e;

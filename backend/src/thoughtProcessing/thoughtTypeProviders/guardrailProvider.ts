@@ -81,8 +81,8 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
   };
 
   onLlmEvent = (_input: GuardrailProviderInput, ctx: ThoughtContext, event: LlmStreamEvent): void => {
-    if (!ctx.streamEntryId) return;
-    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.streamEntryId, event);
+    if (!ctx.thoughtEntryId) return;
+    publishStreamFieldDelta(this.hub, ctx.conversationId, ctx.thoughtEntryId, event);
   };
 
   runDecision = async (
@@ -113,13 +113,13 @@ export class GuardrailThoughtTypeProvider implements ThoughtTypeProvider<Guardra
       }
     }
 
-    if (ctx.thoughtActionEntryId) {
+    if (ctx.thoughtEntryId) {
       // Custom summary/action only — status is flipped by DecisionStep.
-      await this.chatEntries.updateThoughtAction(ctx.conversationId, ctx.thoughtActionEntryId, {
+      await this.chatEntries.updateThoughtDecision(ctx.conversationId, ctx.thoughtEntryId, {
         summary: verdict.verdict === 'flag' ? `Flagged: ${verdict.reason ?? 'no reason'}` : 'Approved',
         action: verdict.verdict,
       });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtActionEntryId);
+      await publishChatEntryUpsert(this.hub, this.chatEntries, ctx.conversationId, ctx.thoughtEntryId);
     }
 
     await this.runTool.run(

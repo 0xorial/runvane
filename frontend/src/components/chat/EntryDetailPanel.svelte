@@ -5,10 +5,9 @@
   import { createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
   import type { LinkedChatEntry } from "@/lib/linkedChatEntry";
   import { formatCostUsd, resolveStreamTokenBreakdown, streamCostUsd, streamTotalTokens } from "@/lib/providerCost";
-  import { buildThoughtTripletsById } from "@/lib/thoughtTriplets";
   import { toolRequestBrief } from "@/lib/toolRequestBrief";
-  import { actionMetaLabel } from "./rows/thoughtTriplet/meta";
-  import { isThoughtStreamEntry, type ChatEntry } from "@/protocol/chatEntry";
+  import { actionMetaLabel } from "./rows/thought/meta";
+  import type { ChatEntry } from "@/protocol/chatEntry";
   import type { ObservableItem } from "@/utils/observableCollection";
   import { formatDurationMs } from "@/utils/formatDurationMs";
   import { formatExactChatTime } from "@/utils/formatRelativeChatTime";
@@ -17,23 +16,20 @@
   import CollapsibleBlock from "@/components/ui/CollapsibleBlock.svelte";
   import CostTooltip from "@/components/ui/CostTooltip.svelte";
   import Icon from "@/components/ui/Icon.svelte";
-  import Spinner from "@/components/ui/Spinner.svelte";
   import TokenTooltip from "@/components/ui/TokenTooltip.svelte";
   import RowIcon from "./RowIcon.svelte";
-  import ThoughtTripletExpanded from "./rows/ThoughtTripletExpanded.svelte";
-  import TryModelBranchButton from "./rows/thoughtTriplet/TryModelBranchButton.svelte";
+  import ThoughtExpanded from "./rows/ThoughtExpanded.svelte";
+  import TryModelBranchButton from "./rows/thought/TryModelBranchButton.svelte";
 
   let {
     conversationId,
     entryId,
     allEntries,
-    activePathEntries,
     onClose,
   }: {
     conversationId: string;
     entryId: string;
     allEntries: ObservableItem<LinkedChatEntry>[];
-    activePathEntries: ObservableItem<LinkedChatEntry>[];
     onClose: () => void;
   } = $props();
 
@@ -53,28 +49,7 @@
 
   // ---- thought details -------------------------------------------------------
 
-  // Stage refs come from the ACTIVE path (mirrors the transcript): a thoughtId
-  // can have sibling streams on other branches, and the panel must show the
-  // branch the user is looking at.
-  const tripletRefs = $derived.by(() => {
-    if (!entry || entry.type !== "thought-prepare") return null;
-    return buildThoughtTripletsById(activePathEntries).get(entry.thoughtId) ?? null;
-  });
-  let streamRaw = $state<ChatEntry | null>(null);
-  $effect(() => {
-    const stream$ = tripletRefs?.streamEntry$;
-    if (!stream$) {
-      streamRaw = null;
-      return;
-    }
-    streamRaw = stream$.get();
-    return stream$.subscribe(() => {
-      streamRaw = stream$.get();
-    });
-  });
-  const stream = $derived(streamRaw && isThoughtStreamEntry(streamRaw) ? streamRaw : null);
-  const actionEntry = $derived(tripletRefs?.actionEntry?.type === "thought-action" ? tripletRefs.actionEntry : null);
-  const prepEntry = $derived(entry?.type === "thought-prepare" ? entry : null);
+  const thoughtEntry = $derived(entry?.type === "thought" ? entry : null);
   const THOUGHT_STAGES = ["context", "reasoning", "action"] as const;
 
   const capabilitiesQuery = createModelCapabilitiesQuery();
@@ -83,21 +58,21 @@
   // At-a-glance line above the stage sections; the token count carries the
   // same hover breakdown (in/cached/out) as everywhere else via TokenTooltip.
   const thoughtMeta = $derived.by(() => {
-    const s = stream;
-    if (!s) return null;
-    const model = String(s.llm?.model || "").trim();
-    const provider = String(s.llm?.providerId || "").trim();
-    const breakdown = resolveStreamTokenBreakdown(s);
-    const total = streamTotalTokens(s);
-    const cost = streamCostUsd(s, pricingByModel.get(model));
+    const t = thoughtEntry;
+    if (!t) return null;
+    const model = String(t.llm?.model || "").trim();
+    const provider = String(t.llm?.providerId || "").trim();
+    const breakdown = resolveStreamTokenBreakdown(t);
+    const total = streamTotalTokens(t);
+    const cost = streamCostUsd(t, pricingByModel.get(model));
     return {
       modelLabel: provider && model ? `${provider}/${model}` : model || "",
       breakdown,
       total,
       cost,
       pricing: pricingByModel.get(model),
-      providerCost: s.provider_cost ?? null,
-      durationLabel: s.thoughtMs != null ? formatDurationMs(s.thoughtMs) : "",
+      providerCost: t.provider_cost ?? null,
+      durationLabel: t.thoughtMs != null ? formatDurationMs(t.thoughtMs) : "",
     };
   });
 
@@ -182,7 +157,7 @@
   const headerTitle = $derived.by(() => {
     if (!entry) return "Details";
     if (entry.type === "tool-invocation") return entry.toolId || "tool";
-    if (entry.type === "thought-prepare") return String(entry.title ?? "").trim() || "Thought";
+    if (entry.type === "thought") return String(entry.title ?? "").trim() || "Thought";
     return "Details";
   });
 </script>
@@ -309,7 +284,7 @@
           </div>
         {/if}
       </div>
-    {:else if prepEntry && stream}
+    {:else if thoughtEntry}
       <div class="space-y-3 text-xs">
         {#if thoughtMeta}
           <div class="flex items-start justify-between gap-2">
@@ -345,10 +320,10 @@
               <span>{thoughtMeta.durationLabel}</span>
             {/if}
             <span class="text-border">·</span>
-            <span>{formatExactChatTime(prepEntry.createdAt)}</span>
+            <span>{formatExactChatTime(thoughtEntry.createdAt)}</span>
           </div>
           <span class="shrink-0 text-muted-foreground">
-            <TryModelBranchButton prepareEntry={prepEntry} {stream} {conversationId} />
+            <TryModelBranchButton entry={thoughtEntry} {conversationId} />
           </span>
           </div>
         {/if}
@@ -358,7 +333,7 @@
               ? ("file" as const)
               : stage === "reasoning"
                 ? ("sparkles" as const)
-                : actionMetaLabel(actionEntry, stream).usesTool
+                : actionMetaLabel(thoughtEntry).usesTool
                   ? ("wrench" as const)
                   : ("message" as const)}
           <!-- No overflow-hidden here: it would become the sticky context for
@@ -369,16 +344,10 @@
               <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{stage}</span>
             </div>
             <div class="px-2.5 pb-2.5">
-              <ThoughtTripletExpanded {stage} prepareEntry={prepEntry} {stream} {actionEntry} {conversationId} />
+              <ThoughtExpanded {stage} entry={thoughtEntry} {conversationId} />
             </div>
           </section>
         {/each}
-      </div>
-    {:else if prepEntry}
-      <!-- Selection just followed a branch switch and the new stream hasn't
-           streamed in yet — sub-second transient, never an end state. -->
-      <div class="flex items-center justify-center p-6">
-        <Spinner size={14} />
       </div>
     {:else}
       <p class="text-xs text-muted-foreground">No details for this entry type.</p>

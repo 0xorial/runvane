@@ -63,9 +63,8 @@ test("auto-categorizes a new conversation into an existing group", async ({ requ
     .poll(
       async () => {
         const entries = await getConversationEntries(request, conversationId);
-        return (
-          entries.some((e) => e.type === "thought_stream" && e.thoughtType === "categorize") &&
-          entries.some((e) => e.type === "thought-prepare" && e.title === "Categorize conversation")
+        return entries.some(
+          (e) => e.type === "thought" && e.thoughtType === "categorize" && e.title === "Categorize conversation",
         );
       },
       { timeout: 10_000 },

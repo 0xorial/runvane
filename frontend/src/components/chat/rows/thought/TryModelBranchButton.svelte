@@ -1,6 +1,6 @@
 <script lang="ts">
   import { reprocessThoughtContext } from "@/api/client";
-  import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+  import type { ThoughtEntry } from "@/protocol/chatEntry";
   import ModelDropdown from "@/components/ui/ModelDropdown.svelte";
   import { createLlmProvidersQuery } from "@/hooks/queries/referenceData";
   import { getChatSessionContext } from "@/lib/chatSessionContext";
@@ -11,12 +11,10 @@
   const HINT = "Try with different model";
 
   let {
-    prepareEntry,
-    stream,
+    entry,
     conversationId,
   }: {
-    prepareEntry: ThoughtPrepareEntry;
-    stream?: ThoughtStreamEntry | null;
+    entry: ThoughtEntry;
     conversationId: string;
   } = $props();
 
@@ -30,7 +28,7 @@
   // turn like a user-message override; false runs only this one LLM call on it.
   let applyDownstream = $state(true);
 
-  const requestText = $derived((prepareEntry.requestText ?? stream?.llmRequest ?? "").trim());
+  const requestText = $derived((entry.llmRequest ?? "").trim());
   const canRebranch = $derived(requestText.length > 0 && !isRebranching);
 
   async function rebranchWithModel(model: string, providerId: string | undefined): Promise<void> {
@@ -42,7 +40,7 @@
     try {
       // Model-only branch: send just the new model. The server re-runs the
       // thought's stored context — no need to round-trip the whole thing.
-      const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
+      const result = await reprocessThoughtContext(conversationId, entry.id, {
         llm: { providerId: pid, model: modelName },
         applyDownstream,
       });
@@ -59,7 +57,7 @@
   <HintTooltip content={HINT} side="top">
     <button
       type="button"
-      data-testid="thought-prepare-try-model"
+      data-testid="thought-try-model"
       class="inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 {!canRebranch ? 'pointer-events-none' : ''}"
       aria-label={HINT}
       disabled={!canRebranch}

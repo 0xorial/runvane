@@ -1,4 +1,4 @@
-import type { ChatEntry, ThoughtStreamEntry } from '../../contracts/chatEntry.js';
+import type { ChatEntry, ThoughtEntry } from '../../contracts/chatEntry.js';
 import { formatRetrievalContext } from '../../rag/retrieval/retrieval-context.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 import { stripToolParamEnvelope } from '../../tools/toolParamEnvelope.js';
@@ -71,15 +71,15 @@ export function describeToolChange(
 }
 
 /**
- * Index of `summarize_attachment` thought-stream entries (which carry the
- * persisted `summaryText`) by attachmentId. When multiple exist for the
- * same attachment (e.g. reprocessed), the latest by `conversationIndex`
- * wins — that matches what the user sees in chat.
+ * Index of `summarize_attachment` thought entries (which carry the persisted
+ * `summaryText`) by attachmentId. When multiple exist for the same attachment
+ * (e.g. reprocessed), the latest by `conversationIndex` wins — that matches
+ * what the user sees in chat.
  */
-function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, ThoughtStreamEntry> {
-  const out = new Map<string, ThoughtStreamEntry>();
+function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, ThoughtEntry> {
+  const out = new Map<string, ThoughtEntry>();
   for (const e of entries) {
-    if (e.type !== 'thought_stream' || e.thoughtType !== 'summarize_attachment') continue;
+    if (e.type !== 'thought' || e.thoughtType !== 'summarize_attachment') continue;
     if (!e.attachmentId) continue;
     const prev = out.get(e.attachmentId);
     if (!prev || prev.conversationIndex < e.conversationIndex) out.set(e.attachmentId, e);
@@ -126,7 +126,7 @@ function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[
  */
 function userMessageParts(
   entry: Extract<ChatEntry, { type: 'user-message' }>,
-  summaries: Map<string, ThoughtStreamEntry>,
+  summaries: Map<string, ThoughtEntry>,
 ): LlmContentPart[] {
   const parts: LlmContentPart[] = [{ kind: 'text', text: entry.text }];
   const ordered = [...(entry.attachments ?? [])].sort((a, b) => a.id.localeCompare(b.id));
@@ -205,7 +205,7 @@ function retrievalAsContext(entry: Extract<ChatEntry, { type: 'retrieval' }>): s
 
 function entryToMessages(
   entry: ChatEntry,
-  summaries: Map<string, ThoughtStreamEntry>,
+  summaries: Map<string, ThoughtEntry>,
 ): LlmMessage[] {
   switch (entry.type) {
     case 'user-message':
@@ -229,9 +229,9 @@ function entryToMessages(
         : [];
     case 'retrieval':
       return [textMessage('system', retrievalAsContext(entry))];
-    case 'thought-prepare':
-    case 'thought-action':
-    case 'thought_stream':
+    case 'thought':
+      // Internal plumbing — thoughts contribute nothing to the prompt
+      // directly (attachment summaries are folded in at the user message).
       return [];
     default: {
       const _exhaustive: never = entry;

@@ -5,11 +5,21 @@ import type {
   CheckpointSummaryEntry,
   ContextInjectionEntry,
   RetrievalEntry,
+  ThoughtEntry,
+  ThoughtForkPoint,
+  ThoughtStage,
   ThoughtStepStatus,
-  ThoughtStreamEntry,
   ThoughtType,
 } from '../../contracts/chatEntry.js';
-import { ChatAttachmentSchema, ThoughtTypeSchema, ToolEnvelopeSchema } from '../../contracts/chatEntry.js';
+import {
+  ChatAttachmentSchema,
+  LlmDecisionSchema,
+  PlannerParseResultSchema,
+  ThoughtForkPointSchema,
+  ThoughtStageSchema,
+  ThoughtTypeSchema,
+  ToolEnvelopeSchema,
+} from '../../contracts/chatEntry.js';
 import { PreinjectedFileRecordSchema } from '../../contracts/preinject.js';
 import { RetrievalHitSchema, RetrievalQuerySchema } from '../../contracts/retrieval.js';
 import { ProviderCostBreakdownSchema } from '../../contracts/provider-cost.js';
@@ -39,12 +49,8 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
       return mapUserMessage(base, payload, ctx);
     case 'assistant-message':
       return { ...base, type: 'assistant-message', text: requireString(payload, 'text', ctx) };
-    case 'thought-prepare':
-      return mapThoughtPrepare(base, payload, ctx);
-    case 'thought-action':
-      return mapThoughtAction(base, payload, ctx);
-    case 'thought_stream':
-      return mapStream(base, payload, ctx);
+    case 'thought':
+      return mapThought(base, payload, ctx);
     case 'tool-invocation':
       return mapToolInvocation(base, payload, ctx);
     case 'checkpoint-summary':
@@ -137,88 +143,89 @@ function parseAttachments(value: unknown, ctx: string): ChatAttachment[] | null 
   return parsed.data;
 }
 
-function mapThoughtPrepare(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
-  const out: ChatEntry = {
+function mapThought(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ThoughtEntry {
+  const thought: ThoughtEntry = {
     ...base,
-    type: 'thought-prepare',
-    thoughtId: requireString(payload, 'thoughtId', ctx),
-    requestText: requireString(payload, 'requestText', ctx),
-  };
-  const title = optionalString(payload, 'title', ctx);
-  if (title !== undefined) out.title = title;
-  const llm = optionalLlmRef(payload, ctx);
-  if (llm !== undefined) out.llm = llm;
-  const inputJson = optionalString(payload, 'inputJson', ctx);
-  if (inputJson !== undefined) out.inputJson = inputJson;
-  return out;
-}
-
-function mapThoughtAction(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {
-  const out: ChatEntry = {
-    ...base,
-    type: 'thought-action',
-    thoughtId: requireString(payload, 'thoughtId', ctx),
-    status: requireStatus(payload, ctx),
-  };
-  const summary = optionalString(payload, 'summary', ctx);
-  if (summary !== undefined) out.summary = summary;
-  const action = optionalString(payload, 'action', ctx);
-  if (action !== undefined) out.action = action;
-  const toolName = optionalString(payload, 'toolName', ctx);
-  if (toolName !== undefined) out.toolName = toolName;
-  const error = optionalString(payload, 'error', ctx);
-  if (error !== undefined) out.error = error;
-  return out;
-}
-
-function mapStream(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ThoughtStreamEntry {
-  const stream: ThoughtStreamEntry = {
-    ...base,
-    type: 'thought_stream',
+    type: 'thought',
     thoughtType: requireThoughtType(payload, ctx),
-    thoughtId: requireString(payload, 'thoughtId', ctx),
-    llmRequest: requireString(payload, 'llmRequest', ctx),
+    stage: requireStage(payload, ctx),
     status: requireStatus(payload, ctx),
   };
+  const error = optionalString(payload, 'error', ctx);
+  if (error !== undefined) thought.error = error;
+  const title = optionalString(payload, 'title', ctx);
+  if (title !== undefined) thought.title = title;
   const llm = optionalLlmRef(payload, ctx);
-  if (llm !== undefined) stream.llm = llm;
-  if (typeof payload.llmResponse === 'string') stream.llmResponse = payload.llmResponse;
-  if (typeof payload.assembledResponse === 'string') stream.assembledResponse = payload.assembledResponse;
-  if (typeof payload.thinkingText === 'string') stream.thinkingText = payload.thinkingText;
+  if (llm !== undefined) thought.llm = llm;
+  const inputJson = optionalString(payload, 'inputJson', ctx);
+  if (inputJson !== undefined) thought.inputJson = inputJson;
+  const forkOf = optionalString(payload, 'forkOf', ctx);
+  if (forkOf !== undefined) thought.forkOf = forkOf;
+  if (payload.forkPoint !== undefined) thought.forkPoint = requireForkPoint(payload, ctx);
+  if (typeof payload.llmRequest === 'string') thought.llmRequest = payload.llmRequest;
+  if (typeof payload.llmResponse === 'string') thought.llmResponse = payload.llmResponse;
+  if (typeof payload.assembledResponse === 'string') thought.assembledResponse = payload.assembledResponse;
+  if (typeof payload.thinkingText === 'string') thought.thinkingText = payload.thinkingText;
   if (payload.thoughtMs !== undefined) {
     if (payload.thoughtMs !== null && (typeof payload.thoughtMs !== 'number' || !Number.isFinite(payload.thoughtMs))) {
       throw new Error(`${ctx}: thoughtMs must be number or null`);
     }
-    stream.thoughtMs = payload.thoughtMs as number | null;
+    thought.thoughtMs = payload.thoughtMs as number | null;
   }
-  const error = optionalString(payload, 'error', ctx);
-  if (error !== undefined) stream.error = error;
-  if (payload.promptTokens !== undefined) stream.promptTokens = requireFiniteNumber(payload, 'promptTokens', ctx);
-  if (payload.completionTokens !== undefined) stream.completionTokens = requireFiniteNumber(payload, 'completionTokens', ctx);
-  if (payload.cachedPromptTokens !== undefined) stream.cachedPromptTokens = requireFiniteNumber(payload, 'cachedPromptTokens', ctx);
-  if (payload.provider_cost !== undefined) stream.provider_cost = requireFiniteNumber(payload, 'provider_cost', ctx);
+  if (payload.promptTokens !== undefined) thought.promptTokens = requireFiniteNumber(payload, 'promptTokens', ctx);
+  if (payload.completionTokens !== undefined) thought.completionTokens = requireFiniteNumber(payload, 'completionTokens', ctx);
+  if (payload.cachedPromptTokens !== undefined) thought.cachedPromptTokens = requireFiniteNumber(payload, 'cachedPromptTokens', ctx);
+  if (payload.provider_cost !== undefined) thought.provider_cost = requireFiniteNumber(payload, 'provider_cost', ctx);
   if (payload.provider_cost_breakdown !== undefined) {
-    stream.provider_cost_breakdown = ProviderCostBreakdownSchema.parse(payload.provider_cost_breakdown);
+    thought.provider_cost_breakdown = ProviderCostBreakdownSchema.parse(payload.provider_cost_breakdown);
   }
+  if (payload.decision !== undefined) {
+    thought.decision = payload.decision === null ? null : LlmDecisionSchema.parse(payload.decision);
+  }
+  if (payload.parseResult !== undefined) {
+    thought.parseResult = PlannerParseResultSchema.parse(payload.parseResult);
+  }
+  const summary = optionalString(payload, 'summary', ctx);
+  if (summary !== undefined) thought.summary = summary;
+  const action = optionalString(payload, 'action', ctx);
+  if (action !== undefined) thought.action = action;
+  const toolName = optionalString(payload, 'toolName', ctx);
+  if (toolName !== undefined) thought.toolName = toolName;
   // summarize_attachment carries the persisted summary + source-file metadata.
-  if (stream.thoughtType === 'summarize_attachment') {
-    stream.attachmentId = requireString(payload, 'attachmentId', ctx);
-    stream.userMessageId = requireString(payload, 'userMessageId', ctx);
+  if (thought.thoughtType === 'summarize_attachment') {
+    thought.attachmentId = requireString(payload, 'attachmentId', ctx);
+    thought.userMessageId = requireString(payload, 'userMessageId', ctx);
     const filename = optionalString(payload, 'filename', ctx);
-    if (filename !== undefined) stream.filename = filename;
+    if (filename !== undefined) thought.filename = filename;
     const mimeType = optionalString(payload, 'mimeType', ctx);
-    if (mimeType !== undefined) stream.mimeType = mimeType;
-    if (payload.sizeBytes !== undefined) stream.sizeBytes = requireFiniteNumber(payload, 'sizeBytes', ctx);
+    if (mimeType !== undefined) thought.mimeType = mimeType;
+    if (payload.sizeBytes !== undefined) thought.sizeBytes = requireFiniteNumber(payload, 'sizeBytes', ctx);
     const summaryText = optionalString(payload, 'summaryText', ctx);
-    if (summaryText !== undefined) stream.summaryText = summaryText;
+    if (summaryText !== undefined) thought.summaryText = summaryText;
   }
-  return stream;
+  return thought;
 }
 
 function requireThoughtType(payload: Record<string, unknown>, ctx: string): ThoughtType {
   const parsed = ThoughtTypeSchema.safeParse(payload.thoughtType);
   if (!parsed.success) {
     throw new Error(`${ctx}: missing or invalid thoughtType (got ${String(payload.thoughtType)})`);
+  }
+  return parsed.data;
+}
+
+function requireStage(payload: Record<string, unknown>, ctx: string): ThoughtStage {
+  const parsed = ThoughtStageSchema.safeParse(payload.stage);
+  if (!parsed.success) {
+    throw new Error(`${ctx}: missing or invalid stage (got ${String(payload.stage)})`);
+  }
+  return parsed.data;
+}
+
+function requireForkPoint(payload: Record<string, unknown>, ctx: string): ThoughtForkPoint {
+  const parsed = ThoughtForkPointSchema.safeParse(payload.forkPoint);
+  if (!parsed.success) {
+    throw new Error(`${ctx}: invalid forkPoint (got ${String(payload.forkPoint)})`);
   }
   return parsed.data;
 }

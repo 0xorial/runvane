@@ -1,6 +1,6 @@
 <script lang="ts">
   import { reprocessThought, reprocessThoughtContext } from "@/api/client";
-  import type { ThoughtPrepareEntry, ThoughtStreamEntry } from "@/protocol/chatEntry";
+  import type { ThoughtEntry } from "@/protocol/chatEntry";
   import CodeEditor from "@/components/ui/CodeEditor.svelte";
   import ZodJsonEditor from "@/components/ui/ZodJsonEditor.svelte";
   import { AgenticPlannerOutputSchema } from "@/lib/editorSchemas";
@@ -12,22 +12,20 @@
   import { displayStatus } from "./meta";
   import ReadOnlySection from "../ReadOnlySection.svelte";
   let {
-    stream,
-    prepareEntry,
+    entry,
     conversationId,
   }: {
-    stream: ThoughtStreamEntry;
-    prepareEntry: ThoughtPrepareEntry;
+    entry: ThoughtEntry;
     conversationId: string;
   } = $props();
 
   const session = getChatSessionContext();
 
-  const response = $derived(String(stream.llmResponse || "").trim());
-  const thinking = $derived(String(stream.thinkingText || "").trim());
+  const response = $derived(String(entry.llmResponse || "").trim());
+  const thinking = $derived(String(entry.thinkingText || "").trim());
   // The full response text, de-chunked — the same content as the raw view but
   // reassembled from the provider's streamed chunks. Hidden when identical to raw.
-  const assembled = $derived(String(stream.assembledResponse || "").trim());
+  const assembled = $derived(String(entry.assembledResponse || "").trim());
 
   let isEditing = $state(false);
   let isSaving = $state(false);
@@ -38,25 +36,25 @@
     if (!isEditing) editedResponse = response;
   });
 
-  const tokenBreakdown = $derived(resolveStreamTokenBreakdown(stream));
+  const tokenBreakdown = $derived(resolveStreamTokenBreakdown(entry));
   const promptTokens = $derived(tokenBreakdown.input);
   const cachedPromptTokens = $derived(tokenBreakdown.cached);
   const completionTokens = $derived(tokenBreakdown.output);
-  const duration = $derived(stream.thoughtMs != null ? `${Math.round(stream.thoughtMs)}ms` : "running");
-  const statusLabel = $derived(displayStatus(stream.status ?? "running"));
-  const providerId = $derived(String(stream.llm?.providerId ?? "").trim());
-  const model = $derived(String(stream.llm?.model ?? "").trim());
+  const duration = $derived(entry.thoughtMs != null ? `${Math.round(entry.thoughtMs)}ms` : "running");
+  const statusLabel = $derived(displayStatus(entry.status));
+  const providerId = $derived(String(entry.llm?.providerId ?? "").trim());
+  const model = $derived(String(entry.llm?.model ?? "").trim());
   const modelLabel = $derived(providerId && model ? `${providerId}/${model}` : "unknown");
   const canEdit = $derived(response.length > 0);
   const canApply = $derived(editedResponse.trim().length > 0 && !isSaving);
   const hasChanges = $derived(editedResponse.trim() !== response.trim());
-  const canRetry = $derived(stream.status === "failed" || stream.status === "cancelled");
+  const canRetry = $derived(entry.status === "failed" || entry.status === "cancelled");
 
   async function applyEdit(): Promise<void> {
     if (!canApply) return;
     isSaving = true;
     try {
-      const result = await reprocessThought(conversationId, stream.id, editedResponse.trim());
+      const result = await reprocessThought(conversationId, entry.id, editedResponse.trim());
       await session.setActiveLeaf(result.data.leafEntryId);
       isEditing = false;
     } catch (error) {
@@ -68,9 +66,9 @@
 
   async function retry(): Promise<void> {
     if (isRetrying) return;
-    const requestText = String(prepareEntry.requestText ?? stream.llmRequest ?? "").trim();
-    const providerId = String(prepareEntry.llm?.providerId ?? stream.llm?.providerId ?? "").trim();
-    const model = String(prepareEntry.llm?.model ?? stream.llm?.model ?? "").trim();
+    const requestText = String(entry.llmRequest ?? "").trim();
+    const providerId = String(entry.llm?.providerId ?? "").trim();
+    const model = String(entry.llm?.model ?? "").trim();
     if (!requestText || !providerId || !model) {
       notifyError("Cannot retry: original request, provider, or model is missing.");
       return;
@@ -79,7 +77,7 @@
     try {
       // Plain retry: reuse the thought's stored context server-side; only the
       // model ref is sent (cheap), not the whole request payload.
-      const result = await reprocessThoughtContext(conversationId, prepareEntry.id, {
+      const result = await reprocessThoughtContext(conversationId, entry.id, {
         llm: { providerId, model },
       });
       await session.setActiveLeaf(result.data.leafEntryId);
@@ -145,7 +143,7 @@
   {#if isEditing}
     <div class="space-y-1.5">
       <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Edit response</div>
-      {#if stream.thoughtType === "planner"}
+      {#if entry.thoughtType === "planner"}
         <ZodJsonEditor
           schema={AgenticPlannerOutputSchema}
           value={editedResponse}
@@ -197,7 +195,7 @@
     {#if assembled}<ReadOnlySection label="Assembled response" value={assembled} />{/if}
     <ReadOnlySection label="Raw response" value={response} />
   {/if}
-  {#if stream.status === "failed" || stream.status === "cancelled"}
-    <ReadOnlySection label="Error" value={String(stream.error || "")} danger />
+  {#if entry.status === "failed" || entry.status === "cancelled"}
+    <ReadOnlySection label="Error" value={String(entry.error || "")} danger />
   {/if}
 </div>
