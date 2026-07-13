@@ -1,20 +1,8 @@
 <script lang="ts">
+  import { popupPosition } from "@/lib/popupPosition";
   import { portal } from "@/lib/portal";
   import type { DropdownItem, ModelGroup } from "@/pages/settings/helpers";
   import type { Snippet } from "svelte";
-
-  const POPUP_GAP = 6;
-  const POPUP_MAX_HEIGHT = 300;
-
-  type PopupPlacement = "below" | "above";
-
-  type PopupLayout = {
-    left: number;
-    top: number;
-    minWidth: number;
-    maxHeight: number;
-    placement: PopupPlacement;
-  };
 
   function normalizeToken(value: unknown): string {
     return String(value || "")
@@ -32,17 +20,6 @@
 
   function itemClassName(item: DropdownItem): string | undefined {
     return typeof item === "string" ? undefined : item.className;
-  }
-
-  function measurePopupLayout(anchor: HTMLElement): PopupLayout {
-    const rect = anchor.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom - POPUP_GAP;
-    const spaceAbove = rect.top - POPUP_GAP;
-    const placement: PopupPlacement = spaceBelow >= 180 || spaceBelow >= spaceAbove ? "below" : "above";
-    const maxHeight = Math.min(POPUP_MAX_HEIGHT, Math.max(120, placement === "below" ? spaceBelow : spaceAbove));
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - 220));
-    const top = placement === "below" ? rect.bottom + POPUP_GAP : rect.top - POPUP_GAP;
-    return { left, top, minWidth: rect.width, maxHeight, placement };
   }
 
   let {
@@ -79,12 +56,6 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let anchor = $state<HTMLButtonElement | null>(null);
   let panel = $state<HTMLDivElement | null>(null);
-  let popupLayout = $state<PopupLayout | null>(null);
-
-  function syncPopupLayout(): void {
-    if (!anchor) return;
-    popupLayout = measurePopupLayout(anchor);
-  }
 
   $effect(() => {
     if (disabled) open = false;
@@ -97,10 +68,8 @@
   $effect(() => {
     if (!open) {
       query = "";
-      popupLayout = null;
       return;
     }
-    syncPopupLayout();
     const id = requestAnimationFrame(() => searchInput?.focus());
 
     function onDocMouseDown(event: MouseEvent): void {
@@ -110,18 +79,10 @@
       open = false;
     }
 
-    function onViewportChange(): void {
-      syncPopupLayout();
-    }
-
     document.addEventListener("mousedown", onDocMouseDown);
-    window.addEventListener("resize", onViewportChange);
-    window.addEventListener("scroll", onViewportChange, true);
     return () => {
       cancelAnimationFrame(id);
       document.removeEventListener("mousedown", onDocMouseDown);
-      window.removeEventListener("resize", onViewportChange);
-      window.removeEventListener("scroll", onViewportChange, true);
     };
   });
 
@@ -161,7 +122,6 @@
     {disabled}
     onclick={() => {
       open = !open;
-      if (open) syncPopupLayout();
     }}
   >
     <span class="min-w-0 flex-1 truncate whitespace-nowrap {!selectedLabel ? 'text-muted-foreground' : ''}">
@@ -175,63 +135,58 @@
   </button>
 </div>
 
-{#if open && popupLayout}
+{#if open}
   <div
     use:portal
+    use:popupPosition={{ anchor, minWidthFromAnchor: true }}
     bind:this={panel}
-    class="fixed z-[1500] w-fit max-w-[min(90vw,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover shadow-xl {popupLayout.placement ===
-      'above'
-        ? '-translate-y-full'
-        : ''}"
-      style:left="{popupLayout.left}px"
-      style:top="{popupLayout.top}px"
-      style:min-width="{popupLayout.minWidth}px"
-      role="listbox"
-    >
-      {#if header}
-        <div class="border-b border-border p-2.5">
-          {@render header()}
-        </div>
-      {/if}
-      <div class="border-b border-border p-2.5">
-        <input
-          bind:this={searchInput}
-          class="box-border w-full rounded-md border border-input bg-muted/40 py-1.5 pl-2 pr-8 text-sm"
-          placeholder={searchPlaceholder}
-          bind:value={query}
-        />
+    class="fixed z-[1500] flex w-fit max-w-[min(90vw,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+    role="listbox"
+  >
+    {#if header}
+      <div class="shrink-0 border-b border-border p-2.5">
+        {@render header()}
       </div>
-      <div class="overflow-auto px-2 pb-2 pt-1.5" style:max-height="{popupLayout.maxHeight}px">
-        {#if filteredGroups.length === 0}
-          <div class="px-1.5 py-2 text-[13px] text-muted-foreground">No results</div>
-        {/if}
-        {#each filteredGroups as g (g.id)}
-          <div class="mt-1.5 first:mt-0">
-            {#if g.label}
-              <div class="px-1.5 py-1 text-xs font-bold text-muted-foreground">{g.label}</div>
-            {/if}
-            {#each g.models as m (`${g.id}:${itemValue(m)}`)}
-              {@const v = itemValue(m)}
-              {@const l = itemLabel(m)}
-              {@const extra = itemClassName(m)}
-              <button
-                type="button"
-                class="block w-full cursor-pointer whitespace-nowrap rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10 {v === value ? 'bg-primary/15' : ''} {extra ?? ''}"
-                onclick={() => {
-                  onChange(v, g.id);
-                  open = false;
-                }}
-              >
-                {l}
-              </button>
-            {/each}
-          </div>
-        {/each}
-      </div>
-      {#if footer}
-        <div class="border-t border-border px-3 py-2 text-[13px] [&_a]:font-semibold [&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline">
-          {@render footer()}
-        </div>
+    {/if}
+    <div class="shrink-0 border-b border-border p-2.5">
+      <input
+        bind:this={searchInput}
+        class="box-border w-full rounded-md border border-input bg-muted/40 py-1.5 pl-2 pr-8 text-sm"
+        placeholder={searchPlaceholder}
+        bind:value={query}
+      />
+    </div>
+    <div class="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5">
+      {#if filteredGroups.length === 0}
+        <div class="px-1.5 py-2 text-[13px] text-muted-foreground">No results</div>
       {/if}
+      {#each filteredGroups as g (g.id)}
+        <div class="mt-1.5 first:mt-0">
+          {#if g.label}
+            <div class="px-1.5 py-1 text-xs font-bold text-muted-foreground">{g.label}</div>
+          {/if}
+          {#each g.models as m (`${g.id}:${itemValue(m)}`)}
+            {@const v = itemValue(m)}
+            {@const l = itemLabel(m)}
+            {@const extra = itemClassName(m)}
+            <button
+              type="button"
+              class="block w-full cursor-pointer whitespace-nowrap rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-mono text-sm text-foreground hover:bg-primary/10 {v === value ? 'bg-primary/15' : ''} {extra ?? ''}"
+              onclick={() => {
+                onChange(v, g.id);
+                open = false;
+              }}
+            >
+              {l}
+            </button>
+          {/each}
+        </div>
+      {/each}
+    </div>
+    {#if footer}
+      <div class="shrink-0 border-t border-border px-3 py-2 text-[13px] [&_a]:font-semibold [&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline">
+        {@render footer()}
+      </div>
+    {/if}
   </div>
 {/if}

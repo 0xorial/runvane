@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ModelPricing } from "@/lib/costEstimation";
+  import { popupPosition } from "@/lib/popupPosition";
   import { portal } from "@/lib/portal";
   import { formatCostUsd } from "@/lib/providerCost";
   import { formatTokenCount } from "@/utils/formatTokenCount";
@@ -23,8 +24,6 @@
 
   let open = $state(false);
   let anchor = $state<HTMLSpanElement | null>(null);
-  let pos = $state({ x: 0, y: 0 });
-  let placement = $state<"top" | "bottom">("top");
 
   const cost = $derived.by(() => {
     if (providerCost != null && Number.isFinite(providerCost)) return providerCost;
@@ -37,15 +36,6 @@
   });
 
   function show(): void {
-    const rect = anchor?.getBoundingClientRect();
-    if (!rect) return;
-    // Flip below when the anchor sits near the window top (details panel meta
-    // line), and clamp the centered x so a right-edge anchor can't clip.
-    const estHeight = 120;
-    const halfWidth = 110;
-    placement = rect.top - estHeight >= 4 ? "top" : "bottom";
-    const x = Math.min(Math.max(rect.left + rect.width / 2, halfWidth + 8), window.innerWidth - halfWidth - 8);
-    pos = { x, y: placement === "top" ? rect.top - 4 : rect.bottom + 4 };
     open = true;
   }
 
@@ -71,12 +61,8 @@
 {#if open}
   <span
     use:portal
-    class="pointer-events-none fixed z-[1500] -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2.5 py-1.5 font-mono text-[11px] text-popover-foreground shadow-md {placement ===
-    'top'
-      ? '-translate-y-full'
-      : ''}"
-    style:left="{pos.x}px"
-    style:top="{pos.y}px"
+    use:popupPosition={{ anchor, align: "center", gap: 4, prefer: "above", fitHeight: false }}
+    class="pointer-events-none fixed z-[1500] block whitespace-nowrap rounded-md border border-border bg-popover px-2.5 py-1.5 font-mono text-[11px] text-popover-foreground shadow-md"
     role="tooltip"
   >
     <span class="block">input: {formatTokenCount(promptTokens)}</span>

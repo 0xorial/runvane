@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ConversationGroupRow, ConversationRow } from "../../../../backend/src/contracts/conversations";
+  import { popupPosition } from "@/lib/popupPosition";
   import { portal } from "@/lib/portal";
 
   let {
@@ -37,12 +38,6 @@
 
   let panel = $state<HTMLDivElement | null>(null);
   let moveSubOpen = $state(false);
-  let pos = $state({ left: 0, top: 0 });
-
-  function syncPosition(): void {
-    const rect = anchor.getBoundingClientRect();
-    pos = { left: rect.right, top: rect.bottom + 4 };
-  }
 
   function close(): void {
     moveSubOpen = false;
@@ -54,23 +49,15 @@
       moveSubOpen = false;
       return;
     }
-    syncPosition();
     function onDocMouseDown(event: MouseEvent): void {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (anchor.contains(target) || panel?.contains(target)) return;
       close();
     }
-    function onViewportChange(): void {
-      syncPosition();
-    }
     document.addEventListener("mousedown", onDocMouseDown);
-    window.addEventListener("resize", onViewportChange);
-    window.addEventListener("scroll", onViewportChange, true);
     return () => {
       document.removeEventListener("mousedown", onDocMouseDown);
-      window.removeEventListener("resize", onViewportChange);
-      window.removeEventListener("scroll", onViewportChange, true);
     };
   });
 </script>
@@ -78,12 +65,11 @@
 {#if open}
   <div
     use:portal
+    use:popupPosition={{ anchor, align: "end", gap: 4 }}
     bind:this={panel}
     role="menu"
     tabindex="-1"
-    class="fixed z-[1500] min-w-[10rem] -translate-x-full rounded-md border border-border bg-popover py-1 text-xs shadow-md"
-    style:left="{pos.left}px"
-    style:top="{pos.top}px"
+    class="fixed z-[1500] flex min-w-[10rem] flex-col overflow-y-auto rounded-md border border-border bg-popover py-1 text-xs shadow-md"
     onmousedown={(e) => e.stopPropagation()}
   >
     {#if deletedMode || conversation.isDeleted}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { summarizeConversationCost, type ModelPricing, type TokenUsageByModelRow } from "@/lib/costEstimation";
   import { navigate } from "@/lib/router";
+  import { popupPosition } from "@/lib/popupPosition";
   import { portal } from "@/lib/portal";
 
   let {
@@ -84,8 +85,6 @@
   let open = $state(false);
   let mode = $state<PopoverMode>("cost");
   let pendingMode: PopoverMode = "cost";
-  let placement = $state<"top" | "bottom">("bottom");
-  let pos = $state({ x: 0, y: 0 });
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let openTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -100,17 +99,6 @@
     }
     return { prompt, cached, completion };
   });
-
-  function place(): void {
-    const r = anchorEl?.getBoundingClientRect();
-    if (!r) return;
-    // Rough popover height: header + a row per model + total row.
-    const estHeight = 30 + summary.perModel.length * 20 + 26;
-    const enoughBelow = r.bottom + 6 + estHeight < window.innerHeight;
-    placement = enoughBelow ? "bottom" : "top";
-    const x = Math.min(Math.max(8, r.left), window.innerWidth - 296);
-    pos = { x, y: enoughBelow ? r.bottom + 4 : r.top - 4 };
-  }
 
   function cancelHide(): void {
     if (hideTimer) {
@@ -136,7 +124,6 @@
     openTimer = setTimeout(() => {
       openTimer = null;
       mode = pendingMode;
-      place();
       open = true;
     }, 300);
   }
@@ -204,15 +191,11 @@
 {#if open}
   <div
     use:portal
+    use:popupPosition={{ anchor: anchorEl, gap: 4, fitHeight: false }}
     role="tooltip"
     data-testid="cost-popover"
     data-popover-mode={mode}
-    class="fixed z-[1500] w-72 max-w-[90vw] rounded-md border border-border bg-popover px-2.5 py-2 font-mono text-[11px] text-popover-foreground shadow-md {placement ===
-    'top'
-      ? '-translate-y-full'
-      : ''}"
-    style:left="{pos.x}px"
-    style:top="{pos.y}px"
+    class="fixed z-[1500] w-72 max-w-[90vw] rounded-md border border-border bg-popover px-2.5 py-2 font-mono text-[11px] text-popover-foreground shadow-md"
     onmouseenter={cancelHide}
     onmouseleave={scheduleHide}
   >

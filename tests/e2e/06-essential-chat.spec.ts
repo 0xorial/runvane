@@ -147,6 +147,18 @@ test("try model branch from the details panel", async ({ app, request }) => {
   await tryModel.click();
   const modelOption = app.page.getByRole("button", { name: "stub-model" });
   await expect(modelOption).toBeVisible();
+  // The portaled model panel opens from the right-edge details panel — the
+  // shared popup positioning must keep it fully inside the viewport
+  // (regression: the hand-rolled clamp guessed the panel width and let wide
+  // model lists stick out of the screen).
+  const panelBox = await app.page.getByRole("listbox").boundingBox();
+  const viewport = app.page.viewportSize();
+  expect(panelBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(panelBox!.x).toBeGreaterThanOrEqual(0);
+  expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport!.width + 0.5);
+  expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(viewport!.height + 0.5);
   const reprocessDone = app.page.waitForResponse(
     (res) => res.url().includes("/reprocess-context") && res.status() === 202,
   );

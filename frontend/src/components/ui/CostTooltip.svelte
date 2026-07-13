@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ModelPricing } from "@/lib/costEstimation";
   import { formatCostUsd } from "@/lib/providerCost";
+  import { popupPosition } from "@/lib/popupPosition";
   import { portal } from "@/lib/portal";
   import { formatTokenCount } from "@/utils/formatTokenCount";
   import type { Snippet } from "svelte";
@@ -38,17 +39,8 @@
 
   let open = $state(false);
   let anchor = $state<HTMLSpanElement | null>(null);
-  let pos = $state({ x: 0, y: 0 });
-  let placement = $state<"top" | "bottom">("top");
 
   function show(): void {
-    const rect = anchor?.getBoundingClientRect();
-    if (!rect) return;
-    const estHeight = 120;
-    const halfWidth = 130;
-    placement = rect.top - estHeight >= 4 ? "top" : "bottom";
-    const x = Math.min(Math.max(rect.left + rect.width / 2, halfWidth + 8), window.innerWidth - halfWidth - 8);
-    pos = { x, y: placement === "top" ? rect.top - 4 : rect.bottom + 4 };
     open = true;
   }
 
@@ -74,13 +66,9 @@
 {#if open}
   <span
     use:portal
+    use:popupPosition={{ anchor, align: "center", gap: 4, prefer: "above", fitHeight: false }}
     data-testid="cost-tooltip"
-    class="pointer-events-none fixed z-[1500] -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2.5 py-1.5 font-mono text-[11px] text-popover-foreground shadow-md {placement ===
-    'top'
-      ? '-translate-y-full'
-      : ''}"
-    style:left="{pos.x}px"
-    style:top="{pos.y}px"
+    class="pointer-events-none fixed z-[1500] block whitespace-nowrap rounded-md border border-border bg-popover px-2.5 py-1.5 font-mono text-[11px] text-popover-foreground shadow-md"
     role="tooltip"
   >
     {#if estimated && pricing}
