@@ -1,5 +1,10 @@
 # Layer 3 — The thought pipeline & the `ThoughtType` architecture
 
+> **2026-07-13:** the three persisted rows this chapter describes were merged
+> into a single `thought` entry per thought (`stage` + one `status`, fork
+> metadata on reprocess siblings) — see `docs/thought-merge-plan.md`. The
+> pipeline steps and the `ThoughtTypeProvider` architecture are unchanged.
+
 **The choice.** Every framework-managed LLM cycle — planning, title generation,
 tool-param resolution, summarization, guardrail checks, categorization — is a
 **"thought"** run through **one shared three-step pipeline** (prepare → reason →

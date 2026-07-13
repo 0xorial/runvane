@@ -53,7 +53,7 @@ provenance for free.
 
 **D5 — rag-planning is a ThoughtType, not an entry type.** New value in
 `ThoughtTypeSchema` + a provider next to `guardrailProvider`, rendered through
-the existing `thought_stream` entry. Planning shapes *how* to retrieve
+the existing `thought` entry. Planning shapes *how* to retrieve
 (queries, storages, top_k), never *whether* — output always ≥ 1 query. Forced
 means forced.
 

@@ -1,5 +1,11 @@
 # Layer 3 — The conversation DAG
 
+> **2026-07-13:** the thought triplet mentioned below (`thought-prepare` /
+> `thought_stream` / `thought-action` glued by `thoughtId`) was merged into a
+> single `thought` entry per thought — see `docs/thought-merge-plan.md`. The
+> DAG mechanics in this chapter are unchanged; only the thought row count and
+> the grouping layer differ.
+
 **The choice.** A conversation is **one append-only table** (`chat_entries`) of
 typed entries linked by `parent_id` into a tree. Nothing is ever destructively
 edited; editing the past means growing a **new sibling branch**. There is no
