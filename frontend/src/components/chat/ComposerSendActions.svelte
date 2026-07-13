@@ -24,8 +24,8 @@
   const keycapHint = "font-mono text-[11px] font-medium leading-none opacity-60";
 </script>
 
-{#snippet shiftEnterKbd()}
-  <kbd class={keycapHint} aria-hidden="true">⇧⏎</kbd>
+{#snippet enterKbd()}
+  <kbd class={keycapHint} aria-hidden="true">⏎</kbd>
 {/snippet}
 
 {#if agentRunning}
@@ -36,7 +36,7 @@
       class={pillSteer}
       disabled={!canSend || sending}
       onclick={() => void onSend({ steer: true })}
-      aria-label="Steer agent ({mod}+Enter)"
+      aria-label="Steer agent ({mod}+Shift+Enter)"
     >
       <span class="inline-flex items-center gap-1.5">
         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25">
@@ -44,7 +44,7 @@
         </svg>
         Steer
       </span>
-      <kbd class={keycapHint} aria-hidden="true">{mod}⏎</kbd>
+      <kbd class={keycapHint} aria-hidden="true">{mod}⇧⏎</kbd>
     </button>
     <button
       type="button"
@@ -52,7 +52,7 @@
       class={pillPrimary}
       disabled={!canSend || sending}
       onclick={() => void onSend({ enqueue: true })}
-      aria-label="Enqueue message (Shift+Enter)"
+      aria-label="Enqueue message (Enter)"
     >
       <span class="inline-flex items-center gap-1.5">
         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25">
@@ -60,7 +60,7 @@
         </svg>
         Enqueue
       </span>
-      {@render shiftEnterKbd()}
+      {@render enterKbd()}
     </button>
   </div>
 {:else}
@@ -70,7 +70,7 @@
     class={pillPrimary}
     disabled={!canSend || sending}
     onclick={() => void onSend({})}
-    aria-label="Send message (Shift+Enter)"
+    aria-label="Send message (Enter)"
   >
     <span class="inline-flex items-center gap-1.5">
       <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25">
@@ -79,6 +79,6 @@
       </svg>
       Send
     </span>
-    {@render shiftEnterKbd()}
+    {@render enterKbd()}
   </button>
 {/if}

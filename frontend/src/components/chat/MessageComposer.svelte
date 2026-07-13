@@ -1,6 +1,6 @@
 <script lang="ts">
   import { focusOnFirstFrame } from "@/lib/focusOnFirstFrame";
-  import { isModifierEnterKey, isShiftEnterKey } from "@/lib/submitShortcut";
+  import { isPlainEnterKey, isSteerEnterKey } from "@/lib/submitShortcut";
   import ChatAgentToolbar from "./ChatAgentToolbar.svelte";
   import ComposerSendActions from "./ComposerSendActions.svelte";
   import type { LlmRef } from "../../../../backend/src/contracts/llm";
@@ -45,20 +45,25 @@
 
   let fileInput = $state<HTMLInputElement | null>(null);
 
+  // Enter sends (enqueues while the agent runs), Shift+Enter inserts a
+  // newline (textarea default — deliberately not intercepted),
+  // Ctrl/Cmd+Shift+Enter steers a running agent.
   function onKeydown(event: KeyboardEvent): void {
+    // During IME composition, Enter confirms the composition — never submit.
+    if (event.isComposing) return;
     if (agentRunning) {
-      if (isModifierEnterKey(event)) {
+      if (isSteerEnterKey(event)) {
         event.preventDefault();
         void onSend({ steer: true });
         return;
       }
-      if (isShiftEnterKey(event)) {
+      if (isPlainEnterKey(event)) {
         event.preventDefault();
         void onSend({ enqueue: true });
       }
       return;
     }
-    if (isShiftEnterKey(event)) {
+    if (isPlainEnterKey(event)) {
       event.preventDefault();
       void onSend({});
     }
