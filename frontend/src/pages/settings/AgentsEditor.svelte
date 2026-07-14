@@ -172,6 +172,18 @@
           {canEdit}
           onchange={(patch) => setCurrentAgent(patchPreinjectOnAgent(currentAgent, patch))}
         />
+      {:else if agents.length === 0 && !agentLoadError}
+        <div class={loadHint} data-testid="agents-empty-hint">
+          No agents yet. An agent is a system prompt + a default model + tool permissions
+          {#if modelGroups.length === 0}
+            — and it needs a model, so
+            <a href="/settings/model-providers" class="text-primary underline underline-offset-2">connect a provider</a>
+            first (or walk the
+            <a href="/chat/new?setup=1" class="text-primary underline underline-offset-2">setup guide</a>).
+          {:else}
+            — hit <strong>Add agent</strong> to create one.
+          {/if}
+        </div>
       {/if}
     {/if}
   </div>

@@ -25,3 +25,9 @@
   searchPlaceholder="Search model"
   {disabled}
 />
+{#if groups.length === 0}
+  <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-400" data-testid="no-models-hint">
+    No verified models —
+    <a href="/settings/model-providers" class="underline underline-offset-2">connect a provider</a> first.
+  </p>
+{/if}

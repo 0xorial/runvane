@@ -54,5 +54,5 @@ export function toolSandboxIdFromSearch(search: string): string {
 export function settingsLinkFromSearch(search: string): string {
   const agent = new URLSearchParams(search).get("agent")?.trim();
   if (agent) return `/settings/agents?agent=${encodeURIComponent(agent)}`;
-  return "/settings/model-providers";
+  return "/settings/overview";
 }

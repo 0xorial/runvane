@@ -278,6 +278,7 @@
     <SettingsSidebar {activeSection} settingsSearch={$chatSearch} onNavigate={goSection} />
     <SettingsSectionView
       section={activeSection}
+      onNavigate={goSection}
       {settings}
       {settingsLoading}
       {providerSearch}

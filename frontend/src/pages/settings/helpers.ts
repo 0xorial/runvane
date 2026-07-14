@@ -6,6 +6,7 @@ export function sortAgents(list: AgentListItemResponse[] | null | undefined): Ag
 }
 
 export const SETTINGS_SECTIONS = [
+  "overview",
   "system",
   "model-providers",
   "model-presets",
@@ -17,7 +18,7 @@ export const SETTINGS_SECTIONS = [
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-export const DEFAULT_SETTINGS_SECTION: SettingsSection = "model-providers";
+export const DEFAULT_SETTINGS_SECTION: SettingsSection = "overview";
 
 export function parseSettingsSection(section: string | undefined): SettingsSection {
   return (SETTINGS_SECTIONS as readonly string[]).includes(section ?? "")

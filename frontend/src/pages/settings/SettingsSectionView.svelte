@@ -3,6 +3,7 @@
   import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
   import type { LlmSettings } from "@/types/llmSettings";
   import AgentsEditor from "./AgentsEditor.svelte";
+  import SettingsOverview from "./SettingsOverview.svelte";
   import SystemSettingsSection from "./SystemSettingsSection.svelte";
   import ModelPresetsEditor from "./ModelPresetsEditor.svelte";
   import ModelPricingEditor from "./ModelPricingEditor.svelte";
@@ -16,6 +17,7 @@
 
   let {
     section,
+    onNavigate,
     settings,
     settingsLoading,
     providerSearch,
@@ -52,6 +54,7 @@
     onDeletePreset,
   }: {
     section: SettingsSection;
+    onNavigate: (section: SettingsSection) => void;
     settings: LlmSettings | null;
     settingsLoading: boolean;
     providerSearch: string;
@@ -90,25 +93,18 @@
 
   const modelGroups = $derived(settings ? buildModelGroups(settings.providers) : []);
   const providerCards = $derived(settings ? filterProviders(settings.providers, providerSearch) : []);
-  const showSectionHeader = $derived(
-    section !== "model-providers" &&
-      section !== "model-presets" &&
-      section !== "model-pricing" &&
-      section !== "agents" &&
-      section !== "rag",
-  );
 </script>
 
 <main class="flex min-w-0 flex-col gap-3.5">
-  {#if showSectionHeader}
-    <SettingsHeader
-      activeSection={section}
-      {providerSearch}
-      onProviderSearchChange={section === "model-providers" ? onProviderSearchChange : undefined}
-    />
-  {/if}
+  <SettingsHeader
+    activeSection={section}
+    {providerSearch}
+    onProviderSearchChange={section === "model-providers" ? onProviderSearchChange : undefined}
+  />
 
-  {#if section === "system"}
+  {#if section === "overview"}
+    <SettingsOverview {settings} {agents} {onNavigate} />
+  {:else if section === "system"}
     <SystemSettingsSection
       {settings}
       {settingsLoading}

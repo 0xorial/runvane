@@ -76,3 +76,36 @@ test("setup guide creates a configured agent in one step", async ({ app, request
   const del = await request.delete(`${apiBaseUrl()}/api/agents/${encodeURIComponent(createdId)}`);
   expect(del.ok()).toBeTruthy();
 });
+
+test("settings overview shows live counts and navigates the grouped sections", async ({ app }) => {
+  await app.page.goto("/settings/overview", { waitUntil: "domcontentloaded" });
+  await expect(app.page.getByTestId("settings-overview")).toBeVisible();
+
+  // Live counts off the seeded state: the stub provider is the only one and
+  // it is verified; agents exist — so the chain is complete, no banner.
+  await expect(app.page.getByTestId("overview-card-model-providers")).toContainText("1 of 1 connected");
+  await expect(app.page.getByTestId("overview-card-agents")).toContainText("configured");
+  await expect(app.page.getByTestId("overview-setup-banner")).not.toBeVisible();
+
+  // Concept cards navigate within settings (slugs unchanged by the regroup).
+  await app.page.getByTestId("overview-card-tool-sandboxes").click();
+  await expect(app.page).toHaveURL(/\/settings\/tool-sandboxes/);
+  await expect(app.page.getByTestId("tool-sandboxes-section")).toBeVisible();
+});
+
+test("rag create form flags an unconnected embedding provider", async ({ app }) => {
+  await app.page.goto("/settings/rag", { waitUntil: "domcontentloaded" });
+  // Open the create form if another test's storages left it collapsed.
+  const addButton = app.page.getByTestId("rag-add");
+  if (await addButton.isVisible().catch(() => false)) await addButton.click();
+
+  // The form defaults to provider id "openai", which the e2e backend has no
+  // verified models for — the dead-end hint names it and links Providers.
+  await expect(app.page.getByTestId("rag-provider")).toHaveValue("openai");
+  await expect(app.page.getByTestId("rag-no-models-hint")).toBeVisible();
+  await expect(app.page.getByTestId("rag-no-models-hint")).toContainText("openai");
+
+  // Switching to the connected stub provider clears the hint.
+  await app.page.getByTestId("rag-provider").fill("stub");
+  await expect(app.page.getByTestId("rag-no-models-hint")).not.toBeVisible();
+});

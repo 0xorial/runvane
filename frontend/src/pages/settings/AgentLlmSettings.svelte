@@ -36,11 +36,6 @@
 </script>
 
 <div class="relative z-[2] mb-5 overflow-visible">
-  {#if modelGroups.length === 0}
-    <p class="mb-3 text-[13px] text-amber-700 dark:text-amber-400">
-      Verify at least one provider (fetch models) to pick a model here.
-    </p>
-  {/if}
   <label class="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground">
     Default model
     <div class="ml-1.5 min-w-[260px] flex-1">

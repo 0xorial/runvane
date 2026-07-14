@@ -272,7 +272,7 @@
 {:else if agents.length === 0}
   <div class="flex items-center gap-2 text-xs text-muted-foreground">
     <span>No agents configured.</span>
-    <a href="/settings/agents" class="text-primary underline">Configure agents</a>
+    <a href="/chat/new?setup=1" class="text-primary underline">Set up runvane</a>
   </div>
 {:else}
   <div class="relative z-10 flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pr-1 text-xs scrollbar-thin">

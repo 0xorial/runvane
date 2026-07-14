@@ -272,14 +272,6 @@
 </script>
 
 <main class="flex min-w-0 flex-col gap-3.5" data-testid="rag-section">
-  <div>
-    <h1 class="text-base font-bold text-foreground">RAG storages</h1>
-    <p class="text-xs text-muted-foreground">
-      Build semantic indexes the <code>rag</code> tool retrieves from. Add a storage to an agent under
-      <strong>Agents → Tools → rag → storages</strong>.
-    </p>
-  </div>
-
   {#if error}
     <div class="rounded-lg border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive" role="alert" data-testid="rag-error">
       {error}
@@ -523,6 +515,13 @@
       <datalist id="rag-embed-model-options">
         {#each embeddingModelOptions as m (m)}<option value={m}></option>{/each}
       </datalist>
+      {#if providerId.trim() && embeddingModelOptions.length === 0}
+        <p class="col-span-2 -mt-1 text-[11px] text-amber-700 dark:text-amber-400" data-testid="rag-no-models-hint">
+          No verified models for provider “{providerId.trim()}” —
+          <a href="/settings/model-providers" class="underline underline-offset-2">connect it in Providers</a>
+          or pick another id.
+        </p>
+      {/if}
       {#if entitySource === "files"}
         <label class="col-span-2 flex flex-col gap-1 text-xs">
           <span class="font-semibold text-foreground">Roots (one absolute path per line)</span>
@@ -557,6 +556,13 @@
           <datalist id="rag-graph-model-options">
             {#each graphModelOptions as m (m)}<option value={m}></option>{/each}
           </datalist>
+          {#if graphProviderId.trim() && graphModelOptions.length === 0}
+            <p class="col-span-2 -mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+              No verified models for provider “{graphProviderId.trim()}” —
+              <a href="/settings/model-providers" class="underline underline-offset-2">connect it in Providers</a>
+              or pick another id.
+            </p>
+          {/if}
         </div>
       {/if}
     </div>
