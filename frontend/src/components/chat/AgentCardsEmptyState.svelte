@@ -12,14 +12,31 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import { queryClient } from "@/lib/queryClient";
   import AddSandboxDialog from "./AddSandboxDialog.svelte";
+  import SetupGuide from "./SetupGuide.svelte";
   import ToolSandboxIcon from "./ToolSandboxIcon.svelte";
   import HarnessToolsHint from "./HarnessToolsHint.svelte";
   import { toolSandboxDescription } from "@/lib/toolSandbox";
+  import { createLlmProvidersQuery } from "@/hooks/queries/referenceData";
+  import { providersReady } from "@/lib/setupState";
 
   let { selectedAgentId }: { selectedAgentId: string } = $props();
 
   const agentsQuery = createAgentsQuery();
   const agents = $derived(sortAgents(agentsQuery.data ?? []));
+
+  // The setup guide replaces the cards whenever the core chain is broken (no
+  // verified provider or no agents) and can be revisited via ?setup=1. Both
+  // queries must have resolved before deciding, or the guide would flash on
+  // every load.
+  const providersQuery = createLlmProvidersQuery();
+  const setupForced = $derived.by(() => {
+    const path = $pathnameStore;
+    const q = path.indexOf("?");
+    return new URLSearchParams(q >= 0 ? path.slice(q + 1) : "").get("setup") === "1";
+  });
+  const setupDataLoaded = $derived(agentsQuery.data !== undefined && providersQuery.data !== undefined);
+  const chainBroken = $derived(setupDataLoaded && (agents.length === 0 || !providersReady(providersQuery.data)));
+  const showSetupGuide = $derived(setupForced || chainBroken);
 
   // Tool sandbox for the new conversation, persisted in the URL (?env=) so
   // ChatComposer reads it when it creates the conversation.
@@ -71,7 +88,9 @@
   }
 </script>
 
-{#if agents.length > 0}
+{#if showSetupGuide}
+  <SetupGuide dismissible={setupForced && !chainBroken} />
+{:else if agents.length > 0}
   <div class="flex h-full w-full items-center justify-center px-4 py-8">
     <div class="w-full max-w-3xl">
       {#if sandboxes.length > 1}

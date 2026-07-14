@@ -43,9 +43,15 @@ test("while the agent runs, Enter enqueues and Ctrl+Shift+Enter steers", async (
   await app.chat.userInput.send();
   await app.chat.transcript.waitForAssistantReply();
 
-  // Second turn: only the planner consumes the queue — a slow streamed reply
-  // keeps the agent visibly running while we exercise the shortcuts.
-  await stubLlmConfigure(request, [{ responses: [{ text: "streaming slowly ".repeat(120), streamMs: 50 }] }]);
+  // Second turn: a slow streamed reply keeps the agent visibly running while
+  // we exercise the shortcuts. Scoped to the planner's model — instant
+  // consumers (a lagging title thought from the warm-up turn) share the
+  // FALLBACK queue and can steal an unscoped script even on second turns.
+  // The stream far outlasts any suite-load delay before the steer press; the
+  // steer abort ends it early, so the happy path never actually waits it out.
+  await stubLlmConfigure(request, [
+    { model: "stub", responses: [{ text: "streaming slowly ".repeat(600), streamMs: 40 }] },
+  ]);
   await app.chat.userInput.typeMessage("long running turn");
   await app.chat.userInput.send();
   const textarea = app.page.getByTestId("chat-user-input");

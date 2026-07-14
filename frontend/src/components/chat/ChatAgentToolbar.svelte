@@ -2,10 +2,8 @@
   import type { LlmRef } from "../../../../backend/src/contracts/llm";
   import ModelDropdown from "@/components/ui/ModelDropdown.svelte";
   import ModelSelector from "@/components/ui/ModelSelector.svelte";
-  import { getAgents } from "@/api/client";
-  import { queryKeys } from "@/hooks/queries/keys";
-  import { queryClient } from "@/lib/queryClient";
   import {
+    createAgentsQuery,
     createLlmProvidersQuery,
     createModelPresetsQuery,
   } from "@/hooks/queries/referenceData";
@@ -38,26 +36,12 @@
   const presetsQuery = createModelPresetsQuery();
   const providersQuery = createLlmProvidersQuery();
 
-  let agents = $state<ReturnType<typeof sortAgents>>([]);
-  let agentsLoading = $state(true);
-
-  $effect(() => {
-    let cancelled = false;
-    void queryClient
-      .ensureQueryData({ queryKey: queryKeys.agents, queryFn: getAgents })
-      .then((data) => {
-        if (cancelled) return;
-        agents = sortAgents(data);
-        agentsLoading = false;
-      })
-      .catch(() => {
-        if (cancelled) return;
-        agentsLoading = false;
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
+  // Reactive, not a one-shot snapshot: the setup guide (and settings) create
+  // agents while this toolbar is mounted, and the URL-sync effect below must
+  // see the fresh list — a stale one "corrects" ?agent= back to an old agent.
+  const agentsQuery = createAgentsQuery();
+  const agents = $derived(sortAgents(agentsQuery.data ?? []));
+  const agentsLoading = $derived(agentsQuery.isPending);
   const presets = $derived(presetsQuery.data ?? []);
   const allLlms = $derived(buildModelGroups(providersQuery.data ?? []));
 

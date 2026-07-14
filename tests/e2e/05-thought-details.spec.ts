@@ -54,10 +54,11 @@ test("edit response edits the assembled text, never the raw chunk transport", as
 
   // A STREAMED stub reply captures provider-style raw chunks (like every real
   // adapter): llmResponse holds the chunk-transport JSON and assembledResponse
-  // the actual reply. On a follow-up turn the planner is the only LLM
-  // consumer, so the queued response deterministically feeds it.
+  // the actual reply. Scoped to the planner's model — instant consumers (a
+  // lagging title thought from the first turn) share the fallback queue and
+  // can steal an unscoped script even on second turns.
   const reply = "streamed stub reply for editing";
-  await stubLlmConfigure(request, [{ responses: [{ text: reply, streamMs: 1 }] }]);
+  await stubLlmConfigure(request, [{ model: "stub", responses: [{ text: reply, streamMs: 1 }] }]);
   await app.chat.userInput.typeMessage("stream this one");
   await app.chat.userInput.send();
   await app.chat.transcript.waitForAssistantMessageCount(2);

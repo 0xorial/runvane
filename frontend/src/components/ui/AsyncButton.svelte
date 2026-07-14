@@ -1,17 +1,19 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { HTMLButtonAttributes } from "svelte/elements";
 
   let {
     disabled = false,
     class: className = "",
     onclick,
     children,
+    ...rest
   }: {
     disabled?: boolean;
     class?: string;
     onclick: () => void | Promise<void>;
     children: Snippet;
-  } = $props();
+  } & HTMLButtonAttributes = $props();
 
   let busy = $state(false);
 
@@ -26,7 +28,7 @@
   }
 </script>
 
-<button type="button" class={className} disabled={disabled || busy} onclick={() => void onClick()}>
+<button {...rest} type="button" class={className} disabled={disabled || busy} onclick={() => void onClick()}>
   {#if busy}
     …
   {:else}
