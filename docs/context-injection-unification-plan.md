@@ -1,6 +1,11 @@
 # Context-injection unification plan
 
-Status: PLANNED 2026-07-15.
+Status: IMPLEMENTED 2026-07-15. Structural merge in `8f53406` (contract +
+mapper + repo + consumers + two-UPDATE migration + unified `ContextRow`); the
+RAG→Context/Knowledge vocabulary rename followed. The `rag` tool, `/settings/rag`
+slug, `/api/rag/*` paths, query keys, `chat-rag-*`/`retrieval-*` testids, and the
+internal `source` values (`files`/`rag`) are unchanged — this was a concept +
+entry-type change, not an identifier sweep.
 
 ## Why
 

@@ -4,8 +4,8 @@
   import { chatToolDraftRevision, getChatRagDraft, setChatRagDraft } from "@/lib/chatToolDraft.svelte";
 
   const HINT =
-    "Single-shot: retrieval over the selected storages runs before the agent plans this message, " +
-    "is recorded as a retrieval step, and switches off after sending.";
+    "Single-shot: pulls context from the selected knowledge bases before the agent plans this " +
+    "message, records it in the transcript, and switches off after sending.";
 
   const TOP_K_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
   const DEFAULT_TOP_K = 8;
@@ -129,12 +129,12 @@
         <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
         <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
       </svg>
-      RAG
+      Context
     </button>
     {#if draft.enabled}
       {#if storages.length === 0}
         <a href="/settings/rag" class="text-[11px] text-primary underline-offset-4 hover:underline">
-          no storages configured — set up RAG ↗
+          no knowledge bases — set one up ↗
         </a>
       {:else}
         {#each storages as storage (storage.id)}
@@ -244,16 +244,15 @@
       </svg>
       <p data-testid="retrieval-mode-explainer">
         {#if selectedNames.length === 0}
-          Pick at least one storage — retrieval runs against it before the agent plans this message.
+          Pick at least one knowledge base — it's searched before the agent plans this message.
         {:else if splitMode}
-          The agent's model will split your message into sub-queries at send time, then run one retrieval
-          per query against
+          The agent's model will split your message into sub-queries at send time, then search each of
           {#each selectedNames as name, i (name)}{i > 0 ? ", " : ""}<strong class="font-mono font-medium text-foreground">{name}</strong>{/each}.
           Token cost is only known after splitting.
         {:else}
-          Your message is embedded as-is and retrieved against
+          Your message is embedded as-is and searched against
           {#each selectedNames as name, i (name)}{i > 0 ? ", " : ""}<strong class="font-mono font-medium text-foreground">{name}</strong>{/each}
-          before the agent plans. The counter on the right is the exact injection.
+          before the agent plans. The counter on the right is the exact context injected.
         {/if}
       </p>
     </div>

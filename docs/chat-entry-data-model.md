@@ -29,8 +29,10 @@ Conversation linkage:
 - `thought`
 - `tool-invocation`
 - `checkpoint-summary`
-- `context-injection`
-- `retrieval`
+- `context-injection` — one grounding-context family, discriminated by a
+  `source` payload field: `files` (workspace context files folded into the
+  prompt) and `rag` (forced retrieval over knowledge bases). Both are spine
+  entries appended after the user message, before the planner.
 
 Shared top-level (outside payload) for all entries:
 
@@ -41,7 +43,10 @@ History: thoughts used to be a three-row triplet (`thought-prepare` /
 before that per-thought stream types (`planner_llm_stream`, …). The
 `thought_stream_unify` migration collapsed the stream types; the
 `thought_merge` migration (2026-07-13) collapsed the triplet into the single
-`thought` type below. See `docs/thought-merge-plan.md`.
+`thought` type below. Separately, the `context_unify` migration (2026-07-15)
+folded the old `retrieval` entry into `context-injection` with the `source`
+discriminant above (a 1:1 in-place type rename). See
+`docs/context-injection-unification-plan.md` and `docs/thought-merge-plan.md`.
 
 ## `payload_json` Shapes
 

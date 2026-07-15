@@ -30,11 +30,12 @@
 </script>
 
 <div class="mt-3.5">
-  <div class="mb-1 text-[13px] font-bold text-foreground">Context file preinjection</div>
+  <div class="mb-1 text-[13px] font-bold text-foreground">Context injection · files</div>
   <p class="mb-2.5 text-xs text-muted-foreground">
-    Before the first planner step of a new conversation, scan the workspace for common agent-context
-    files (instructions, manifests, READMEs, lint configs, env samples) and fold them into the prompt.
-    The discovered/injected files are recorded on a "context-injection" chat entry.
+    Inject context from the workspace: before the first planner step of a new conversation, scan for
+    common agent-context files (instructions, manifests, READMEs, lint configs, env samples) and fold
+    them into the prompt. The discovered/injected files show as a context row in the transcript.
+    (Knowledge bases are the other context source — searched at send time.)
   </p>
   <div
     class="inline-flex overflow-hidden rounded-md border border-border text-[11px] font-medium"

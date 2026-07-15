@@ -60,9 +60,9 @@
     },
     {
       section: "rag",
-      title: "RAG storages",
+      title: "Knowledge bases",
       count: storageCount == null ? "—" : `${storageCount} indexed`,
-      role: "What agents can look up; embeds via a provider model.",
+      role: "Context agents can look up and inject; embeds via a provider model.",
     },
   ]);
 </script>
@@ -102,8 +102,8 @@
   <p class="px-1 text-xs leading-relaxed text-muted-foreground">
     <strong>Providers</strong> feed models to everything. An <strong>agent</strong> answers your
     chats with its default model, and its tools run in the conversation's
-    <strong>sandbox</strong>; the <code>rag</code> tool looks things up in
-    <strong>RAG storages</strong>, which embed content through a provider model too. Model
+    <strong>sandbox</strong>; it can inject context from
+    <strong>knowledge bases</strong>, which embed content through a provider model too. Model
     <button type="button" class="cursor-pointer border-0 bg-transparent p-0 text-primary underline-offset-4 hover:underline" onclick={() => onNavigate("model-presets")}>presets</button>,
     <button type="button" class="cursor-pointer border-0 bg-transparent p-0 text-primary underline-offset-4 hover:underline" onclick={() => onNavigate("model-pricing")}>pricing</button>
     and

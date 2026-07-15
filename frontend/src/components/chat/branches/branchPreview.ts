@@ -28,7 +28,7 @@ export function entryPreview(entry: ChatEntry): string {
     }
     const injectedCount = (entry.files ?? []).filter((f) => f.status === "injected").length;
     return injectedCount > 0
-      ? `Preinjected ${injectedCount} file${injectedCount === 1 ? "" : "s"}`
+      ? `Injected ${injectedCount} context file${injectedCount === 1 ? "" : "s"}`
       : "No context files found";
   }
   if (!isThoughtEntry(entry)) return String((entry as ChatEntry).type);

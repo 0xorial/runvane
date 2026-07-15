@@ -12,7 +12,7 @@
     agents: "Agents",
     tools: "Tools",
     "tool-sandboxes": "Tool Sandboxes",
-    rag: "RAG Storages",
+    rag: "Knowledge bases",
   };
 
   // One sentence per section stating what the thing IS and what consumes it —
@@ -21,14 +21,14 @@
     overview: "How runvane fits together, with live setup state.",
     system: "Harness-wide defaults: global models for titles and summaries, conversation behavior.",
     "model-providers":
-      "Model sources. Everything that picks a model — agents, RAG storages, presets — picks from a connected provider.",
+      "Model sources. Everything that picks a model — agents, knowledge bases, presets — picks from a connected provider.",
     "model-presets": "Reusable model parameter bundles agents and chats can reference.",
     "model-pricing": "Per-model token prices that power conversation cost estimates.",
     agents: "Who you talk to: a system prompt, a default model, and per-tool permissions.",
     tools: "The tool catalog. Which agent may use which tool is configured per agent.",
     "tool-sandboxes":
       "Where a conversation's target tools run. Harness host and None are built in; add ssh hosts to act on other machines. Picked per chat on the new-chat screen.",
-    rag: "Semantic indexes the rag tool retrieves from; each needs an embedding model from a provider. Attach storages to an agent under Agents → Tools → rag.",
+    rag: "Semantic indexes the agent injects as context — via forced context injection in the composer, or the rag tool. Each needs an embedding model from a provider; attach them to an agent under Agents → Tools → rag.",
   };
 
   let {

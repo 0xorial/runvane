@@ -139,7 +139,7 @@
     <div class="mb-1 text-base font-bold text-foreground">Set up runvane</div>
     <p class="mb-4 text-xs leading-relaxed text-muted-foreground">
       <strong>Providers</strong> supply models to everything; an <strong>agent</strong> is who you talk
-      to; <strong>sandboxes</strong> are where its tools act; <strong>RAG storages</strong> are what it
+      to; <strong>sandboxes</strong> are where its tools act; <strong>knowledge bases</strong> are what it
       can look up. Two steps make it usable:
     </p>
 
@@ -157,7 +157,7 @@
           <div class="text-sm font-medium text-foreground">Connect a model provider</div>
           <div class="text-[11px] text-muted-foreground">
             {providerDone
-              ? `${verifiedProviders(providers).length} connected — agents, RAG and presets pick models from here`
+              ? `${verifiedProviders(providers).length} connected — agents, knowledge bases and presets pick models from here`
               : "Enter credentials and test the connection; a passing test saves it"}
           </div>
         </div>
@@ -271,7 +271,7 @@
       </div>
     </section>
 
-    <!-- Later: sandboxes + RAG -->
+    <!-- Later: sandboxes + knowledge bases -->
     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
       <button
         type="button"
@@ -294,7 +294,7 @@
       >
         <span class="mt-0.5 text-muted-foreground"><Icon name="chevron-right" class="h-3.5 w-3.5" /></span>
         <span class="min-w-0">
-          <span class="block text-[13px] font-medium text-foreground">Create a RAG storage <span class="text-muted-foreground">(later is fine)</span></span>
+          <span class="block text-[13px] font-medium text-foreground">Create a knowledge base <span class="text-muted-foreground">(later is fine)</span></span>
           <span class="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
             Indexed folders or sources agents can look up; needs an embedding model from a provider.
           </span>

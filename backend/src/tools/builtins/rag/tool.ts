@@ -33,7 +33,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
 
   getAiDescription(): string {
     return (
-      "Semantic retrieval over the agent's configured RAG storages, plus source management. " +
+      "Semantic retrieval over the agent's configured knowledge bases, plus source management. " +
       'Routing: use this tool for CONCEPTUAL recall over indexed prose — questions about meaning, ' +
       'topics, or "where is X discussed". For exact identifiers, error strings, or symbol lookups, ' +
       'prefer grep/file tools on the working tree: embeddings rank paraphrases, not literals. ' +
@@ -56,7 +56,7 @@ export class RagTool extends BaseTool<RagToolParams, RagToolRules> {
   }
 
   getHumanDescription(): string {
-    return 'Semantic search over configured RAG storages.';
+    return 'Semantic search over the agent\'s knowledge bases.';
   }
 
   getParamsSchema(): unknown {

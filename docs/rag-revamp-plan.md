@@ -1,5 +1,13 @@
 # RAG revamp — plan & architectural notes
 
+> **Superseded (2026-07-15) for the entry model + vocabulary:** the standalone
+> `retrieval` chat entry described here was folded into the unified
+> `context-injection` entry (discriminated by `source: files | rag`), and the
+> user-facing "RAG" wording was renamed to "Context injection" (the act) /
+> "Knowledge bases" (the indexed sources). The retrieval *pipeline* (forced
+> retrieval, preplanned mode, the `rag` tool, storages) is unchanged. See
+> `docs/context-injection-unification-plan.md`.
+
 Restructure the retrieval subsystem around two cleanly separated shapes, delete
 the LightRAG sidecar while keeping its two genuinely valuable ideas natively,
 and give users a forced-retrieval path that doesn't masquerade as a tool call.

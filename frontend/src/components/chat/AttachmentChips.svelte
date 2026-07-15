@@ -53,7 +53,7 @@
               aria-label={opt.label}
               title={opt.value === "direct"
                 ? "Direct (raw bytes) — sent every turn"
-                : "Summarize — RAG subagent, query full content on demand"}
+                : "Summarize — a subagent retrieves from the full content on demand"}
               onclick={() => onChangeMode(idx, opt.value)}
               class="flex h-6 items-center justify-center gap-1 rounded-[3px] px-1 text-[11px] font-medium transition-colors {active
                 ? 'bg-background text-foreground shadow-sm ring-1 ring-border'

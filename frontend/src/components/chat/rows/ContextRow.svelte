@@ -29,7 +29,7 @@
       return `Retrieved ${hits.length} excerpt${hits.length === 1 ? "" : "s"}`;
     }
     return injectedFiles.length > 0
-      ? `Preinjected ${injectedFiles.length} file${injectedFiles.length === 1 ? "" : "s"}`
+      ? `Injected ${injectedFiles.length} context file${injectedFiles.length === 1 ? "" : "s"}`
       : "No context files found";
   });
 
