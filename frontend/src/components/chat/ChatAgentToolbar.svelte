@@ -18,8 +18,10 @@
   };
 
   const AGENT_DEFAULT_MODEL_SENTINEL = "__agent_default__";
+  // No hover bg here — the wrapping <label> owns the hover so the icon + trigger
+  // highlight together as one control.
   const embeddedDropdownButtonClass =
-    "min-h-[24px] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none hover:bg-secondary/45 focus-visible:ring-1 focus-visible:ring-border";
+    "min-h-[24px] rounded-md border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-foreground shadow-none focus-visible:ring-1 focus-visible:ring-border";
 
   let {
     conversationId = null,
@@ -111,7 +113,6 @@
 
   const modelGroupsWithAgentDefault = $derived.by((): ModelGroup[] => {
     if (!normalizedAgentDefault) return allLlms;
-    const agentName = currentAgent?.name?.trim() || "agent";
     return [
       {
         id: AGENT_DEFAULT_MODEL_SENTINEL,
@@ -119,7 +120,7 @@
         models: [
           {
             value: AGENT_DEFAULT_MODEL_SENTINEL,
-            label: `${agentName} default (${normalizedAgentDefault.model})`,
+            label: `${normalizedAgentDefault.model} · default`,
             className: "text-muted-foreground",
           },
         ],
@@ -275,16 +276,16 @@
     <a href="/chat/new?setup=1" class="text-primary underline">Set up runvane</a>
   </div>
 {:else}
-  <div class="relative z-10 flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pr-1 text-xs scrollbar-thin">
+  <div class="relative z-10 flex min-w-0 items-center gap-2.5 overflow-x-auto whitespace-nowrap pr-1 text-xs scrollbar-thin">
     {#if showAgent}
-      <label class="flex shrink-0 items-center gap-1 text-muted-foreground">
-        <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground">
-          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+      <label class="group flex shrink-0 cursor-pointer items-center gap-0 rounded-md px-1 -mx-0.5 text-muted-foreground transition-colors hover:bg-secondary/45">
+        <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
           </svg>
           <span class="sr-only">Agent</span>
         </span>
-        <div class="min-w-[96px] max-w-[11rem]">
+        <div class="max-w-[11rem]">
           <ModelDropdown
             value={selectedAgentId}
             onChange={(id) => setAgentIdAndUrl(id)}
@@ -299,16 +300,15 @@
           </ModelDropdown>
         </div>
       </label>
-      <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
     {/if}
-    <label class="flex shrink-0 items-center gap-1 text-muted-foreground">
-      <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+    <label class="group flex shrink-0 cursor-pointer items-center gap-0 rounded-md px-1 -mx-0.5 text-muted-foreground transition-colors hover:bg-secondary/45">
+      <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <rect width="16" height="16" x="4" y="4" rx="2" /><rect width="6" height="6" x="9" y="9" rx="1" /><path d="M15 2v2" /><path d="M15 20v2" /><path d="M2 15h2" /><path d="M2 9h2" /><path d="M20 15h2" /><path d="M20 9h2" /><path d="M9 2v2" /><path d="M9 20v2" />
         </svg>
         <span class="sr-only">Model</span>
       </span>
-      <div class="flex min-w-[104px] max-w-[12rem] items-center">
+      <div class="flex max-w-[12rem] items-center">
         <div class="min-w-0 flex-1">
           <ModelSelector
             value={modelSelectorValue}
@@ -343,15 +343,14 @@
         {/if}
       </div>
     </label>
-    <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
-    <label class="flex shrink-0 items-center gap-1 text-muted-foreground">
-      <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" aria-hidden="true">
+    <label class="group flex shrink-0 cursor-pointer items-center gap-0 rounded-md px-1 -mx-0.5 text-muted-foreground transition-colors hover:bg-secondary/45">
+      <span class="inline-flex shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M10.5 6h9.75" /><path d="M10.5 12h9.75" /><path d="M10.5 18h9.75" /><path d="M3.75 6h.007" /><path d="M3.75 12h.007" /><path d="M3.75 18h.007" />
         </svg>
         <span class="sr-only">Preset</span>
       </span>
-      <div class="min-w-[92px] max-w-[10.5rem]">
+      <div class="max-w-[10.5rem]">
         <ModelDropdown
           value={selectedPresetId != null ? String(selectedPresetId) : ""}
           onChange={(id) => setPresetIdAndUrl(id)}

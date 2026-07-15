@@ -123,6 +123,7 @@
     <button
       bind:this={anchor}
       type="button"
+      title={selectedLabel || placeholder}
       class="flex min-h-[28px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-muted/40 px-2.5 py-1 text-left text-sm text-foreground {disabled
         ? 'cursor-not-allowed opacity-55'
         : ''} {buttonClass}"

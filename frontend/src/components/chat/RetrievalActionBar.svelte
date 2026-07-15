@@ -104,12 +104,15 @@
   });
 
   const chipBase =
-    "inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors";
+    "inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors";
   const segmentBase =
     "inline-flex h-5 shrink-0 items-center gap-1 px-2 text-[11px] font-medium transition-colors";
 </script>
 
-<div class="border-b border-border/60 px-0.5 pb-1 mb-0.5" data-testid="chat-rag-bar">
+<div
+  class="px-0.5 {draft.enabled ? 'mb-0.5 border-b border-border/60 pb-1' : 'pb-0.5'}"
+  data-testid="chat-rag-bar"
+>
   <div class="flex flex-wrap items-center gap-1">
     <button
       type="button"
@@ -117,20 +120,11 @@
       aria-pressed={draft.enabled}
       title={HINT}
       onclick={toggleEnabled}
-      class="{chipBase} {draft.enabled
-        ? 'bg-primary/15 text-primary ring-1 ring-primary/40'
-        : 'text-muted-foreground hover:bg-secondary/45 hover:text-foreground'}"
+      class="{chipBase} -ml-1 {draft.enabled
+        ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
+        : 'bg-secondary/30 text-muted-foreground ring-1 ring-border/60 hover:bg-secondary/50 hover:text-foreground'}"
     >
-      <svg
-        class="h-3 w-3 transition-transform {draft.enabled ? 'rotate-90' : ''}"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path d="m9 6 6 6-6 6" />
-      </svg>
-      <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+      <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <ellipse cx="12" cy="5" rx="8" ry="3" />
         <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
         <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
@@ -157,16 +151,16 @@
               : 'text-muted-foreground hover:bg-secondary/45 hover:text-foreground'}"
           >
             {#if selected}
-              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="m5 13 4 4L19 7" />
               </svg>
             {/if}
             {storage.name}
           </button>
         {/each}
-        <span class="h-4 w-px shrink-0 bg-border/80" aria-hidden="true"></span>
+        <span class="h-4 w-px shrink-0 bg-border/60" aria-hidden="true"></span>
         <div
-          class="flex shrink-0 items-center overflow-hidden rounded-full ring-1 ring-border"
+          class="flex shrink-0 items-center overflow-hidden rounded-md ring-1 ring-border"
           role="group"
           data-testid="chat-rag-mode"
           aria-label="Query mode"
@@ -223,7 +217,7 @@
             class="ml-auto inline-flex items-center gap-1 pr-1 text-[11px] text-muted-foreground"
             data-testid="retrieval-runtime-note"
           >
-            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
             </svg>
             runtime estimate
@@ -243,7 +237,7 @@
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        stroke-width="1.75"
+        stroke-width="2"
       >
         <circle cx="12" cy="12" r="9" />
         <path d="M12 8h.01M12 11v5" />
