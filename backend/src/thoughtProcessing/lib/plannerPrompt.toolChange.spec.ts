@@ -41,7 +41,14 @@ describe('extractToolOperations', () => {
   });
 
   it('works on the real filesystem tool JSON-Schema (z.toJSONSchema output)', () => {
-    expect(extractToolOperations(filesystemParamsSchema())).toEqual(['read_file', 'list_dir', 'grep', 'stat']);
+    expect(extractToolOperations(filesystemParamsSchema())).toEqual([
+      'read_file',
+      'list_dir',
+      'grep',
+      'stat',
+      'write_file',
+      'edit_file',
+    ]);
   });
 });
 

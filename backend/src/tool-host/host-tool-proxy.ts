@@ -3,10 +3,12 @@ import {
   type RuleEvaluationResult,
   type ToolLocation,
   type ToolPermissionContext,
+  type ToolPolicy,
   type ToolRunContext,
 } from '../tools/base-tool.js';
 import type { ToolSandboxKind } from '../contracts/tool-sandbox.js';
 import type { HostToolDescriptor, InvocationResult } from './protocol.js';
+import type { HostToolRulesProfile } from './host-tool-rules.js';
 
 export type RouterInvokeOptions = { signal?: AbortSignal; onProgress?: (delta: string) => void };
 
@@ -35,6 +37,9 @@ export class HostToolProxy extends BaseTool {
   constructor(
     private readonly router: ConversationToolRouter,
     private readonly descriptor: HostToolDescriptor,
+    /** Optional governance for this specific host tool (rules + per-call
+     *  permission logic). When present the proxy is safety-bearing. */
+    private readonly profile?: HostToolRulesProfile,
   ) {
     super();
   }
@@ -60,11 +65,17 @@ export class HostToolProxy extends BaseTool {
   }
 
   getRulesSchema(): unknown {
-    return { type: 'object', properties: {}, additionalProperties: false };
+    return this.profile ? this.profile.rulesSchema() : { type: 'object', properties: {}, additionalProperties: false };
   }
 
   getDefaultRules(): Record<string, unknown> {
-    return {};
+    return this.profile ? this.profile.defaultRules() : {};
+  }
+
+  getDefaultPolicy(): ToolPolicy {
+    // A governed proxy defaults to `custom` so its allowlist logic runs out of
+    // the box; an ungoverned proxy keeps the safe `ask` default.
+    return this.profile ? 'custom' : 'ask';
   }
 
   parseParams(raw: unknown): unknown {
@@ -72,6 +83,7 @@ export class HostToolProxy extends BaseTool {
   }
 
   parseRules(raw: unknown): Record<string, unknown> {
+    if (this.profile) return this.profile.parseRules(raw);
     return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   }
 
@@ -86,13 +98,16 @@ export class HostToolProxy extends BaseTool {
         },
       ];
     }
-    // Runs in the target sandbox, not on the host machine — allow by default; agents
-    // can still tighten this per-tool via guardrails.
+    // A governed proxy judges the specific call (e.g. an exec command allowlist);
+    // an ungoverned one runs in the sandbox, so allow by default.
+    if (this.profile) return this.profile.evaluate(context.params, context.rules);
     return [{ ruleName: 'tool-host', permission: 'allow', detail: `target tool (${kind})` }];
   }
 
   async runTool(params: unknown, context: ToolRunContext): Promise<unknown> {
-    const result = await this.router.invokeForConversation(context.conversationId, this.descriptor.name, params, {
+    // A governed proxy may fill defaults (e.g. a working directory) before dispatch.
+    const dispatchParams = this.profile ? this.profile.applyDefaults(params, (context.toolRules as Record<string, unknown>) ?? {}) : params;
+    const result = await this.router.invokeForConversation(context.conversationId, this.descriptor.name, dispatchParams, {
       signal: context.signal,
       onProgress: context.onProgress,
     });

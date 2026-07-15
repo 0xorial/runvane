@@ -26,6 +26,9 @@ export type ToolPermissionContext<TRules> = {
   agentId: string | null;
   entries: ChatEntry[];
   rules: TRules;
+  /** The parsed params of the specific call being judged (e.g. a command
+   *  string), so per-call permission logic can inspect the actual arguments. */
+  params: unknown;
 };
 
 export type ToolRunContext = {

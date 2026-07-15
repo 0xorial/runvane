@@ -2,8 +2,8 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { TargetTool } from '../server.ts';
 
-type FsOperation = 'read_file' | 'write_file' | 'list_dir' | 'stat';
-const OPERATIONS: FsOperation[] = ['read_file', 'write_file', 'list_dir', 'stat'];
+type FsOperation = 'read_file' | 'write_file' | 'edit_file' | 'list_dir' | 'stat';
+const OPERATIONS: FsOperation[] = ['read_file', 'write_file', 'edit_file', 'list_dir', 'stat'];
 
 function asObject(raw: unknown): Record<string, unknown> {
   return (raw ?? {}) as Record<string, unknown>;
@@ -25,14 +25,18 @@ export const filesystemTool: TargetTool = {
     'Filesystem access in the sandbox, selected by `operation`: ' +
     '`read_file` (UTF-8 contents, truncated to maxBytes), ' +
     '`write_file` (writes `content`, creating parent dirs), ' +
+    '`edit_file` (replaces exact `oldString` with `newString`), ' +
     '`list_dir` (directory entries), `stat` (size/kind/mtime). `path` is always required.',
-  humanDescription: 'Read, write, list, or stat a sandbox path',
+  humanDescription: 'Read, write, edit, list, or stat a sandbox path',
   paramsSchema: {
     type: 'object',
     properties: {
       operation: { type: 'string', enum: OPERATIONS },
       path: { type: 'string' },
       content: { type: 'string', description: 'write_file: contents to write.' },
+      oldString: { type: 'string', description: 'edit_file: exact text to replace.' },
+      newString: { type: 'string', description: 'edit_file: replacement text.' },
+      replaceAll: { type: 'boolean', description: 'edit_file: replace every occurrence (default false).' },
       maxBytes: { type: 'number', description: 'read_file: cap on returned bytes.' },
     },
     required: ['operation', 'path'],
@@ -60,6 +64,20 @@ export const filesystemTool: TargetTool = {
         await fs.mkdir(path.dirname(p), { recursive: true });
         await fs.writeFile(p, content, 'utf8');
         return { operation, path: p, bytesWritten: Buffer.byteLength(content) };
+      }
+      case 'edit_file': {
+        const oldString = requireString(o, 'oldString');
+        const newString = typeof o.newString === 'string' ? o.newString : '';
+        const replaceAll = o.replaceAll === true;
+        const before = await fs.readFile(p, 'utf8');
+        const count = before.split(oldString).length - 1;
+        if (count === 0) throw new Error('filesystem: edit_file oldString not found in file');
+        if (count > 1 && !replaceAll) {
+          throw new Error(`filesystem: edit_file oldString appears ${count} times — pass replaceAll or make it unique`);
+        }
+        const after = replaceAll ? before.split(oldString).join(newString) : before.replace(oldString, newString);
+        await fs.writeFile(p, after, 'utf8');
+        return { operation, path: p, replacements: replaceAll ? count : 1 };
       }
       case 'list_dir': {
         const entries = await fs.readdir(p, { withFileTypes: true });

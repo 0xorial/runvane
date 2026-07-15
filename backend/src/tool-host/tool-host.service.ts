@@ -12,6 +12,7 @@ import {
 import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { HostToolProxy, type ConversationToolRouter, type RouterInvokeOptions } from './host-tool-proxy.js';
+import { HOST_TOOL_RULES_PROFILES } from './host-tool-rules.js';
 import type { InvocationResult } from './protocol.js';
 import { ToolSandboxesService } from './tool-sandboxes.service.js';
 import { ToolHostClient, type ToolHostSpawnConfig } from './tool-host-client.js';
@@ -62,7 +63,7 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
           continue;
         }
         try {
-          this.tools.register(new HostToolProxy(this, descriptor));
+          this.tools.register(new HostToolProxy(this, descriptor, HOST_TOOL_RULES_PROFILES[descriptor.name]));
           registered += 1;
         } catch (err) {
           this.logger.warn(`skipping host tool ${descriptor.name}: ${(err as Error).message}`);

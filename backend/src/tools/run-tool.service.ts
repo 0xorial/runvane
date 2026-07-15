@@ -198,6 +198,7 @@ export class RunToolService implements OnModuleInit {
         agentId: input.agentId,
         entries,
         rules: parsedRules,
+        params: parsedParams,
       });
       const permission = mostPermissivePermission(ruleResults);
       if (permission === 'forbid') {

@@ -5,7 +5,14 @@ export const FilesystemToolRulesSchema = z
     allowed_roots: z
       .array(z.string().min(1))
       .default([])
-      .describe('Directory roots the tool may access. Resolved paths must stay inside one of these roots.'),
+      .describe('Directory roots the tool may READ from. Resolved paths must stay inside one of these roots.'),
+    writable_roots: z
+      .array(z.string().min(1))
+      .default([])
+      .describe(
+        'Directory roots write_file/edit_file may write to. Empty (the default) means writes are disabled — ' +
+          'enabling the tool for reads never implicitly grants writes. Resolved write paths must stay inside one of these roots.',
+      ),
     max_read_bytes: z
       .number()
       .finite()

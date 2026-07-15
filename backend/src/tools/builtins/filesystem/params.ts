@@ -1,17 +1,43 @@
 import { z } from 'zod';
 
-export const FilesystemOperationSchema = z.enum(['read_file', 'list_dir', 'grep', 'stat']);
+export const FilesystemOperationSchema = z.enum([
+  'read_file',
+  'list_dir',
+  'grep',
+  'stat',
+  'write_file',
+  'edit_file',
+]);
 
 export const FilesystemToolParamsSchema = z
   .object({
     operation: FilesystemOperationSchema.describe(
       'read_file returns text content (optionally a line range); list_dir returns directory entries; ' +
-        'grep searches file contents under path and returns only matching lines; stat returns metadata (size, mtime, line count).',
+        'grep searches file contents under path and returns only matching lines; stat returns metadata (size, mtime, line count); ' +
+        'write_file writes content to a path (creating parent dirs), overwriting any existing file; ' +
+        'edit_file replaces an exact string in a file and returns a diff.',
     ),
     path: z
       .string()
       .min(1)
       .describe('Absolute or relative path on the host filesystem. For grep, the file or directory to search.'),
+    content: z
+      .string()
+      .optional()
+      .describe('File contents to write (write_file only). Written verbatim as UTF-8.'),
+    old_string: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Exact text to replace (edit_file only). Must appear exactly once unless replace_all is set.'),
+    new_string: z
+      .string()
+      .optional()
+      .describe('Replacement text (edit_file only). May be empty to delete old_string.'),
+    replace_all: z
+      .boolean()
+      .optional()
+      .describe('Replace every occurrence of old_string instead of requiring a unique match (edit_file only). Default false.'),
     max_bytes: z
       .number()
       .finite()
