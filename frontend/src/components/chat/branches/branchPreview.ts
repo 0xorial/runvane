@@ -16,18 +16,20 @@ export function entryPreview(entry: ChatEntry): string {
     return head ? `Summary: ${head}…` : "Summary";
   }
   if (entry.type === "context-injection") {
-    const injectedCount = entry.files.filter((f) => f.status === "injected").length;
+    if (entry.source === "rag") {
+      const queries = entry.queries ?? [];
+      const hits = entry.hits ?? [];
+      if (entry.state === "pending" && queries.length === 0) return "Planning retrieval…";
+      if (entry.state === "pending") return "Retrieving…";
+      if (entry.state === "failed") return "Retrieval failed";
+      return hits.length > 0
+        ? `Retrieved ${hits.length} excerpt${hits.length === 1 ? "" : "s"}`
+        : "Retrieval found nothing";
+    }
+    const injectedCount = (entry.files ?? []).filter((f) => f.status === "injected").length;
     return injectedCount > 0
       ? `Preinjected ${injectedCount} file${injectedCount === 1 ? "" : "s"}`
       : "No context files found";
-  }
-  if (entry.type === "retrieval") {
-    if (entry.state === "pending" && entry.queries.length === 0) return "Planning retrieval…";
-    if (entry.state === "pending") return "Retrieving…";
-    if (entry.state === "failed") return "Retrieval failed";
-    return entry.hits.length > 0
-      ? `Retrieved ${entry.hits.length} excerpt${entry.hits.length === 1 ? "" : "s"}`
-      : "Retrieval found nothing";
   }
   if (!isThoughtEntry(entry)) return String((entry as ChatEntry).type);
   if (entry.thoughtType === "summarize_attachment") {
@@ -56,7 +58,6 @@ export function entryIconName(
   if (entry.type === "assistant-message") return "bot";
   if (entry.type === "tool-invocation") return "wrench";
   if (entry.type === "context-injection") return "file";
-  if (entry.type === "retrieval") return "file";
   if (isThoughtEntry(entry)) {
     const toolName = String(entry.toolName || "").trim();
     const action = String(entry.action || "").trim();

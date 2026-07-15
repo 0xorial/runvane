@@ -262,44 +262,45 @@ export const CheckpointSummaryEntrySchema = ChatEntryBaseSchema.extend({
 export type CheckpointSummaryEntry = z.infer<typeof CheckpointSummaryEntrySchema>;
 
 /**
- * Persisted, once-per-conversation record of the pre-planner context-file
- * scan (see context-injection.service.ts). `files` lists every candidate
- * file the scan discovered on disk, each tagged with whether it was folded
- * into `content` (`injected`) or left out (`skipped` — category not
- * selected, unreadable, or binary). Appended as a thought-less spine entry
- * right after the first user-message, before the planner thought starts, so
- * `content` is already part of the immutable entry DAG the planner reads
- * from — no separate re-scan on reprocess.
+ * A harness-driven CONTEXT INJECTION: extra context folded onto the spine right
+ * after the user message it grounds, before the planner thought starts — so it
+ * is part of the immutable entry DAG the planner reads from (no re-scan/
+ * re-retrieve on reprocess). One entry family, discriminated by `source`:
+ *
+ * - `files` — the pre-planner context-file scan (see context-injection.service).
+ *   `files` lists every candidate discovered on disk, each tagged `injected`
+ *   (folded into `content`) or `skipped` (category not selected, unreadable, or
+ *   binary). Once-written, never updated.
+ * - `rag` — a user-forced retrieval over knowledge storages (`overrides.rag`),
+ *   executed by the harness (NOT a tool invocation — tool rows assert the model
+ *   chose them). Starts `pending` with `hits: []` (every committed state must be
+ *   snapshot-mappable); the done/failed update only fills optionals. `storages`
+ *   holds display names.
+ *
+ * Source-specific fields are optional here; the mapper enforces the exact shape
+ * per `source`. Future grounding kinds (attachment recall, conversation memory)
+ * add another `source`, not a new entry type.
  */
+export const ContextInjectionSourceSchema = z.enum(['files', 'rag']);
+export type ContextInjectionSource = z.infer<typeof ContextInjectionSourceSchema>;
+
 export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
   type: z.literal('context-injection'),
-  files: z.array(PreinjectedFileRecordSchema),
-  content: z.string(),
+  source: ContextInjectionSourceSchema,
+  // source: 'files'
+  files: z.array(PreinjectedFileRecordSchema).optional(),
+  content: z.string().optional(),
+  // source: 'rag'
+  state: z.enum(['pending', 'done', 'failed']).optional(),
+  queries: z.array(RetrievalQuerySchema).optional(),
+  storages: z.array(z.string()).optional(),
+  hits: z.array(RetrievalHitSchema).optional(),
+  error: z.string().optional(),
 });
 export type ContextInjectionEntry = z.infer<typeof ContextInjectionEntrySchema>;
 
-/**
- * Harness-driven context fetch, recorded on the spine right after the user
- * message it grounds (before the planner thought starts). NOT a tool
- * invocation — tool rows assert the model chose them; this retrieval was
- * forced by the user (`overrides.rag`) and executed by the harness.
- * `source` names the corpus kind: future grounding sources (attachment
- * recall, conversation memory) reuse this entry type with another source,
- * not a new entry kind. The initial insert is schema-complete with
- * state 'pending' and hits [] (the snapshot mapper must be able to serve
- * every committed state); the done/failed update only fills optionals.
- */
-export const RetrievalEntrySchema = ChatEntryBaseSchema.extend({
-  type: z.literal('retrieval'),
-  source: z.literal('rag'),
-  state: z.enum(['pending', 'done', 'failed']),
-  queries: z.array(RetrievalQuerySchema),
-  /** Display names of the storages searched. */
-  storages: z.array(z.string()),
-  hits: z.array(RetrievalHitSchema),
-  error: z.string().optional(),
-});
-export type RetrievalEntry = z.infer<typeof RetrievalEntrySchema>;
+/** The `source: 'rag'` variant, kept as a named type for retrieval call sites. */
+export type RetrievalEntry = ContextInjectionEntry & { source: 'rag' };
 
 // ---- Union ----
 
@@ -310,6 +311,5 @@ export const ChatEntrySchema = z.discriminatedUnion('type', [
   AssistantMessageEntrySchema,
   CheckpointSummaryEntrySchema,
   ContextInjectionEntrySchema,
-  RetrievalEntrySchema,
 ]);
 export type ChatEntry = z.infer<typeof ChatEntrySchema>;

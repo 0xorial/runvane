@@ -197,10 +197,16 @@ function toolInvocationAsPair(entry: Extract<ChatEntry, { type: 'tool-invocation
  * failures stay visible — the planner must know grounding was requested and
  * what came back; it must never silently proceed as if it wasn't.
  */
-function retrievalAsContext(entry: Extract<ChatEntry, { type: 'retrieval' }>): string {
+function retrievalAsContext(entry: Extract<ChatEntry, { type: 'context-injection' }>): string {
   // Shared with the composer's preview endpoint so the pre-send token estimate
   // is computed from the exact block the planner receives.
-  return formatRetrievalContext(entry);
+  return formatRetrievalContext({
+    storages: entry.storages ?? [],
+    queries: entry.queries ?? [],
+    state: entry.state ?? 'done',
+    hits: entry.hits ?? [],
+    error: entry.error,
+  });
 }
 
 function entryToMessages(
@@ -221,14 +227,13 @@ function entryToMessages(
       // sees just this condensed paragraph in their place.
       return [textMessage('system', `[Earlier in this conversation, summarized]\n${entry.summaryText}`)];
     case 'context-injection':
-      // Empty when the scan found nothing to inject (mode 'none', or no
-      // candidate files matched); the entry is still persisted for the audit
-      // trail (`files`), just with no message to contribute here.
-      return entry.content.trim().length > 0
+      if (entry.source === 'rag') return [textMessage('system', retrievalAsContext(entry))];
+      // files source. Empty when the scan found nothing to inject (mode 'none',
+      // or no candidate files matched); the entry is still persisted for the
+      // audit trail (`files`), just with no message to contribute here.
+      return (entry.content ?? '').trim().length > 0
         ? [textMessage('system', `[Project context files]\n${entry.content}`)]
         : [];
-    case 'retrieval':
-      return [textMessage('system', retrievalAsContext(entry))];
     case 'thought':
       // Internal plumbing — thoughts contribute nothing to the prompt
       // directly (attachment summaries are folded in at the user message).

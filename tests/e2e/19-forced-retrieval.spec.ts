@@ -23,7 +23,8 @@ const COOK_DOC = "A tomato basil pasta recipe: boil water, add salt, then cook t
 const DB_QUESTION = "How are the SQLite database migrations managed and applied to the schema?";
 
 type RetrievalEntryShape = {
-  type: "retrieval";
+  type: "context-injection";
+  source: "rag";
   state: string;
   storages: string[];
   queries: Array<{ text: string; origin: string }>;
@@ -73,9 +74,9 @@ async function retrievalEntryOf(
   conversationId: string,
 ): Promise<RetrievalEntryShape | undefined> {
   const entries = (await getConversationEntries(request, conversationId)) as unknown as Array<
-    RetrievalEntryShape | { type: string }
+    RetrievalEntryShape | { type: string; source?: string }
   >;
-  return entries.find((e): e is RetrievalEntryShape => e.type === "retrieval");
+  return entries.find((e): e is RetrievalEntryShape => e.type === "context-injection" && e.source === "rag");
 }
 
 async function postRagMessage(

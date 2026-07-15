@@ -4,7 +4,6 @@ import type {
   ChatEntryBase,
   CheckpointSummaryEntry,
   ContextInjectionEntry,
-  RetrievalEntry,
   ThoughtEntry,
   ThoughtForkPoint,
   ThoughtStage,
@@ -57,8 +56,6 @@ export function rowToChatEntry(row: ChatEntryDbRow): ChatEntry {
       return mapCheckpointSummary(base, payload, ctx);
     case 'context-injection':
       return mapContextInjection(base, payload, ctx);
-    case 'retrieval':
-      return mapRetrieval(base, payload, ctx);
     default:
       throw new Error(`${ctx}: unknown chat entry type`);
   }
@@ -77,18 +74,16 @@ function mapCheckpointSummary(base: ChatEntryBase, payload: Record<string, unkno
   return { ...base, type: 'checkpoint-summary', ...p };
 }
 
-const ContextInjectionPayloadSchema = z.object({
+// The unified context-injection entry is one of two source-specific shapes;
+// dispatch on `source` and enforce the exact fields per source (strict, so a
+// files row can't smuggle rag fields and vice versa).
+const FilesContextPayloadSchema = z.object({
+  source: z.literal('files'),
   files: z.array(PreinjectedFileRecordSchema),
   content: z.string(),
 });
 
-function mapContextInjection(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ContextInjectionEntry {
-  const p = ContextInjectionPayloadSchema.safeParse(payload);
-  if (!p.success) throw new Error(`${ctx}: ${p.error.message}`);
-  return { ...base, type: 'context-injection', ...p.data };
-}
-
-const RetrievalPayloadSchema = z.object({
+const RagContextPayloadSchema = z.object({
   source: z.literal('rag'),
   state: z.enum(['pending', 'done', 'failed']),
   queries: z.array(RetrievalQuerySchema),
@@ -97,10 +92,14 @@ const RetrievalPayloadSchema = z.object({
   error: z.string().optional(),
 });
 
-function mapRetrieval(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): RetrievalEntry {
-  const p = RetrievalPayloadSchema.safeParse(payload);
+function mapContextInjection(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ContextInjectionEntry {
+  const source = payload.source;
+  const p =
+    source === 'rag'
+      ? RagContextPayloadSchema.safeParse(payload)
+      : FilesContextPayloadSchema.safeParse(payload);
   if (!p.success) throw new Error(`${ctx}: ${p.error.message}`);
-  return { ...base, type: 'retrieval', ...p.data };
+  return { ...base, type: 'context-injection', ...p.data };
 }
 
 function mapUserMessage(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ChatEntry {

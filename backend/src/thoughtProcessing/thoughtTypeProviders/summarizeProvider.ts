@@ -116,17 +116,17 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
         lines.push(`<earlier-summary>\n${e.summaryText}\n</earlier-summary>`);
         break;
       case 'context-injection': {
-        const injected = e.files.filter((f) => f.status === 'injected').map((f) => f.path);
-        if (injected.length > 0) lines.push(`<context-files injected="${injected.join(', ')}" />`);
-        break;
-      }
-      case 'retrieval': {
-        // The fold only needs to record THAT grounding happened and from
-        // where — the excerpts themselves are turn-local context.
-        const sources = [...new Set(e.hits.map((h) => h.source))];
-        lines.push(
-          `<retrieved-context storages="${e.storages.join(', ')}" state="${e.state}" sources="${sources.join(', ')}" />`,
-        );
+        if (e.source === 'rag') {
+          // The fold only needs to record THAT grounding happened and from
+          // where — the excerpts themselves are turn-local context.
+          const sources = [...new Set((e.hits ?? []).map((h) => h.source))];
+          lines.push(
+            `<retrieved-context storages="${(e.storages ?? []).join(', ')}" state="${e.state}" sources="${sources.join(', ')}" />`,
+          );
+        } else {
+          const injected = (e.files ?? []).filter((f) => f.status === 'injected').map((f) => f.path);
+          if (injected.length > 0) lines.push(`<context-files injected="${injected.join(', ')}" />`);
+        }
         break;
       }
       case 'thought':

@@ -184,7 +184,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     const row = await this.appendEntry(conversationId, {
       type: 'context-injection',
       parentId: input.parentId,
-      payload: { files: input.files, content: input.content },
+      payload: { source: 'files', files: input.files, content: input.content },
     });
     return { id: row.id };
   }
@@ -205,7 +205,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     },
   ): Promise<{ id: string }> {
     const row = await this.appendEntry(conversationId, {
-      type: 'retrieval',
+      type: 'context-injection',
       parentId: input.parentId,
       payload: {
         source: input.source,
