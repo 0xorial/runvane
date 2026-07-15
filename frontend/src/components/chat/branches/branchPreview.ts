@@ -16,7 +16,7 @@ export function entryPreview(entry: ChatEntry): string {
     return head ? `Summary: ${head}…` : "Summary";
   }
   if (entry.type === "context-injection") {
-    if (entry.source === "rag") {
+    if (entry.source === "knowledge") {
       const queries = entry.queries ?? [];
       const hits = entry.hits ?? [];
       if (entry.state === "pending" && queries.length === 0) return "Planning retrieval…";

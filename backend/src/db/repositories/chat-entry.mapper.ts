@@ -76,15 +76,15 @@ function mapCheckpointSummary(base: ChatEntryBase, payload: Record<string, unkno
 
 // The unified context-injection entry is one of two source-specific shapes;
 // dispatch on `source` and enforce the exact fields per source (strict, so a
-// files row can't smuggle rag fields and vice versa).
+// files row can't smuggle knowledge fields and vice versa).
 const FilesContextPayloadSchema = z.object({
   source: z.literal('files'),
   files: z.array(PreinjectedFileRecordSchema),
   content: z.string(),
 });
 
-const RagContextPayloadSchema = z.object({
-  source: z.literal('rag'),
+const KnowledgeContextPayloadSchema = z.object({
+  source: z.literal('knowledge'),
   state: z.enum(['pending', 'done', 'failed']),
   queries: z.array(RetrievalQuerySchema),
   storages: z.array(z.string()),
@@ -95,8 +95,8 @@ const RagContextPayloadSchema = z.object({
 function mapContextInjection(base: ChatEntryBase, payload: Record<string, unknown>, ctx: string): ContextInjectionEntry {
   const source = payload.source;
   const p =
-    source === 'rag'
-      ? RagContextPayloadSchema.safeParse(payload)
+    source === 'knowledge'
+      ? KnowledgeContextPayloadSchema.safeParse(payload)
       : FilesContextPayloadSchema.safeParse(payload);
   if (!p.success) throw new Error(`${ctx}: ${p.error.message}`);
   return { ...base, type: 'context-injection', ...p.data };

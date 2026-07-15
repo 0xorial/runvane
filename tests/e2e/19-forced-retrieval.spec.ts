@@ -9,10 +9,10 @@ const runE2e = process.env.RUN_E2E_TESTS === "1";
 test.skip(!runE2e, "Set RUN_E2E_TESTS=1 with backend+frontend running");
 
 /**
- * Forced retrieval (docs/rag-revamp-plan.md, phase 2a): a user message carrying
- * `overrides.rag` runs harness-driven retrieval BEFORE the planner and records
+ * Forced retrieval (docs/knowledge-revamp-plan.md, phase 2a): a user message carrying
+ * `overrides.knowledge` runs harness-driven retrieval BEFORE the planner and records
  * it as a `retrieval` chat entry the planner prompt folds in — distinct from
- * the model-driven `rag` tool (covered by 08-rag). Embeddings go through the
+ * the model-driven `knowledge` tool (covered by 08-knowledge). Embeddings go through the
  * stub provider (deterministic bag-of-words), so ranking is stable without a
  * live model.
  */
@@ -24,7 +24,7 @@ const DB_QUESTION = "How are the SQLite database migrations managed and applied 
 
 type RetrievalEntryShape = {
   type: "context-injection";
-  source: "rag";
+  source: "knowledge";
   state: string;
   storages: string[];
   queries: Array<{ text: string; origin: string }>;
@@ -33,7 +33,7 @@ type RetrievalEntryShape = {
 type StreamEntry = { type: string; thoughtType?: string; llmRequest?: string };
 
 async function makeDocs(files: Record<string, string>): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "e2e-forced-rag-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "e2e-forced-knowledge-"));
   for (const [name, content] of Object.entries(files)) await writeFile(path.join(dir, name), content);
   return dir;
 }
@@ -45,7 +45,7 @@ async function createStorage(
   root: string,
   opts: { skipIngest?: boolean } = {},
 ): Promise<string> {
-  const createRes = await request.post(`${apiBaseUrl()}/api/rag/storages`, {
+  const createRes = await request.post(`${apiBaseUrl()}/api/knowledge/storages`, {
     data: {
       name,
       entitySource: "files",
@@ -57,7 +57,7 @@ async function createStorage(
   expect(createRes.ok()).toBeTruthy();
   const storage = (await createRes.json()) as { id: string };
   if (!opts.skipIngest) {
-    const ingestRes = await request.post(`${apiBaseUrl()}/api/rag/storages/${storage.id}/ingest`, {
+    const ingestRes = await request.post(`${apiBaseUrl()}/api/knowledge/storages/${storage.id}/ingest`, {
       data: {},
     });
     expect(ingestRes.ok()).toBeTruthy();
@@ -66,7 +66,7 @@ async function createStorage(
 }
 
 async function deleteStorage(request: APIRequestContext, id: string): Promise<void> {
-  await request.delete(`${apiBaseUrl()}/api/rag/storages/${encodeURIComponent(id)}`);
+  await request.delete(`${apiBaseUrl()}/api/knowledge/storages/${encodeURIComponent(id)}`);
 }
 
 async function retrievalEntryOf(
@@ -76,10 +76,10 @@ async function retrievalEntryOf(
   const entries = (await getConversationEntries(request, conversationId)) as unknown as Array<
     RetrievalEntryShape | { type: string; source?: string }
   >;
-  return entries.find((e): e is RetrievalEntryShape => e.type === "context-injection" && e.source === "rag");
+  return entries.find((e): e is RetrievalEntryShape => e.type === "context-injection" && e.source === "knowledge");
 }
 
-async function postRagMessage(
+async function postKnowledgeMessage(
   request: APIRequestContext,
   agentId: string,
   storageId: string,
@@ -95,14 +95,14 @@ async function postRagMessage(
     data: {
       message,
       agentId,
-      overrides: { rag: { storages: [storageId], ...(mode ? { mode } : {}) } },
+      overrides: { knowledge: { storages: [storageId], ...(mode ? { mode } : {}) } },
     },
   });
   expect(msgRes.ok()).toBeTruthy();
   return id;
 }
 
-test("overrides.rag runs retrieval before the planner; entry + planner prompt carry the hits", async ({
+test("overrides.knowledge runs retrieval before the planner; entry + planner prompt carry the hits", async ({
   request,
 }) => {
   test.setTimeout(25_000);
@@ -110,7 +110,7 @@ test("overrides.rag runs retrieval before the planner; entry + planner prompt ca
   const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
   const storageId = await createStorage(request, `e2e-forced-${Date.now()}`, docs);
   try {
-    const conversationId = await postRagMessage(request, agentId, storageId, DB_QUESTION);
+    const conversationId = await postKnowledgeMessage(request, agentId, storageId, DB_QUESTION);
 
     // The retrieval entry resolves to done with the right doc on top.
     await expect
@@ -152,7 +152,7 @@ test("zero hits stay visible: empty storage yields done + no hits, and the plann
   // Created but never ingested — retrieval over it finds nothing.
   const storageId = await createStorage(request, `e2e-forced-empty-${Date.now()}`, docs, { skipIngest: true });
   try {
-    const conversationId = await postRagMessage(request, agentId, storageId, DB_QUESTION);
+    const conversationId = await postKnowledgeMessage(request, agentId, storageId, DB_QUESTION);
 
     await expect
       .poll(async () => (await retrievalEntryOf(request, conversationId))?.state ?? "missing", {
@@ -178,7 +178,7 @@ test("zero hits stay visible: empty storage yields done + no hits, and the plann
   }
 });
 
-test("preplanned mode: a rag_planning thought composes the queries, retrieval records them as planned", async ({
+test("preplanned mode: a knowledge_planning thought composes the queries, retrieval records them as planned", async ({
   request,
 }) => {
   test.setTimeout(25_000);
@@ -186,7 +186,7 @@ test("preplanned mode: a rag_planning thought composes the queries, retrieval re
   const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
   const storageId = await createStorage(request, `e2e-preplanned-${Date.now()}`, docs);
   try {
-    const conversationId = await postRagMessage(request, agentId, storageId, DB_QUESTION, "preplanned");
+    const conversationId = await postKnowledgeMessage(request, agentId, storageId, DB_QUESTION, "preplanned");
 
     await expect
       .poll(async () => (await retrievalEntryOf(request, conversationId))?.state ?? "missing", {
@@ -194,7 +194,7 @@ test("preplanned mode: a rag_planning thought composes the queries, retrieval re
       })
       .toBe("done");
     const entry = (await retrievalEntryOf(request, conversationId))!;
-    // The stub planning reply (STUB_RAG_PLANNING_REPLY) is two planned queries.
+    // The stub planning reply (STUB_KNOWLEDGE_PLANNING_REPLY) is two planned queries.
     expect(entry.queries.map((q) => q.origin)).toEqual(["planned", "planned"]);
     expect(entry.queries[0]!.text).toBe("SQLite database migrations Prisma");
     expect(entry.hits.length).toBeGreaterThan(0);
@@ -203,7 +203,7 @@ test("preplanned mode: a rag_planning thought composes the queries, retrieval re
     // The planning thought is visible in the transcript, and the planner
     // still anchors after the retrieval entry (its prompt carries the hits).
     const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
-    const planning = entries.find((e) => e.type === "thought" && e.thoughtType === "rag_planning");
+    const planning = entries.find((e) => e.type === "thought" && e.thoughtType === "knowledge_planning");
     expect(planning).toBeTruthy();
     await expect
       .poll(
@@ -227,7 +227,7 @@ test("preview endpoint returns the hits and token estimate a send would inject",
   const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
   const storageId = await createStorage(request, `e2e-forced-preview-${Date.now()}`, docs);
   try {
-    const res = await request.post(`${apiBaseUrl()}/api/rag/retrieve/preview`, {
+    const res = await request.post(`${apiBaseUrl()}/api/knowledge/retrieve/preview`, {
       data: { query: DB_QUESTION, storages: [storageId] },
     });
     expect(res.ok()).toBeTruthy();
@@ -259,8 +259,8 @@ test("composer bar: toggle + storage chip preview the injection, send records it
     await app.chat.gotoNew(agentId);
 
     // Enable forced retrieval and pick the storage in the bar above the input.
-    await app.page.getByTestId("chat-rag-toggle").click();
-    await app.page.locator(`[data-testid="chat-rag-storage"][data-storage-name="${name}"]`).click();
+    await app.page.getByTestId("chat-knowledge-toggle").click();
+    await app.page.locator(`[data-testid="chat-knowledge-storage"][data-storage-name="${name}"]`).click();
 
     // Live preview: typing runs the actual retrieval (debounced) and reports
     // what a send right now would inject.
@@ -278,7 +278,7 @@ test("composer bar: toggle + storage chip preview the injection, send records it
     await expect(row.getByTestId("retrieval-query-origin").first()).toHaveText("verbatim");
 
     // Single-shot: the toggle switched itself off after sending.
-    await expect(app.page.getByTestId("chat-rag-toggle")).toHaveAttribute("aria-pressed", "false");
+    await expect(app.page.getByTestId("chat-knowledge-toggle")).toHaveAttribute("aria-pressed", "false");
   } finally {
     await deleteStorage(request, storageId);
     await rm(docs, { recursive: true, force: true });

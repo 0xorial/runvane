@@ -12,13 +12,13 @@ import { ThoughtProcessingService } from '../thoughtProcessing/thought-processin
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { CategorizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
-import { RagPlanningThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/ragPlanningProvider.js';
+import { KnowledgePlanningThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/knowledgePlanningProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import type { ChatAttachment } from '../contracts/chatEntry.js';
-import type { RagOverride, RetrievalQuery } from '../contracts/retrieval.js';
+import type { KnowledgeOverride, RetrievalQuery } from '../contracts/retrieval.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
-import { ForcedRetrievalService } from '../rag/retrieval/forced-retrieval.service.js';
+import { ForcedRetrievalService } from '../knowledge/retrieval/forced-retrieval.service.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ConversationCategorizerService } from './conversation-categorizer.service.js';
@@ -51,7 +51,7 @@ export class ConversationProcessorService implements OnModuleInit {
     private readonly plannerProvider: PlannerThoughtTypeProvider,
     private readonly summarizeProvider: SummarizeThoughtTypeProvider,
     private readonly summarizeAttachmentProvider: SummarizeAttachmentThoughtTypeProvider,
-    private readonly ragPlanningProvider: RagPlanningThoughtTypeProvider,
+    private readonly knowledgePlanningProvider: KnowledgePlanningThoughtTypeProvider,
     private readonly uploads: UploadsService,
     private readonly agents: AgentsRepo,
     private readonly runTool: RunToolService,
@@ -497,18 +497,18 @@ export class ConversationProcessorService implements OnModuleInit {
         // Forced retrieval: also awaited and spine-chained — the planner must
         // anchor after the retrieval entry so the hits are in its input DAG.
         let plannerDeferred = false;
-        if (userPayload.overrides?.rag) {
-          const rag = userPayload.overrides.rag;
+        if (userPayload.overrides?.knowledge) {
+          const knowledge = userPayload.overrides.knowledge;
           const hasSummaryAttachments = (attachments ?? []).some((a) => a.mode === 'summary');
           // Preplanned + summary attachments would need a second planner gate
           // (the attachment barrier owns the start today), so that combination
           // degrades to verbatim.
-          if (rag.mode === 'preplanned' && !hasSummaryAttachments) {
+          if (knowledge.mode === 'preplanned' && !hasSummaryAttachments) {
             const entry = await this.beginPreplannedRetrieval({
               conversationId,
               parentId: spineTip,
               messageText: body.message,
-              override: rag,
+              override: knowledge,
               scope,
               llm,
             });
@@ -518,7 +518,7 @@ export class ConversationProcessorService implements OnModuleInit {
             }
           }
           if (!plannerDeferred) {
-            const retrieval = await this.runForcedRetrieval(conversationId, spineTip, body.message, rag);
+            const retrieval = await this.runForcedRetrieval(conversationId, spineTip, body.message, knowledge);
             if (retrieval) spineTip = retrieval.id;
           }
         }
@@ -606,9 +606,9 @@ export class ConversationProcessorService implements OnModuleInit {
   }
 
   /**
-   * Forced retrieval (docs/rag-revamp-plan.md): the user opted this message
-   * into grounding via `overrides.rag`, so retrieval ALWAYS executes — this
-   * is the harness-driven pipeline, distinct from the model-driven `rag`
+   * Forced retrieval (docs/knowledge-revamp-plan.md): the user opted this message
+   * into grounding via `overrides.knowledge`, so retrieval ALWAYS executes — this
+   * is the harness-driven pipeline, distinct from the model-driven `knowledge`
    * tool. The record is a `retrieval` spine entry appended after the user
    * message (before the planner thought starts), pending → done/failed; the
    * planner anchors after it and reads the hits from the immutable entry
@@ -620,7 +620,7 @@ export class ConversationProcessorService implements OnModuleInit {
     conversationId: string,
     parentId: string,
     messageText: string,
-    override: RagOverride,
+    override: KnowledgeOverride,
   ): Promise<{ id: string } | null> {
     // Verbatim: the message text is the embedding query. (Preplanned mode goes
     // through beginPreplannedRetrieval; it lands here only as its degrade path.)
@@ -630,7 +630,7 @@ export class ConversationProcessorService implements OnModuleInit {
     try {
       created = await this.chatEntries.appendRetrievalEntry(conversationId, {
         parentId,
-        source: 'rag',
+        source: 'knowledge',
         queries,
         storages: storageNames,
       });
@@ -647,7 +647,7 @@ export class ConversationProcessorService implements OnModuleInit {
 
   /**
    * Preplanned forced retrieval (plan doc D5): append the retrieval entry with
-   * no queries yet, run a `rag_planning` side thought anchored to it, and
+   * no queries yet, run a `knowledge_planning` side thought anchored to it, and
    * continue the turn — execute the retrieval, then start the planner — when
    * the plan arrives. The continuation is once-guarded and the provider's
    * settle hook also fires it with `null` (verbatim fallback), so a crashed or
@@ -659,7 +659,7 @@ export class ConversationProcessorService implements OnModuleInit {
     conversationId: string;
     parentId: string;
     messageText: string;
-    override: RagOverride;
+    override: KnowledgeOverride;
     scope: LifecycleScope;
     llm: LlmRef;
   }): Promise<{ id: string } | null> {
@@ -669,7 +669,7 @@ export class ConversationProcessorService implements OnModuleInit {
     try {
       created = await this.chatEntries.appendRetrievalEntry(conversationId, {
         parentId: args.parentId,
-        source: 'rag',
+        source: 'knowledge',
         queries: [],
         storages: storageNames,
       });
@@ -703,7 +703,7 @@ export class ConversationProcessorService implements OnModuleInit {
     };
 
     void this.thoughtProcessing.startThought({
-      provider: this.ragPlanningProvider,
+      provider: this.knowledgePlanningProvider,
       conversationId,
       scope,
       anchorParentId: created.id,
@@ -728,7 +728,7 @@ export class ConversationProcessorService implements OnModuleInit {
     conversationId: string,
     entryId: string,
     queries: RetrievalQuery[],
-    override: RagOverride,
+    override: KnowledgeOverride,
   ): Promise<void> {
     try {
       const hits = await this.forcedRetrieval.run(queries, override.storages, override.top_k);

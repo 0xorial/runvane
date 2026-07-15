@@ -20,7 +20,7 @@ import { TasksModule } from './tasks/tasks.module.js';
 import { TerminalModule } from './terminal/terminal.module.js';
 import { ToolsModule } from './tools/tools.module.js';
 import { ToolHostModule } from './tool-host/tool-host.module.js';
-import { RagModule } from './rag/rag.module.js';
+import { KnowledgeModule } from './knowledge/knowledge.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 import { TestHarnessModule } from './test-harness/test-harness.module.js';
 
@@ -80,7 +80,7 @@ export class AppModule {
         TerminalModule,
         ToolsModule,
         ToolHostModule,
-        RagModule,
+        KnowledgeModule,
         UploadsModule,
         ...(stubHarness ? [TestHarnessModule] : []),
       ],

@@ -1,5 +1,5 @@
 import type { ChatEntry, ThoughtEntry } from '../../contracts/chatEntry.js';
-import { formatRetrievalContext } from '../../rag/retrieval/retrieval-context.js';
+import { formatRetrievalContext } from '../../knowledge/retrieval/retrieval-context.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 import { stripToolParamEnvelope } from '../../tools/toolParamEnvelope.js';
 
@@ -227,7 +227,7 @@ function entryToMessages(
       // sees just this condensed paragraph in their place.
       return [textMessage('system', `[Earlier in this conversation, summarized]\n${entry.summaryText}`)];
     case 'context-injection':
-      if (entry.source === 'rag') return [textMessage('system', retrievalAsContext(entry))];
+      if (entry.source === 'knowledge') return [textMessage('system', retrievalAsContext(entry))];
       // files source. Empty when the scan found nothing to inject (mode 'none',
       // or no candidate files matched); the entry is still persisted for the
       // audit trail (`files`), just with no message to contribute here.

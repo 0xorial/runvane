@@ -7,13 +7,13 @@ import { ReasonStep } from '../thoughtProcessing/steps/reasonStep.js';
 import { AutoTitleThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/autoTitleProvider.js';
 import { CategorizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/categorizeProvider.js';
 import { GuardrailThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/guardrailProvider.js';
-import { RagPlanningThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/ragPlanningProvider.js';
+import { KnowledgePlanningThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/knowledgePlanningProvider.js';
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/summarizeProvider.js';
 import { ToolParamsThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
-import { RagModule } from '../rag/rag.module.js';
+import { KnowledgeModule } from '../knowledge/knowledge.module.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { ToolsModule } from '../tools/tools.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
@@ -23,7 +23,7 @@ import { ConversationsController } from './conversations.controller.js';
 import { ConversationsService } from './conversations.service.js';
 
 @Module({
-  imports: [DatabaseModule, ToolsModule, UploadsModule, RagModule],
+  imports: [DatabaseModule, ToolsModule, UploadsModule, KnowledgeModule],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,
@@ -40,7 +40,7 @@ import { ConversationsService } from './conversations.service.js';
     SummarizeThoughtTypeProvider,
     SummarizeAttachmentThoughtTypeProvider,
     GuardrailThoughtTypeProvider,
-    RagPlanningThoughtTypeProvider,
+    KnowledgePlanningThoughtTypeProvider,
     RunToolService,
     ContextInjectionService,
   ],

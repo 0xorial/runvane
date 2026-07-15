@@ -9,7 +9,7 @@ import { AutoTitleThoughtTypeProvider } from './thoughtTypeProviders/autoTitlePr
 import { CategorizeThoughtTypeProvider } from './thoughtTypeProviders/categorizeProvider.js';
 import { GuardrailThoughtTypeProvider } from './thoughtTypeProviders/guardrailProvider.js';
 import { PlannerThoughtTypeProvider } from './thoughtTypeProviders/plannerProvider.js';
-import { RagPlanningThoughtTypeProvider } from './thoughtTypeProviders/ragPlanningProvider.js';
+import { KnowledgePlanningThoughtTypeProvider } from './thoughtTypeProviders/knowledgePlanningProvider.js';
 import { SummarizeAttachmentThoughtTypeProvider } from './thoughtTypeProviders/summarizeAttachmentProvider.js';
 import { SummarizeThoughtTypeProvider } from './thoughtTypeProviders/summarizeProvider.js';
 import { ToolParamsThoughtTypeProvider } from './thoughtTypeProviders/toolParamsProvider.js';
@@ -52,8 +52,8 @@ export class ThoughtProcessingService implements OnModuleInit {
     summarizeAttachmentProvider: SummarizeAttachmentThoughtTypeProvider,
     @Inject(forwardRef(() => GuardrailThoughtTypeProvider))
     guardrailProvider: GuardrailThoughtTypeProvider,
-    @Inject(forwardRef(() => RagPlanningThoughtTypeProvider))
-    ragPlanningProvider: RagPlanningThoughtTypeProvider,
+    @Inject(forwardRef(() => KnowledgePlanningThoughtTypeProvider))
+    knowledgePlanningProvider: KnowledgePlanningThoughtTypeProvider,
   ) {
     this.providers = [
       autoTitleProvider,
@@ -63,7 +63,7 @@ export class ThoughtProcessingService implements OnModuleInit {
       summarizeProvider,
       summarizeAttachmentProvider,
       guardrailProvider,
-      ragPlanningProvider,
+      knowledgePlanningProvider,
     ];
   }
 

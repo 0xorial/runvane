@@ -4,7 +4,7 @@ import { ModelPresetsModule } from '../model-presets/model-presets.module.js';
 import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
 import { ApiTool } from './builtins/api/tool.js';
 import { ConversationsTool } from './builtins/conversations/tool.js';
-import { RagTool } from './builtins/rag/tool.js';
+import { KnowledgeTool } from './builtins/knowledge/tool.js';
 import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
 import { FilesystemIndexTool } from './builtins/filesystem-index/tool.js';
@@ -17,18 +17,18 @@ import { WebSearchTool } from './builtins/web-search/tool.js';
 import { WebBrowseTool } from './builtins/web-browse/tool.js';
 import { TOOL_TOKEN, ToolRegistry } from './tool-registry.js';
 import { DatabaseModule } from '../db/database.module.js';
-import { RagModule } from '../rag/rag.module.js';
+import { KnowledgeModule } from '../knowledge/knowledge.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
 
 @Module({
-  imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule, RagModule],
+  imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule, KnowledgeModule],
   providers: [
     GetCurrentTimeTool,
     TodoWriteTool,
     FilesystemTool,
     FilesystemIndexStore,
     FilesystemIndexTool,
-    RagTool,
+    KnowledgeTool,
     ApiTool,
     ConversationsTool,
     DelegateLlmTool,
@@ -45,7 +45,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         TodoWriteTool,
         FilesystemTool,
         FilesystemIndexTool,
-        RagTool,
+        KnowledgeTool,
         ApiTool,
         ConversationsTool,
         DelegateLlmTool,

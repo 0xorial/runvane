@@ -12,7 +12,7 @@
     agents: "Agents",
     tools: "Tools",
     "tool-sandboxes": "Tool Sandboxes",
-    rag: "Knowledge bases",
+    knowledge: "Knowledge bases",
   };
 
   // One sentence per section stating what the thing IS and what consumes it —
@@ -28,7 +28,7 @@
     tools: "The tool catalog. Which agent may use which tool is configured per agent.",
     "tool-sandboxes":
       "Where a conversation's target tools run. Harness host and None are built in; add ssh hosts to act on other machines. Picked per chat on the new-chat screen.",
-    rag: "Semantic indexes the agent injects as context — via forced context injection in the composer, or the rag tool. Each needs an embedding model from a provider; attach them to an agent under Agents → Tools → rag.",
+    knowledge: "Semantic indexes the agent injects as context — via forced context injection in the composer, or the knowledge tool. Each needs an embedding model from a provider; attach them to an agent under Agents → Tools → knowledge.",
   };
 
   let {

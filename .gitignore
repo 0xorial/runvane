@@ -15,8 +15,8 @@ dist/
 *.tsbuildinfo
 
 backend/data/
-backend/.rag/
-.rag/
+backend/.knowledge/
+.knowledge/
 
 .env
 .env.user

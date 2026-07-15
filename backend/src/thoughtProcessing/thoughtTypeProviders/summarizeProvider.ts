@@ -116,7 +116,7 @@ function renderTurnsForSummary(entries: ChatEntry[]): string {
         lines.push(`<earlier-summary>\n${e.summaryText}\n</earlier-summary>`);
         break;
       case 'context-injection': {
-        if (e.source === 'rag') {
+        if (e.source === 'knowledge') {
           // The fold only needs to record THAT grounding happened and from
           // where — the excerpts themselves are turn-local context.
           const sources = [...new Set((e.hits ?? []).map((h) => h.source))];

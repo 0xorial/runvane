@@ -7,7 +7,7 @@
   let { side = "bottom" }: { side?: "top" | "bottom" } = $props();
 
   // Built dynamically from the tool catalog: tools whose location is the harness
-  // run centrally (rag, conversations, api, …) no matter which tool sandbox a
+  // run centrally (knowledge, conversations, api, …) no matter which tool sandbox a
   // conversation is bound to — they never cross the wire into the sandbox.
   const toolsQuery = createQuery(() => ({ queryKey: queryKeys.tools, queryFn: getTools }));
   const harnessTools = $derived(

@@ -20,7 +20,7 @@ describe('extractAssistantPreviewFromStream', () => {
   });
 
   it('cuts at a deepseek tool-calls opener', () => {
-    const text = 'The answer is 42.\n<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>rag';
+    const text = 'The answer is 42.\n<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>knowledge';
     expect(extractAssistantPreviewFromStream(text)).toBe('The answer is 42.');
   });
 

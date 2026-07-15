@@ -199,7 +199,7 @@ export class ChatEntriesRepo extends ChatEntriesBaseRepo {
     conversationId: string,
     input: {
       parentId: string | null;
-      source: 'rag';
+      source: 'knowledge';
       queries: RetrievalQuery[];
       storages: string[];
     },

@@ -4,14 +4,14 @@
   import RowIcon from "../RowIcon.svelte";
 
   // One context-injection row for both sources: `files` (context files folded
-  // in) and `rag` (retrieval over knowledge storages). The two testids are
+  // in) and `knowledge` (retrieval over knowledge storages). The two testids are
   // preserved source-derived so the existing e2e selectors keep working.
   let { entry }: { entry: ContextInjectionEntry } = $props();
 
   let toggled = $state<boolean | null>(null);
   const expanded = $derived(toggled ?? false);
 
-  const isRag = $derived(entry.source === "rag");
+  const isKnowledge = $derived(entry.source === "knowledge");
   const files = $derived(entry.files ?? []);
   const queries = $derived(entry.queries ?? []);
   const hits = $derived(entry.hits ?? []);
@@ -20,7 +20,7 @@
   const injectedFiles = $derived(files.filter((f) => f.status === "injected"));
 
   const summary = $derived.by(() => {
-    if (isRag) {
+    if (isKnowledge) {
       // Preplanned mode appends the entry before its queries exist.
       if (entry.state === "pending" && queries.length === 0) return "Planning retrieval…";
       if (entry.state === "pending") return "Retrieving…";
@@ -33,14 +33,14 @@
       : "No context files found";
   });
 
-  const failed = $derived(isRag && entry.state === "failed");
+  const failed = $derived(isKnowledge && entry.state === "failed");
 </script>
 
 <ChatThreadIndent>
   {#snippet children()}
     <div
       class="overflow-hidden rounded-md border bg-secondary/50"
-      data-testid={isRag ? "retrieval-row" : "context-injection-row"}
+      data-testid={isKnowledge ? "retrieval-row" : "context-injection-row"}
     >
       <button
         type="button"
@@ -50,13 +50,13 @@
       >
         <RowIcon name="chevron" class="h-3 w-3 shrink-0 text-muted-foreground {expanded ? 'rotate-90' : ''}" />
         <RowIcon name="file" class="h-3 w-3 shrink-0 {failed ? 'text-destructive' : 'text-primary'}" />
-        <span class="font-medium text-foreground" data-testid={isRag ? "retrieval-summary" : undefined}>{summary}</span>
-        {#if isRag}
+        <span class="font-medium text-foreground" data-testid={isKnowledge ? "retrieval-summary" : undefined}>{summary}</span>
+        {#if isKnowledge}
           <span class="min-w-0 truncate text-muted-foreground">{storages.join(", ")}</span>
         {/if}
       </button>
       {#if expanded}
-        {#if isRag}
+        {#if isKnowledge}
           <div class="animate-slide-in space-y-2 border-t px-3 py-2">
             {#each queries as query, i (i)}
               <div class="text-[11px] text-muted-foreground">

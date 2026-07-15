@@ -26,7 +26,7 @@
         { section: "tool-sandboxes", label: "Sandboxes" },
       ],
     },
-    { label: "Knowledge", items: [{ section: "rag", label: "Knowledge bases" }] },
+    { label: "Knowledge", items: [{ section: "knowledge", label: "Knowledge bases" }] },
     { label: "System", items: [{ section: "system", label: "System" }] },
   ];
 

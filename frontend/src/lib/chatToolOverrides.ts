@@ -1,21 +1,21 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
-import type { RagOverride } from "../../../backend/src/contracts/retrieval";
+import type { KnowledgeOverride } from "../../../backend/src/contracts/retrieval";
 import type { UserMessageOverrides } from "../../../backend/src/contracts/user-message-overrides";
 
-/** Draft state for the per-message forced-retrieval override (`overrides.rag`). */
-export type ChatRagDraft = {
+/** Draft state for the per-message forced-retrieval override (`overrides.knowledge`). */
+export type ChatKnowledgeDraft = {
   enabled: boolean;
   /** Storage ids to ground the next message in. */
   storages: string[];
   topK?: number;
   /** 'verbatim' (default): the message text is the query.
-   *  'preplanned': a rag-planning thought composes the queries at send time. */
+   *  'preplanned': a knowledge-planning thought composes the queries at send time. */
   mode?: "verbatim" | "preplanned";
 };
 
-export const EMPTY_RAG_DRAFT: ChatRagDraft = { enabled: false, storages: [] };
+export const EMPTY_KNOWLEDGE_DRAFT: ChatKnowledgeDraft = { enabled: false, storages: [] };
 
-export function compileRagOverride(draft: ChatRagDraft): RagOverride | undefined {
+export function compileKnowledgeOverride(draft: ChatKnowledgeDraft): KnowledgeOverride | undefined {
   if (!draft.enabled || draft.storages.length === 0) return undefined;
   return {
     storages: [...draft.storages],
@@ -55,12 +55,12 @@ export function draftHasOverrides(draft: ChatToolDraft): boolean {
 
 export function compileUserMessageOverrides(
   draft: ChatToolDraft,
-  ragDraft?: ChatRagDraft,
+  knowledgeDraft?: ChatKnowledgeDraft,
 ): UserMessageOverrides | undefined {
   const tools = compileChatToolOverrides(draft);
-  const rag = ragDraft ? compileRagOverride(ragDraft) : undefined;
-  if (!tools && !rag) return undefined;
-  return { version: 1, ...(tools ? { tools } : {}), ...(rag ? { rag } : {}) };
+  const knowledge = knowledgeDraft ? compileKnowledgeOverride(knowledgeDraft) : undefined;
+  if (!tools && !knowledge) return undefined;
+  return { version: 1, ...(tools ? { tools } : {}), ...(knowledge ? { knowledge } : {}) };
 }
 
 function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {

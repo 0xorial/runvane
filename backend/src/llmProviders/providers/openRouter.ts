@@ -109,7 +109,7 @@ export class OpenRouterProvider implements LlmProvider {
   }
 
   /** `POST {base_url}/embeddings` — OpenRouter routes OpenAI-compatible
-   *  embedding models (e.g. 'openai/text-embedding-3-small'), so RAG
+   *  embedding models (e.g. 'openai/text-embedding-3-small'), so knowledge
    *  storages can embed through the same account as chat. */
   async embedTexts(
     settingsIn: ProviderSettingsDict,

@@ -12,8 +12,8 @@
   import MessageComposer from "./MessageComposer.svelte";
   import QueuedMessageChips from "./QueuedMessageChips.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
-  import { compileUserMessageOverrides, EMPTY_RAG_DRAFT } from "@/lib/chatToolOverrides";
-  import { getChatRagDraft, getChatToolDraft, setChatRagDraft } from "@/lib/chatToolDraft.svelte";
+  import { compileUserMessageOverrides, EMPTY_KNOWLEDGE_DRAFT } from "@/lib/chatToolOverrides";
+  import { getChatKnowledgeDraft, getChatToolDraft, setChatKnowledgeDraft } from "@/lib/chatToolDraft.svelte";
   import RetrievalActionBar from "./RetrievalActionBar.svelte";
   import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
@@ -77,8 +77,8 @@
 
   /** Forced retrieval is single-shot: it applies to the message just sent and
    * switches itself off, instead of persisting as a policy for the chat. */
-  function consumeRagDraft(): void {
-    if (getChatRagDraft().enabled) setChatRagDraft({ ...EMPTY_RAG_DRAFT });
+  function consumeKnowledgeDraft(): void {
+    if (getChatKnowledgeDraft().enabled) setChatKnowledgeDraft({ ...EMPTY_KNOWLEDGE_DRAFT });
   }
 
   async function onSend(mode: MessageSendMode): Promise<void> {
@@ -88,7 +88,7 @@
     const clientRequestId = crypto.randomUUID();
     const agentId = effectiveAgentId;
     const { llm, modelPresetId } = agentSelection;
-    const overrides = compileUserMessageOverrides(getChatToolDraft(), getChatRagDraft());
+    const overrides = compileUserMessageOverrides(getChatToolDraft(), getChatKnowledgeDraft());
     const sendOpts = {
       ...(mode.steer ? { steer: true as const } : {}),
       ...(mode.enqueue ? { enqueue: true as const } : {}),
@@ -117,7 +117,7 @@
           clientRequestId,
           sendOpts,
         );
-        consumeRagDraft();
+        consumeKnowledgeDraft();
         return;
       }
 
@@ -142,7 +142,7 @@
           clientRequestId,
           sendOpts,
         );
-        consumeRagDraft();
+        consumeKnowledgeDraft();
         onSent?.(`sent-${clientRequestId}`, cid);
         replacePath(`/chat/${encodeURIComponent(cid)}${search}`);
         return;
@@ -172,7 +172,7 @@
           optimistic.clientRequestId,
           sendOpts,
         );
-        consumeRagDraft();
+        consumeKnowledgeDraft();
       }
     } catch (err) {
       console.error("[ChatComposer] send failed", err);

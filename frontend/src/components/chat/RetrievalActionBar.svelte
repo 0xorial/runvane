@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { getRagStorages, previewForcedRetrieval } from "@/api/ragClient";
-  import { chatToolDraftRevision, getChatRagDraft, setChatRagDraft } from "@/lib/chatToolDraft.svelte";
+  import { getKnowledgeStorages, previewForcedRetrieval } from "@/api/knowledgeClient";
+  import { chatToolDraftRevision, getChatKnowledgeDraft, setChatKnowledgeDraft } from "@/lib/chatToolDraft.svelte";
 
   const HINT =
     "Single-shot: pulls context from the selected knowledge bases before the agent plans this " +
@@ -14,14 +14,14 @@
   let { text }: { text: string } = $props();
 
   const storagesQuery = createQuery(() => ({
-    queryKey: ["rag-storages"],
-    queryFn: getRagStorages,
+    queryKey: ["knowledge-storages"],
+    queryFn: getKnowledgeStorages,
   }));
   const storages = $derived(storagesQuery.data ?? []);
 
   const draft = $derived.by(() => {
     void $chatToolDraftRevision;
-    return getChatRagDraft();
+    return getChatKnowledgeDraft();
   });
   const splitMode = $derived(draft.mode === "preplanned");
   const selectedNames = $derived(
@@ -29,24 +29,24 @@
   );
 
   function toggleEnabled(): void {
-    const current = getChatRagDraft();
-    setChatRagDraft({ ...current, enabled: !current.enabled });
+    const current = getChatKnowledgeDraft();
+    setChatKnowledgeDraft({ ...current, enabled: !current.enabled });
   }
 
   function toggleStorage(id: string): void {
-    const current = getChatRagDraft();
+    const current = getChatKnowledgeDraft();
     const next = current.storages.includes(id)
       ? current.storages.filter((x) => x !== id)
       : [...current.storages, id];
-    setChatRagDraft({ ...current, storages: next });
+    setChatKnowledgeDraft({ ...current, storages: next });
   }
 
   function setMode(mode: "verbatim" | "preplanned"): void {
-    setChatRagDraft({ ...getChatRagDraft(), mode });
+    setChatKnowledgeDraft({ ...getChatKnowledgeDraft(), mode });
   }
 
   function setTopK(value: number): void {
-    setChatRagDraft({ ...getChatRagDraft(), topK: value === DEFAULT_TOP_K ? undefined : value });
+    setChatKnowledgeDraft({ ...getChatKnowledgeDraft(), topK: value === DEFAULT_TOP_K ? undefined : value });
   }
 
   type Preview =
@@ -111,12 +111,12 @@
 
 <div
   class="px-0.5 {draft.enabled ? 'mb-0.5 border-b border-border/60 pb-1' : 'pb-0.5'}"
-  data-testid="chat-rag-bar"
+  data-testid="chat-knowledge-bar"
 >
   <div class="flex flex-wrap items-center gap-1">
     <button
       type="button"
-      data-testid="chat-rag-toggle"
+      data-testid="chat-knowledge-toggle"
       aria-pressed={draft.enabled}
       title={HINT}
       onclick={toggleEnabled}
@@ -133,7 +133,7 @@
     </button>
     {#if draft.enabled}
       {#if storages.length === 0}
-        <a href="/settings/rag" class="text-[11px] text-primary underline-offset-4 hover:underline">
+        <a href="/settings/knowledge" class="text-[11px] text-primary underline-offset-4 hover:underline">
           no knowledge bases — set one up ↗
         </a>
       {:else}
@@ -141,7 +141,7 @@
           {@const selected = draft.storages.includes(storage.id)}
           <button
             type="button"
-            data-testid="chat-rag-storage"
+            data-testid="chat-knowledge-storage"
             data-storage-name={storage.name}
             aria-pressed={selected}
             title="{storage.name} ({storage.counts.chunks} chunks)"
@@ -162,12 +162,12 @@
         <div
           class="flex shrink-0 items-center overflow-hidden rounded-md ring-1 ring-border"
           role="group"
-          data-testid="chat-rag-mode"
+          data-testid="chat-knowledge-mode"
           aria-label="Query mode"
         >
           <button
             type="button"
-            data-testid="chat-rag-mode-verbatim"
+            data-testid="chat-knowledge-mode-verbatim"
             aria-pressed={!splitMode}
             title="Direct: your message text is embedded as-is — the estimate on the right is exact."
             onclick={() => setMode("verbatim")}
@@ -182,7 +182,7 @@
           </button>
           <button
             type="button"
-            data-testid="chat-rag-mode-preplanned"
+            data-testid="chat-knowledge-mode-preplanned"
             aria-pressed={splitMode}
             title="LLM-split: the agent's model splits your message into sub-queries at send time."
             onclick={() => setMode("preplanned")}
@@ -202,7 +202,7 @@
         <label class="{chipBase} cursor-pointer text-muted-foreground hover:text-foreground" title="Excerpts per query">
           k=
           <select
-            data-testid="chat-rag-topk"
+            data-testid="chat-knowledge-topk"
             class="cursor-pointer bg-transparent text-[11px] text-foreground outline-none"
             value={draft.topK ?? DEFAULT_TOP_K}
             onchange={(e) => setTopK(Number(e.currentTarget.value))}

@@ -1,7 +1,7 @@
 import { APIRequestContext, expect } from "@playwright/test";
 
 export const PROBE_MESSAGE = "what is the time?";
-export const RAG_PROBE_MESSAGE = "__rag_probe__ find the indexed database migration notes";
+export const KNOWLEDGE_PROBE_MESSAGE = "__rag_probe__ find the indexed database migration notes";
 export const STUB_SUMMARIZE_REPLY = "e2e stub summary of folded turns.";
 export const STUB_GUARDRAIL_FLAG_REASON = "e2e stub guardrail flag";
 export const STUB_ATTACHMENT_SUMMARY_REPLY = "e2e stub attachment summary.";

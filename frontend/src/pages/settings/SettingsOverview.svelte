@@ -4,7 +4,7 @@
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
   import type { LlmSettings } from "@/types/llmSettings";
   import { getToolSandboxes } from "@/api/client";
-  import { getRagStorages } from "@/api/ragClient";
+  import { getKnowledgeStorages } from "@/api/knowledgeClient";
   import { queryKeys } from "@/hooks/queries/keys";
   import { setupChainComplete, verifiedProviders } from "@/lib/setupState";
   import type { SettingsSection } from "./helpers";
@@ -23,7 +23,7 @@
   let storageCount = $state<number | null>(null);
   onMount(async () => {
     try {
-      storageCount = (await getRagStorages()).length;
+      storageCount = (await getKnowledgeStorages()).length;
     } catch {
       storageCount = null;
     }
@@ -59,7 +59,7 @@
       role: "Where an agent's tools act: this machine, none, or ssh hosts.",
     },
     {
-      section: "rag",
+      section: "knowledge",
       title: "Knowledge bases",
       count: storageCount == null ? "—" : `${storageCount} indexed`,
       role: "Context agents can look up and inject; embeds via a provider model.",

@@ -2,8 +2,8 @@ import type { LlmRequest } from '../types.js';
 
 export const PROBE_TIME_USER_MESSAGE = 'what is the time?';
 export const STUB_PROBE_TIME_REPLY = 'The current time is 12:00 UTC.';
-export const RAG_PROBE_MARKER = '__rag_probe__';
-export const STUB_RAG_REPLY = 'Based on the indexed notes, run the Prisma migration to update the schema.';
+export const KNOWLEDGE_PROBE_MARKER = '__rag_probe__';
+export const STUB_KNOWLEDGE_REPLY = 'Based on the indexed notes, run the Prisma migration to update the schema.';
 export const STUB_SUMMARIZE_REPLY = 'e2e stub summary of folded turns.';
 export const STUB_ATTACHMENT_SUMMARY_REPLY = 'e2e stub attachment summary.';
 export const STUB_ASK_ATTACHMENT_REPLY =
@@ -103,14 +103,14 @@ export function stubIsGuardrailRequest(blob: string): boolean {
   return /Tool name:/i.test(blob) && /Respond with JSON only/i.test(blob);
 }
 
-/** Matches RAG_PLANNING_SYSTEM_PROMPT (ragPlanningProvider.ts). */
-export function stubIsRagPlanningRequest(blob: string): boolean {
+/** Matches KNOWLEDGE_PLANNING_SYSTEM_PROMPT (knowledgePlanningProvider.ts). */
+export function stubIsKnowledgePlanningRequest(blob: string): boolean {
   return /compose retrieval queries/i.test(blob);
 }
 
 /** Two planned queries: distinct bag-of-words targets exercise dedupe, and
  *  the first one still ranks db.md on top in the forced-retrieval e2e. */
-export const STUB_RAG_PLANNING_REPLY = '{"queries":["SQLite database migrations Prisma","schema update"]}';
+export const STUB_KNOWLEDGE_PLANNING_REPLY = '{"queries":["SQLite database migrations Prisma","schema update"]}';
 
 export function stubIsSummarizeAttachmentRequest(blob: string): boolean {
   return /You summarize a single attachment/i.test(blob);
@@ -295,17 +295,17 @@ export function stubGraphExtractionReply(blob: string): string {
 }
 
 /**
- * Drives the rag source-management e2e: a user message with
- * RAG_SOURCES_MARKER plus `base=<dir> storage=<name>` makes the planner
- * (1) explore the base via rag suggest_sources, (2) add `<base>/docs` via
- * rag add_source, then (3) finalize. Tool params are emitted as structured
+ * Drives the knowledge source-management e2e: a user message with
+ * KNOWLEDGE_SOURCES_MARKER plus `base=<dir> storage=<name>` makes the planner
+ * (1) explore the base via knowledge suggest_sources, (2) add `<base>/docs` via
+ * knowledge add_source, then (3) finalize. Tool params are emitted as structured
  * JSON in the tool_request; the params-resolution stub echoes them through.
  */
-export const RAG_SOURCES_MARKER = '__rag_sources_probe__';
-export const STUB_RAG_SOURCES_REPLY = 'Explored the base and indexed the docs folder into the storage.';
+export const KNOWLEDGE_SOURCES_MARKER = '__rag_sources_probe__';
+export const STUB_KNOWLEDGE_SOURCES_REPLY = 'Explored the base and indexed the docs folder into the storage.';
 
-export function stubIsRagSourcesConversation(request: LlmRequest): boolean {
-  return stubUserText(request).includes(RAG_SOURCES_MARKER);
+export function stubIsKnowledgeSourcesConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(KNOWLEDGE_SOURCES_MARKER);
 }
 
 function stubCountToolResults(request: LlmRequest): number {
@@ -314,7 +314,7 @@ function stubCountToolResults(request: LlmRequest): number {
     .filter((part) => part.kind === 'tool_result').length;
 }
 
-export function stubRagSourcesPlanner(request: LlmRequest): string {
+export function stubKnowledgeSourcesPlanner(request: LlmRequest): string {
   const text = stubUserText(request);
   const base = text.match(/base=(\S+)/)?.[1] ?? '';
   const storage = text.match(/storage=(\S+)/)?.[1] ?? '';
@@ -324,7 +324,7 @@ export function stubRagSourcesPlanner(request: LlmRequest): string {
       assistant_thinking: 'Explore the base directory before picking sources.',
       assistant_output: 'Let me look at what that folder contains.',
       tool_requests: [
-        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'suggest_sources', base }) },
+        { tool_name: 'knowledge', tool_request: JSON.stringify({ operation: 'suggest_sources', base }) },
       ],
       followup: 'continue',
     });
@@ -335,7 +335,7 @@ export function stubRagSourcesPlanner(request: LlmRequest): string {
       assistant_output: 'Indexing the docs folder.',
       tool_requests: [
         {
-          tool_name: 'rag',
+          tool_name: 'knowledge',
           tool_request: JSON.stringify({ operation: 'add_source', storage, roots: [`${base}/docs`] }),
         },
       ],
@@ -344,25 +344,25 @@ export function stubRagSourcesPlanner(request: LlmRequest): string {
   }
   return JSON.stringify({
     assistant_thinking: 'Source added and indexing started.',
-    assistant_output: STUB_RAG_SOURCES_REPLY,
+    assistant_output: STUB_KNOWLEDGE_SOURCES_REPLY,
     tool_requests: [],
     followup: 'finalize',
   });
 }
 
 /**
- * Drives the orientation e2e: a user message with RAG_ORIENT_MARKER plus
+ * Drives the orientation e2e: a user message with KNOWLEDGE_ORIENT_MARKER plus
  * `storage=<name> source=<label>` makes the planner (1) list_storages with the
  * source listing, (2) read_source the given label, then (3) finalize.
  */
-export const RAG_ORIENT_MARKER = '__rag_orient_probe__';
-export const STUB_RAG_ORIENT_REPLY = 'Oriented: listed the storages and read the full source.';
+export const KNOWLEDGE_ORIENT_MARKER = '__rag_orient_probe__';
+export const STUB_KNOWLEDGE_ORIENT_REPLY = 'Oriented: listed the storages and read the full source.';
 
-export function stubIsRagOrientConversation(request: LlmRequest): boolean {
-  return stubUserText(request).includes(RAG_ORIENT_MARKER);
+export function stubIsKnowledgeOrientConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(KNOWLEDGE_ORIENT_MARKER);
 }
 
-export function stubRagOrientPlanner(request: LlmRequest): string {
+export function stubKnowledgeOrientPlanner(request: LlmRequest): string {
   const text = stubUserText(request);
   const storage = text.match(/storage=(\S+)/)?.[1] ?? '';
   const source = text.match(/source=(\S+)/)?.[1] ?? '';
@@ -372,7 +372,7 @@ export function stubRagOrientPlanner(request: LlmRequest): string {
       assistant_thinking: 'Orient over the indexed storages first.',
       assistant_output: 'Checking what is indexed.',
       tool_requests: [
-        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'list_storages', storage }) },
+        { tool_name: 'knowledge', tool_request: JSON.stringify({ operation: 'list_storages', storage }) },
       ],
       followup: 'continue',
     });
@@ -382,33 +382,33 @@ export function stubRagOrientPlanner(request: LlmRequest): string {
       assistant_thinking: 'The chunks alone are not enough — read the whole source.',
       assistant_output: 'Reading the full document.',
       tool_requests: [
-        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'read_source', storage, source }) },
+        { tool_name: 'knowledge', tool_request: JSON.stringify({ operation: 'read_source', storage, source }) },
       ],
       followup: 'continue',
     });
   }
   return JSON.stringify({
     assistant_thinking: 'Storage listing and full source in hand.',
-    assistant_output: STUB_RAG_ORIENT_REPLY,
+    assistant_output: STUB_KNOWLEDGE_ORIENT_REPLY,
     tool_requests: [],
     followup: 'finalize',
   });
 }
 
 /**
- * Drives the create-storage e2e: a user message with RAG_CREATE_MARKER plus
+ * Drives the create-storage e2e: a user message with KNOWLEDGE_CREATE_MARKER plus
  * `base=<dir> name=<storage>` makes the planner (1) explore the base,
  * (2) create a storage named `<storage>` with `<base>/docs` as its root,
  * then (3) finalize.
  */
-export const RAG_CREATE_MARKER = '__rag_create_probe__';
-export const STUB_RAG_CREATE_REPLY = 'Created a storage and started indexing the docs folder.';
+export const KNOWLEDGE_CREATE_MARKER = '__rag_create_probe__';
+export const STUB_KNOWLEDGE_CREATE_REPLY = 'Created a storage and started indexing the docs folder.';
 
-export function stubIsRagCreateConversation(request: LlmRequest): boolean {
-  return stubUserText(request).includes(RAG_CREATE_MARKER);
+export function stubIsKnowledgeCreateConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(KNOWLEDGE_CREATE_MARKER);
 }
 
-export function stubRagCreatePlanner(request: LlmRequest): string {
+export function stubKnowledgeCreatePlanner(request: LlmRequest): string {
   const text = stubUserText(request);
   const base = text.match(/base=(\S+)/)?.[1] ?? '';
   const name = text.match(/name=(\S+)/)?.[1] ?? '';
@@ -418,7 +418,7 @@ export function stubRagCreatePlanner(request: LlmRequest): string {
       assistant_thinking: 'No storage exists; explore the base first.',
       assistant_output: 'Let me look at that folder.',
       tool_requests: [
-        { tool_name: 'rag', tool_request: JSON.stringify({ operation: 'suggest_sources', base }) },
+        { tool_name: 'knowledge', tool_request: JSON.stringify({ operation: 'suggest_sources', base }) },
       ],
       followup: 'continue',
     });
@@ -429,7 +429,7 @@ export function stubRagCreatePlanner(request: LlmRequest): string {
       assistant_output: 'Creating a storage for the docs.',
       tool_requests: [
         {
-          tool_name: 'rag',
+          tool_name: 'knowledge',
           tool_request: JSON.stringify({ operation: 'create_storage', name, roots: [`${base}/docs`] }),
         },
       ],
@@ -438,31 +438,31 @@ export function stubRagCreatePlanner(request: LlmRequest): string {
   }
   return JSON.stringify({
     assistant_thinking: 'Storage created and indexing started.',
-    assistant_output: STUB_RAG_CREATE_REPLY,
+    assistant_output: STUB_KNOWLEDGE_CREATE_REPLY,
     tool_requests: [],
     followup: 'finalize',
   });
 }
 
-/** Drives the rag-tool e2e: a user message containing RAG_PROBE_MARKER makes
- *  the planner call the `rag` tool once, then finalize. */
-export function stubIsRagProbeConversation(request: LlmRequest): boolean {
-  return stubUserText(request).includes(RAG_PROBE_MARKER);
+/** Drives the knowledge-tool e2e: a user message containing KNOWLEDGE_PROBE_MARKER makes
+ *  the planner call the `knowledge` tool once, then finalize. */
+export function stubIsKnowledgeProbeConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(KNOWLEDGE_PROBE_MARKER);
 }
 
-export function stubRagPlannerFirstRound(): string {
+export function stubKnowledgePlannerFirstRound(): string {
   return JSON.stringify({
-    assistant_thinking: 'User wants indexed notes; query the rag tool.',
+    assistant_thinking: 'User wants indexed notes; query the knowledge tool.',
     assistant_output: 'Let me search the indexed notes.',
-    tool_requests: [{ tool_name: 'rag', tool_request: 'database migration prisma' }],
+    tool_requests: [{ tool_name: 'knowledge', tool_request: 'database migration prisma' }],
     followup: 'continue',
   });
 }
 
-export function stubRagPlannerFinalize(): string {
+export function stubKnowledgePlannerFinalize(): string {
   return JSON.stringify({
-    assistant_thinking: 'The rag tool returned the relevant chunk.',
-    assistant_output: STUB_RAG_REPLY,
+    assistant_thinking: 'The knowledge tool returned the relevant chunk.',
+    assistant_output: STUB_KNOWLEDGE_REPLY,
     tool_requests: [],
     followup: 'finalize',
   });
@@ -718,7 +718,7 @@ export function pickStubReply(request: LlmRequest): string {
   if (stubIsCategorizationRequest(blob)) return STUB_CATEGORY_REPLY;
   if (stubIsToolParamsRequest(blob)) {
     if (stubIsAskAttachmentToolParamsRequest(blob)) return stubAskAttachmentParamsReply(blob);
-    if (/Produce JSON args for tool "rag"/.test(blob)) {
+    if (/Produce JSON args for tool "knowledge"/.test(blob)) {
       // The user message is the planner's raw tool_request (no prefix — only
       // ask_attachment adds a params-context note). Structured requests from
       // the source-management flow are one-line JSON objects; pass them
@@ -754,7 +754,7 @@ export function pickStubReply(request: LlmRequest): string {
   }
   if (stubIsGraphExtractionRequest(blob)) return stubGraphExtractionReply(blob);
   if (stubIsGraphSummarizeRequest(blob)) return STUB_GRAPH_SUMMARY_REPLY;
-  if (stubIsRagPlanningRequest(blob)) return STUB_RAG_PLANNING_REPLY;
+  if (stubIsKnowledgePlanningRequest(blob)) return STUB_KNOWLEDGE_PLANNING_REPLY;
   if (stubIsSummarizeRequest(blob)) return STUB_SUMMARIZE_REPLY;
   if (stubIsGuardrailRequest(blob)) return stubGuardrailFlagReply();
   if (stubIsSummarizeAttachmentRequest(blob)) return STUB_ATTACHMENT_SUMMARY_REPLY;
@@ -782,11 +782,11 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
-    if (stubIsRagSourcesConversation(request)) return stubRagSourcesPlanner(request);
-    if (stubIsRagCreateConversation(request)) return stubRagCreatePlanner(request);
-    if (stubIsRagOrientConversation(request)) return stubRagOrientPlanner(request);
-    if (stubIsRagProbeConversation(request)) {
-      return stubHasPlannerToolResult(request) ? stubRagPlannerFinalize() : stubRagPlannerFirstRound();
+    if (stubIsKnowledgeSourcesConversation(request)) return stubKnowledgeSourcesPlanner(request);
+    if (stubIsKnowledgeCreateConversation(request)) return stubKnowledgeCreatePlanner(request);
+    if (stubIsKnowledgeOrientConversation(request)) return stubKnowledgeOrientPlanner(request);
+    if (stubIsKnowledgeProbeConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubKnowledgePlannerFinalize() : stubKnowledgePlannerFirstRound();
     }
     if (stubIsTodoProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubTodoPlannerFinalize() : stubTodoPlannerFirstRound();

@@ -8,7 +8,7 @@
   import ModelPresetsEditor from "./ModelPresetsEditor.svelte";
   import ModelPricingEditor from "./ModelPricingEditor.svelte";
   import ProviderCard from "./ProviderCard.svelte";
-  import RagStoragesSection from "./RagStoragesSection.svelte";
+  import KnowledgeStoragesSection from "./KnowledgeStoragesSection.svelte";
   import ToolSandboxesSection from "./ToolSandboxesSection.svelte";
   import SettingsHeader from "./SettingsHeader.svelte";
   import { buildModelGroups, filterProviders, type SettingsSection } from "./helpers";
@@ -172,8 +172,8 @@
       Per-agent tool enablement and approval policy: open <strong>Agents</strong> → pick an agent →
       <strong>Tools &amp; permissions</strong>.
     </div>
-  {:else if section === "rag"}
-    <RagStoragesSection />
+  {:else if section === "knowledge"}
+    <KnowledgeStoragesSection />
   {:else if section === "tool-sandboxes"}
     <ToolSandboxesSection />
   {/if}

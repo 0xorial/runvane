@@ -288,9 +288,9 @@
         </span>
       </button>
       <a
-        href="/settings/rag"
+        href="/settings/knowledge"
         class="group flex items-start gap-2.5 rounded-xl border border-dashed border-border bg-transparent p-2.5 text-left transition-colors hover:border-primary/60 hover:bg-card/40"
-        data-testid="setup-rag-link"
+        data-testid="setup-knowledge-link"
       >
         <span class="mt-0.5 text-muted-foreground"><Icon name="chevron-right" class="h-3.5 w-3.5" /></span>
         <span class="min-w-0">

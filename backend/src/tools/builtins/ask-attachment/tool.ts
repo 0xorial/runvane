@@ -17,7 +17,7 @@ import { askAttachmentParamsSchema, parseAskAttachmentParams, type AskAttachment
 import { AskAttachmentRulesSchema, parseAskAttachmentRules, type AskAttachmentRules } from './rules.js';
 
 /**
- * RAG-via-subagent: answers a focused question about a single attachment.
+ * knowledge-via-subagent: answers a focused question about a single attachment.
  *
  * Loads the attachment's full bytes once per call and delegates to a sub-LLM
  * call that the agent never sees in its own context. Returns just the

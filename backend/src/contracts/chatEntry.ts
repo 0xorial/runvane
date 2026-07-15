@@ -15,7 +15,7 @@ import { PreinjectedFileRecordSchema } from './preinject.js';
  * - `summary`: a one-shot summarize-attachment thought runs before the
  *   planner. The planner sees the summary text in place of the raw bytes,
  *   and can call the `ask_attachment` tool to query the full content via
- *   a RAG-style subagent. Cheap on tokens; relies on summary quality + tool
+ *   a knowledge-style subagent. Cheap on tokens; relies on summary quality + tool
  *   usage for precise lookups.
  */
 export const AttachmentModeSchema = z.enum(['direct', 'summary']);
@@ -119,7 +119,7 @@ export const ThoughtTypeSchema = z.enum([
   'summarize_attachment',
   'guardrail',
   'categorize',
-  'rag_planning',
+  'knowledge_planning',
 ]);
 export type ThoughtType = z.infer<typeof ThoughtTypeSchema>;
 
@@ -271,7 +271,7 @@ export type CheckpointSummaryEntry = z.infer<typeof CheckpointSummaryEntrySchema
  *   `files` lists every candidate discovered on disk, each tagged `injected`
  *   (folded into `content`) or `skipped` (category not selected, unreadable, or
  *   binary). Once-written, never updated.
- * - `rag` — a user-forced retrieval over knowledge storages (`overrides.rag`),
+ * - `knowledge` — a user-forced retrieval over knowledge storages (`overrides.knowledge`),
  *   executed by the harness (NOT a tool invocation — tool rows assert the model
  *   chose them). Starts `pending` with `hits: []` (every committed state must be
  *   snapshot-mappable); the done/failed update only fills optionals. `storages`
@@ -281,7 +281,7 @@ export type CheckpointSummaryEntry = z.infer<typeof CheckpointSummaryEntrySchema
  * per `source`. Future grounding kinds (attachment recall, conversation memory)
  * add another `source`, not a new entry type.
  */
-export const ContextInjectionSourceSchema = z.enum(['files', 'rag']);
+export const ContextInjectionSourceSchema = z.enum(['files', 'knowledge']);
 export type ContextInjectionSource = z.infer<typeof ContextInjectionSourceSchema>;
 
 export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
@@ -290,7 +290,7 @@ export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
   // source: 'files'
   files: z.array(PreinjectedFileRecordSchema).optional(),
   content: z.string().optional(),
-  // source: 'rag'
+  // source: 'knowledge'
   state: z.enum(['pending', 'done', 'failed']).optional(),
   queries: z.array(RetrievalQuerySchema).optional(),
   storages: z.array(z.string()).optional(),
@@ -299,8 +299,8 @@ export const ContextInjectionEntrySchema = ChatEntryBaseSchema.extend({
 });
 export type ContextInjectionEntry = z.infer<typeof ContextInjectionEntrySchema>;
 
-/** The `source: 'rag'` variant, kept as a named type for retrieval call sites. */
-export type RetrievalEntry = ContextInjectionEntry & { source: 'rag' };
+/** The `source: 'knowledge'` variant, kept as a named type for retrieval call sites. */
+export type RetrievalEntry = ContextInjectionEntry & { source: 'knowledge' };
 
 // ---- Union ----
 

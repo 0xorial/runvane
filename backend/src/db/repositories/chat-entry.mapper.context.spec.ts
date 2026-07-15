@@ -31,30 +31,30 @@ describe('rowToChatEntry: unified context-injection entry', () => {
     });
   });
 
-  it('maps a rag source in pending state (was the retrieval entry, mid-flight)', () => {
+  it('maps a knowledge source in pending state (was the retrieval entry, mid-flight)', () => {
     const entry = rowToChatEntry(
       row('context-injection', {
-        source: 'rag',
+        source: 'knowledge',
         state: 'pending',
         queries: [],
         storages: ['Docs'],
         hits: [],
       }),
     );
-    expect(entry).toMatchObject({ type: 'context-injection', source: 'rag', state: 'pending', storages: ['Docs'] });
+    expect(entry).toMatchObject({ type: 'context-injection', source: 'knowledge', state: 'pending', storages: ['Docs'] });
   });
 
-  it('maps a resolved rag source with hits', () => {
+  it('maps a resolved knowledge source with hits', () => {
     const entry = rowToChatEntry(
       row('context-injection', {
-        source: 'rag',
+        source: 'knowledge',
         state: 'done',
         queries: [{ text: 'q', origin: 'verbatim' }],
         storages: ['Docs'],
         hits: [{ storage: 'Docs', source: 'a.md', chunkIndex: 0, score: 0.9, origin: 'seed', text: 't' }],
       }),
     );
-    expect(entry).toMatchObject({ type: 'context-injection', source: 'rag', state: 'done' });
+    expect(entry).toMatchObject({ type: 'context-injection', source: 'knowledge', state: 'done' });
     expect(entry.type === 'context-injection' && entry.hits?.length).toBe(1);
   });
 
@@ -63,12 +63,12 @@ describe('rowToChatEntry: unified context-injection entry', () => {
     expect(() => rowToChatEntry(row('context-injection', { files: [], content: '' }))).toThrow();
   });
 
-  it('rejects a rag row missing required rag fields', () => {
-    expect(() => rowToChatEntry(row('context-injection', { source: 'rag', state: 'done' }))).toThrow();
+  it('rejects a knowledge row missing required knowledge fields', () => {
+    expect(() => rowToChatEntry(row('context-injection', { source: 'knowledge', state: 'done' }))).toThrow();
   });
 
   it('no longer recognizes the old retrieval type', () => {
-    expect(() => rowToChatEntry(row('retrieval', { source: 'rag', state: 'done', queries: [], storages: [], hits: [] }))).toThrow(
+    expect(() => rowToChatEntry(row('retrieval', { source: 'knowledge', state: 'done', queries: [], storages: [], hits: [] }))).toThrow(
       /unknown chat entry type/,
     );
   });

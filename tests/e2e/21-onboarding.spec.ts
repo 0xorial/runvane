@@ -93,19 +93,19 @@ test("settings overview shows live counts and navigates the grouped sections", a
   await expect(app.page.getByTestId("tool-sandboxes-section")).toBeVisible();
 });
 
-test("rag create form flags an unconnected embedding provider", async ({ app }) => {
-  await app.page.goto("/settings/rag", { waitUntil: "domcontentloaded" });
+test("knowledge create form flags an unconnected embedding provider", async ({ app }) => {
+  await app.page.goto("/settings/knowledge", { waitUntil: "domcontentloaded" });
   // Open the create form if another test's storages left it collapsed.
-  const addButton = app.page.getByTestId("rag-add");
+  const addButton = app.page.getByTestId("knowledge-add");
   if (await addButton.isVisible().catch(() => false)) await addButton.click();
 
   // The form defaults to provider id "openai", which the e2e backend has no
   // verified models for — the dead-end hint names it and links Providers.
-  await expect(app.page.getByTestId("rag-provider")).toHaveValue("openai");
-  await expect(app.page.getByTestId("rag-no-models-hint")).toBeVisible();
-  await expect(app.page.getByTestId("rag-no-models-hint")).toContainText("openai");
+  await expect(app.page.getByTestId("knowledge-provider")).toHaveValue("openai");
+  await expect(app.page.getByTestId("knowledge-no-models-hint")).toBeVisible();
+  await expect(app.page.getByTestId("knowledge-no-models-hint")).toContainText("openai");
 
   // Switching to the connected stub provider clears the hint.
-  await app.page.getByTestId("rag-provider").fill("stub");
-  await expect(app.page.getByTestId("rag-no-models-hint")).not.toBeVisible();
+  await app.page.getByTestId("knowledge-provider").fill("stub");
+  await expect(app.page.getByTestId("knowledge-no-models-hint")).not.toBeVisible();
 });

@@ -20,7 +20,7 @@ export type {
   UserMessageEntry,
 } from "../../../backend/src/contracts/chatEntry.js";
 
-export type { RagOverride, RetrievalHit, RetrievalQuery } from "../../../backend/src/contracts/retrieval.js";
+export type { KnowledgeOverride, RetrievalHit, RetrievalQuery } from "../../../backend/src/contracts/retrieval.js";
 
 export type {
   AgentPreinjectConfig,
