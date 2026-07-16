@@ -27,6 +27,13 @@ export type ModelPricingPer1M = {
   outCostPer1m: number;
 };
 
+/** One model surfaced by discovery, with catalog pricing where the provider
+ *  publishes it alongside the model list. */
+export type DiscoveredModel = {
+  name: string;
+  pricing?: ModelPricingPer1M;
+};
+
 /** Re-exported for convenience; usage shape lives in types.ts. */
 export type { LlmUsage as StreamTextCompletionUsage } from './types.js';
 
@@ -96,4 +103,12 @@ export interface LlmProvider {
    * overrides only.
    */
   listModelPricing?(settings: ProviderSettingsDict): Promise<Record<string, ModelPricingPer1M>>;
+
+  /**
+   * Optional richer discovery: the model list WITH catalog pricing where the
+   * provider publishes it. Used by the verify flow to persist pricing next to
+   * `models_json`, so discovered capability rows stop being unpriced.
+   * Providers without pricing keep implementing `listModels` only.
+   */
+  discoverModels?(settings: ProviderSettingsDict): Promise<DiscoveredModel[]>;
 }

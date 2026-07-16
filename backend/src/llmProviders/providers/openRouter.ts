@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   ConnectivityResult,
+  DiscoveredModel,
   LlmProvider,
   LlmProviderSettingSpec,
   ModelPricingPer1M,
@@ -61,6 +62,25 @@ function perTokenUsd(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** Null when the entry has no parsable prompt+completion rates. */
+function parseEntryPricing(entry: unknown): ModelPricingPer1M | null {
+  const pricing = (entry as { pricing?: Record<string, unknown> }).pricing;
+  const prompt = perTokenUsd(pricing?.prompt);
+  const completion = perTokenUsd(pricing?.completion);
+  if (prompt == null || completion == null) return null;
+  const cached = perTokenUsd(pricing?.input_cache_read) ?? prompt;
+  return {
+    inCostPer1m: prompt * 1_000_000,
+    cachedInCostPer1m: cached * 1_000_000,
+    outCostPer1m: completion * 1_000_000,
+  };
+}
+
+function cheaperPricing(a: ModelPricingPer1M, b: ModelPricingPer1M): boolean {
+  if (a.inCostPer1m !== b.inCostPer1m) return a.inCostPer1m < b.inCostPer1m;
+  return a.outCostPer1m < b.outCostPer1m;
+}
+
 @Injectable()
 export class OpenRouterProvider implements LlmProvider {
   public readonly id = 'openrouter';
@@ -111,32 +131,41 @@ export class OpenRouterProvider implements LlmProvider {
     }
   }
 
-  async listModels(settingsIn: ProviderSettingsDict): Promise<string[]> {
+  /**
+   * OpenRouter has no separate price API — `/models` carries `pricing` as
+   * USD-per-token strings (prompt/completion/input_cache_read) next to each
+   * model; scale to per-1M. Duplicate ids in the payload resolve to the
+   * CURRENT CHEAPEST rate (by input, then output). Per-endpoint prices
+   * (`/models/:author/:slug/endpoints`) are deliberately not fetched: that
+   * would be one request per model, and the `/models` figure already reflects
+   * default routing.
+   */
+  async discoverModels(settingsIn: ProviderSettingsDict): Promise<DiscoveredModel[]> {
     const data = await this.fetchModelsPayload(settingsIn);
-    return Array.from(new Set(data.map(parseModelIdentifier).filter((x) => x.length > 0)));
+    const byName = new Map<string, DiscoveredModel>();
+    for (const entry of data) {
+      const name = parseModelIdentifier(entry);
+      if (!name) continue;
+      const pricing = parseEntryPricing(entry);
+      const existing = byName.get(name);
+      if (!existing) {
+        byName.set(name, pricing ? { name, pricing } : { name });
+        continue;
+      }
+      if (pricing && (!existing.pricing || cheaperPricing(pricing, existing.pricing))) {
+        byName.set(name, { name, pricing });
+      }
+    }
+    return Array.from(byName.values());
   }
 
-  /** OpenRouter's `/models` payload carries `pricing` as USD-per-token strings
-   *  (prompt/completion/input_cache_read); scale to per-1M for the composer's
-   *  cost estimate. Models without parsable prompt+completion are skipped. */
+  async listModels(settingsIn: ProviderSettingsDict): Promise<string[]> {
+    return (await this.discoverModels(settingsIn)).map((m) => m.name);
+  }
+
   async listModelPricing(settingsIn: ProviderSettingsDict): Promise<Record<string, ModelPricingPer1M>> {
-    const data = await this.fetchModelsPayload(settingsIn);
-    const out: Record<string, ModelPricingPer1M> = {};
-    for (const entry of data) {
-      const id = parseModelIdentifier(entry);
-      if (!id) continue;
-      const pricing = (entry as { pricing?: Record<string, unknown> }).pricing;
-      const prompt = perTokenUsd(pricing?.prompt);
-      const completion = perTokenUsd(pricing?.completion);
-      if (prompt == null || completion == null) continue;
-      const cached = perTokenUsd(pricing?.input_cache_read) ?? prompt;
-      out[id] = {
-        inCostPer1m: prompt * 1_000_000,
-        cachedInCostPer1m: cached * 1_000_000,
-        outCostPer1m: completion * 1_000_000,
-      };
-    }
-    return out;
+    const discovered = await this.discoverModels(settingsIn);
+    return Object.fromEntries(discovered.filter((m) => m.pricing).map((m) => [m.name, m.pricing!]));
   }
 
   /** `POST {base_url}/embeddings` — OpenRouter routes OpenAI-compatible

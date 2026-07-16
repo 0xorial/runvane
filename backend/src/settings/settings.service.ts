@@ -47,7 +47,7 @@ export class SettingsService {
     const tested = await this.llmProviderSettings.testConnection(providerId, settings);
     if (tested.kind === 'unknown_provider') return { ok: false, detail: `unknown provider: ${providerId}`, models: [] };
     if (tested.kind === 'connectivity_failed') return tested.value;
-    await this.llmProviderSettings.upsertProviderModels(providerId, settings, tested.value.models);
+    await this.llmProviderSettings.upsertProviderModels(providerId, settings, tested.value.models, tested.pricing);
     return tested.value;
   }
 

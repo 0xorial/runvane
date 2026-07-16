@@ -1,5 +1,31 @@
 import { Injectable } from '@nestjs/common';
+import type { ModelPricingPer1M } from '../../llmProviders/provider.js';
 import { PrismaService } from '../prisma.service.js';
+
+/** models_pricing_json → {model → per-1M rates}; anything malformed reads as unpriced. */
+function parseDiscoveredPricing(raw: unknown): Record<string, ModelPricingPer1M> {
+  try {
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, ModelPricingPer1M> = {};
+    for (const [model, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue;
+      const rec = value as Record<string, unknown>;
+      const inCost = Number(rec.inCostPer1m);
+      const cached = Number(rec.cachedInCostPer1m);
+      const outCost = Number(rec.outCostPer1m);
+      if (!Number.isFinite(inCost) || !Number.isFinite(outCost)) continue;
+      out[model] = {
+        inCostPer1m: inCost,
+        cachedInCostPer1m: Number.isFinite(cached) ? cached : inCost,
+        outCostPer1m: outCost,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 export type ModelCapabilityRow = {
   provider_id: string;
@@ -133,19 +159,24 @@ export class ModelCapabilitiesRepo {
 
     // Fold in models from configured providers (`llm_providers.models_json`) so the
     // editor lists every model a user can currently pick, not just the few that
-    // happen to have overrides. Rows without overrides surface as "unpriced".
+    // happen to have overrides. Catalog pricing captured at discovery
+    // (`models_pricing_json`, e.g. OpenRouter's /models rates) prices the row;
+    // rows without either surface as "unpriced". Overrides always win — they
+    // were inserted into `effective` first.
     const providers = (await this.prisma.$queryRawUnsafe(
-      `SELECT id, models_json FROM llm_providers WHERE models_verified = 1`,
-    )) as Array<{ id: string; models_json: unknown }>;
+      `SELECT id, models_json, models_pricing_json FROM llm_providers WHERE models_verified = 1`,
+    )) as Array<{ id: string; models_json: unknown; models_pricing_json: unknown }>;
     for (const provider of providers) {
       const raw = provider.models_json;
       const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (!Array.isArray(parsed)) continue;
+      const pricingByModel = parseDiscoveredPricing(provider.models_pricing_json);
       for (const entry of parsed) {
         const modelName = String(entry ?? '').trim();
         if (!modelName) continue;
         const key = `${provider.id}::${modelName}`;
         if (effective.has(key)) continue;
+        const pricing = pricingByModel[modelName];
         effective.set(key, {
           provider_id: provider.id,
           model_name: modelName,
@@ -153,9 +184,9 @@ export class ModelCapabilitiesRepo {
           supports_file_input: false,
           max_context_tokens: null,
           max_output_tokens: null,
-          input_cost_per_1m: null,
-          cached_input_cost_per_1m: null,
-          output_cost_per_1m: null,
+          input_cost_per_1m: pricing?.inCostPer1m ?? null,
+          cached_input_cost_per_1m: pricing?.cachedInCostPer1m ?? null,
+          output_cost_per_1m: pricing?.outCostPer1m ?? null,
           self_hosted: false,
           currency: 'USD',
           source: 'discovered',

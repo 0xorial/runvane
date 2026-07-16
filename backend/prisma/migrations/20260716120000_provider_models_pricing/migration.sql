@@ -1,0 +1,11 @@
+-- Provider model discovery optionally captures catalog pricing (OpenRouter's
+-- /models payload carries USD-per-token rates alongside the model list).
+-- Stored per provider as {model name -> {inCostPer1m, cachedInCostPer1m,
+-- outCostPer1m}} and folded into the effective model-capability rows, so
+-- discovered models stop surfacing as "unpriced" wherever the provider
+-- publishes rates. Null = provider doesn't publish pricing / not re-verified
+-- since this column landed.
+--
+-- Hand-written additive ALTER on purpose (see the sqlite migration memory):
+-- prisma migrate's auto-diff has a history of dropping raw-SQL-only state.
+ALTER TABLE "llm_providers" ADD COLUMN "models_pricing_json" JSONB;

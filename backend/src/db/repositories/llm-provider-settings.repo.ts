@@ -152,7 +152,14 @@ export class LlmProviderSettingsRepo {
     return parseObjectJson(row.settings_json);
   }
 
-  async upsertProviderModels(providerId: string, settings: ProviderSettingsDict, models: string[]): Promise<void> {
+  async upsertProviderModels(
+    providerId: string,
+    settings: ProviderSettingsDict,
+    models: string[],
+    /** Catalog pricing captured by discovery; null = provider publishes none
+     *  (stored as NULL, refreshed — never merged — on every verify). */
+    pricing: Record<string, ModelPricingPer1M> | null = null,
+  ): Promise<void> {
     const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT label, created_at FROM llm_providers WHERE id = ?`,
       providerId,
@@ -161,12 +168,13 @@ export class LlmProviderSettingsRepo {
     const fallbackLabel = this.registry.get(providerId)?.label ?? providerId;
     await this.prisma.$executeRawUnsafe(
       `INSERT OR REPLACE INTO llm_providers
-       (id, label, settings_json, models_json, models_verified, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, COALESCE((SELECT created_at FROM llm_providers WHERE id = ?), ?), ?)`,
+       (id, label, settings_json, models_json, models_pricing_json, models_verified, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, COALESCE((SELECT created_at FROM llm_providers WHERE id = ?), ?), ?)`,
       providerId,
       existing?.label ?? fallbackLabel,
       JSON.stringify(settings),
       JSON.stringify(models),
+      pricing ? JSON.stringify(pricing) : null,
       providerId,
       existing?.created_at ?? new Date().toISOString(),
       new Date().toISOString(),
@@ -196,7 +204,7 @@ export class LlmProviderSettingsRepo {
     settings: ProviderSettingsDict,
   ): Promise<
     | { kind: 'unknown_provider' }
-    | { kind: 'ok'; value: LlmProviderConnectionTestResponse }
+    | { kind: 'ok'; value: LlmProviderConnectionTestResponse; pricing: Record<string, ModelPricingPer1M> | null }
     | { kind: 'connectivity_failed'; value: LlmProviderConnectionTestResponse }
   > {
     const provider = this.registry.get(providerId);
@@ -209,8 +217,19 @@ export class LlmProviderSettingsRepo {
       };
     }
     try {
+      // Richer discovery when the provider offers it: models + catalog
+      // pricing in one pass, persisted next to models_json by the caller.
+      if (provider.discoverModels) {
+        const discovered = await provider.discoverModels(settings);
+        const priced = discovered.filter((m) => m.pricing);
+        return {
+          kind: 'ok',
+          value: { ok: true, detail: null, models: discovered.map((m) => m.name) },
+          pricing: priced.length > 0 ? Object.fromEntries(priced.map((m) => [m.name, m.pricing!])) : null,
+        };
+      }
       const models = await provider.listModels(settings);
-      return { kind: 'ok', value: { ok: true, detail: null, models } };
+      return { kind: 'ok', value: { ok: true, detail: null, models }, pricing: null };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       return { kind: 'connectivity_failed', value: { ok: false, detail, models: [] } };

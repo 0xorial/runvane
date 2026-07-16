@@ -82,6 +82,9 @@ model LlmProviderSetting {
   label          String
   settingsJson   Json     @map("settings_json")
   modelsJson     Json     @map("models_json")
+  /// Catalog pricing captured at discovery (model name → USD per 1M rates),
+  /// null for providers that don't publish it. Refreshed on every verify.
+  modelsPricingJson Json? @map("models_pricing_json")
   modelsVerified Boolean  @default(false) @map("models_verified")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

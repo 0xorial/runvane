@@ -47,15 +47,22 @@ export class StubLlmProvider implements LlmProvider, StubLlmControl {
     return [...this.models];
   }
 
-  /** Fixed catalog pricing so the composer's cost estimate is exercisable in
-   *  e2e without a live provider ($2 in / $1 cached / $10 out per 1M).
-   *  'stub' is included on top of the picker models — the e2e seed's agents
+  /** Fixed catalog pricing so the composer's cost estimate and the
+   *  discovery-persists-pricing flow are exercisable in e2e without a live
+   *  provider ($2 in / $1 cached / $10 out per 1M). */
+  private fixedPricing() {
+    return { inCostPer1m: 2, cachedInCostPer1m: 1, outCostPer1m: 10 };
+  }
+
+  async discoverModels(_settings: ProviderSettingsDict) {
+    return this.models.map((name) => ({ name, pricing: this.fixedPricing() }));
+  }
+
+  /** 'stub' is priced on top of the picker models — the e2e seed's agents
    *  run with model_name 'stub'. */
   async listModelPricing(_settings: ProviderSettingsDict) {
     const priced = new Set([...this.models, 'stub']);
-    return Object.fromEntries(
-      [...priced].map((model) => [model, { inCostPer1m: 2, cachedInCostPer1m: 1, outCostPer1m: 10 }]),
-    );
+    return Object.fromEntries([...priced].map((model) => [model, this.fixedPricing()]));
   }
 
   configure(scripts: StubModelScript[], opts?: { append?: boolean }): void {

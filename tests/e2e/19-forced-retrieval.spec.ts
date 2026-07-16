@@ -242,6 +242,35 @@ test("typing alone prices the send — tokens and cost from the provider's live 
   await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok · ≈\$\d/);
 });
 
+test("verifying a provider persists discovered catalog pricing into the capability rows", async ({ request }) => {
+  test.setTimeout(20_000);
+  // The stub provider's discoverModels publishes fixed rates; a verify
+  // (test_connection) must land them on the discovered capability rows.
+  const testRes = await request.post(`${apiBaseUrl()}/api/settings/llm_provider/test_connection`, {
+    data: { provider_id: "stub" },
+  });
+  expect(testRes.ok()).toBeTruthy();
+  const tested = (await testRes.json()) as { ok: boolean; models: string[] };
+  expect(tested.ok).toBe(true);
+  expect(tested.models).toContain("stub-model");
+
+  const capsRes = await request.get(`${apiBaseUrl()}/api/settings/model_capabilities`);
+  expect(capsRes.ok()).toBeTruthy();
+  const caps = (await capsRes.json()) as {
+    models: Array<{
+      provider_id: string;
+      model_name: string;
+      input_cost_per_1m: number | null;
+      output_cost_per_1m: number | null;
+      source: string;
+    }>;
+  };
+  const row = caps.models.find((m) => m.provider_id === "stub" && m.model_name === "stub-model");
+  expect(row?.source).toBe("discovered");
+  expect(row?.input_cost_per_1m).toBe(2);
+  expect(row?.output_cost_per_1m).toBe(10);
+});
+
 test("a model without any pricing offers a set-price link next to the estimate", async ({ app, request }) => {
   test.setTimeout(20_000);
   // 'e2e-unpriced' is off the stub provider's priced catalog and has no

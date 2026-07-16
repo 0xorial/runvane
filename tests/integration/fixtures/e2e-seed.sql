@@ -3,6 +3,7 @@ INSERT INTO llm_providers (
   label,
   settings_json,
   models_json,
+  models_pricing_json,
   models_verified,
   created_at,
   updated_at
@@ -12,6 +13,7 @@ VALUES (
   'Test stub',
   '{"base_url":""}',
   '["stub-model"]',
+  '{"stub-model":{"inCostPer1m":2,"cachedInCostPer1m":1,"outCostPer1m":10}}',
   1,
   datetime('now'),
   datetime('now')

@@ -45,6 +45,7 @@ export type LlmProviderSettingCountAggregateOutputType = {
   label: number
   settingsJson: number
   modelsJson: number
+  modelsPricingJson: number
   modelsVerified: number
   createdAt: number
   updatedAt: number
@@ -73,6 +74,7 @@ export type LlmProviderSettingCountAggregateInputType = {
   label?: true
   settingsJson?: true
   modelsJson?: true
+  modelsPricingJson?: true
   modelsVerified?: true
   createdAt?: true
   updatedAt?: true
@@ -156,6 +158,7 @@ export type LlmProviderSettingGroupByOutputType = {
   label: string
   settingsJson: runtime.JsonValue
   modelsJson: runtime.JsonValue
+  modelsPricingJson: runtime.JsonValue | null
   modelsVerified: boolean
   createdAt: Date
   updatedAt: Date
@@ -187,6 +190,7 @@ export type LlmProviderSettingWhereInput = {
   label?: Prisma.StringFilter<"LlmProviderSetting"> | string
   settingsJson?: Prisma.JsonFilter<"LlmProviderSetting">
   modelsJson?: Prisma.JsonFilter<"LlmProviderSetting">
+  modelsPricingJson?: Prisma.JsonNullableFilter<"LlmProviderSetting">
   modelsVerified?: Prisma.BoolFilter<"LlmProviderSetting"> | boolean
   createdAt?: Prisma.DateTimeFilter<"LlmProviderSetting"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"LlmProviderSetting"> | Date | string
@@ -197,6 +201,7 @@ export type LlmProviderSettingOrderByWithRelationInput = {
   label?: Prisma.SortOrder
   settingsJson?: Prisma.SortOrder
   modelsJson?: Prisma.SortOrder
+  modelsPricingJson?: Prisma.SortOrderInput | Prisma.SortOrder
   modelsVerified?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -210,6 +215,7 @@ export type LlmProviderSettingWhereUniqueInput = Prisma.AtLeast<{
   label?: Prisma.StringFilter<"LlmProviderSetting"> | string
   settingsJson?: Prisma.JsonFilter<"LlmProviderSetting">
   modelsJson?: Prisma.JsonFilter<"LlmProviderSetting">
+  modelsPricingJson?: Prisma.JsonNullableFilter<"LlmProviderSetting">
   modelsVerified?: Prisma.BoolFilter<"LlmProviderSetting"> | boolean
   createdAt?: Prisma.DateTimeFilter<"LlmProviderSetting"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"LlmProviderSetting"> | Date | string
@@ -220,6 +226,7 @@ export type LlmProviderSettingOrderByWithAggregationInput = {
   label?: Prisma.SortOrder
   settingsJson?: Prisma.SortOrder
   modelsJson?: Prisma.SortOrder
+  modelsPricingJson?: Prisma.SortOrderInput | Prisma.SortOrder
   modelsVerified?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -236,6 +243,7 @@ export type LlmProviderSettingScalarWhereWithAggregatesInput = {
   label?: Prisma.StringWithAggregatesFilter<"LlmProviderSetting"> | string
   settingsJson?: Prisma.JsonWithAggregatesFilter<"LlmProviderSetting">
   modelsJson?: Prisma.JsonWithAggregatesFilter<"LlmProviderSetting">
+  modelsPricingJson?: Prisma.JsonNullableWithAggregatesFilter<"LlmProviderSetting">
   modelsVerified?: Prisma.BoolWithAggregatesFilter<"LlmProviderSetting"> | boolean
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"LlmProviderSetting"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"LlmProviderSetting"> | Date | string
@@ -246,6 +254,7 @@ export type LlmProviderSettingCreateInput = {
   label: string
   settingsJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -256,6 +265,7 @@ export type LlmProviderSettingUncheckedCreateInput = {
   label: string
   settingsJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -266,6 +276,7 @@ export type LlmProviderSettingUpdateInput = {
   label?: Prisma.StringFieldUpdateOperationsInput | string
   settingsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -276,6 +287,7 @@ export type LlmProviderSettingUncheckedUpdateInput = {
   label?: Prisma.StringFieldUpdateOperationsInput | string
   settingsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -286,6 +298,7 @@ export type LlmProviderSettingCreateManyInput = {
   label: string
   settingsJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -296,6 +309,7 @@ export type LlmProviderSettingUpdateManyMutationInput = {
   label?: Prisma.StringFieldUpdateOperationsInput | string
   settingsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -306,6 +320,7 @@ export type LlmProviderSettingUncheckedUpdateManyInput = {
   label?: Prisma.StringFieldUpdateOperationsInput | string
   settingsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   modelsJson?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  modelsPricingJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   modelsVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -316,6 +331,7 @@ export type LlmProviderSettingCountOrderByAggregateInput = {
   label?: Prisma.SortOrder
   settingsJson?: Prisma.SortOrder
   modelsJson?: Prisma.SortOrder
+  modelsPricingJson?: Prisma.SortOrder
   modelsVerified?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -344,6 +360,7 @@ export type LlmProviderSettingSelect<ExtArgs extends runtime.Types.Extensions.In
   label?: boolean
   settingsJson?: boolean
   modelsJson?: boolean
+  modelsPricingJson?: boolean
   modelsVerified?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -354,6 +371,7 @@ export type LlmProviderSettingSelectCreateManyAndReturn<ExtArgs extends runtime.
   label?: boolean
   settingsJson?: boolean
   modelsJson?: boolean
+  modelsPricingJson?: boolean
   modelsVerified?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -364,6 +382,7 @@ export type LlmProviderSettingSelectUpdateManyAndReturn<ExtArgs extends runtime.
   label?: boolean
   settingsJson?: boolean
   modelsJson?: boolean
+  modelsPricingJson?: boolean
   modelsVerified?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -374,12 +393,13 @@ export type LlmProviderSettingSelectScalar = {
   label?: boolean
   settingsJson?: boolean
   modelsJson?: boolean
+  modelsPricingJson?: boolean
   modelsVerified?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type LlmProviderSettingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "label" | "settingsJson" | "modelsJson" | "modelsVerified" | "createdAt" | "updatedAt", ExtArgs["result"]["llmProviderSetting"]>
+export type LlmProviderSettingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "label" | "settingsJson" | "modelsJson" | "modelsPricingJson" | "modelsVerified" | "createdAt" | "updatedAt", ExtArgs["result"]["llmProviderSetting"]>
 
 export type $LlmProviderSettingPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "LlmProviderSetting"
@@ -389,6 +409,11 @@ export type $LlmProviderSettingPayload<ExtArgs extends runtime.Types.Extensions.
     label: string
     settingsJson: runtime.JsonValue
     modelsJson: runtime.JsonValue
+    /**
+     * Catalog pricing captured at discovery (model name → USD per 1M rates),
+     * null for providers that don't publish it. Refreshed on every verify.
+     */
+    modelsPricingJson: runtime.JsonValue | null
     modelsVerified: boolean
     createdAt: Date
     updatedAt: Date
@@ -819,6 +844,7 @@ export interface LlmProviderSettingFieldRefs {
   readonly label: Prisma.FieldRef<"LlmProviderSetting", 'String'>
   readonly settingsJson: Prisma.FieldRef<"LlmProviderSetting", 'Json'>
   readonly modelsJson: Prisma.FieldRef<"LlmProviderSetting", 'Json'>
+  readonly modelsPricingJson: Prisma.FieldRef<"LlmProviderSetting", 'Json'>
   readonly modelsVerified: Prisma.FieldRef<"LlmProviderSetting", 'Boolean'>
   readonly createdAt: Prisma.FieldRef<"LlmProviderSetting", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"LlmProviderSetting", 'DateTime'>

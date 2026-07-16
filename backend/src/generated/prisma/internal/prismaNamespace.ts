@@ -1483,6 +1483,7 @@ export const LlmProviderSettingScalarFieldEnum = {
   label: 'label',
   settingsJson: 'settingsJson',
   modelsJson: 'modelsJson',
+  modelsPricingJson: 'modelsPricingJson',
   modelsVerified: 'modelsVerified',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
