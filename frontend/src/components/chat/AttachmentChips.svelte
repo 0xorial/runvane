@@ -28,7 +28,9 @@
 
 {#if files.length > 0}
   <div class="flex flex-wrap gap-2">
-    {#each files as { file, mode }, idx (file.name + file.size + idx)}
+    <!-- Keyed by the File OBJECT: an index-based key re-keys (and recreates
+         the previews of) every chip after a removal. -->
+    {#each files as { file, mode }, idx (file)}
       <div class="group relative flex w-[150px] flex-col gap-1.5 rounded-md border border-border bg-card p-1.5 text-card-foreground">
         <button
           type="button"

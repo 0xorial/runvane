@@ -10,6 +10,7 @@
   import { readPreinjectConfig, seedPathsFromConfig } from "@/pages/settings/agentPreinject";
   import ContextFileList from "./ContextFileList.svelte";
   import KnowledgeSearchControls from "./KnowledgeSearchControls.svelte";
+  import PlannerBaselineBlock from "./PlannerBaselineBlock.svelte";
 
   // New-conversation staging area (sibling of "Tool sandbox" and "Agent"):
   // everything the first message will carry. Files: instruction files (and
@@ -106,9 +107,14 @@
 
     <KnowledgeSearchControls />
 
+    <div class="my-1.5 h-px bg-border/60" aria-hidden="true"></div>
+
+    <PlannerBaselineBlock {agentId} />
+
     <p class="mt-1.5 border-t border-border/60 pt-1.5 text-[11px] text-muted-foreground">
-      Injected with the first message only — the total appears in the message box below. Later messages can
-      attach files and searches from the composer's Context panel.
+      Files and searches are injected with the first message only — the send total appears in the message box
+      below; the planner baseline rides along every turn. Later messages can attach files and searches from
+      the composer's Context panel.
     </p>
   </div>
 </div>

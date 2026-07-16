@@ -19,7 +19,12 @@ import { withToolNoteProperty } from '../../tools/toolParamEnvelope.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripThoughtInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext, isParseableToolParamsJson } from '../lib/toolParamsPrompt.js';
-import { buildPlannerMessages, describeToolChange, extractToolOperations, type PlannerToolInfo } from '../lib/plannerPrompt.js';
+import { buildPlannerMessages, describeToolChange, type PlannerToolInfo } from '../lib/plannerPrompt.js';
+import {
+  describePlannerToolInfos,
+  resolveDirectPlannerToolIds,
+  resolveEnabledPlannerToolIds,
+} from '../lib/plannerToolCatalog.js';
 import {
   extractAssistantPreviewFromStream,
   parsePlannerCompletion,
@@ -86,10 +91,8 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     const agent = await this.agents.get(agentId);
     if (!agent) throw new Error(`planner agent not found: ${agentId}`);
     const toolOverrides = anchorUserMessage.overrides?.tools;
-    const enabledToolIds = this.resolveEnabledToolIds(agent, toolOverrides);
-    const directToolIds = enabledToolIds.filter(
-      (name) => !resolveSeparateParamsResolution(agent, toolOverrides, name),
-    );
+    const enabledToolIds = resolveEnabledPlannerToolIds(this.tools, agent, toolOverrides);
+    const directToolIds = resolveDirectPlannerToolIds(agent, toolOverrides, enabledToolIds);
     const toolChangeNote = await this.computeToolChangeNote(entries, agent, enabledToolIds);
     return {
       conversationId,
@@ -119,7 +122,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (prev.type !== 'user-message') return undefined;
     const prevAgent = prev.agentId === currentAgent.id ? currentAgent : await this.agents.get(prev.agentId);
     if (!prevAgent) return undefined;
-    const previousEnabled = this.resolveEnabledToolIds(prevAgent, prev.overrides?.tools);
+    const previousEnabled = resolveEnabledPlannerToolIds(this.tools, prevAgent, prev.overrides?.tools);
     return describeToolChange(previousEnabled, currentEnabled);
   };
 
@@ -129,7 +132,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       messages: buildPlannerMessages({
         systemPrompt: input.systemPrompt,
         entries: input.entries,
-        tools: this.describeToolsForPlanner(input.enabledToolIds, input.directToolIds ?? []),
+        tools: describePlannerToolInfos(this.tools, input.enabledToolIds, input.directToolIds ?? []),
         ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
       }),
       // Declare the enabled tools natively. We render prior tool calls as native
@@ -163,24 +166,6 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     return side.filter((e) => {
       if (e.type !== 'thought' || e.thoughtType !== 'summarize_attachment') return false;
       return e.parentId !== null && lineageIds.has(e.parentId);
-    });
-  }
-
-  // Enrich the bare enabled-tool names with each tool's model-facing
-  // description and dispatch operations, so the planner can select tools (and
-  // operations) deliberately rather than guessing from the name alone.
-  private describeToolsForPlanner(enabledToolIds: string[], directToolIds: string[]): PlannerToolInfo[] {
-    const direct = new Set(directToolIds);
-    return enabledToolIds.map((name) => {
-      const tool = this.tools.get(name);
-      return {
-        name,
-        description: tool?.getAiDescription() ?? '',
-        operations: tool ? extractToolOperations(tool.getParamsSchema()) : [],
-        // Direct-args tools need their schema in the prompt: the model writes
-        // the literal JSON args itself, no resolver fills them in.
-        ...(direct.has(name) && tool ? { directParamsSchema: withToolNoteProperty(tool.getParamsSchema()) } : {}),
-      };
     });
   }
 
@@ -298,16 +283,6 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       );
     }
   };
-
-  private resolveEnabledToolIds(agent: AgentEntity, toolOverrides?: Record<string, AgentToolConfig>): string[] {
-    return this.tools
-      .list()
-      .filter((tool) => {
-        const policy = resolveToolConfig(agent, toolOverrides, tool.getName()).policy;
-        return policy != null && policy !== 'off';
-      })
-      .map((tool) => tool.getName());
-  }
 
   private startToolParamsThought(
     args: {

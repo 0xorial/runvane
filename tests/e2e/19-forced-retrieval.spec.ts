@@ -348,6 +348,47 @@ test("image estimate follows the model family: a claude-named model applies the 
   }
 });
 
+test("planner-baseline preview prices system prompt and each tool separately; overrides shrink it", async ({
+  request,
+}) => {
+  test.setTimeout(15_000);
+  const agentId = await defaultAgentId(request);
+  const res = await request.post(`${apiBaseUrl()}/api/planner-baseline/preview`, { data: { agentId } });
+  expect(res.ok()).toBeTruthy();
+  const baseline = (await res.json()) as {
+    totalTokens: number;
+    systemPrompt: { tokens: number };
+    scaffolding: { tokens: number };
+    tools: { tokens: number; perTool: Array<{ name: string; tokens: number; line: string }> };
+  };
+  expect(baseline.totalTokens).toBeGreaterThan(0);
+  expect(baseline.scaffolding.tokens).toBeGreaterThan(0);
+  const probeTool = baseline.tools.perTool.find((t) => t.name === "get_current_time");
+  expect(probeTool?.tokens ?? 0).toBeGreaterThan(0);
+  expect(probeTool?.line).toContain("get_current_time");
+
+  // Flipping a tool off via overrides drops its line (and the tools price).
+  const offRes = await request.post(`${apiBaseUrl()}/api/planner-baseline/preview`, {
+    data: { agentId, toolOverrides: { get_current_time: { policy: "off" } } },
+  });
+  expect(offRes.ok()).toBeTruthy();
+  const withoutTool = (await offRes.json()) as typeof baseline;
+  expect(withoutTool.tools.perTool.some((t) => t.name === "get_current_time")).toBe(false);
+  expect(withoutTool.tools.tokens).toBeLessThan(baseline.tools.tokens);
+});
+
+test("Start context shows the planner baseline with a per-tool breakdown", async ({ app, request }) => {
+  test.setTimeout(20_000);
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+
+  const section = app.page.getByTestId("planner-baseline-section");
+  await expect(section.getByTestId("planner-baseline-total")).toHaveText(/~\d+ tok\/turn/);
+  await section.getByTestId("baseline-tools-row").click();
+  const toolRow = section.locator('[data-testid="baseline-tool-row"][data-tool-name="get_current_time"]');
+  await expect(toolRow).toContainText(/~\d+ tok/);
+});
+
 test("verifying a provider persists discovered catalog pricing into the capability rows", async ({ request }) => {
   test.setTimeout(20_000);
   // The stub provider's discoverModels publishes fixed rates; a verify

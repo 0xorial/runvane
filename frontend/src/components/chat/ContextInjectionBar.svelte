@@ -19,6 +19,10 @@
   import type { SelectedAttachment } from "./AttachmentChips.svelte";
   import ContextFileList from "./ContextFileList.svelte";
   import KnowledgeSearchControls from "./KnowledgeSearchControls.svelte";
+  import PlannerBaselineBlock from "./PlannerBaselineBlock.svelte";
+  import { plannerBaselineQueryOptions } from "@/api/plannerBaselineClient";
+  import { compileChatToolOverrides } from "@/lib/chatToolOverrides";
+  import { getChatToolDraft } from "@/lib/chatToolDraft.svelte";
 
   const CHIP_HINT =
     "Everything auto-injected with this send: context files and any knowledge-base search you enable " +
@@ -232,6 +236,15 @@
     return costLabel ? `${tokens} · ${costLabel}` : tokens;
   });
 
+  // Per-turn baseline (system prompt + tools + scaffolding) — informational:
+  // it rides along with EVERY turn, so it is surfaced in the breakdown and
+  // the panel block rather than folded into the send total.
+  const baselineQuery = createQuery(() => {
+    void $chatToolDraftRevision;
+    return plannerBaselineQueryOptions(agentId, compileChatToolOverrides(getChatToolDraft()));
+  });
+  const baseline = $derived(baselineQuery.data);
+
   const totalTitle = $derived.by(() => {
     const parts = [`message ~${messageTokens} tok`];
     if (attachments.length > 0) {
@@ -240,6 +253,11 @@
     }
     if (filesTokens > 0) parts.push(`context files ~${filesTokens} tok`);
     if (knowledgeSelected) parts.push(knowledgeTokens === null ? "knowledge at send" : `knowledge ~${knowledgeTokens} tok`);
+    if (baseline) {
+      parts.push(
+        `+ baseline every turn: system ~${baseline.systemPrompt.tokens + baseline.scaffolding.tokens} · tools ~${baseline.tools.tokens} tok`,
+      );
+    }
     return parts.join(" · ");
   });
 
@@ -435,6 +453,13 @@
         <!-- ===== Knowledge: single-shot forced retrieval for this message ===== -->
         <section class="px-2 py-1.5">
           <KnowledgeSearchControls headerRight={knowledgeHeaderRight} children={excerptList} />
+        </section>
+
+        <div class="h-px bg-border/60" aria-hidden="true"></div>
+
+        <!-- ===== Planner baseline: the per-turn system message ===== -->
+        <section class="px-2 py-1.5">
+          <PlannerBaselineBlock {agentId} />
         </section>
       </div>
     {/if}

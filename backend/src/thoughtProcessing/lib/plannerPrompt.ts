@@ -88,30 +88,53 @@ function indexAttachmentSummaries(entries: ChatEntry[]): Map<string, ThoughtEntr
   return out;
 }
 
-function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[]): string {
-  const parts: string[] = [];
-  if (agentSystemPrompt.trim().length > 0) parts.push(agentSystemPrompt.trim());
+/** The named parts of the planner's system message. Exported for the
+ *  composer's baseline preview so its token counts are computed from the
+ *  exact strings the planner receives (same discipline as
+ *  formatContextFilesBlock / formatRetrievalContext). */
+export type PlannerBaselineParts = {
+  /** The agent's own system prompt, trimmed ('' when the agent has none). */
+  systemPrompt: string;
+  /** Header + one line per tool (or the "(none)" placeholder). */
+  toolsBlock: string;
+  /** The fixed reply-format scaffolding every planner turn carries. */
+  scaffolding: string;
+  /** Each tool's exact prompt line, for per-tool pricing/examination. */
+  toolLines: Array<{ name: string; line: string }>;
+};
+
+export function plannerBaselineParts(agentSystemPrompt: string, tools: PlannerToolInfo[]): PlannerBaselineParts {
   const hasDirect = tools.some((t) => t.directParamsSchema !== undefined);
   const toolsHeader = hasDirect
     ? 'Tools. Default: write each tool_request as a natural-language brief — a separate agent fills the ' +
       "call's JSON args. Exception: for tools marked [direct args] there is no such agent — your " +
       'tool_request must itself be the JSON arguments, exactly matching the given schema:'
     : "Tools (a separate agent fills each call's JSON args from your natural-language request):";
-  parts.push(tools.length > 0 ? `${toolsHeader}\n${tools.map(formatToolLine).join('\n')}` : 'Tools: (none)');
-  parts.push(
+  const toolLines = tools.map((tool) => ({ name: tool.name, line: formatToolLine(tool) }));
+  const toolsBlock =
+    tools.length > 0 ? `${toolsHeader}\n${toolLines.map((t) => t.line).join('\n')}` : 'Tools: (none)';
+  const scaffolding =
     'Reply with one JSON object (preferred — it is the only format that lets you set assistant_output and followup explicitly):\n' +
-      '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string, "note": string}], "followup": "finalize"|"continue"}\n' +
-      '`assistant_thinking` is a brief summary of your thoughts and plans for the next step. ' +
-      '`assistant_output` is the user-facing text of your response. ' +
-      '`tool_requests` is an array of tool requests. ' +
-      '`followup` is the mode for the next step: "finalize" if you need to finalize the conversation, "continue" if you need to continue the conversation. ' +
-      '`tool_request` is a natural-language brief (except for [direct args] tools, where it must be the literal JSON arguments). ' +
-      '`note` is 3-6 plain words shown to the user next to the call, saying what it is for (e.g. "check current server time"). ' +
-      'Use "continue" only if you need tool results before replying.\n' +
-      'Code fences or surrounding prose are fine. If that JSON is impractical, you may instead write your reply as prose and ' +
-      'express tool calls in any common format (e.g. <tool_call>{"name": ..., "arguments": ...}</tool_call> or [TOOL_CALLS] [...]); ' +
-      'these are parsed too, and your prose then becomes the user-facing text.',
-  );
+    '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string, "note": string}], "followup": "finalize"|"continue"}\n' +
+    '`assistant_thinking` is a brief summary of your thoughts and plans for the next step. ' +
+    '`assistant_output` is the user-facing text of your response. ' +
+    '`tool_requests` is an array of tool requests. ' +
+    '`followup` is the mode for the next step: "finalize" if you need to finalize the conversation, "continue" if you need to continue the conversation. ' +
+    '`tool_request` is a natural-language brief (except for [direct args] tools, where it must be the literal JSON arguments). ' +
+    '`note` is 3-6 plain words shown to the user next to the call, saying what it is for (e.g. "check current server time"). ' +
+    'Use "continue" only if you need tool results before replying.\n' +
+    'Code fences or surrounding prose are fine. If that JSON is impractical, you may instead write your reply as prose and ' +
+    'express tool calls in any common format (e.g. <tool_call>{"name": ..., "arguments": ...}</tool_call> or [TOOL_CALLS] [...]); ' +
+    'these are parsed too, and your prose then becomes the user-facing text.';
+  return { systemPrompt: agentSystemPrompt.trim(), toolsBlock, scaffolding, toolLines };
+}
+
+export function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[]): string {
+  const baseline = plannerBaselineParts(agentSystemPrompt, tools);
+  const parts: string[] = [];
+  if (baseline.systemPrompt.length > 0) parts.push(baseline.systemPrompt);
+  parts.push(baseline.toolsBlock);
+  parts.push(baseline.scaffolding);
   return parts.join('\n\n');
 }
 
