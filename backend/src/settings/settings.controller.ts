@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Query } from '@nestjs/common';
 import { ModelCapabilityOverrideDto } from './dto/model-capability-override.dto.js';
 import { LlmProviderConnectionTestDto, PutLlmProviderSettingsDto } from './dto/settings.dto.js';
 import { SettingsService } from './settings.service.js';
@@ -30,6 +30,11 @@ export class SettingsController {
   @Get('model_capabilities')
   async getModelCapabilities() {
     return this.settings.listModelCapabilities();
+  }
+
+  @Get('model_pricing/live')
+  async getLiveModelPricing(@Query('providerId') providerId?: string) {
+    return this.settings.liveModelPricing(providerId ?? '');
   }
 
   @Put('model_capabilities/override')

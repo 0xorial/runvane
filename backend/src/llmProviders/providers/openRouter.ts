@@ -3,6 +3,7 @@ import type {
   ConnectivityResult,
   LlmProvider,
   LlmProviderSettingSpec,
+  ModelPricingPer1M,
   ProviderSettingsDict,
 } from '../provider.js';
 import { StreamInterruptedError, isAbortError } from '../provider.js';
@@ -51,6 +52,13 @@ function parseModelIdentifier(rawModel: unknown): string {
   if (rawModel == null || typeof rawModel !== 'object') return '';
   const rec = rawModel as { id?: unknown };
   return typeof rec.id === 'string' && rec.id.trim() ? rec.id.trim() : '';
+}
+
+/** OpenRouter prices are USD-per-token strings (e.g. "0.00000015"). */
+function perTokenUsd(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 @Injectable()
@@ -106,6 +114,29 @@ export class OpenRouterProvider implements LlmProvider {
   async listModels(settingsIn: ProviderSettingsDict): Promise<string[]> {
     const data = await this.fetchModelsPayload(settingsIn);
     return Array.from(new Set(data.map(parseModelIdentifier).filter((x) => x.length > 0)));
+  }
+
+  /** OpenRouter's `/models` payload carries `pricing` as USD-per-token strings
+   *  (prompt/completion/input_cache_read); scale to per-1M for the composer's
+   *  cost estimate. Models without parsable prompt+completion are skipped. */
+  async listModelPricing(settingsIn: ProviderSettingsDict): Promise<Record<string, ModelPricingPer1M>> {
+    const data = await this.fetchModelsPayload(settingsIn);
+    const out: Record<string, ModelPricingPer1M> = {};
+    for (const entry of data) {
+      const id = parseModelIdentifier(entry);
+      if (!id) continue;
+      const pricing = (entry as { pricing?: Record<string, unknown> }).pricing;
+      const prompt = perTokenUsd(pricing?.prompt);
+      const completion = perTokenUsd(pricing?.completion);
+      if (prompt == null || completion == null) continue;
+      const cached = perTokenUsd(pricing?.input_cache_read) ?? prompt;
+      out[id] = {
+        inCostPer1m: prompt * 1_000_000,
+        cachedInCostPer1m: cached * 1_000_000,
+        outCostPer1m: completion * 1_000_000,
+      };
+    }
+    return out;
   }
 
   /** `POST {base_url}/embeddings` — OpenRouter routes OpenAI-compatible

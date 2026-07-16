@@ -526,6 +526,18 @@ export function getModelCapabilities(): Promise<ModelCapabilitiesResponse> {
   return getJson("/api/settings/model_capabilities").then(parseModelCapabilitiesResponse);
 }
 
+export type LiveModelPricingResponse = {
+  pricing: Record<string, { inCostPer1m: number; cachedInCostPer1m: number; outCostPer1m: number }>;
+};
+
+/** Live catalog pricing for one provider (composer cost estimate). Empty map
+ *  when the provider doesn't publish pricing — never an error. */
+export function getLiveModelPricing(providerId: string): Promise<LiveModelPricingResponse> {
+  return getJson(
+    `/api/settings/model_pricing/live?providerId=${encodeURIComponent(providerId)}`,
+  ) as Promise<LiveModelPricingResponse>;
+}
+
 export function updateModelCapabilityOverride(
   body: ModelCapabilityOverrideUpsert,
 ): Promise<{ models: ModelCapabilityRow[] }> {

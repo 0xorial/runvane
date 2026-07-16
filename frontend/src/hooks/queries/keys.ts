@@ -1,6 +1,7 @@
 export const queryKeys = {
   agents: ["agents"] as const,
   modelCapabilities: ["model-capabilities"] as const,
+  liveModelPricing: (providerId: string) => ["live-model-pricing", providerId] as const,
   modelPresets: ["model-presets"] as const,
   llmProviders: ["llm-providers"] as const,
   tools: ["tools"] as const,

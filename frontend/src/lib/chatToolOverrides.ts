@@ -25,17 +25,22 @@ export function compileKnowledgeOverride(draft: ChatKnowledgeDraft): KnowledgeOv
   };
 }
 
-/** Draft state for the per-message context-files attach (`overrides.contextFiles`).
+/** Draft state for the per-message context-files selection (`overrides.contextFiles`).
  *  Single-shot like the knowledge draft: applies to the message being composed. */
 export type ChatContextFilesDraft = {
-  /** Candidate relPaths to fold in with the next message. Empty = off. */
+  /** Candidate relPaths to fold in with the next message. */
   paths: string[];
+  /** False until the user touches a checkbox. Untouched = follow the agent's
+   *  preinject config (no override compiled — the automatic first-message
+   *  scan applies); touched = explicit, even when `paths` is empty (that
+   *  means "inject nothing"). */
+  touched: boolean;
 };
 
-export const EMPTY_CONTEXT_FILES_DRAFT: ChatContextFilesDraft = { paths: [] };
+export const EMPTY_CONTEXT_FILES_DRAFT: ChatContextFilesDraft = { paths: [], touched: false };
 
 export function compileContextFilesOverride(draft: ChatContextFilesDraft): ContextFilesOverride | undefined {
-  if (draft.paths.length === 0) return undefined;
+  if (!draft.touched && draft.paths.length === 0) return undefined;
   return { paths: [...draft.paths] };
 }
 

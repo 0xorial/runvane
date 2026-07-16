@@ -2,7 +2,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { APIRequestContext } from "@playwright/test";
-import { apiBaseUrl, defaultAgentId, getConversationEntries } from "./harness/client";
+import {
+  apiBaseUrl,
+  createProbeConversation,
+  defaultAgentId,
+  getConversationEntries,
+  waitForNoPendingTasks,
+} from "./harness/client";
 import { expect, test } from "./fixtures";
 
 const runE2e = process.env.RUN_E2E_TESTS === "1";
@@ -222,14 +228,18 @@ test("preplanned mode: a knowledge_planning thought composes the queries, retrie
   }
 });
 
-test("typing alone prices the send in the collapsed Context bar", async ({ app, request }) => {
+test("typing alone prices the send — tokens and cost from the provider's live catalog pricing", async ({
+  app,
+  request,
+}) => {
   test.setTimeout(20_000);
   const agentId = await defaultAgentId(request);
   await app.chat.gotoNew(agentId);
   // No knowledge, no files, no attachments — the message text itself is
-  // estimated (chars/4) and the rollup appears as soon as there is one.
+  // estimated (chars/4) and the rollup appears as soon as there is one. The
+  // stub provider publishes fixed catalog pricing, so ≈$ shows too.
   await app.chat.userInput.typeMessage("hello estimator, price this message");
-  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok · ≈\$\d/);
 });
 
 test("preview endpoint returns the hits and token estimate a send would inject", async ({ request }) => {
@@ -256,7 +266,7 @@ test("preview endpoint returns the hits and token estimate a send would inject",
   }
 });
 
-test("composer Context panel: knowledge toggle + storage preview the injection with examinable hits and a total, send records it, and the draft resets", async ({
+test("composer Context panel (existing conversation): knowledge toggle + storage preview the injection with examinable hits and a total, send records it, and the draft resets", async ({
   app,
   request,
 }) => {
@@ -266,9 +276,11 @@ test("composer Context panel: knowledge toggle + storage preview the injection w
   const name = `e2e-forced-ui-${Date.now()}`;
   const storageId = await createStorage(request, name, docs);
   try {
-    await app.chat.gotoNew(agentId);
+    const conversationId = await createProbeConversation(request, agentId);
+    await waitForNoPendingTasks(request, { timeoutMs: 15_000, conversationId });
+    await app.chat.open(conversationId);
 
-    // Open the unified Context panel, switch knowledge search on, pick the storage.
+    // Open the Context panel, switch knowledge search on, pick the storage.
     await app.page.getByTestId("chat-context-chip").click();
     await app.page.getByTestId("chat-knowledge-toggle").click();
     await app.page.locator(`[data-testid="chat-knowledge-storage"][data-storage-name="${name}"]`).click();
@@ -295,12 +307,37 @@ test("composer Context panel: knowledge toggle + storage preview the injection w
     await expect(row.getByTestId("retrieval-hit-source").first()).toHaveText("db.md");
     await expect(row.getByTestId("retrieval-query-origin").first()).toHaveText("verbatim");
 
-    // Single-shot: the knowledge draft switched itself off after sending.
-    // (Navigation to the new conversation may have remounted the bar with the
-    // panel closed — reopen it to reach the toggle.)
-    const chip = app.page.getByTestId("chat-context-chip");
-    if ((await chip.getAttribute("aria-expanded")) !== "true") await chip.click();
+    // Single-shot: no navigation on an existing conversation, so the toggle is
+    // still mounted — it switched itself off after sending.
     await expect(app.page.getByTestId("chat-knowledge-toggle")).toHaveAttribute("aria-pressed", "false");
+  } finally {
+    await deleteStorage(request, storageId);
+    await rm(docs, { recursive: true, force: true });
+  }
+});
+
+test("new chat: knowledge search staged in Start context rides the first send", async ({ app, request }) => {
+  test.setTimeout(30_000);
+  const agentId = await defaultAgentId(request);
+  const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
+  const name = `e2e-start-knowledge-${Date.now()}`;
+  const storageId = await createStorage(request, name, docs);
+  try {
+    await app.chat.gotoNew(agentId);
+
+    // The Start context section hosts the same single-shot knowledge controls.
+    const section = app.page.getByTestId("start-context-section");
+    await section.getByTestId("chat-knowledge-toggle").click();
+    await section.locator(`[data-testid="chat-knowledge-storage"][data-storage-name="${name}"]`).click();
+
+    // The composer estimate prices the staged search while typing.
+    await app.chat.userInput.typeMessage(DB_QUESTION);
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/, { timeout: 10_000 });
+
+    await app.chat.userInput.send();
+    const row = app.page.getByTestId("retrieval-row");
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row.getByTestId("retrieval-summary")).toContainText("Retrieved", { timeout: 15_000 });
   } finally {
     await deleteStorage(request, storageId);
     await rm(docs, { recursive: true, force: true });

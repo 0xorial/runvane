@@ -86,7 +86,10 @@
    * policy for the chat. */
   function consumeSingleShotDrafts(): void {
     if (getChatKnowledgeDraft().enabled) setChatKnowledgeDraft({ ...EMPTY_KNOWLEDGE_DRAFT });
-    if (getChatContextFilesDraft().paths.length > 0) setChatContextFilesDraft({ ...EMPTY_CONTEXT_FILES_DRAFT });
+    const filesDraft = getChatContextFilesDraft();
+    if (filesDraft.touched || filesDraft.paths.length > 0) {
+      setChatContextFilesDraft({ ...EMPTY_CONTEXT_FILES_DRAFT });
+    }
   }
 
   async function onSend(mode: MessageSendMode): Promise<void> {

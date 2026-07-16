@@ -55,6 +55,14 @@ export class SettingsService {
     return { models: await this.modelCapabilities.listEffective() };
   }
 
+  /** Live catalog pricing for one provider's models (composer cost estimate).
+   *  Always 200 with an empty map when unavailable — pricing is best-effort. */
+  async liveModelPricing(providerId: string) {
+    const id = providerId.trim();
+    const pricing = id ? await this.llmProviderSettings.listModelPricing(id) : null;
+    return { pricing: pricing ?? {} };
+  }
+
   async upsertModelCapabilityOverride(body: ModelCapabilityOverrideDto) {
     return { models: await this.modelCapabilities.upsertOverride(body) };
   }

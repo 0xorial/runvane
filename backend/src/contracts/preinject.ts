@@ -40,13 +40,16 @@ export type PreinjectedFileRecord = z.infer<typeof PreinjectedFileRecordSchema>;
 
 /**
  * Per-message context-files request (`overrides.contextFiles`): the user picked
- * exact candidate paths to fold in with THIS message — the "attach it later"
- * counterpart to the automatic first-message scan. Paths not on the candidate
- * list are ignored (the list is the whole API surface; never arbitrary disk).
- * An explicit override suppresses the automatic first-message scan.
+ * exact candidate paths to fold in with THIS message — the first-message
+ * staging selection or the "attach it later" picker. Paths not on the
+ * candidate list are ignored (the list is the whole API surface; never
+ * arbitrary disk). Presence of the key IS the explicit signal: it suppresses
+ * the automatic first-message scan, so an EMPTY `paths` means "inject
+ * nothing" (the user unchecked everything), not "fall back to the agent
+ * config".
  */
 export const ContextFilesOverrideSchema = z.object({
-  paths: z.array(z.string().min(1)).min(1),
+  paths: z.array(z.string().min(1)),
 });
 export type ContextFilesOverride = z.infer<typeof ContextFilesOverrideSchema>;
 

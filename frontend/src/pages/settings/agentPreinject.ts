@@ -1,5 +1,11 @@
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
-import { PREINJECT_FILE_TYPES, type AgentPreinjectConfig, type PreinjectFileType, type PreinjectMode } from "@/protocol/chatEntry";
+import {
+  PREINJECT_FILE_TYPES,
+  type AgentPreinjectConfig,
+  type PreinjectFileType,
+  type PreinjectMode,
+  type PreinjectPreviewFile,
+} from "@/protocol/chatEntry";
 
 export { PREINJECT_FILE_TYPES };
 export type { PreinjectFileType, PreinjectMode };
@@ -36,6 +42,21 @@ export function readPreinjectConfig(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { mode: "none" };
   const rec = raw as Record<string, unknown>;
   return { mode: toMode(rec.mode), types: toTypes(rec.types) };
+}
+
+/**
+ * The candidate paths the agent's preinject config would inject — the default
+ * checkbox state of the first-message staging selection (Start context section
+ * and the composer estimate derive it identically; the send compiles an
+ * explicit override only once the user touches a checkbox, so untouched
+ * behavior stays config-driven end to end).
+ */
+export function seedPathsFromConfig(files: PreinjectPreviewFile[], config: AgentPreinjectConfig): string[] {
+  if (config.mode === "none") return [];
+  const types = config.mode === "selected" ? new Set(config.types ?? []) : null;
+  return files
+    .filter((f) => f.status === "injected" && (!types || types.has(f.fileType)))
+    .map((f) => f.path);
 }
 
 export function patchPreinjectOnAgent(

@@ -45,7 +45,7 @@ export function getChatContextFilesDraft(): ChatContextFilesDraft {
 }
 
 export function setChatContextFilesDraft(next: ChatContextFilesDraft): void {
-  contextFilesDraftStore.set({ paths: [...next.paths] });
+  contextFilesDraftStore.set({ paths: [...next.paths], touched: next.touched });
   touchDraft();
 }
 
@@ -111,8 +111,9 @@ function draftsEqual(a: ChatToolDraft, b: ChatToolDraft): boolean {
 
 export function resetChatToolDraft(): void {
   const draft = get(draftStore);
+  const filesDraft = get(contextFilesDraftStore);
   const hadOverrides =
-    draftHasOverrides(draft) || get(knowledgeDraftStore).enabled || get(contextFilesDraftStore).paths.length > 0;
+    draftHasOverrides(draft) || get(knowledgeDraftStore).enabled || filesDraft.touched || filesDraft.paths.length > 0;
   const hadSelection = get(selectedToolForEditStore) !== null;
   if (!hadOverrides && !hadSelection) return;
   draftStore.set({});

@@ -155,7 +155,7 @@ test("preview endpoint: an unset preinject config reads as mode 'none' with noth
   expect(preview.totalTokens).toBe(0);
 });
 
-test("new chat: the Start context section lists the files half pre-send and the composer prices it", async ({
+test("new chat: Start context stages the files half — checkboxes seed from the agent config and edits ride the first send", async ({
   app,
   request,
 }) => {
@@ -166,21 +166,38 @@ test("new chat: the Start context section lists the files half pre-send and the 
   try {
     await app.chat.gotoNew(agentId);
 
-    // Start context section (sibling of Tool sandbox / Agent): per-file rows
-    // carry their own token estimate, and the content the planner would
-    // receive is examinable in place.
+    // Staging section (sibling of Tool sandbox / Agent): mode 'all' seeds both
+    // discovered candidates checked; rows stay examinable.
     const section = app.page.getByTestId("start-context-section");
-    await expect(section.getByTestId("start-context-tokens")).toHaveText(/~\d+ tok/);
+    await expect(section.getByTestId("start-context-tokens")).toContainText("2 selected");
+    const readmeCheck = section.locator('[data-testid="context-file-check"][data-file-path="README.md"]');
+    await expect(readmeCheck).toBeChecked();
     const readmeRow = section.locator('[data-testid="context-file-row"][data-file-path="README.md"]');
     await expect(readmeRow).toContainText(/~\d+ tok/);
     await readmeRow.click();
     await expect(section.getByTestId("context-file-content")).toContainText(README_MARKER);
+    await readmeRow.click();
 
-    // Composer rollup prices the same scan; its panel points at the section.
-    await expect(app.page.getByTestId("chat-context-summary")).toContainText(/\d+ files?/);
+    // The composer shows no Context chip on a first message — staging lives
+    // above; the box carries only the estimate.
+    await expect(app.page.getByTestId("chat-context-chip")).toHaveCount(0);
     await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
-    await app.page.getByTestId("chat-context-chip").click();
-    await expect(app.page.getByTestId("context-files-note")).toContainText("Start context above");
+
+    // Unchecking materializes an explicit selection...
+    await section.locator('[data-testid="context-file-check"][data-file-path="package.json"]').uncheck();
+    await expect(section.getByTestId("start-context-tokens")).toContainText("1 selected");
+
+    // ...and the first send injects exactly that selection, not the config's.
+    await app.chat.userInput.typeMessage(PROBE_MESSAGE);
+    await app.chat.userInput.send();
+    const conversationId = await app.chat.waitForConversationChange("new");
+    await expect
+      .poll(async () => (await contextInjectionEntry(request, conversationId))?.files?.length ?? 0, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0);
+    const entry = (await contextInjectionEntry(request, conversationId))!;
+    expect(entry.files).toEqual([{ path: "README.md", fileType: "readme", status: "injected" }]);
   } finally {
     await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
   }

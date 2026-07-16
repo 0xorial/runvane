@@ -18,6 +18,15 @@ export const ConnectivityResultSchema = z.object({
 });
 export type ConnectivityResult = z.infer<typeof ConnectivityResultSchema>;
 
+/** Per-model catalog pricing in USD per 1M tokens — the same shape the
+ *  frontend's capability-derived `ModelPricing` uses, so live provider
+ *  pricing can back-fill models the capability table leaves unpriced. */
+export type ModelPricingPer1M = {
+  inCostPer1m: number;
+  cachedInCostPer1m: number;
+  outCostPer1m: number;
+};
+
 /** Re-exported for convenience; usage shape lives in types.ts. */
 export type { LlmUsage as StreamTextCompletionUsage } from './types.js';
 
@@ -79,4 +88,12 @@ export interface LlmProvider {
     texts: string[],
     signal?: AbortSignal,
   ): Promise<number[][]>;
+
+  /**
+   * Optional: live per-model pricing from the provider's catalog, keyed by
+   * model name. Providers that don't publish pricing (self-hosted backends)
+   * simply omit this; the composer's cost estimate falls back to capability
+   * overrides only.
+   */
+  listModelPricing?(settings: ProviderSettingsDict): Promise<Record<string, ModelPricingPer1M>>;
 }

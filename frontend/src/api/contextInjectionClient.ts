@@ -5,16 +5,11 @@ import type { PreinjectPreviewResult } from "@/protocol/chatEntry";
 
 export type { PreinjectPreviewFile, PreinjectPreviewResult } from "@/protocol/chatEntry";
 
-/** Composer preview: the same workspace scan (and token pricing) a first
- *  message sent with this agent would trigger. Persists nothing. */
-export function previewContextFiles(agentId: string): Promise<PreinjectPreviewResult> {
-  return getJson(
-    `/api/context-injection/preview?agentId=${encodeURIComponent(agentId)}`,
-  ) as Promise<PreinjectPreviewResult>;
-}
-
-/** Every candidate found on disk, agent gating ignored — the source list for
- *  the per-message attach picker (`overrides.contextFiles`). */
+/** Every candidate found on disk with content + token pricing, agent gating
+ *  ignored — the one source list for the Start context staging checkboxes and
+ *  the per-message attach picker (`overrides.contextFiles`). Persists nothing.
+ *  (The agent-gated variant, `?agentId=`, remains an API/e2e surface: it
+ *  mirrors exactly what the automatic first-message scan would inject.) */
 export function previewAllContextFiles(): Promise<PreinjectPreviewResult> {
   return getJson("/api/context-injection/preview?all=1") as Promise<PreinjectPreviewResult>;
 }

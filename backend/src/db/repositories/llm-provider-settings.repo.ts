@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LlmProviderRegistry } from '../../llmProviders/registry.js';
-import type { ProviderSettingsDict } from '../../llmProviders/provider.js';
+import type { ModelPricingPer1M, ProviderSettingsDict } from '../../llmProviders/provider.js';
 import type {
   LlmConfiguration,
   LlmProviderConnectionTestResponse,
@@ -171,6 +171,24 @@ export class LlmProviderSettingsRepo {
       existing?.created_at ?? new Date().toISOString(),
       new Date().toISOString(),
     );
+  }
+
+  /**
+   * Live per-model pricing from the provider's catalog, using the stored
+   * provider settings. Null when the provider is unknown, unconfigured, or
+   * doesn't publish pricing — callers treat that as "no pricing", never an
+   * error (this only feeds the composer's cost estimate).
+   */
+  async listModelPricing(providerId: string): Promise<Record<string, ModelPricingPer1M> | null> {
+    const provider = this.registry.get(providerId);
+    if (!provider?.listModelPricing) return null;
+    const settings = await this.getProviderSettings(providerId);
+    if (!settings) return null;
+    try {
+      return await provider.listModelPricing(settings);
+    } catch {
+      return null;
+    }
   }
 
   async testConnection(
