@@ -167,6 +167,9 @@ async function sshSpawnConfig(ssh: SshSandboxConfig): Promise<ToolHostSpawnConfi
   const baseArgs = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new'];
   if (ssh.port) baseArgs.push('-p', String(ssh.port));
   if (ssh.identityFile) baseArgs.push('-i', ssh.identityFile);
+  // Custom transport (docker sandboxes ride `docker exec … sshd -i`): still
+  // real ssh, just not over TCP — the deploy path below works unchanged.
+  if (ssh.proxyCommand) baseArgs.push('-o', `ProxyCommand=${ssh.proxyCommand}`);
   baseArgs.push(destination);
   const remote = ssh.remoteCommand?.trim() || (await deployToolHostOverSsh(baseArgs));
   return { command: 'ssh', args: [...baseArgs, remote] };

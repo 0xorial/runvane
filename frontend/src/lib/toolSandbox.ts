@@ -3,6 +3,10 @@ import type { ToolSandbox } from "../../../backend/src/contracts/tool-sandbox";
 /** One-line explainer of where a conversation's target tools execute. */
 export function toolSandboxDescription(env: ToolSandbox): string {
   if (env.kind === "none") return "No sandbox — target tools are disabled for this chat.";
+  if (env.docker) {
+    const mounts = env.docker.mounts.length;
+    return `Docker sandbox (${env.docker.image})${mounts > 0 ? ` — ${mounts} mount${mounts === 1 ? "" : "s"}` : ""}.`;
+  }
   if (env.kind === "ssh" && env.ssh) {
     const target = `${env.ssh.user ? `${env.ssh.user}@` : ""}${env.ssh.host}${env.ssh.port ? `:${env.ssh.port}` : ""}`;
     return `Tools run over ssh on ${target}.`;

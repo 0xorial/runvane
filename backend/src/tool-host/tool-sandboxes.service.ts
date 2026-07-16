@@ -57,10 +57,33 @@ export class ToolSandboxesService {
     if (req.id && !external.some((e) => e.id === id)) {
       throw new NotFoundException(`tool sandbox ${id} not found`);
     }
-    const env: ToolSandbox = { id, name: req.name.trim(), kind: 'ssh', builtin: false, ssh: req.ssh };
+    // An update keeps the docker linkage (renaming a docker sandbox must not
+    // orphan its container at delete time).
+    const existing = external.find((e) => e.id === id);
+    const env: ToolSandbox = {
+      id,
+      name: req.name.trim(),
+      kind: 'ssh',
+      builtin: false,
+      ssh: req.ssh,
+      docker: existing?.docker ?? null,
+    };
     const next = [...external.filter((e) => e.id !== id), env];
     await this.settings.setJson(TOOL_SANDBOXES_SETTING_KEY, next);
     return env;
+  }
+
+  /** Store a fully-built non-builtin row (docker sandboxes are assembled by
+   *  SandboxContainersService; this only persists). Replaces any row with
+   *  the same id. */
+  async saveRow(env: ToolSandbox): Promise<ToolSandbox> {
+    if (BUILTIN_SANDBOX_IDS.includes(env.id) || env.builtin) {
+      throw new BadRequestException(`cannot store a builtin sandbox id "${env.id}"`);
+    }
+    const parsed = ToolSandboxSchema.parse(env);
+    const external = await this.listExternal();
+    await this.settings.setJson(TOOL_SANDBOXES_SETTING_KEY, [...external.filter((e) => e.id !== parsed.id), parsed]);
+    return parsed;
   }
 
   async remove(id: string): Promise<void> {

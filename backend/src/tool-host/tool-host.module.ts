@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../db/database.module.js';
 import { ToolsModule } from '../tools/tools.module.js';
+import { SandboxContainersService } from './sandbox-containers.service.js';
 import { ToolSandboxesController } from './tool-sandboxes.controller.js';
 import { ToolSandboxesService } from './tool-sandboxes.service.js';
 import { ToolHostService } from './tool-host.service.js';
@@ -13,7 +14,7 @@ import { ToolHostService } from './tool-host.service.js';
 @Module({
   imports: [ToolsModule, DatabaseModule],
   controllers: [ToolSandboxesController],
-  providers: [ToolHostService, ToolSandboxesService],
-  exports: [ToolHostService, ToolSandboxesService],
+  providers: [ToolHostService, ToolSandboxesService, SandboxContainersService],
+  exports: [ToolHostService, ToolSandboxesService, SandboxContainersService],
 })
 export class ToolHostModule {}

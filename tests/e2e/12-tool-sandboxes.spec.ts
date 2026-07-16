@@ -83,6 +83,9 @@ test("add-sandbox card opens a dialog that creates and selects a new ssh env", a
   const dialog = page.getByTestId("add-env-dialog");
   await expect(dialog).toBeVisible();
 
+  // The dialog defaults to the Docker (managed) flow — this test covers the
+  // existing-host ssh flow.
+  await dialog.getByTestId("add-env-mode-ssh").click();
   await dialog.getByTestId("add-env-name").fill("E2E Box");
   await dialog.getByPlaceholder("box.local").fill("e2e.local");
   await dialog.getByTestId("add-env-submit").click();

@@ -574,6 +574,16 @@ export function createToolSandbox(body: { name: string; ssh: SshSandboxConfig })
   return sendJson("/api/tool-sandboxes", "POST", body) as Promise<ToolSandbox>;
 }
 
+/** Create a runvane-managed docker sandbox (container + keys + ssh row).
+ *  Slow on first use — the sandbox image may be built/pulled. */
+export function createDockerSandbox(body: {
+  name: string;
+  image?: string;
+  mounts: Array<{ host: string; container: string; readonly?: boolean }>;
+}): Promise<ToolSandbox> {
+  return sendJson("/api/tool-sandboxes/docker", "POST", body) as Promise<ToolSandbox>;
+}
+
 export function deleteToolSandbox(id: string): Promise<void> {
   return deleteJson(`/api/tool-sandboxes/${encodeURIComponent(id)}`).then(() => undefined);
 }
