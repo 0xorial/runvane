@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentPreinjectConfig, PreinjectedFileRecord, PreinjectFileType } from '../contracts/preinject.js';
+import type { SandboxScanRoot } from './sandbox-scan-root.js';
 
 /** Per-file cap so one huge instruction file can't blow the planner's context budget. */
 const MAX_FILE_BYTES = 20_000;
@@ -40,7 +41,10 @@ const INSTRUCTION_FILE_NAMES = new Set([
   '.windsurfrules',
 ]);
 
-type Candidate = { relPath: string; fileType: PreinjectFileType };
+/** `relPath` is the AGENT-VISIBLE path (container path for docker-sandbox
+ *  mounts, workspace-relative for the local sandbox); `hostAbs` is where the
+ *  harness actually reads the bytes. */
+type Candidate = { relPath: string; hostAbs: string; fileType: PreinjectFileType };
 
 export type ContextInjectionResult = {
   files: PreinjectedFileRecord[];
@@ -61,8 +65,11 @@ export type ContextInjectionResult = {
  * .clinerules, .windsurfrules, .github/copilot-instructions.md,
  * .cursor/rules/*.mdc) are picked up at any depth because monorepos scope
  * them per package, plus the root README as the one general-context file.
- * The scan root is the SANDBOX's workspace (see sandbox-scan-root.ts) —
- * callers must resolve it; there is deliberately no cwd default.
+ * The scan roots are the SANDBOX's workspace (see sandbox-scan-root.ts) —
+ * one root for the local sandbox, one per harness-host mount for docker
+ * sandboxes (read host-side, presented at the container path the agent's
+ * tools see). Callers must resolve them; there is deliberately no cwd
+ * default.
  *
  * Pure file I/O, no LLM call — this is why it isn't a `ThoughtTypeProvider`
  * (that abstraction is built around an LLM request/response cycle).
@@ -71,12 +78,12 @@ export type ContextInjectionResult = {
 export class ContextInjectionService {
   private readonly logger = new Logger(ContextInjectionService.name);
 
-  async scan(config: AgentPreinjectConfig | undefined, root: string): Promise<ContextInjectionResult | null> {
+  async scan(config: AgentPreinjectConfig | undefined, roots: SandboxScanRoot[]): Promise<ContextInjectionResult | null> {
     const mode = config?.mode ?? 'none';
     if (mode === 'none') return null;
     const selectedTypes = mode === 'selected' ? new Set(config?.types ?? []) : null;
 
-    return this.collect(root, await this.discover(root), (candidate) =>
+    return this.collect(await this.discoverAll(roots), (candidate) =>
       mode === 'all' ? true : selectedTypes!.has(candidate.fileType),
     );
   }
@@ -89,22 +96,34 @@ export class ContextInjectionService {
    * don't appear in the result (no skipped-by-gating audit rows: there is no
    * gating), unreadable/binary requested ones are recorded as skipped.
    */
-  async scanSelected(requestedPaths: string[], root: string): Promise<ContextInjectionResult | null> {
+  async scanSelected(requestedPaths: string[], roots: SandboxScanRoot[]): Promise<ContextInjectionResult | null> {
     const requested = new Set(requestedPaths);
-    const candidates = (await this.discover(root)).filter((c) => requested.has(c.relPath));
-    return this.collect(root, candidates, () => true);
+    const candidates = (await this.discoverAll(roots)).filter((c) => requested.has(c.relPath));
+    return this.collect(candidates, () => true);
+  }
+
+  /** Union of per-root discoveries, in root order, capped as one budget. */
+  private async discoverAll(roots: SandboxScanRoot[]): Promise<Candidate[]> {
+    const out: Candidate[] = [];
+    for (const root of roots) {
+      if (out.length >= MAX_CANDIDATES) break;
+      out.push(...(await this.discover(root, MAX_CANDIDATES - out.length)));
+    }
+    return out;
   }
 
   /**
-   * Bounded BFS for candidate files. Deterministic: directory entries are
-   * visited in name order, results carry breadth-first (shallowest-first)
-   * order, and the candidate count is capped.
+   * Bounded BFS for candidate files under one root. Deterministic: directory
+   * entries are visited in name order, results carry breadth-first
+   * (shallowest-first) order, and the candidate count is capped. `relPath`
+   * carries the root's container prefix — the path the agent sees.
    */
-  private async discover(root: string): Promise<Candidate[]> {
+  private async discover(root: SandboxScanRoot, budget: number): Promise<Candidate[]> {
     const out: Candidate[] = [];
-    const queue: Array<{ abs: string; rel: string; depth: number }> = [{ abs: root, rel: '', depth: 0 }];
+    const queue: Array<{ abs: string; rel: string; depth: number }> = [{ abs: root.hostPath, rel: '', depth: 0 }];
+    const visible = (rel: string): string => (root.containerPrefix ? path.posix.join(root.containerPrefix, rel) : rel);
 
-    while (queue.length > 0 && out.length < MAX_CANDIDATES) {
+    while (queue.length > 0 && out.length < budget) {
       const dir = queue.shift()!;
       let entries;
       try {
@@ -115,26 +134,27 @@ export class ContextInjectionService {
       entries.sort((a, b) => a.name.localeCompare(b.name));
 
       for (const entry of entries) {
-        if (out.length >= MAX_CANDIDATES) break;
+        if (out.length >= budget) break;
         const rel = dir.rel ? `${dir.rel}/${entry.name}` : entry.name;
+        const hostAbs = path.join(dir.abs, entry.name);
 
         if (entry.isDirectory()) {
           if (dir.depth >= MAX_DEPTH) continue;
           if (SKIP_DIRS.has(entry.name)) continue;
           if (entry.name.startsWith('.') && !HIDDEN_DIR_ALLOW.has(entry.name)) continue;
-          queue.push({ abs: path.join(dir.abs, entry.name), rel, depth: dir.depth + 1 });
+          queue.push({ abs: hostAbs, rel, depth: dir.depth + 1 });
           continue;
         }
         if (!entry.isFile()) continue;
 
         if (INSTRUCTION_FILE_NAMES.has(entry.name)) {
-          out.push({ relPath: rel, fileType: 'instructions' });
+          out.push({ relPath: visible(rel), hostAbs, fileType: 'instructions' });
         } else if (entry.name === 'copilot-instructions.md' && path.basename(dir.rel) === '.github') {
-          out.push({ relPath: rel, fileType: 'instructions' });
+          out.push({ relPath: visible(rel), hostAbs, fileType: 'instructions' });
         } else if (entry.name.endsWith('.mdc') && /(^|\/)\.cursor\/rules$/.test(dir.rel)) {
-          out.push({ relPath: rel, fileType: 'instructions' });
+          out.push({ relPath: visible(rel), hostAbs, fileType: 'instructions' });
         } else if (entry.name === 'README.md' && dir.depth === 0) {
-          out.push({ relPath: rel, fileType: 'readme' });
+          out.push({ relPath: visible(rel), hostAbs, fileType: 'readme' });
         }
       }
     }
@@ -142,7 +162,6 @@ export class ContextInjectionService {
   }
 
   private async collect(
-    root: string,
     candidates: Candidate[],
     typeEnabled: (candidate: Candidate) => boolean,
   ): Promise<ContextInjectionResult | null> {
@@ -153,7 +172,7 @@ export class ContextInjectionService {
         files.push({ path: candidate.relPath, fileType: candidate.fileType, status: 'skipped' });
         continue;
       }
-      const content = await this.readAsText(path.join(root, candidate.relPath));
+      const content = await this.readAsText(candidate.hostAbs);
       if (content === null) {
         files.push({ path: candidate.relPath, fileType: candidate.fileType, status: 'skipped' });
         continue;

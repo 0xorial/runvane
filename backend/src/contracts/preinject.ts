@@ -76,9 +76,10 @@ export const PreinjectPreviewFileSchema = PreinjectedFileRecordSchema.extend({
 export type PreinjectPreviewFile = z.infer<typeof PreinjectPreviewFileSchema>;
 
 /** Why a sandbox has no scannable workspace: its tools run on a remote host
- *  (scanning through the tool-host isn't wired yet), or there is no sandbox
- *  at all. */
-export const PreinjectScanUnavailableReasonSchema = z.enum(['remote-sandbox', 'no-sandbox']);
+ *  (scanning through the tool-host isn't wired yet), it is a docker sandbox
+ *  with no harness-host mounts (only container-internal files, invisible to
+ *  the scanner), or there is no sandbox at all. */
+export const PreinjectScanUnavailableReasonSchema = z.enum(['remote-sandbox', 'no-mounts', 'no-sandbox']);
 export type PreinjectScanUnavailableReason = z.infer<typeof PreinjectScanUnavailableReasonSchema>;
 
 export const PreinjectPreviewResultSchema = z.object({

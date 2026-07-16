@@ -6,7 +6,7 @@ import { estimateContextTokens } from '../knowledge/retrieval/retrieval-context.
 import { ToolSandboxesService } from '../tool-host/tool-sandboxes.service.js';
 import { formatContextFilesBlock } from './context-files-block.js';
 import { ContextInjectionService } from './context-injection.service.js';
-import { resolveSandboxScanRoot, type SandboxScanRoot } from './sandbox-scan-root.js';
+import { resolveSandboxScanRoots, type SandboxScanRoots } from './sandbox-scan-root.js';
 
 /**
  * Composer preview for the `files` half of context injection: runs the same
@@ -42,11 +42,11 @@ export class ContextInjectionController {
     @Query('toolSandboxId') toolSandboxId?: string,
     @Query('conversationId') conversationId?: string,
   ): Promise<PreinjectPreviewResult> {
-    const scanRoot = await this.resolveScanRoot(toolSandboxId, conversationId);
+    const scanRoots = await this.resolveScanRoots(toolSandboxId, conversationId);
 
     if (all === '1' || all === 'true') {
-      if (scanRoot.root === null) return this.unscannable('all', scanRoot);
-      return this.toPreview('all', await this.contextInjection.scan({ mode: 'all' }, scanRoot.root));
+      if (scanRoots.roots === null) return this.unscannable('all', scanRoots);
+      return this.toPreview('all', await this.contextInjection.scan({ mode: 'all' }, scanRoots.roots));
     }
 
     if (!agentId?.trim()) throw new BadRequestException('agentId is required');
@@ -55,23 +55,23 @@ export class ContextInjectionController {
     const config = agent.default_llm_configuration?.preinject ?? undefined;
     const mode = config?.mode ?? 'none';
 
-    if (scanRoot.root === null) return this.unscannable(mode, scanRoot);
-    return this.toPreview(mode, await this.contextInjection.scan(config, scanRoot.root));
+    if (scanRoots.roots === null) return this.unscannable(mode, scanRoots);
+    return this.toPreview(mode, await this.contextInjection.scan(config, scanRoots.roots));
   }
 
-  private async resolveScanRoot(toolSandboxId?: string, conversationId?: string): Promise<SandboxScanRoot> {
+  private async resolveScanRoots(toolSandboxId?: string, conversationId?: string): Promise<SandboxScanRoots> {
     const boundSandboxId = conversationId?.trim()
       ? await this.conversations.getToolSandboxId(conversationId.trim())
       : (toolSandboxId?.trim() ?? null);
     const sandbox = await this.toolSandboxes.getOrDefault(boundSandboxId);
-    return resolveSandboxScanRoot(sandbox);
+    return resolveSandboxScanRoots(sandbox);
   }
 
   private unscannable(
     mode: PreinjectPreviewResult['mode'],
-    scanRoot: Extract<SandboxScanRoot, { root: null }>,
+    scanRoots: Extract<SandboxScanRoots, { roots: null }>,
   ): PreinjectPreviewResult {
-    return { mode, files: [], totalTokens: 0, scannable: false, unavailableReason: scanRoot.reason };
+    return { mode, files: [], totalTokens: 0, scannable: false, unavailableReason: scanRoots.reason };
   }
 
   private toPreview(

@@ -116,7 +116,7 @@
                     selectEnv(env.id);
                   }
                 }}
-                class="group flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-card/40 p-2.5 text-left transition-colors hover:border-primary/60 hover:bg-card {selected
+                class="group relative flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-card/40 p-2.5 text-left transition-colors hover:border-primary/60 hover:bg-card {selected
                   ? 'border-primary/70 bg-primary/5'
                   : ''}"
               >
@@ -124,9 +124,23 @@
                   <ToolSandboxIcon kind={env.kind} />
                 </span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm font-medium text-foreground">{env.name}</span>
+                  <span class="block truncate pr-5 text-sm font-medium text-foreground">{env.name}</span>
                   <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{toolSandboxDescription(env)}</span>
                 </span>
+                {#if !env.builtin}
+                  <a
+                    href="/settings/tool-sandboxes"
+                    title="Sandbox details"
+                    onclick={(e) => e.stopPropagation()}
+                    class="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-secondary/60 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85">
+                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span class="sr-only">Sandbox details</span>
+                  </a>
+                {/if}
               </div>
             {/each}
             <button

@@ -2,6 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { ContextInjectionService } from '../../../backend/src/context-injection/context-injection.service';
+import type { SandboxScanRoot } from '../../../backend/src/context-injection/sandbox-scan-root';
+
+const asRoot = (hostPath: string, containerPrefix = ''): SandboxScanRoot[] => [{ hostPath, containerPrefix }];
 
 const runLive = process.env.RUN_INTEGRATION_TESTS === '1';
 const describeLive = runLive ? describe : describe.skip;
@@ -45,7 +48,7 @@ describeLive('context-injection scan (traversal rules)', () => {
     await put('node_modules/lib/CLAUDE.md'); // skip-dir — never entered
     await put('.hidden/CLAUDE.md'); // hidden dir (not allow-listed) — never entered
 
-    const result = await service.scan({ mode: 'all' }, root);
+    const result = await service.scan({ mode: 'all' }, asRoot(root));
     expect(result).not.toBeNull();
     const paths = result!.files.map((f) => f.path).sort();
     expect(paths).toEqual(
@@ -71,7 +74,7 @@ describeLive('context-injection scan (traversal rules)', () => {
     await put('CLAUDE.md');
     await put('README.md');
 
-    const result = await service.scan({ mode: 'selected', types: ['instructions'] }, root);
+    const result = await service.scan({ mode: 'selected', types: ['instructions'] }, asRoot(root));
     expect(result).not.toBeNull();
     expect(result!.files).toEqual([
       { path: 'CLAUDE.md', fileType: 'instructions', status: 'injected' },
@@ -84,7 +87,7 @@ describeLive('context-injection scan (traversal rules)', () => {
     await put('a/b/c/d/e/CLAUDE.md'); // inside a depth-5 dir — still found
     await put('a/b/c/d/e/f/CLAUDE.md'); // dir at depth 6 — never entered
 
-    const result = await service.scan({ mode: 'all' }, root);
+    const result = await service.scan({ mode: 'all' }, asRoot(root));
     expect(result!.files.map((f) => f.path)).toEqual(['a/b/c/d/e/CLAUDE.md']);
   });
 
@@ -93,13 +96,38 @@ describeLive('context-injection scan (traversal rules)', () => {
     await put('backend/AGENTS.md');
     await put('secret.txt', 'not a candidate');
 
-    const result = await service.scanSelected(['backend/AGENTS.md', 'secret.txt', '../etc/passwd'], root);
+    const result = await service.scanSelected(['backend/AGENTS.md', 'secret.txt', '../etc/passwd'], asRoot(root));
     expect(result).not.toBeNull();
     expect(result!.files).toEqual([{ path: 'backend/AGENTS.md', fileType: 'instructions', status: 'injected' }]);
   });
 
   it('an empty selection yields no result (explicit "inject nothing")', async () => {
     await put('CLAUDE.md');
-    expect(await service.scanSelected([], root)).toBeNull();
+    expect(await service.scanSelected([], asRoot(root))).toBeNull();
+  });
+
+  it('docker-sandbox mounts: reads host-side, presents container paths, unions multiple mounts', async () => {
+    await put('projA/CLAUDE.md');
+    await put('projA/README.md');
+    await put('projB/AGENTS.md');
+
+    const roots: SandboxScanRoot[] = [
+      { hostPath: path.join(root, 'projA'), containerPrefix: '/workspace/a' },
+      { hostPath: path.join(root, 'projB'), containerPrefix: '/workspace/b' },
+    ];
+    const result = await service.scan({ mode: 'all' }, roots);
+    expect(result!.files.map((f) => f.path)).toEqual([
+      '/workspace/a/CLAUDE.md',
+      '/workspace/a/README.md',
+      '/workspace/b/AGENTS.md',
+    ]);
+    // Each mount root's README counts as THE root README for that mount.
+    expect(result!.files.find((f) => f.path === '/workspace/a/README.md')?.fileType).toBe('readme');
+    // Planner sections carry the agent-visible (container) paths.
+    expect(result!.content).toContain('--- /workspace/a/CLAUDE.md ---');
+
+    // scanSelected matches on the container paths too.
+    const selected = await service.scanSelected(['/workspace/b/AGENTS.md'], roots);
+    expect(selected!.files).toEqual([{ path: '/workspace/b/AGENTS.md', fileType: 'instructions', status: 'injected' }]);
   });
 });

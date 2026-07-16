@@ -442,7 +442,9 @@
               <p class={noteText} data-testid="context-files-note">
                 {candidatesPreview.unavailableReason === "remote-sandbox"
                   ? "This conversation's sandbox runs on a remote host — its workspace can't be scanned for context files yet."
-                  : "This conversation has no sandbox — there is no workspace to scan for context files."}
+                  : candidatesPreview.unavailableReason === "no-mounts"
+                    ? "This conversation's sandbox has no harness-host mounts — nothing the scanner can reach."
+                    : "This conversation has no sandbox — there is no workspace to scan for context files."}
               </p>
             {:else if candidates.length === 0}
               <p class={noteText} data-testid="context-files-note">

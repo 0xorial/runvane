@@ -81,6 +81,7 @@ test("a failing create returns the real technical error — message and cause-ch
 });
 
 test("docker sandbox: create registers an ssh-over-docker-exec row; delete removes the container", async ({
+  app,
   request,
 }) => {
   test.setTimeout(120_000);
@@ -88,6 +89,7 @@ test("docker sandbox: create registers an ssh-over-docker-exec row; delete remov
   await ensureTinyImage();
 
   const hostDir = await mkdtemp(path.join(os.tmpdir(), "e2e-sbx-mount-"));
+  await writeFile(path.join(hostDir, "CLAUDE.md"), "e2e sandbox instructions marker");
   let sandboxId: string | null = null;
   try {
     const createRes = await request.post(`${apiBaseUrl()}/api/tool-sandboxes/docker`, {
@@ -138,6 +140,39 @@ test("docker sandbox: create registers an ssh-over-docker-exec row; delete remov
     const listRes = await request.get(`${apiBaseUrl()}/api/tool-sandboxes`);
     const { sandboxes } = (await listRes.json()) as { sandboxes: Array<{ id: string }> };
     expect(sandboxes.some((s) => s.id === created.id)).toBe(true);
+
+    // Context-file discovery reads the mount host-side and presents the
+    // CONTAINER path — a mounted workspace is scannable, not "remote".
+    const previewRes = await request.get(
+      `${apiBaseUrl()}/api/context-injection/preview?all=1&toolSandboxId=${created.id}`,
+    );
+    expect(previewRes.ok()).toBeTruthy();
+    const preview = (await previewRes.json()) as {
+      scannable: boolean;
+      files: Array<{ path: string; status: string; content?: string }>;
+    };
+    expect(preview.scannable).toBe(true);
+    const claude = preview.files.find((f) => f.path === "/workspace/mounted/CLAUDE.md");
+    expect(claude?.status).toBe("injected");
+    expect(claude?.content).toContain("e2e sandbox instructions marker");
+
+    // Settings shows the sandbox's full details: image, container, mounts.
+    await app.page.goto("/settings/tool-sandboxes", { waitUntil: "domcontentloaded" });
+    const row = app.page.locator(`[data-testid="tool-env-row"][data-env-id="${created.id}"]`);
+    await row.getByTestId("tool-env-details").click();
+    const panel = row.getByTestId("tool-env-detail-panel");
+    await expect(panel.getByTestId("tool-env-detail-image")).toHaveText(TEST_IMAGE);
+    await expect(panel.getByTestId("tool-env-detail-mount")).toContainText("/workspace/mounted");
+    await expect(panel.getByTestId("tool-env-detail-mount")).toContainText("ro");
+    await expect(panel).toContainText("docker exec -i -u root");
+
+    // Rename keeps the docker linkage (delete below still removes the container).
+    await row.getByTestId("tool-env-rename").click();
+    await row.getByTestId("tool-env-rename-input").fill("e2e docker renamed");
+    await row.getByTestId("tool-env-rename-save").click();
+    await expect(app.page.locator(`[data-testid="tool-env-row"][data-env-id="${created.id}"]`)).toContainText(
+      "e2e docker renamed",
+    );
 
     // Delete tears the container down with the row.
     const delRes = await request.delete(`${apiBaseUrl()}/api/tool-sandboxes/${created.id}`);

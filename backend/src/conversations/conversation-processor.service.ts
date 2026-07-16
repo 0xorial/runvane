@@ -1,7 +1,7 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
 import { ContextInjectionService, type ContextInjectionResult } from '../context-injection/context-injection.service.js';
-import { resolveSandboxScanRoot } from '../context-injection/sandbox-scan-root.js';
+import { resolveSandboxScanRoots, type SandboxScanRoot } from '../context-injection/sandbox-scan-root.js';
 import { ToolSandboxesService } from '../tool-host/tool-sandboxes.service.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
@@ -587,14 +587,15 @@ export class ConversationProcessorService implements OnModuleInit {
   }
 
   /**
-   * The workspace context-file discovery runs in: the conversation's tool
-   * sandbox decides (local → the server's cwd; ssh/none → no scannable
-   * workspace → null, and no entry is appended).
+   * The workspace roots context-file discovery runs in: the conversation's
+   * tool sandbox decides (local → the server's cwd; docker → its harness-host
+   * mounts; ssh/none/mountless → no scannable workspace → null, and no entry
+   * is appended).
    */
-  private async resolveContextScanRoot(conversationId: string): Promise<string | null> {
+  private async resolveContextScanRoots(conversationId: string): Promise<SandboxScanRoot[] | null> {
     const sandboxId = await this.conversations.getToolSandboxId(conversationId);
     const sandbox = await this.toolSandboxes.getOrDefault(sandboxId);
-    return resolveSandboxScanRoot(sandbox).root;
+    return resolveSandboxScanRoots(sandbox).roots;
   }
 
   /**
@@ -610,10 +611,10 @@ export class ConversationProcessorService implements OnModuleInit {
     parentId: string,
   ): Promise<{ id: string } | null> {
     try {
-      const root = await this.resolveContextScanRoot(conversationId);
-      if (!root) return null;
+      const roots = await this.resolveContextScanRoots(conversationId);
+      if (!roots) return null;
       const agent = await this.agents.get(agentId);
-      const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined, root);
+      const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined, roots);
       return await this.appendFilesEntry(conversationId, parentId, result);
     } catch (err) {
       this.logger.warn(
@@ -635,9 +636,9 @@ export class ConversationProcessorService implements OnModuleInit {
     paths: string[],
   ): Promise<{ id: string } | null> {
     try {
-      const root = await this.resolveContextScanRoot(conversationId);
-      if (!root) return null;
-      const result = await this.contextInjection.scanSelected(paths, root);
+      const roots = await this.resolveContextScanRoots(conversationId);
+      if (!roots) return null;
+      const result = await this.contextInjection.scanSelected(paths, roots);
       return await this.appendFilesEntry(conversationId, parentId, result);
     } catch (err) {
       this.logger.warn(

@@ -622,6 +622,13 @@ export function createDockerSandbox(body: {
   return sendJson("/api/tool-sandboxes/docker", "POST", body) as Promise<ToolSandbox>;
 }
 
+/** Rename/reconfigure an existing sandbox. Docker-backed rows keep their
+ *  container linkage server-side; pass the current `ssh` back unchanged when
+ *  only renaming. */
+export function updateToolSandbox(id: string, body: { name: string; ssh: SshSandboxConfig }): Promise<ToolSandbox> {
+  return sendJson(`/api/tool-sandboxes/${encodeURIComponent(id)}`, "PUT", body) as Promise<ToolSandbox>;
+}
+
 export function deleteToolSandbox(id: string): Promise<void> {
   return deleteJson(`/api/tool-sandboxes/${encodeURIComponent(id)}`).then(() => undefined);
 }

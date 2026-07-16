@@ -89,7 +89,9 @@
         <p class="text-[11px] text-muted-foreground" data-testid="start-context-note">
           {preview.unavailableReason === "remote-sandbox"
             ? "This sandbox runs on a remote host — its workspace can't be scanned for context files yet."
-            : "No sandbox — there is no workspace to scan for context files."}
+            : preview.unavailableReason === "no-mounts"
+              ? "This sandbox has no harness-host mounts — nothing the scanner can reach. Add mounts when creating a sandbox to get context files."
+              : "No sandbox — there is no workspace to scan for context files."}
         </p>
       {:else if candidates.length === 0}
         <p class="text-[11px] text-muted-foreground" data-testid="start-context-note">
