@@ -57,10 +57,7 @@
 </script>
 
 <div class="mt-4" data-testid="start-context-section">
-  <div class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-    Start context
-    <span class="font-normal">— carried by the first message</span>
-  </div>
+  <div class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">Start context</div>
   <div class="rounded-xl border border-border bg-card/40 p-2.5">
     <div class="flex items-center gap-1.5">
       <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-foreground">

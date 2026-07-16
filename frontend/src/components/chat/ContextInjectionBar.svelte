@@ -183,6 +183,20 @@
   const messageTokens = $derived(estimateTextTokens(text.trim()));
   const attachmentEst = $derived(estimateAttachmentTokens(attachments, selectedLlm.model));
 
+  // Baseline (system prompt + tools + scaffolding). On the FIRST message the
+  // composer is staging the whole initial request, so the total includes it;
+  // later sends show what they add, with the baseline kept in the tooltip.
+  const baselineQuery = createQuery(() => {
+    void $chatToolDraftRevision;
+    return plannerBaselineQueryOptions(agentId, compileChatToolOverrides(getChatToolDraft()));
+  });
+  const baseline = $derived(baselineQuery.data);
+  /** Null while the amount is still loading (first message with an agent). */
+  const baselineTokens = $derived.by(() => {
+    if (!firstMessage || !agentId) return 0;
+    return baseline ? baseline.totalTokens : null;
+  });
+
   const knowledgeSelected = $derived(draft.enabled && draft.storages.length > 0);
   /** Direct-mode tokens once previewed; null while the amount is still unknown
    *  (typing/loading, or LLM-split where queries only exist at send time). */
@@ -192,8 +206,12 @@
     return null;
   });
 
-  const totalKnown = $derived(messageTokens + attachmentEst.tokens + filesTokens + (knowledgeTokens ?? 0));
-  const totalPending = $derived(knowledgeTokens === null || attachmentEst.unknownCount > 0);
+  const totalKnown = $derived(
+    messageTokens + attachmentEst.tokens + filesTokens + (knowledgeTokens ?? 0) + (baselineTokens ?? 0),
+  );
+  const totalPending = $derived(
+    knowledgeTokens === null || attachmentEst.unknownCount > 0 || baselineTokens === null,
+  );
   const anythingActive = $derived(selectedFilePaths.length > 0 || draft.enabled);
   const showTotal = $derived(anythingActive || text.trim().length > 0 || attachments.length > 0);
 
@@ -236,15 +254,6 @@
     return costLabel ? `${tokens} · ${costLabel}` : tokens;
   });
 
-  // Per-turn baseline (system prompt + tools + scaffolding) — informational:
-  // it rides along with EVERY turn, so it is surfaced in the breakdown and
-  // the panel block rather than folded into the send total.
-  const baselineQuery = createQuery(() => {
-    void $chatToolDraftRevision;
-    return plannerBaselineQueryOptions(agentId, compileChatToolOverrides(getChatToolDraft()));
-  });
-  const baseline = $derived(baselineQuery.data);
-
   const totalTitle = $derived.by(() => {
     const parts = [`message ~${messageTokens} tok`];
     if (attachments.length > 0) {
@@ -254,8 +263,11 @@
     if (filesTokens > 0) parts.push(`context files ~${filesTokens} tok`);
     if (knowledgeSelected) parts.push(knowledgeTokens === null ? "knowledge at send" : `knowledge ~${knowledgeTokens} tok`);
     if (baseline) {
+      const sys = baseline.systemPrompt.tokens + baseline.scaffolding.tokens;
       parts.push(
-        `plus every request: system prompt ~${baseline.systemPrompt.tokens + baseline.scaffolding.tokens} tok · tools ~${baseline.tools.tokens} tok`,
+        firstMessage
+          ? `system prompt ~${sys} tok · tools ~${baseline.tools.tokens} tok`
+          : `plus every request: system prompt ~${sys} tok · tools ~${baseline.tools.tokens} tok`,
       );
     }
     return parts.join(" · ");

@@ -75,6 +75,14 @@ async function deleteStorage(request: APIRequestContext, id: string): Promise<vo
   await request.delete(`${apiBaseUrl()}/api/knowledge/storages/${encodeURIComponent(id)}`);
 }
 
+/** The agent's per-request baseline total — first-message composer totals
+ *  include it, so exact-number assertions are computed relative to it. */
+async function baselineTotal(request: APIRequestContext, agentId: string): Promise<number> {
+  const res = await request.post(`${apiBaseUrl()}/api/planner-baseline/preview`, { data: { agentId } });
+  expect(res.ok()).toBeTruthy();
+  return ((await res.json()) as { totalTokens: number }).totalTokens;
+}
+
 async function retrievalEntryOf(
   request: APIRequestContext,
   conversationId: string,
@@ -248,11 +256,12 @@ test("direct attachments count into the estimate: text by size, images by measur
 }) => {
   test.setTimeout(20_000);
   const agentId = await defaultAgentId(request);
+  const base = await baselineTotal(request, agentId);
   await app.chat.gotoNew(agentId);
 
-  // 20 chars → ~5 tok of message text.
+  // 20 chars → ~5 tok of message text, on top of the per-request baseline.
   await app.chat.userInput.typeMessage("estimate attachments");
-  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~5 tok/);
+  await expect(app.page.getByTestId("chat-context-total")).toContainText(`~${base + 5} tok`);
 
   // 400 bytes of text/plain, mode 'direct' by default → +100 tok, exact.
   const fileInput = app.page.locator('input[type="file"]');
@@ -261,7 +270,7 @@ test("direct attachments count into the estimate: text by size, images by measur
     mimeType: "text/plain",
     buffer: Buffer.alloc(400, "a"),
   });
-  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~105 tok/);
+  await expect(app.page.getByTestId("chat-context-total")).toContainText(`~${base + 105} tok`);
 
   // A 1×1 PNG, 'direct' by default → measured to 1 vision token (pixels/750,
   // floored at 1) — a knowable amount, not an at-send "?" (which would render
@@ -271,7 +280,7 @@ test("direct attachments count into the estimate: text by size, images by measur
     "base64",
   );
   await fileInput.setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: onePxPng });
-  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~106 tok/);
+  await expect(app.page.getByTestId("chat-context-total")).toContainText(`~${base + 106} tok`);
 });
 
 test("direct PDFs price per sniffed page; images price by the send model's family rules", async ({
@@ -280,6 +289,7 @@ test("direct PDFs price per sniffed page; images price by the send model's famil
 }) => {
   test.setTimeout(25_000);
   const agentId = await defaultAgentId(request);
+  const base = await baselineTotal(request, agentId);
   await app.chat.gotoNew(agentId);
   await app.chat.userInput.typeMessage("estimate attachments"); // ~5 tok
 
@@ -307,7 +317,7 @@ test("direct PDFs price per sniffed page; images price by the send model's famil
     .getByRole("radiogroup", { name: "Attachment mode" })
     .getByRole("radio", { name: "Direct" })
     .click();
-  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~3005 tok/);
+  await expect(app.page.getByTestId("chat-context-total")).toContainText(`~${base + 3005} tok`);
 });
 
 test("image estimate follows the model family: a claude-named model applies the pixel cap", async ({
@@ -326,6 +336,7 @@ test("image estimate follows the model family: a claude-named model applies the 
   expect(createRes.ok()).toBeTruthy();
   const agent = (await createRes.json()) as { id: string };
   try {
+    const base = await baselineTotal(request, agent.id);
     await app.chat.gotoNew(agent.id);
     await app.chat.userInput.typeMessage("estimate attachments"); // ~5 tok
 
@@ -342,7 +353,7 @@ test("image estimate follows the model family: a claude-named model applies the 
       input.files = dt.files;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~1539 tok/);
+    await expect(app.page.getByTestId("chat-context-total")).toContainText(`~${base + 1539} tok`);
   } finally {
     await request.delete(`${apiBaseUrl()}/api/agents/${agent.id}`);
   }
