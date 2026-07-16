@@ -242,6 +242,38 @@ test("typing alone prices the send — tokens and cost from the provider's live 
   await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok · ≈\$\d/);
 });
 
+test("direct attachments count into the estimate: text by size, images by measured pixels", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(20_000);
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+
+  // 20 chars → ~5 tok of message text.
+  await app.chat.userInput.typeMessage("estimate attachments");
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~5 tok/);
+
+  // 400 bytes of text/plain, mode 'direct' by default → +100 tok, exact.
+  const fileInput = app.page.locator('input[type="file"]');
+  await fileInput.setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.alloc(400, "a"),
+  });
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~105 tok/);
+
+  // A 1×1 PNG, 'direct' by default → measured to 1 vision token (pixels/750,
+  // floored at 1) — a knowable amount, not an at-send "?" (which would render
+  // as "~N + ? tok" and fail the match). Each picker use appends.
+  const onePxPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await fileInput.setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: onePxPng });
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~106 tok/);
+});
+
 test("verifying a provider persists discovered catalog pricing into the capability rows", async ({ request }) => {
   test.setTimeout(20_000);
   // The stub provider's discoverModels publishes fixed rates; a verify

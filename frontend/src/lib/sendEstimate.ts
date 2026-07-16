@@ -14,19 +14,42 @@ export function estimateTextTokens(text: string): number {
 export type AttachmentTokenEstimate = {
   /** ~tokens of the uploads whose prompt contribution is knowable pre-send. */
   tokens: number;
-  /** Uploads whose contribution only resolves at send time (images, PDFs,
-   *  'summary' mode — the planner sees a summary that doesn't exist yet). */
+  /** Uploads whose contribution only resolves at send time ('summary' mode —
+   *  the planner sees a summary that doesn't exist yet; direct binaries like
+   *  PDFs, whose cost is provider/page dependent; images not yet measured). */
   unknownCount: number;
 };
 
+/** ~vision tokens for an inlined image: pixels/750 — Anthropic's rule of
+ *  thumb, close enough across providers for a "~" estimate. */
+function estimateImageTokens(dims: { width: number; height: number }): number {
+  return Math.max(1, Math.ceil((dims.width * dims.height) / 750));
+}
+
+/**
+ * Prices what direct mode actually sends (expandAttachments.ts): text-like
+ * files are inlined as content (bytes/4), images become vision parts (priced
+ * from their measured dimensions), other binaries become base64 file parts
+ * whose real cost is provider-dependent → unknown. Summary mode is always
+ * unknown pre-send.
+ */
 export function estimateAttachmentTokens(
-  attachments: Array<{ file: File; mode: AttachmentMode }>,
+  attachments: Array<{ file: File; mode: AttachmentMode; imageDims?: { width: number; height: number } }>,
 ): AttachmentTokenEstimate {
   let tokens = 0;
   let unknownCount = 0;
-  for (const { file, mode } of attachments) {
+  for (const { file, mode, imageDims } of attachments) {
+    if (mode !== "direct") {
+      unknownCount += 1;
+      continue;
+    }
+    if (file.type.startsWith("image/")) {
+      if (imageDims) tokens += estimateImageTokens(imageDims);
+      else unknownCount += 1;
+      continue;
+    }
     const textLike = file.type.startsWith("text/") || file.type === "application/json";
-    if (mode === "direct" && textLike) tokens += Math.ceil(file.size / 4);
+    if (textLike) tokens += Math.ceil(file.size / 4);
     else unknownCount += 1;
   }
   return { tokens, unknownCount };

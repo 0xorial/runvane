@@ -79,6 +79,24 @@
     if (files.length === 0) return;
     const wrapped = files.map((file) => ({ file, mode: defaultAttachmentMode(file) }));
     selectedFiles = [...selectedFiles, ...wrapped];
+    for (const entry of wrapped) measureImage(entry.file);
+  }
+
+  /** The vision-token estimate needs pixel dimensions; measured once per
+   * added image and stamped onto its entry (matched by File identity so a
+   * mode flip in the meantime doesn't lose the result). */
+  function measureImage(file: File): void {
+    if (!file.type.startsWith("image/")) return;
+    createImageBitmap(file).then(
+      (bitmap) => {
+        const imageDims = { width: bitmap.width, height: bitmap.height };
+        bitmap.close();
+        selectedFiles = selectedFiles.map((x) => (x.file === file ? { ...x, imageDims } : x));
+      },
+      () => {
+        /* undecodable image — stays an at-send unknown */
+      },
+    );
   }
 
   /** Forced retrieval and file attaches are single-shot: they apply to the

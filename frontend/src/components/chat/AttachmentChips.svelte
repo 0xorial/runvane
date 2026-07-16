@@ -2,7 +2,13 @@
   import type { AttachmentMode } from "@/api/client";
   import Icon from "@/components/ui/Icon.svelte";
 
-  export type SelectedAttachment = { file: File; mode: AttachmentMode };
+  export type SelectedAttachment = {
+    file: File;
+    mode: AttachmentMode;
+    /** Pixel size, measured once on add (images only) — drives the composer's
+     *  vision-token estimate; unmeasured images price as at-send unknowns. */
+    imageDims?: { width: number; height: number };
+  };
 
   let {
     files,
