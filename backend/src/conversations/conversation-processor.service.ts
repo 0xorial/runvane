@@ -1,6 +1,6 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
-import { ContextInjectionService } from '../context-injection/context-injection.service.js';
+import { ContextInjectionService, type ContextInjectionResult } from '../context-injection/context-injection.service.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { PendingMessagesRepo } from '../db/repositories/pending-messages.repo.js';
@@ -490,7 +490,16 @@ export class ConversationProcessorService implements OnModuleInit {
         // The context-injection entry (when created) becomes the spine tip the
         // planner anchors at; side thoughts stay anchored to the user message.
         let spineTip = userEntry.id;
-        if (isFirstMessage) {
+        if (userPayload.overrides?.contextFiles) {
+          // Explicit per-message attach: the user picked exact paths, which
+          // also suppresses the automatic first-message scan (no double inject).
+          const injected = await this.injectSelectedContextFiles(
+            conversationId,
+            userEntry.id,
+            userPayload.overrides.contextFiles.paths,
+          );
+          if (injected) spineTip = injected.id;
+        } else if (isFirstMessage) {
           const injected = await this.injectContextFiles(conversationId, body.agentId, userEntry.id);
           if (injected) spineTip = injected.id;
         }
@@ -589,20 +598,50 @@ export class ConversationProcessorService implements OnModuleInit {
     try {
       const agent = await this.agents.get(agentId);
       const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined);
-      if (!result) return null;
-      const created = await this.chatEntries.appendContextInjection(conversationId, {
-        parentId,
-        files: result.files,
-        content: result.content,
-      });
-      await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
-      return created;
+      return await this.appendFilesEntry(conversationId, parentId, result);
     } catch (err) {
       this.logger.warn(
         `context-injection scan failed for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return null;
     }
+  }
+
+  /**
+   * Explicit per-message context-files attach (`overrides.contextFiles`): scan
+   * only the paths the user picked — no agent-config gating — and append the
+   * same `context-injection` files entry the first-message scan produces.
+   * Best-effort like injectContextFiles: failures are logged and swallowed.
+   */
+  private async injectSelectedContextFiles(
+    conversationId: string,
+    parentId: string,
+    paths: string[],
+  ): Promise<{ id: string } | null> {
+    try {
+      const result = await this.contextInjection.scanSelected(paths);
+      return await this.appendFilesEntry(conversationId, parentId, result);
+    } catch (err) {
+      this.logger.warn(
+        `context-injection attach failed for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  private async appendFilesEntry(
+    conversationId: string,
+    parentId: string,
+    result: ContextInjectionResult | null,
+  ): Promise<{ id: string } | null> {
+    if (!result) return null;
+    const created = await this.chatEntries.appendContextInjection(conversationId, {
+      parentId,
+      files: result.files,
+      content: result.content,
+    });
+    await publishChatEntryUpsert(this.hub, this.chatEntries, conversationId, created.id);
+    return created;
   }
 
   /**

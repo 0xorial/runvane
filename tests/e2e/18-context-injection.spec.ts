@@ -1,5 +1,13 @@
 import { APIRequestContext } from "@playwright/test";
-import { apiBaseUrl, createProbeConversation, defaultAgentId, FORBID_AGENT_ID, getConversationEntries } from "./harness/client";
+import {
+  apiBaseUrl,
+  createProbeConversation,
+  defaultAgentId,
+  FORBID_AGENT_ID,
+  getConversationEntries,
+  PROBE_MESSAGE,
+  waitForNoPendingTasks,
+} from "./harness/client";
 import { expect, test } from "./fixtures";
 
 const runE2e = process.env.RUN_E2E_TESTS === "1";
@@ -147,7 +155,7 @@ test("preview endpoint: an unset preinject config reads as mode 'none' with noth
   expect(preview.totalTokens).toBe(0);
 });
 
-test("composer Context panel lists the files half pre-send; existing conversations show the first-message note", async ({
+test("new chat: the Start context section lists the files half pre-send and the composer prices it", async ({
   app,
   request,
 }) => {
@@ -158,26 +166,120 @@ test("composer Context panel lists the files half pre-send; existing conversatio
   try {
     await app.chat.gotoNew(agentId);
 
-    // Collapsed rollup: file count + total tokens, visible before anything is sent.
-    await expect(app.page.getByTestId("chat-context-summary")).toContainText(/\d+ files?/);
-    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
-
-    // Panel: per-file rows carry their own token estimate, and the content
-    // the planner would receive is examinable in place.
-    await app.page.getByTestId("chat-context-chip").click();
-    const readmeRow = app.page.locator('[data-testid="context-file-row"][data-file-path="README.md"]');
+    // Start context section (sibling of Tool sandbox / Agent): per-file rows
+    // carry their own token estimate, and the content the planner would
+    // receive is examinable in place.
+    const section = app.page.getByTestId("start-context-section");
+    await expect(section.getByTestId("start-context-tokens")).toHaveText(/~\d+ tok/);
+    const readmeRow = section.locator('[data-testid="context-file-row"][data-file-path="README.md"]');
     await expect(readmeRow).toContainText(/~\d+ tok/);
     await readmeRow.click();
-    await expect(app.page.getByTestId("context-file-content")).toContainText(README_MARKER);
+    await expect(section.getByTestId("context-file-content")).toContainText(README_MARKER);
 
-    // Existing conversation: the files half is first-message-only and says so.
-    const conversationId = await createProbeConversation(request, agentId);
-    await app.chat.open(conversationId);
+    // Composer rollup prices the same scan; its panel points at the section.
+    await expect(app.page.getByTestId("chat-context-summary")).toContainText(/\d+ files?/);
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
     await app.page.getByTestId("chat-context-chip").click();
-    await expect(app.page.getByTestId("context-files-note")).toContainText("first message only");
+    await expect(app.page.getByTestId("context-files-note")).toContainText("Start context above");
   } finally {
     await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
   }
+});
+
+test("existing conversation: the composer panel attaches candidate files to the next message only", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(30_000);
+  const agentId = await defaultAgentId(request);
+  // No preinject config on the agent: the probe conversation starts with no
+  // files entry, so the one that appears below is the manual attach.
+  const conversationId = await createProbeConversation(request, agentId);
+  await app.chat.open(conversationId);
+
+  // Pick README.md in the attach picker; the rollup prices the selection.
+  await app.page.getByTestId("chat-context-chip").click();
+  await app.page.locator('[data-testid="context-file-check"][data-file-path="README.md"]').check();
+  await expect(app.page.getByTestId("context-files-tokens")).toContainText("1 selected");
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
+
+  await app.chat.userInput.typeMessage(PROBE_MESSAGE);
+  await app.chat.userInput.send();
+
+  // The attach lands as the same context-injection entry the first-message
+  // scan produces, and the single-shot draft reset after sending.
+  await expect(app.page.getByTestId("context-injection-row")).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(async () => (await contextInjectionEntry(request, conversationId))?.files?.[0]?.path ?? "missing", {
+      timeout: 15_000,
+    })
+    .toBe("README.md");
+  const entry = (await contextInjectionEntry(request, conversationId))!;
+  expect(entry.files).toEqual([{ path: "README.md", fileType: "readme", status: "injected" }]);
+  expect(entry.content).toContain(README_MARKER);
+  await expect(app.page.getByTestId("chat-context-summary")).toHaveText("nothing injected");
+});
+
+test("overrides.contextFiles injects the picked candidates and the planner sees them", async ({ request }) => {
+  test.setTimeout(25_000);
+  const agentId = await defaultAgentId(request);
+  const conversationId = await createProbeConversation(request, agentId);
+
+  // Let the first turn settle, then chain the follow-up onto its spine tip —
+  // the turn's assistant message (a second message must name its parent).
+  await waitForNoPendingTasks(request, { timeoutMs: 15_000, conversationId });
+  const settled = (await getConversationEntries(request, conversationId)) as unknown as Array<{
+    id: string;
+    type: string;
+  }>;
+  const leafId = [...settled].reverse().find((e) => e.type === "assistant-message")?.id;
+  expect(leafId).toBeTruthy();
+
+  const msgRes = await request.post(`${apiBaseUrl()}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    data: {
+      message: "ground this in the readme",
+      agentId,
+      parentId: leafId,
+      overrides: { contextFiles: { paths: ["README.md", "../etc/passwd"] } },
+    },
+  });
+  expect(msgRes.ok()).toBeTruthy();
+
+  await expect
+    .poll(async () => (await contextInjectionEntry(request, conversationId))?.files?.length ?? 0, {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(0);
+  const entry = (await contextInjectionEntry(request, conversationId))!;
+  // Only the candidate-list path landed; the traversal attempt was dropped.
+  expect(entry.files).toEqual([{ path: "README.md", fileType: "readme", status: "injected" }]);
+  expect(entry.content).toContain(README_MARKER);
+
+  await expect
+    .poll(
+      async () => {
+        const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
+        const planners = entries.filter((e) => e.type === "thought" && e.thoughtType === "planner");
+        return planners.some((p) => p.llmRequest?.includes(README_MARKER) ?? false);
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+});
+
+test("preview endpoint ?all=1 lists every candidate regardless of agent gating", async ({ request }) => {
+  test.setTimeout(15_000);
+  const res = await request.get(`${apiBaseUrl()}/api/context-injection/preview?all=1`);
+  expect(res.ok()).toBeTruthy();
+  const preview = (await res.json()) as {
+    mode: string;
+    files: Array<{ path: string; status: string; tokens?: number }>;
+    totalTokens: number;
+  };
+  expect(preview.mode).toBe("all");
+  const readme = preview.files.find((f) => f.path === "README.md");
+  expect(readme?.status).toBe("injected");
+  expect(readme?.tokens ?? 0).toBeGreaterThan(0);
 });
 
 test("agents without a preinject config get no context-injection entry", async ({ request }) => {

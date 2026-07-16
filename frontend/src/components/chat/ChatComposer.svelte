@@ -12,8 +12,14 @@
   import MessageComposer from "./MessageComposer.svelte";
   import QueuedMessageChips from "./QueuedMessageChips.svelte";
   import type { PendingMessage } from "@/lib/chatSessionStore";
-  import { compileUserMessageOverrides, EMPTY_KNOWLEDGE_DRAFT } from "@/lib/chatToolOverrides";
-  import { getChatKnowledgeDraft, getChatToolDraft, setChatKnowledgeDraft } from "@/lib/chatToolDraft.svelte";
+  import { compileUserMessageOverrides, EMPTY_CONTEXT_FILES_DRAFT, EMPTY_KNOWLEDGE_DRAFT } from "@/lib/chatToolOverrides";
+  import {
+    getChatContextFilesDraft,
+    getChatKnowledgeDraft,
+    getChatToolDraft,
+    setChatContextFilesDraft,
+    setChatKnowledgeDraft,
+  } from "@/lib/chatToolDraft.svelte";
   import ContextInjectionBar from "./ContextInjectionBar.svelte";
   import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
@@ -75,10 +81,12 @@
     selectedFiles = [...selectedFiles, ...wrapped];
   }
 
-  /** Forced retrieval is single-shot: it applies to the message just sent and
-   * switches itself off, instead of persisting as a policy for the chat. */
-  function consumeKnowledgeDraft(): void {
+  /** Forced retrieval and file attaches are single-shot: they apply to the
+   * message just sent and switch themselves off, instead of persisting as a
+   * policy for the chat. */
+  function consumeSingleShotDrafts(): void {
     if (getChatKnowledgeDraft().enabled) setChatKnowledgeDraft({ ...EMPTY_KNOWLEDGE_DRAFT });
+    if (getChatContextFilesDraft().paths.length > 0) setChatContextFilesDraft({ ...EMPTY_CONTEXT_FILES_DRAFT });
   }
 
   async function onSend(mode: MessageSendMode): Promise<void> {
@@ -88,7 +96,11 @@
     const clientRequestId = crypto.randomUUID();
     const agentId = effectiveAgentId;
     const { llm, modelPresetId } = agentSelection;
-    const overrides = compileUserMessageOverrides(getChatToolDraft(), getChatKnowledgeDraft());
+    const overrides = compileUserMessageOverrides(
+      getChatToolDraft(),
+      getChatKnowledgeDraft(),
+      getChatContextFilesDraft(),
+    );
     const sendOpts = {
       ...(mode.steer ? { steer: true as const } : {}),
       ...(mode.enqueue ? { enqueue: true as const } : {}),
@@ -117,7 +129,7 @@
           clientRequestId,
           sendOpts,
         );
-        consumeKnowledgeDraft();
+        consumeSingleShotDrafts();
         return;
       }
 
@@ -142,7 +154,7 @@
           clientRequestId,
           sendOpts,
         );
-        consumeKnowledgeDraft();
+        consumeSingleShotDrafts();
         onSent?.(`sent-${clientRequestId}`, cid);
         replacePath(`/chat/${encodeURIComponent(cid)}${search}`);
         return;
@@ -172,7 +184,7 @@
           optimistic.clientRequestId,
           sendOpts,
         );
-        consumeKnowledgeDraft();
+        consumeSingleShotDrafts();
       }
     } catch (err) {
       console.error("[ChatComposer] send failed", err);
@@ -199,7 +211,13 @@
   onFileInputChange={addFiles}
 >
   {#snippet contextSlot(text: string)}
-    <ContextInjectionBar {text} agentId={effectiveAgentId} {conversationId} />
+    <ContextInjectionBar
+      {text}
+      agentId={effectiveAgentId}
+      {conversationId}
+      attachments={selectedFiles}
+      llm={agentSelection.llm}
+    />
   {/snippet}
   {#snippet queuedSlot()}
     {#if conversationId && pendingMessages.length > 0}

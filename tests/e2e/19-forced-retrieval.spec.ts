@@ -222,6 +222,16 @@ test("preplanned mode: a knowledge_planning thought composes the queries, retrie
   }
 });
 
+test("typing alone prices the send in the collapsed Context bar", async ({ app, request }) => {
+  test.setTimeout(20_000);
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+  // No knowledge, no files, no attachments — the message text itself is
+  // estimated (chars/4) and the rollup appears as soon as there is one.
+  await app.chat.userInput.typeMessage("hello estimator, price this message");
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
+});
+
 test("preview endpoint returns the hits and token estimate a send would inject", async ({ request }) => {
   test.setTimeout(25_000);
   const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });

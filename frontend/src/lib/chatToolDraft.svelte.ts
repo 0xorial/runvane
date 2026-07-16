@@ -2,10 +2,12 @@ import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
 import type { UserMessageEntry } from "@/protocol/chatEntry";
 import { get, writable } from "svelte/store";
 import {
+  type ChatContextFilesDraft,
   type ChatKnowledgeDraft,
   type ChatToolDraft,
   type ChatToolDraftEntry,
   type ToolOverrideUiMode,
+  EMPTY_CONTEXT_FILES_DRAFT,
   EMPTY_KNOWLEDGE_DRAFT,
   draftFromStoredOverrides,
   draftHasOverrides,
@@ -13,6 +15,7 @@ import {
 
 const draftStore = writable<ChatToolDraft>({});
 const knowledgeDraftStore = writable<ChatKnowledgeDraft>({ ...EMPTY_KNOWLEDGE_DRAFT });
+const contextFilesDraftStore = writable<ChatContextFilesDraft>({ ...EMPTY_CONTEXT_FILES_DRAFT });
 const selectedToolForEditStore = writable<string | null>(null);
 export const chatToolDraftRevision = writable(0);
 
@@ -34,6 +37,15 @@ export function getChatKnowledgeDraft(): ChatKnowledgeDraft {
 
 export function setChatKnowledgeDraft(next: ChatKnowledgeDraft): void {
   knowledgeDraftStore.set({ ...next, storages: [...next.storages] });
+  touchDraft();
+}
+
+export function getChatContextFilesDraft(): ChatContextFilesDraft {
+  return get(contextFilesDraftStore);
+}
+
+export function setChatContextFilesDraft(next: ChatContextFilesDraft): void {
+  contextFilesDraftStore.set({ paths: [...next.paths] });
   touchDraft();
 }
 
@@ -99,11 +111,13 @@ function draftsEqual(a: ChatToolDraft, b: ChatToolDraft): boolean {
 
 export function resetChatToolDraft(): void {
   const draft = get(draftStore);
-  const hadOverrides = draftHasOverrides(draft) || get(knowledgeDraftStore).enabled;
+  const hadOverrides =
+    draftHasOverrides(draft) || get(knowledgeDraftStore).enabled || get(contextFilesDraftStore).paths.length > 0;
   const hadSelection = get(selectedToolForEditStore) !== null;
   if (!hadOverrides && !hadSelection) return;
   draftStore.set({});
   knowledgeDraftStore.set({ ...EMPTY_KNOWLEDGE_DRAFT });
+  contextFilesDraftStore.set({ ...EMPTY_CONTEXT_FILES_DRAFT });
   selectedToolForEditStore.set(null);
   touchDraft();
 }

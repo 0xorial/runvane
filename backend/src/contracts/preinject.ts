@@ -38,6 +38,18 @@ export const PreinjectedFileRecordSchema = z.object({
 });
 export type PreinjectedFileRecord = z.infer<typeof PreinjectedFileRecordSchema>;
 
+/**
+ * Per-message context-files request (`overrides.contextFiles`): the user picked
+ * exact candidate paths to fold in with THIS message — the "attach it later"
+ * counterpart to the automatic first-message scan. Paths not on the candidate
+ * list are ignored (the list is the whole API surface; never arbitrary disk).
+ * An explicit override suppresses the automatic first-message scan.
+ */
+export const ContextFilesOverrideSchema = z.object({
+  paths: z.array(z.string().min(1)).min(1),
+});
+export type ContextFilesOverride = z.infer<typeof ContextFilesOverrideSchema>;
+
 // ---- Composer preview (GET /api/context-injection/preview) ----
 // Nothing below is ever persisted: it is the record shape plus the content and
 // token detail the composer shows BEFORE the first message is sent.

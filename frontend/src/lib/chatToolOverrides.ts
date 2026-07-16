@@ -1,4 +1,5 @@
 import type { AgentToolConfig } from "../../../backend/src/agents/agent.entity";
+import type { ContextFilesOverride } from "../../../backend/src/contracts/preinject";
 import type { KnowledgeOverride } from "../../../backend/src/contracts/retrieval";
 import type { UserMessageOverrides } from "../../../backend/src/contracts/user-message-overrides";
 
@@ -22,6 +23,20 @@ export function compileKnowledgeOverride(draft: ChatKnowledgeDraft): KnowledgeOv
     ...(draft.topK ? { top_k: draft.topK } : {}),
     ...(draft.mode === "preplanned" ? { mode: "preplanned" as const } : {}),
   };
+}
+
+/** Draft state for the per-message context-files attach (`overrides.contextFiles`).
+ *  Single-shot like the knowledge draft: applies to the message being composed. */
+export type ChatContextFilesDraft = {
+  /** Candidate relPaths to fold in with the next message. Empty = off. */
+  paths: string[];
+};
+
+export const EMPTY_CONTEXT_FILES_DRAFT: ChatContextFilesDraft = { paths: [] };
+
+export function compileContextFilesOverride(draft: ChatContextFilesDraft): ContextFilesOverride | undefined {
+  if (draft.paths.length === 0) return undefined;
+  return { paths: [...draft.paths] };
 }
 
 export type ToolOverrideUiMode = "inherit" | "off" | "ask" | "allow" | "custom";
@@ -56,11 +71,18 @@ export function draftHasOverrides(draft: ChatToolDraft): boolean {
 export function compileUserMessageOverrides(
   draft: ChatToolDraft,
   knowledgeDraft?: ChatKnowledgeDraft,
+  contextFilesDraft?: ChatContextFilesDraft,
 ): UserMessageOverrides | undefined {
   const tools = compileChatToolOverrides(draft);
   const knowledge = knowledgeDraft ? compileKnowledgeOverride(knowledgeDraft) : undefined;
-  if (!tools && !knowledge) return undefined;
-  return { version: 1, ...(tools ? { tools } : {}), ...(knowledge ? { knowledge } : {}) };
+  const contextFiles = contextFilesDraft ? compileContextFilesOverride(contextFilesDraft) : undefined;
+  if (!tools && !knowledge && !contextFiles) return undefined;
+  return {
+    version: 1,
+    ...(tools ? { tools } : {}),
+    ...(knowledge ? { knowledge } : {}),
+    ...(contextFiles ? { contextFiles } : {}),
+  };
 }
 
 function deriveDraftEntryFromStored(cfg: AgentToolConfig): ChatToolDraftEntry {

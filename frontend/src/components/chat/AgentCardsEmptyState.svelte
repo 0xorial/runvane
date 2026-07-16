@@ -13,6 +13,7 @@
   import { queryClient } from "@/lib/queryClient";
   import AddSandboxDialog from "./AddSandboxDialog.svelte";
   import SetupGuide from "./SetupGuide.svelte";
+  import StartContextSection from "./StartContextSection.svelte";
   import ToolSandboxIcon from "./ToolSandboxIcon.svelte";
   import HarnessToolsHint from "./HarnessToolsHint.svelte";
   import { toolSandboxDescription } from "@/lib/toolSandbox";
@@ -206,6 +207,9 @@
         </div>
       {/each}
       </div>
+      {#if selectedAgentId}
+        <StartContextSection agentId={selectedAgentId} />
+      {/if}
     </div>
   </div>
   <AddSandboxDialog open={addOpen} onOpenChange={(o) => (addOpen = o)} onCreated={onEnvCreated} />

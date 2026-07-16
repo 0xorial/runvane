@@ -12,3 +12,9 @@ export function previewContextFiles(agentId: string): Promise<PreinjectPreviewRe
     `/api/context-injection/preview?agentId=${encodeURIComponent(agentId)}`,
   ) as Promise<PreinjectPreviewResult>;
 }
+
+/** Every candidate found on disk, agent gating ignored — the source list for
+ *  the per-message attach picker (`overrides.contextFiles`). */
+export function previewAllContextFiles(): Promise<PreinjectPreviewResult> {
+  return getJson("/api/context-injection/preview?all=1") as Promise<PreinjectPreviewResult>;
+}

@@ -21,17 +21,30 @@ export class ContextInjectionController {
     private readonly contextInjection: ContextInjectionService,
   ) {}
 
+  /**
+   * `?all=1` ignores agent gating and prices every candidate found on disk —
+   * the source list for the composer's per-message attach picker
+   * (`overrides.contextFiles`). Otherwise `agentId` is required and the
+   * response mirrors the automatic first-message scan for that agent.
+   */
   @Get('preview')
-  async preview(@Query('agentId') agentId?: string): Promise<PreinjectPreviewResult> {
+  async preview(@Query('agentId') agentId?: string, @Query('all') all?: string): Promise<PreinjectPreviewResult> {
+    if (all === '1' || all === 'true') {
+      return this.toPreview('all', await this.contextInjection.scan({ mode: 'all' }));
+    }
     if (!agentId?.trim()) throw new BadRequestException('agentId is required');
     const agent = await this.agents.get(agentId);
     if (!agent) throw new NotFoundException(`agent ${agentId} not found`);
 
     const config = agent.default_llm_configuration?.preinject ?? undefined;
-    const mode = config?.mode ?? 'none';
-    const result = await this.contextInjection.scan(config);
-    if (!result) return { mode, files: [], totalTokens: 0 };
+    return this.toPreview(config?.mode ?? 'none', await this.contextInjection.scan(config));
+  }
 
+  private toPreview(
+    mode: PreinjectPreviewResult['mode'],
+    result: Awaited<ReturnType<ContextInjectionService['scan']>>,
+  ): PreinjectPreviewResult {
+    if (!result) return { mode, files: [], totalTokens: 0 };
     const files = result.files.map((file) => {
       const section = result.sections[file.path];
       return section === undefined ? file : { ...file, content: section, tokens: estimateContextTokens(section) };

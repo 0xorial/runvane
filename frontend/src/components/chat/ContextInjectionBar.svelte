@@ -1,13 +1,29 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { previewContextFiles, type PreinjectPreviewResult } from "@/api/contextInjectionClient";
+  import type { LlmRef } from "../../../../backend/src/contracts/llm";
+  import {
+    previewAllContextFiles,
+    previewContextFiles,
+    type PreinjectPreviewResult,
+  } from "@/api/contextInjectionClient";
   import { getKnowledgeStorages, previewForcedRetrieval, type RetrievePreviewResult } from "@/api/knowledgeClient";
-  import { chatToolDraftRevision, getChatKnowledgeDraft, setChatKnowledgeDraft } from "@/lib/chatToolDraft.svelte";
-  import { PREINJECT_FILE_TYPE_LABELS } from "@/pages/settings/agentPreinject";
+  import {
+    chatToolDraftRevision,
+    getChatContextFilesDraft,
+    getChatKnowledgeDraft,
+    setChatContextFilesDraft,
+    setChatKnowledgeDraft,
+  } from "@/lib/chatToolDraft.svelte";
+  import { estimateAttachmentTokens, estimateTextTokens } from "@/lib/sendEstimate";
+  import { formatCostUsd } from "@/lib/providerCost";
+  import { createAgentsQuery, createModelCapabilitiesQuery, pricingFromCapabilities } from "@/hooks/queries/referenceData";
+  import { getAgentLlm } from "@/pages/settings/agentLlm";
+  import type { SelectedAttachment } from "./AttachmentChips.svelte";
+  import ContextFileList from "./ContextFileList.svelte";
 
   const CHIP_HINT =
-    "Everything auto-injected with this send: the agent's context files (first message of a " +
-    "conversation) and any knowledge-base search you enable for this message.";
+    "Everything auto-injected with this send: context files (agent-configured at conversation start, " +
+    "or attached per message) and any knowledge-base search you enable for this message.";
   const KNOWLEDGE_HINT =
     "Single-shot: pulls context from the selected knowledge bases before the agent plans this " +
     "message, records it in the transcript, and switches off after sending.";
@@ -19,34 +35,66 @@
     text,
     agentId,
     conversationId,
+    attachments = [],
+    llm = null,
   }: {
-    /** The message being composed — drives the live retrieval preview. */
+    /** The message being composed — drives the live previews and the estimate. */
     text: string;
     /** The agent this send would use — drives the files-scan preview. */
     agentId: string;
-    /** Null while composing the first message (files inject only then). */
+    /** Null while composing the first message (the auto files scan fires then). */
     conversationId: string | null;
+    /** Uploads staged in the composer — priced into the estimate. */
+    attachments?: SelectedAttachment[];
+    /** Explicit model override from the toolbar; null = the agent's default. */
+    llm?: LlmRef | null;
   } = $props();
 
   let open = $state(false);
-  let expandedFile = $state<string | null>(null);
-  let expandedExcerpt = $state<number | null>(null);
 
-  // ---- Files half (agent-configured, first message only) ----
+  // ---- Files half ----
+  // First message: the agent-config scan runs automatically (rows are listed in
+  // the Start context section above the composer; here it only feeds the
+  // estimate). Later messages: an explicit per-message attach picker over the
+  // full candidate list (`overrides.contextFiles`).
 
   const firstMessage = $derived(!conversationId);
 
-  const filesQuery = createQuery(() => ({
+  const autoFilesQuery = createQuery(() => ({
     queryKey: ["context-files-preview", agentId],
     queryFn: () => previewContextFiles(agentId),
     enabled: Boolean(agentId) && firstMessage,
     staleTime: 15_000,
   }));
-  const filesPreview = $derived<PreinjectPreviewResult | undefined>(
-    firstMessage && agentId ? filesQuery.data : undefined,
+  const autoFiles = $derived<PreinjectPreviewResult | undefined>(
+    firstMessage && agentId ? autoFilesQuery.data : undefined,
   );
-  const injectedFiles = $derived((filesPreview?.files ?? []).filter((f) => f.status === "injected"));
-  const filesTokens = $derived(filesPreview?.totalTokens ?? 0);
+  const autoInjectedCount = $derived((autoFiles?.files ?? []).filter((f) => f.status === "injected").length);
+  const autoTokens = $derived(autoFiles?.totalTokens ?? 0);
+
+  const filesDraft = $derived.by(() => {
+    void $chatToolDraftRevision;
+    return getChatContextFilesDraft();
+  });
+
+  const attachQuery = createQuery(() => ({
+    queryKey: ["context-files-preview", "all"],
+    queryFn: previewAllContextFiles,
+    enabled: !firstMessage && (open || filesDraft.paths.length > 0),
+    staleTime: 15_000,
+  }));
+  const attachCandidates = $derived(!firstMessage ? (attachQuery.data?.files ?? []) : []);
+  const attachTokens = $derived(
+    attachCandidates.filter((f) => filesDraft.paths.includes(f.path)).reduce((sum, f) => sum + (f.tokens ?? 0), 0),
+  );
+
+  function toggleAttachPath(path: string): void {
+    const current = getChatContextFilesDraft();
+    const next = current.paths.includes(path)
+      ? current.paths.filter((p) => p !== path)
+      : [...current.paths, path];
+    setChatContextFilesDraft({ paths: next });
+  }
 
   // ---- Knowledge half (single-shot forced retrieval) ----
 
@@ -140,7 +188,17 @@
     return "";
   });
 
-  // ---- Rollup (chip summary + total) ----
+  let expandedExcerpt = $state<number | null>(null);
+
+  function toggleExcerptRow(index: number): void {
+    expandedExcerpt = expandedExcerpt === index ? null : index;
+  }
+
+  // ---- Send estimate (message + attachments + files + knowledge → tokens/$) ----
+
+  const messageTokens = $derived(estimateTextTokens(text.trim()));
+  const attachmentEst = $derived(estimateAttachmentTokens(attachments));
+  const filesTokens = $derived(firstMessage ? autoTokens : attachTokens);
 
   const knowledgeSelected = $derived(draft.enabled && draft.storages.length > 0);
   /** Direct-mode tokens once previewed; null while the amount is still unknown
@@ -151,14 +209,57 @@
     return null;
   });
 
-  const totalKnown = $derived(filesTokens + (knowledgeTokens ?? 0));
-  const totalPending = $derived(knowledgeTokens === null);
-  const anythingActive = $derived(injectedFiles.length > 0 || draft.enabled);
+  const totalKnown = $derived(messageTokens + attachmentEst.tokens + filesTokens + (knowledgeTokens ?? 0));
+  const totalPending = $derived(knowledgeTokens === null || attachmentEst.unknownCount > 0);
+  const anythingActive = $derived(
+    autoInjectedCount > 0 || draft.enabled || filesDraft.paths.length > 0,
+  );
+  const showTotal = $derived(anythingActive || text.trim().length > 0 || attachments.length > 0);
+
+  // Pricing: explicit toolbar override, else the agent's default model.
+  const capabilitiesQuery = createModelCapabilitiesQuery();
+  const agentsQuery = createAgentsQuery();
+  const pricingByModel = $derived(pricingFromCapabilities(capabilitiesQuery.data));
+  const modelName = $derived.by(() => {
+    if (llm?.model) return llm.model.trim();
+    const agent = (agentsQuery.data ?? []).find((a) => a.id === agentId);
+    return agent ? getAgentLlm(agent).model.trim() : "";
+  });
+  const costLabel = $derived.by(() => {
+    if (totalKnown === 0) return "";
+    const pricing = modelName ? pricingByModel.get(modelName) : undefined;
+    if (!pricing) return "";
+    return `≈${formatCostUsd((totalKnown / 1_000_000) * pricing.inCostPer1m)}`;
+  });
+
+  const totalLabel = $derived.by(() => {
+    if (!showTotal) return "";
+    const tokens = totalPending
+      ? totalKnown > 0
+        ? `~${totalKnown} + ? tok`
+        : "? tok"
+      : `~${totalKnown} tok`;
+    return costLabel ? `${tokens} · ${costLabel}` : tokens;
+  });
+
+  const totalTitle = $derived.by(() => {
+    const parts = [`message ~${messageTokens} tok`];
+    if (attachments.length > 0) {
+      const unknown = attachmentEst.unknownCount > 0 ? ` + ${attachmentEst.unknownCount} at send` : "";
+      parts.push(`attachments ~${attachmentEst.tokens} tok${unknown}`);
+    }
+    if (filesTokens > 0) parts.push(`context files ~${filesTokens} tok`);
+    if (knowledgeSelected) parts.push(knowledgeTokens === null ? "knowledge at send" : `knowledge ~${knowledgeTokens} tok`);
+    return parts.join(" · ");
+  });
 
   const chipSummary = $derived.by(() => {
     const parts: string[] = [];
-    if (injectedFiles.length > 0) {
-      parts.push(`${injectedFiles.length} file${injectedFiles.length === 1 ? "" : "s"}`);
+    if (firstMessage && autoInjectedCount > 0) {
+      parts.push(`${autoInjectedCount} file${autoInjectedCount === 1 ? "" : "s"}`);
+    }
+    if (!firstMessage && filesDraft.paths.length > 0) {
+      parts.push(`${filesDraft.paths.length} attached file${filesDraft.paths.length === 1 ? "" : "s"}`);
     }
     if (draft.enabled) {
       if (draft.storages.length === 0) parts.push("knowledge: pick a base");
@@ -170,20 +271,6 @@
     return parts.length > 0 ? parts.join(" + ") : "nothing injected";
   });
 
-  const totalLabel = $derived.by(() => {
-    if (!anythingActive) return "";
-    if (totalPending) return totalKnown > 0 ? `~${totalKnown} + ? tok` : "? tok";
-    return `~${totalKnown} tok`;
-  });
-
-  function toggleFileRow(path: string): void {
-    expandedFile = expandedFile === path ? null : path;
-  }
-
-  function toggleExcerptRow(index: number): void {
-    expandedExcerpt = expandedExcerpt === index ? null : index;
-  }
-
   const chipBase =
     "inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors";
   const segmentBase =
@@ -193,7 +280,7 @@
 </script>
 
 <div class="px-0.5 {open ? 'mb-0.5 border-b border-border/60 pb-1' : 'pb-0.5'}" data-testid="chat-context-bar">
-  <!-- Collapsed row: chip + live rollup. Always answers "what rides along with this send?" -->
+  <!-- Collapsed row: chip + live rollup. Always answers "what does this send cost?" -->
   <div class="flex flex-wrap items-center gap-1.5">
     <button
       type="button"
@@ -223,7 +310,11 @@
     </button>
     <span class="text-[11px] text-muted-foreground" data-testid="chat-context-summary">{chipSummary}</span>
     {#if totalLabel}
-      <span class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground" data-testid="chat-context-total">
+      <span
+        class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground"
+        title={totalTitle}
+        data-testid="chat-context-total"
+      >
         {totalLabel}
       </span>
     {/if}
@@ -231,12 +322,12 @@
 
   {#if open}
     <div class="mt-1 overflow-hidden rounded-md ring-1 ring-border/60" data-testid="chat-context-panel">
-      <!-- ===== Files: agent-configured workspace scan, first message only ===== -->
+      <!-- ===== Files: auto scan on the first message, explicit attach afterwards ===== -->
       <section class="px-2 py-1.5" data-testid="context-files-section">
         <div class="flex items-center gap-1.5">
           <span
             class={sectionTitle}
-            title="Workspace files the agent folds into the planner once per conversation — carried by the first message."
+            title="Workspace files folded into the planner: automatically once per conversation (first message, per the agent's settings), or attached per message here."
           >
             <svg class="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -244,10 +335,7 @@
             </svg>
             Context files
           </span>
-          {#if firstMessage}
-            <span class="text-[11px] text-muted-foreground">injected once, with this first message</span>
-          {/if}
-          {#if agentId}
+          {#if agentId && firstMessage}
             <a
               href="/settings/agents?agent={encodeURIComponent(agentId)}"
               class="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -256,77 +344,56 @@
               configure ↗
             </a>
           {/if}
-          {#if firstMessage && injectedFiles.length > 0}
+          {#if firstMessage && autoInjectedCount > 0}
             <span class="ml-auto text-[11px] tabular-nums text-muted-foreground" data-testid="context-files-tokens">
-              ~{filesTokens} tok
+              ~{autoTokens} tok
+            </span>
+          {:else if !firstMessage && filesDraft.paths.length > 0}
+            <span class="ml-auto text-[11px] tabular-nums text-muted-foreground" data-testid="context-files-tokens">
+              {filesDraft.paths.length} selected · ~{attachTokens} tok
             </span>
           {/if}
         </div>
         <div class="mt-1 space-y-px">
-          {#if !firstMessage}
-            <p class={noteText} data-testid="context-files-note">
-              Injected on the conversation's first message only — this conversation already carries its start
-              context (see the top of the transcript).
-            </p>
-          {:else if !agentId}
-            <p class={noteText} data-testid="context-files-note">Pick an agent to preview its context files.</p>
-          {:else if filesQuery.isPending}
+          {#if firstMessage}
+            {#if !agentId}
+              <p class={noteText} data-testid="context-files-note">Pick an agent to preview its context files.</p>
+            {:else if autoFilesQuery.isPending}
+              <p class={noteText} data-testid="context-files-note">scanning workspace…</p>
+            {:else if autoFilesQuery.isError}
+              <p class={noteText} data-testid="context-files-note">files preview failed</p>
+            {:else if autoFiles?.mode === "none"}
+              <p class={noteText} data-testid="context-files-note">
+                Off for this agent — nothing from the workspace is auto-injected.
+              </p>
+            {:else if autoInjectedCount === 0}
+              <p class={noteText} data-testid="context-files-note">
+                No candidate files (CLAUDE.md, README.md, package.json, …) found in the workspace.
+              </p>
+            {:else}
+              <p class={noteText} data-testid="context-files-note">
+                Listed under Start context above — injected once, with this first message.
+              </p>
+            {/if}
+          {:else if attachQuery.isPending}
             <p class={noteText} data-testid="context-files-note">scanning workspace…</p>
-          {:else if filesQuery.isError}
+          {:else if attachQuery.isError}
             <p class={noteText} data-testid="context-files-note">files preview failed</p>
-          {:else if filesPreview?.mode === "none"}
-            <p class={noteText} data-testid="context-files-note">
-              Off for this agent — nothing from the workspace is auto-injected.
-            </p>
-          {:else if (filesPreview?.files ?? []).length === 0}
+          {:else if attachCandidates.length === 0}
             <p class={noteText} data-testid="context-files-note">
               No candidate files (CLAUDE.md, README.md, package.json, …) found in the workspace.
             </p>
           {:else}
-            {#each filesPreview?.files ?? [] as file (file.path)}
-              {@const injected = file.status === "injected"}
-              <div>
-                <button
-                  type="button"
-                  data-testid="context-file-row"
-                  data-file-path={file.path}
-                  disabled={!injected}
-                  aria-expanded={expandedFile === file.path}
-                  onclick={() => toggleFileRow(file.path)}
-                  class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[11px] {injected
-                    ? 'hover:bg-secondary/45'
-                    : 'cursor-default opacity-60'}"
-                >
-                  <svg
-                    class="h-2.5 w-2.5 shrink-0 text-muted-foreground transition-transform {expandedFile === file.path
-                      ? 'rotate-90'
-                      : ''} {injected ? '' : 'invisible'}"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                  <code class="text-secondary-foreground">{file.path}</code>
-                  <span class="min-w-0 truncate text-muted-foreground">
-                    {PREINJECT_FILE_TYPE_LABELS[file.fileType].split(" (")[0]}
-                  </span>
-                  {#if injected}
-                    <span class="ml-auto shrink-0 tabular-nums text-muted-foreground">~{file.tokens ?? 0} tok</span>
-                  {:else}
-                    <span class="ml-auto shrink-0 rounded bg-muted px-1 py-px text-[10px] uppercase tracking-wide text-muted-foreground">
-                      skipped
-                    </span>
-                  {/if}
-                </button>
-                {#if expandedFile === file.path && file.content}
-                  <pre
-                    data-testid="context-file-content"
-                    class="scrollbar-thin mx-1 mb-1 max-h-36 overflow-y-auto whitespace-pre-wrap break-words rounded bg-secondary/40 px-2 py-1 text-[11px] text-muted-foreground">{file.content}</pre>
-                {/if}
-              </div>
-            {/each}
+            <ContextFileList
+              files={attachCandidates}
+              selectable
+              selectedPaths={filesDraft.paths}
+              onToggle={toggleAttachPath}
+            />
+            <p class="pt-0.5 {noteText}">
+              Checked files are folded in with this message only (the conversation got its start context with
+              its first message).
+            </p>
           {/if}
         </div>
       </section>

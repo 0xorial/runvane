@@ -88,6 +88,35 @@ export class ContextInjectionService {
     return { files, content: Object.values(sections).join('\n\n'), sections };
   }
 
+  /**
+   * Explicit per-message selection (`overrides.contextFiles`): the user picked
+   * exact candidate paths, so the agent's mode gating does not apply. Only
+   * requested paths appear in the result (no skipped-by-gating audit rows —
+   * there is no gating); paths off the candidate list or absent on disk are
+   * silently dropped, unreadable/binary ones are recorded as skipped.
+   */
+  async scanSelected(requestedPaths: string[], root: string = process.cwd()): Promise<ContextInjectionResult | null> {
+    const requested = new Set(requestedPaths);
+    const files: PreinjectedFileRecord[] = [];
+    const sections: Record<string, string> = {};
+    for (const candidate of CANDIDATES) {
+      if (!requested.has(candidate.relPath)) continue;
+      const absPath = path.join(root, candidate.relPath);
+      if (!(await this.statFile(absPath))) continue;
+
+      const content = await this.readAsText(absPath);
+      if (content === null) {
+        files.push({ path: candidate.relPath, fileType: candidate.fileType, status: 'skipped' });
+        continue;
+      }
+      files.push({ path: candidate.relPath, fileType: candidate.fileType, status: 'injected' });
+      sections[candidate.relPath] = `--- ${candidate.relPath} ---\n${content}`;
+    }
+
+    if (files.length === 0) return null;
+    return { files, content: Object.values(sections).join('\n\n'), sections };
+  }
+
   private async statFile(absPath: string): Promise<boolean> {
     try {
       const s = await stat(absPath);
