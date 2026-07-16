@@ -40,3 +40,4 @@ demos/demo-output/
 # …except the encoded demo clips served by GitHub Pages.
 !docs/demo/*.mp4
 !docs/demo/*.webm
+core

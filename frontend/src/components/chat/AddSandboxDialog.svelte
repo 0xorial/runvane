@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { browseSandboxHost, createDockerSandbox, createToolSandbox, type HostBrowseResult } from "@/api/client";
+  import { ApiError, browseSandboxHost, createDockerSandbox, createToolSandbox, type HostBrowseResult } from "@/api/client";
   import type { SshSandboxConfig, ToolSandbox } from "../../../../backend/src/contracts/tool-sandbox";
 
   let {
@@ -20,6 +20,7 @@
   let name = $state("");
   let saving = $state(false);
   let error = $state<string | null>(null);
+  let errorStack = $state<string | null>(null);
 
   // ssh fields
   let host = $state("");
@@ -55,6 +56,7 @@
     image = "";
     mounts = [];
     error = null;
+    errorStack = null;
   }
 
   function close(): void {
@@ -114,6 +116,7 @@
     if (!canSave || saving) return;
     saving = true;
     error = null;
+    errorStack = null;
     try {
       let created: ToolSandbox;
       if (mode === "docker") {
@@ -145,6 +148,7 @@
       await onCreated(created);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      errorStack = e instanceof ApiError ? (e.serverStack ?? null) : null;
     } finally {
       saving = false;
     }
@@ -185,7 +189,20 @@
       </div>
 
       {#if error}
-        <div class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">{error}</div>
+        <div
+          class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
+          data-testid="add-env-error"
+        >
+          <p class="break-words">{error}</p>
+          {#if errorStack}
+            <details class="mt-1">
+              <summary class="cursor-pointer text-[11px] opacity-80">stack trace</summary>
+              <pre
+                data-testid="add-env-error-stack"
+                class="scrollbar-thin mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-snug opacity-90">{errorStack}</pre>
+            </details>
+          {/if}
+        </div>
       {/if}
 
       {#if mode === "docker"}

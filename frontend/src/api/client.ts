@@ -60,25 +60,42 @@ import {
 } from "../../../backend/src/contracts/model-presets";
 export type { PostConversationMessageAcceptedResponse } from "../../../backend/src/contracts/conversations";
 
-function errDetail(data: unknown, fallback: string): string {
+/** API failure carrying the server's FULL technical detail: the real message
+ *  as `message` and the backend's cause-chain stack as `serverStack` (the
+ *  all-exceptions filter puts both in every error body). Error displays show
+ *  the message prominently and the stack expandable — never a bare status. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly serverStack?: string;
+
+  constructor(message: string, status: number, serverStack?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    if (serverStack) this.serverStack = serverStack;
+  }
+}
+
+function apiError(data: unknown, status: number): ApiError {
+  let message = `HTTP ${status}`;
+  let serverStack: string | undefined;
   if (data && typeof data === "object") {
     // Our handlers use `detail`; Nest's HttpExceptions use `message`
     // (string or array of validation messages). Surface whichever exists —
     // a bare "HTTP 500" hides the actual reason from the user.
-    const rec = data as { detail?: unknown; message?: unknown };
-    if (typeof rec.detail === "string" && rec.detail) return rec.detail;
-    if (typeof rec.message === "string" && rec.message && rec.message !== "Internal server error") {
-      return rec.message;
-    }
-    if (Array.isArray(rec.message) && rec.message.length > 0) return rec.message.map(String).join("; ");
+    const rec = data as { detail?: unknown; message?: unknown; stack?: unknown };
+    if (typeof rec.detail === "string" && rec.detail) message = rec.detail;
+    else if (typeof rec.message === "string" && rec.message) message = rec.message;
+    else if (Array.isArray(rec.message) && rec.message.length > 0) message = rec.message.map(String).join("; ");
+    if (typeof rec.stack === "string" && rec.stack) serverStack = rec.stack;
   }
-  return fallback;
+  return new ApiError(message, status, serverStack);
 }
 
 export async function getJson(path: string): Promise<unknown> {
   const res = await fetch(`${API_BASE_URL}${path}`);
   const data: unknown = await res.json();
-  if (!res.ok) throw new Error(errDetail(data, `HTTP ${res.status}`));
+  if (!res.ok) throw apiError(data, res.status);
   return data;
 }
 
@@ -89,14 +106,14 @@ export async function sendJson(path: string, method: string, body: unknown): Pro
     body: JSON.stringify(body),
   });
   const data: unknown = await res.json();
-  if (!res.ok) throw new Error(errDetail(data, `HTTP ${res.status}`));
+  if (!res.ok) throw apiError(data, res.status);
   return data;
 }
 
 export async function deleteJson(path: string): Promise<unknown> {
   const res = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE" });
   const data: unknown = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(errDetail(data, `HTTP ${res.status}`));
+  if (!res.ok) throw apiError(data, res.status);
   return data;
 }
 
@@ -111,7 +128,7 @@ export async function postJsonAccepted(path: string, body: unknown): Promise<Pos
   });
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok && res.status !== 202) {
-    throw new Error(errDetail(data, `HTTP ${res.status}`));
+    throw apiError(data, res.status);
   }
   return { status: res.status, data };
 }
@@ -488,7 +505,7 @@ export async function uploadFile(file: File): Promise<UploadFileResponse> {
     body: form,
   });
   const data: unknown = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(errDetail(data, `HTTP ${res.status}`));
+  if (!res.ok) throw apiError(data, res.status);
   return validateUploadFileResponse(data);
 }
 

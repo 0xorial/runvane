@@ -49,6 +49,10 @@ export function installTestDiagnostics(suite) {
     // is allowlisted ONLY for the spec that previews a PDF chip. Other blob
     // aborts (e.g. object-URL churn revoking a loading preview) still fail.
     /\[browser requestfailed\] «direct PDFs price per sniffed page.*GET blob:.*ERR_ABORTED/,
+    // Chrome logs its own console.error for every 500 response; this spec
+    // triggers one ON PURPOSE to prove error bodies carry message + stack
+    // into the dialog. Scoped to that spec — unexpected 500s elsewhere fail.
+    /\[browser console\.error\] «a failing create returns the real technical error.*Failed to load resource.*500/,
   ];
   const problems = [];
   let lineBuf = "";

@@ -5,7 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module.js';
-import { HttpExceptionLoggingFilter } from './http/http-exception-logging.filter.js';
+import { AllExceptionsFilter } from './http/all-exceptions.filter.js';
 import type { StubLlmControl } from './llmProviders/providers/stubLlm.control.js';
 import { STUB_DEMO_MODELS } from './llmProviders/providers/stubLlm.models.js';
 import { StubLlmProvider } from './llmProviders/providers/stubLlm.js';
@@ -93,7 +93,7 @@ export async function createRunvaneApp(config: RunvaneBootConfig): Promise<Runva
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   app.useGlobalPipes(new ZodValidationPipe());
-  app.useGlobalFilters(new HttpExceptionLoggingFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
   await app.listen(config.port);
 
   const origin = `http://127.0.0.1:${config.port}`;

@@ -50,9 +50,10 @@ export class ToolSandboxesController {
       row = await this.containers.create(sandboxId, body);
     } catch (err) {
       // The failure reason (docker missing, build/pull failure, bad mount)
-      // must reach the dialog — a bare 500 hides it.
+      // must reach the dialog — a bare 500 hides it. `cause` keeps the
+      // original stack for the all-exceptions filter's cause-chain walk.
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException((err as Error).message);
+      throw new InternalServerErrorException((err as Error).message, { cause: err });
     }
     try {
       return await this.sandboxes.saveRow(row);

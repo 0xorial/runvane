@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from '../../../backend/src/app.module.js';
-import { HttpExceptionLoggingFilter } from '../../../backend/src/http/http-exception-logging.filter.js';
+import { AllExceptionsFilter } from '../../../backend/src/http/all-exceptions.filter.js';
 import type { StubLlmControl } from '../../../backend/src/llmProviders/providers/stubLlm.control.js';
 import { StubLlmProvider } from '../../../backend/src/llmProviders/providers/stubLlm.js';
 import type { LlmRuntime } from '../../../backend/src/runtime/runtime.config.js';
@@ -46,7 +46,7 @@ export async function createTestApp(): Promise<TestApp> {
   const app = moduleFixture.createNestApplication();
   app.useWebSocketAdapter(new WsAdapter(app));
   app.useGlobalPipes(new ZodValidationPipe());
-  app.useGlobalFilters(new HttpExceptionLoggingFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
   await app.init();
   await app.listen(0, '127.0.0.1');
 

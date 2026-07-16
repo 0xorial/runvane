@@ -50,6 +50,36 @@ async function containerExists(name: string): Promise<boolean> {
   return stdout.trim() === name;
 }
 
+test("a failing create returns the real technical error — message and cause-chain stack, into the dialog", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  test.skip(!(await dockerAvailable()), "docker daemon not reachable from the harness");
+
+  // API level: the body carries the docker failure text AND the stack.
+  const res = await request.post(`${apiBaseUrl()}/api/tool-sandboxes/docker`, {
+    data: { name: "e2e broken", image: "runvane-definitely-missing:nope", mounts: [] },
+  });
+  expect(res.status()).toBe(500);
+  const body = (await res.json()) as { message: string; stack?: string };
+  expect(body.message).toContain("docker pull failed");
+  expect(body.stack).toContain("SandboxContainersService");
+
+  // Dialog level: message shown, stack expandable.
+  const agentRes = await request.get(`${apiBaseUrl()}/api/agents`);
+  const agents = (await agentRes.json()) as Array<{ id: string }>;
+  await app.chat.gotoNew(agents[0]!.id);
+  await app.page.getByTestId("tool-env-add").click();
+  const dialog = app.page.getByTestId("add-env-dialog");
+  await dialog.getByTestId("add-env-name").fill("e2e broken");
+  await dialog.getByPlaceholder("runvane-sandbox:latest").fill("runvane-definitely-missing:nope");
+  await dialog.getByTestId("add-env-submit").click();
+  await expect(dialog.getByTestId("add-env-error")).toContainText("docker pull failed", { timeout: 60_000 });
+  await dialog.getByText("stack trace").click();
+  await expect(dialog.getByTestId("add-env-error-stack")).toContainText("SandboxContainersService");
+});
+
 test("docker sandbox: create registers an ssh-over-docker-exec row; delete removes the container", async ({
   request,
 }) => {
