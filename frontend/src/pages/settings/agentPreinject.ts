@@ -1,13 +1,14 @@
 import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
 import {
   PREINJECT_FILE_TYPES,
+  SCANNED_PREINJECT_TYPES,
   type AgentPreinjectConfig,
   type PreinjectFileType,
   type PreinjectMode,
   type PreinjectPreviewFile,
 } from "@/protocol/chatEntry";
 
-export { PREINJECT_FILE_TYPES };
+export { PREINJECT_FILE_TYPES, SCANNED_PREINJECT_TYPES };
 export type { PreinjectFileType, PreinjectMode };
 
 const MODES: readonly PreinjectMode[] = ["all", "none", "selected"];
@@ -18,10 +19,13 @@ export const PREINJECT_MODE_LABELS: Record<PreinjectMode, string> = {
   selected: "Selected types",
 };
 
+// manifest / lint_config / env_example are legacy labels: no new scan emits
+// them (discovery is instruction-files + root README now), but persisted
+// entries from the flat root-grab era still render with them.
 export const PREINJECT_FILE_TYPE_LABELS: Record<PreinjectFileType, string> = {
-  instructions: "Agent instructions (CLAUDE.md, AGENTS.md, .cursorrules, …)",
+  instructions: "AI instructions (CLAUDE.md, AGENTS.md, .cursorrules, …)",
   manifest: "Package manifest (package.json, pyproject.toml, …)",
-  readme: "README",
+  readme: "README (workspace root)",
   lint_config: "Lint / format config",
   env_example: "Env var sample (.env.example)",
 };

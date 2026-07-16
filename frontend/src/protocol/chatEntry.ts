@@ -31,7 +31,7 @@ export type {
   PreinjectPreviewFile,
   PreinjectPreviewResult,
 } from "../../../backend/src/contracts/preinject.js";
-export { PREINJECT_FILE_TYPES } from "../../../backend/src/contracts/preinject.js";
+export { PREINJECT_FILE_TYPES, SCANNED_PREINJECT_TYPES } from "../../../backend/src/contracts/preinject.js";
 
 export function isPlannerThinkingEntry(e: ChatEntry): e is ThoughtEntry {
   return e.type === "thought" && e.thoughtType === "planner";

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { AgentPreinjectConfig } from "@/protocol/chatEntry";
-  import { PREINJECT_FILE_TYPES, PREINJECT_FILE_TYPE_LABELS, PREINJECT_MODE_LABELS, type PreinjectFileType, type PreinjectMode } from "./agentPreinject";
+  import { PREINJECT_FILE_TYPE_LABELS, PREINJECT_MODE_LABELS, SCANNED_PREINJECT_TYPES, type PreinjectFileType, type PreinjectMode } from "./agentPreinject";
 
   let {
     config,
@@ -32,10 +32,12 @@
 <div class="mt-3.5">
   <div class="mb-1 text-[13px] font-bold text-foreground">Context injection · files</div>
   <p class="mb-2.5 text-xs text-muted-foreground">
-    Inject context from the workspace: before the first planner step of a new conversation, scan for
-    common agent-context files (instructions, manifests, READMEs, lint configs, env samples) and fold
-    them into the prompt. The discovered/injected files show as a context row in the transcript.
-    (Knowledge bases are the other context source — searched at send time.)
+    Inject context from the conversation's sandbox workspace: before the first planner step, traverse
+    it for common AI instruction files (CLAUDE.md, AGENTS.md, GEMINI.md, .cursorrules, .clinerules,
+    .windsurfrules, .github/copilot-instructions.md, .cursor/rules) at any depth, plus the root
+    README, and fold them into the prompt. The discovered/injected files show as a context row in the
+    transcript and can be adjusted per conversation in Start context. (Knowledge bases are the other
+    context source — searched at send time.)
   </p>
   <div
     class="inline-flex overflow-hidden rounded-md border border-border text-[11px] font-medium"
@@ -60,7 +62,7 @@
 
   {#if config.mode === "selected"}
     <div class="mt-2 flex flex-col gap-1.5">
-      {#each PREINJECT_FILE_TYPES as fileType (fileType)}
+      {#each SCANNED_PREINJECT_TYPES as fileType (fileType)}
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"

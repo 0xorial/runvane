@@ -208,7 +208,7 @@
       {/each}
       </div>
       {#if selectedAgentId}
-        <StartContextSection agentId={selectedAgentId} />
+        <StartContextSection agentId={selectedAgentId} toolSandboxId={selectedEnvId} />
       {/if}
     </div>
   </div>

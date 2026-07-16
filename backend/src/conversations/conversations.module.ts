@@ -15,6 +15,7 @@ import { SummarizeThoughtTypeProvider } from '../thoughtProcessing/thoughtTypePr
 import { ToolParamsThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/toolParamsProvider.js';
 import { ThoughtProcessingService } from '../thoughtProcessing/thought-processing.service.js';
 import { KnowledgeModule } from '../knowledge/knowledge.module.js';
+import { ToolHostModule } from '../tool-host/tool-host.module.js';
 import { RunToolService } from '../tools/run-tool.service.js';
 import { ToolsModule } from '../tools/tools.module.js';
 import { UploadsModule } from '../uploads/uploads.module.js';
@@ -24,7 +25,7 @@ import { ConversationsController } from './conversations.controller.js';
 import { ConversationsService } from './conversations.service.js';
 
 @Module({
-  imports: [DatabaseModule, ToolsModule, UploadsModule, KnowledgeModule],
+  imports: [DatabaseModule, ToolsModule, UploadsModule, KnowledgeModule, ToolHostModule],
   controllers: [ConversationsController, ContextInjectionController],
   providers: [
     ConversationsService,

@@ -1,55 +1,89 @@
 import { BadRequestException, Controller, Get, NotFoundException, Query } from '@nestjs/common';
 import type { PreinjectPreviewResult } from '../contracts/preinject.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
+import { ConversationsRepo } from '../db/repositories/conversations.repo.js';
 import { estimateContextTokens } from '../knowledge/retrieval/retrieval-context.js';
+import { ToolSandboxesService } from '../tool-host/tool-sandboxes.service.js';
 import { formatContextFilesBlock } from './context-files-block.js';
 import { ContextInjectionService } from './context-injection.service.js';
+import { resolveSandboxScanRoot, type SandboxScanRoot } from './sandbox-scan-root.js';
 
 /**
  * Composer preview for the `files` half of context injection: runs the same
- * workspace scan a conversation's first message with this agent would run —
- * persisting nothing — and prices it with the same estimator as the knowledge
- * preview (`/api/knowledge/retrieve/preview`), so the composer can show what
- * WILL ride along with the send before it happens. `totalTokens` is computed
- * from the exact planner block (formatContextFilesBlock), per-file `tokens`
- * from that file's section of it.
+ * sandbox-workspace discovery a send would run — persisting nothing — and
+ * prices it with the same estimator as the knowledge preview
+ * (`/api/knowledge/retrieve/preview`). `totalTokens` is computed from the
+ * exact planner block (formatContextFilesBlock), per-file `tokens` from that
+ * file's section of it.
+ *
+ * The scan root comes from the tool sandbox: pass `conversationId` to use the
+ * conversation's bound sandbox (attach picker), or `toolSandboxId` for a
+ * not-yet-created conversation (Start context staging; defaults to `local`).
  */
 @Controller('api/context-injection')
 export class ContextInjectionController {
   constructor(
     private readonly agents: AgentsRepo,
+    private readonly conversations: ConversationsRepo,
+    private readonly toolSandboxes: ToolSandboxesService,
     private readonly contextInjection: ContextInjectionService,
   ) {}
 
   /**
-   * `?all=1` ignores agent gating and prices every candidate found on disk —
-   * the source list for the composer's per-message attach picker
-   * (`overrides.contextFiles`). Otherwise `agentId` is required and the
-   * response mirrors the automatic first-message scan for that agent.
+   * `?all=1` ignores agent gating and prices every discovered candidate —
+   * the source list for the staging checkboxes and the per-message attach
+   * picker (`overrides.contextFiles`). Otherwise `agentId` is required and
+   * the response mirrors the automatic first-message scan for that agent.
    */
   @Get('preview')
-  async preview(@Query('agentId') agentId?: string, @Query('all') all?: string): Promise<PreinjectPreviewResult> {
+  async preview(
+    @Query('agentId') agentId?: string,
+    @Query('all') all?: string,
+    @Query('toolSandboxId') toolSandboxId?: string,
+    @Query('conversationId') conversationId?: string,
+  ): Promise<PreinjectPreviewResult> {
+    const scanRoot = await this.resolveScanRoot(toolSandboxId, conversationId);
+
     if (all === '1' || all === 'true') {
-      return this.toPreview('all', await this.contextInjection.scan({ mode: 'all' }));
+      if (scanRoot.root === null) return this.unscannable('all', scanRoot);
+      return this.toPreview('all', await this.contextInjection.scan({ mode: 'all' }, scanRoot.root));
     }
+
     if (!agentId?.trim()) throw new BadRequestException('agentId is required');
     const agent = await this.agents.get(agentId);
     if (!agent) throw new NotFoundException(`agent ${agentId} not found`);
-
     const config = agent.default_llm_configuration?.preinject ?? undefined;
-    return this.toPreview(config?.mode ?? 'none', await this.contextInjection.scan(config));
+    const mode = config?.mode ?? 'none';
+
+    if (scanRoot.root === null) return this.unscannable(mode, scanRoot);
+    return this.toPreview(mode, await this.contextInjection.scan(config, scanRoot.root));
+  }
+
+  private async resolveScanRoot(toolSandboxId?: string, conversationId?: string): Promise<SandboxScanRoot> {
+    const boundSandboxId = conversationId?.trim()
+      ? await this.conversations.getToolSandboxId(conversationId.trim())
+      : (toolSandboxId?.trim() ?? null);
+    const sandbox = await this.toolSandboxes.getOrDefault(boundSandboxId);
+    return resolveSandboxScanRoot(sandbox);
+  }
+
+  private unscannable(
+    mode: PreinjectPreviewResult['mode'],
+    scanRoot: Extract<SandboxScanRoot, { root: null }>,
+  ): PreinjectPreviewResult {
+    return { mode, files: [], totalTokens: 0, scannable: false, unavailableReason: scanRoot.reason };
   }
 
   private toPreview(
     mode: PreinjectPreviewResult['mode'],
     result: Awaited<ReturnType<ContextInjectionService['scan']>>,
   ): PreinjectPreviewResult {
-    if (!result) return { mode, files: [], totalTokens: 0 };
+    if (!result) return { mode, files: [], totalTokens: 0, scannable: true };
     const files = result.files.map((file) => {
       const section = result.sections[file.path];
       return section === undefined ? file : { ...file, content: section, tokens: estimateContextTokens(section) };
     });
     const block = formatContextFilesBlock(result.content);
-    return { mode, files, totalTokens: block ? estimateContextTokens(block) : 0 };
+    return { mode, files, totalTokens: block ? estimateContextTokens(block) : 0, scannable: true };
   }
 }

@@ -74,11 +74,11 @@ test("mode 'all' injects every discovered file and the planner sees the content"
     const entry = await contextInjectionEntry(request, conversationId);
     expect(entry, "expected a context-injection entry on the chain").toBeTruthy();
     const readme = entry!.files.find((f) => f.path === "README.md");
-    const manifest = entry!.files.find((f) => f.path === "package.json");
     expect(readme?.status).toBe("injected");
     expect(readme?.fileType).toBe("readme");
-    expect(manifest?.status).toBe("injected");
-    expect(manifest?.fileType).toBe("manifest");
+    // Discovery is instruction-files + root README — manifests are no longer
+    // candidates, even under mode 'all'.
+    expect(entry!.files.some((f) => f.path === "package.json")).toBe(false);
     expect(entry!.content).toContain(README_MARKER);
 
     // Ground-truth: the planner's own prompt (not just the audit entry) carried it.
@@ -97,7 +97,9 @@ test("mode 'all' injects every discovered file and the planner sees the content"
   }
 });
 
-test("mode 'selected' only injects the chosen category; others are recorded as skipped", async ({ request }) => {
+test("mode 'selected' only injects the chosen category (traversal gating itself is pinned by the integration spec)", async ({
+  request,
+}) => {
   test.setTimeout(25_000);
   const agentId = await defaultAgentId(request);
   const original = await setAgentPreinject(request, agentId, { mode: "selected", types: ["readme"] });
@@ -107,11 +109,42 @@ test("mode 'selected' only injects the chosen category; others are recorded as s
 
     const entry = await contextInjectionEntry(request, conversationId);
     expect(entry, "expected a context-injection entry on the chain").toBeTruthy();
-    const readme = entry!.files.find((f) => f.path === "README.md");
-    const manifest = entry!.files.find((f) => f.path === "package.json");
-    expect(readme?.status).toBe("injected");
-    expect(manifest?.status).toBe("skipped");
+    expect(entry!.files).toEqual([{ path: "README.md", fileType: "readme", status: "injected" }]);
     expect(entry!.content).toContain(README_MARKER);
+  } finally {
+    await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
+  }
+});
+
+test("a conversation bound to the 'none' sandbox gets no files entry — there is no workspace", async ({
+  request,
+}) => {
+  test.setTimeout(25_000);
+  const agentId = await defaultAgentId(request);
+  const original = await setAgentPreinject(request, agentId, { mode: "all" });
+
+  try {
+    const createRes = await request.post(`${apiBaseUrl()}/api/conversations`, {
+      data: { title: "e2e no-sandbox", toolSandboxId: "none" },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const { id } = (await createRes.json()) as { id: string };
+    const msgRes = await request.post(`${apiBaseUrl()}/api/conversations/${encodeURIComponent(id)}/messages`, {
+      data: { message: PROBE_MESSAGE, agentId },
+    });
+    expect(msgRes.ok()).toBeTruthy();
+
+    // The turn completes without any context-injection entry.
+    await expect
+      .poll(
+        async () => {
+          const entries = (await getConversationEntries(request, id)) as unknown as StreamEntry[];
+          return entries.some((e) => e.type === "thought" && e.thoughtType === "planner");
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    expect(await contextInjectionEntry(request, id)).toBeUndefined();
   } finally {
     await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
   }
@@ -166,10 +199,11 @@ test("new chat: Start context stages the files half — checkboxes seed from the
   try {
     await app.chat.gotoNew(agentId);
 
-    // Staging section (sibling of Tool sandbox / Agent): mode 'all' seeds both
-    // discovered candidates checked; rows stay examinable.
+    // Staging section (sibling of Tool sandbox / Agent): mode 'all' seeds the
+    // discovered candidate (the workspace root README) checked; rows stay
+    // examinable.
     const section = app.page.getByTestId("start-context-section");
-    await expect(section.getByTestId("start-context-tokens")).toContainText("2 selected");
+    await expect(section.getByTestId("start-context-tokens")).toContainText("1 selected");
     const readmeCheck = section.locator('[data-testid="context-file-check"][data-file-path="README.md"]');
     await expect(readmeCheck).toBeChecked();
     const readmeRow = section.locator('[data-testid="context-file-row"][data-file-path="README.md"]');
@@ -183,21 +217,24 @@ test("new chat: Start context stages the files half — checkboxes seed from the
     await expect(app.page.getByTestId("chat-context-chip")).toHaveCount(0);
     await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
 
-    // Unchecking materializes an explicit selection...
-    await section.locator('[data-testid="context-file-check"][data-file-path="package.json"]').uncheck();
-    await expect(section.getByTestId("start-context-tokens")).toContainText("1 selected");
+    // Unchecking everything materializes an explicit "inject nothing" —
+    // the first send must NOT fall back to the agent config's scan.
+    await readmeCheck.uncheck();
+    await expect(readmeCheck).not.toBeChecked();
 
-    // ...and the first send injects exactly that selection, not the config's.
     await app.chat.userInput.typeMessage(PROBE_MESSAGE);
     await app.chat.userInput.send();
     const conversationId = await app.chat.waitForConversationChange("new");
     await expect
-      .poll(async () => (await contextInjectionEntry(request, conversationId))?.files?.length ?? 0, {
-        timeout: 15_000,
-      })
-      .toBeGreaterThan(0);
-    const entry = (await contextInjectionEntry(request, conversationId))!;
-    expect(entry.files).toEqual([{ path: "README.md", fileType: "readme", status: "injected" }]);
+      .poll(
+        async () => {
+          const entries = (await getConversationEntries(request, conversationId)) as unknown as StreamEntry[];
+          return entries.some((e) => e.type === "thought" && e.thoughtType === "planner");
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    expect(await contextInjectionEntry(request, conversationId)).toBeUndefined();
   } finally {
     await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
   }
@@ -284,7 +321,9 @@ test("overrides.contextFiles injects the picked candidates and the planner sees 
     .toBe(true);
 });
 
-test("preview endpoint ?all=1 lists every candidate regardless of agent gating", async ({ request }) => {
+test("preview endpoint ?all=1 lists every candidate regardless of agent gating; the sandbox scopes the scan", async ({
+  request,
+}) => {
   test.setTimeout(15_000);
   const res = await request.get(`${apiBaseUrl()}/api/context-injection/preview?all=1`);
   expect(res.ok()).toBeTruthy();
@@ -292,11 +331,40 @@ test("preview endpoint ?all=1 lists every candidate regardless of agent gating",
     mode: string;
     files: Array<{ path: string; status: string; tokens?: number }>;
     totalTokens: number;
+    scannable: boolean;
   };
   expect(preview.mode).toBe("all");
+  expect(preview.scannable).toBe(true);
   const readme = preview.files.find((f) => f.path === "README.md");
   expect(readme?.status).toBe("injected");
   expect(readme?.tokens ?? 0).toBeGreaterThan(0);
+
+  // The 'none' sandbox has no workspace: nothing to scan, and it says why.
+  const noneRes = await request.get(`${apiBaseUrl()}/api/context-injection/preview?all=1&toolSandboxId=none`);
+  expect(noneRes.ok()).toBeTruthy();
+  const nonePreview = (await noneRes.json()) as {
+    files: unknown[];
+    totalTokens: number;
+    scannable: boolean;
+    unavailableReason?: string;
+  };
+  expect(nonePreview.scannable).toBe(false);
+  expect(nonePreview.unavailableReason).toBe("no-sandbox");
+  expect(nonePreview.files).toEqual([]);
+  expect(nonePreview.totalTokens).toBe(0);
+});
+
+test("new chat with the 'none' sandbox: Start context explains there is no workspace to scan", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(20_000);
+  const agentId = await defaultAgentId(request);
+  await app.page.goto(`/chat/new?agent=${encodeURIComponent(agentId)}&env=none`, {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(app.page.getByTestId("start-context-note")).toContainText("No sandbox");
+  await expect(app.page.locator('[data-testid="context-file-check"]')).toHaveCount(0);
 });
 
 test("agents without a preinject config get no context-injection entry", async ({ request }) => {

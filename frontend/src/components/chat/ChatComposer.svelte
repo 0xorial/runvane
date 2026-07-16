@@ -218,6 +218,7 @@
       {text}
       agentId={effectiveAgentId}
       {conversationId}
+      toolSandboxId={toolSandboxIdFromSearch(search) || "local"}
       attachments={selectedFiles}
       llm={agentSelection.llm}
     />

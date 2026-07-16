@@ -12,21 +12,22 @@
   import KnowledgeSearchControls from "./KnowledgeSearchControls.svelte";
 
   // New-conversation staging area (sibling of "Tool sandbox" and "Agent"):
-  // everything the first message will carry. Files: every candidate found in
-  // the workspace, checkboxes seeded from the agent's preinject config — the
-  // first toggle materializes the selection as a single-shot
-  // `overrides.contextFiles` (config stays untouched). Knowledge: the same
-  // single-shot search controls the composer offers on later messages. The
-  // live token/cost rollup lives in the composer box below, next to the text
-  // it prices.
-  let { agentId }: { agentId: string } = $props();
+  // everything the first message will carry. Files: instruction files (and
+  // the root README) discovered in the SELECTED SANDBOX's workspace,
+  // checkboxes seeded from the agent's preinject config — the first toggle
+  // materializes the selection as a single-shot `overrides.contextFiles`
+  // (config stays untouched). Knowledge: the same single-shot search controls
+  // the composer offers on later messages. The live token/cost rollup lives
+  // in the composer box below, next to the text it prices.
+  let { agentId, toolSandboxId }: { agentId: string; toolSandboxId: string } = $props();
 
   const filesQuery = createQuery(() => ({
-    queryKey: ["context-files-preview", "all"],
-    queryFn: previewAllContextFiles,
+    queryKey: ["context-files-preview", "all", "env", toolSandboxId],
+    queryFn: () => previewAllContextFiles({ toolSandboxId }),
     staleTime: 15_000,
   }));
-  const candidates = $derived(filesQuery.data?.files ?? []);
+  const preview = $derived(filesQuery.data);
+  const candidates = $derived(preview?.files ?? []);
 
   const agentsQuery = createAgentsQuery();
   const agentConfig = $derived.by(() => {
@@ -86,9 +87,15 @@
         <p class="text-[11px] text-muted-foreground">scanning workspace…</p>
       {:else if filesQuery.isError}
         <p class="text-[11px] text-muted-foreground">files preview failed</p>
+      {:else if preview && !preview.scannable}
+        <p class="text-[11px] text-muted-foreground" data-testid="start-context-note">
+          {preview.unavailableReason === "remote-sandbox"
+            ? "This sandbox runs on a remote host — its workspace can't be scanned for context files yet."
+            : "No sandbox — there is no workspace to scan for context files."}
+        </p>
       {:else if candidates.length === 0}
         <p class="text-[11px] text-muted-foreground" data-testid="start-context-note">
-          No candidate files (CLAUDE.md, README.md, package.json, …) found in the workspace.
+          No instruction files (CLAUDE.md, AGENTS.md, .cursorrules, …) or README found in the workspace.
         </p>
       {:else}
         <ContextFileList files={candidates} selectable selectedPaths={selectedPaths} onToggle={toggle} />

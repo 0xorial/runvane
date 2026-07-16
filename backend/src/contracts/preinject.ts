@@ -10,6 +10,15 @@ export const PreinjectFileTypeSchema = z.enum(PREINJECT_FILE_TYPES);
 export type PreinjectFileType = z.infer<typeof PreinjectFileTypeSchema>;
 
 /**
+ * The categories the CURRENT scan can produce: AI instruction files
+ * (discovered by workspace traversal) and the root README. The other enum
+ * values above are legacy — kept so persisted entries and old agent configs
+ * from the flat root-grab era still parse/render, but no new scan emits them
+ * and the settings UI no longer offers them.
+ */
+export const SCANNED_PREINJECT_TYPES = ['instructions', 'readme'] as const satisfies readonly PreinjectFileType[];
+
+/**
  * `all`: preinject every discovered candidate file.
  * `none`: preinject nothing (default when unset — no behavior change for
  * agents that never configure this).
@@ -66,6 +75,12 @@ export const PreinjectPreviewFileSchema = PreinjectedFileRecordSchema.extend({
 });
 export type PreinjectPreviewFile = z.infer<typeof PreinjectPreviewFileSchema>;
 
+/** Why a sandbox has no scannable workspace: its tools run on a remote host
+ *  (scanning through the tool-host isn't wired yet), or there is no sandbox
+ *  at all. */
+export const PreinjectScanUnavailableReasonSchema = z.enum(['remote-sandbox', 'no-sandbox']);
+export type PreinjectScanUnavailableReason = z.infer<typeof PreinjectScanUnavailableReasonSchema>;
+
 export const PreinjectPreviewResultSchema = z.object({
   /** The agent's effective preinject mode ('none' when unset). */
   mode: PreinjectModeSchema,
@@ -73,5 +88,9 @@ export const PreinjectPreviewResultSchema = z.object({
   /** ~tokens of the exact `[Project context files]` block the planner would
    *  receive on a first message (see plannerPrompt); 0 when nothing injects. */
   totalTokens: z.number(),
+  /** False when the bound sandbox has no scannable workspace — `files` is
+   *  then empty and `unavailableReason` says why. */
+  scannable: z.boolean(),
+  unavailableReason: PreinjectScanUnavailableReasonSchema.optional(),
 });
 export type PreinjectPreviewResult = z.infer<typeof PreinjectPreviewResultSchema>;

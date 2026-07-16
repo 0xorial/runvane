@@ -28,6 +28,7 @@
     text,
     agentId,
     conversationId,
+    toolSandboxId = "",
     attachments = [],
     llm = null,
   }: {
@@ -38,6 +39,9 @@
     /** Null while composing the first message: staging then lives in the
      *  Start context section, and this bar reduces to the estimate line. */
     conversationId: string | null;
+    /** The sandbox a NEW conversation would bind (?env=) — scopes the files
+     *  scan pre-creation; existing conversations use their bound sandbox. */
+    toolSandboxId?: string;
     /** Uploads staged in the composer — priced into the estimate. */
     attachments?: SelectedAttachment[];
     /** Explicit model override from the toolbar; null = the agent's default. */
@@ -59,12 +63,16 @@
   });
 
   const candidatesQuery = createQuery(() => ({
-    queryKey: ["context-files-preview", "all"],
-    queryFn: previewAllContextFiles,
+    queryKey: firstMessage
+      ? (["context-files-preview", "all", "env", toolSandboxId] as const)
+      : (["context-files-preview", "all", "conv", conversationId] as const),
+    queryFn: () =>
+      previewAllContextFiles(firstMessage ? { toolSandboxId } : { conversationId: conversationId ?? undefined }),
     enabled: firstMessage ? Boolean(agentId) : open || filesDraft.touched || filesDraft.paths.length > 0,
     staleTime: 15_000,
   }));
-  const candidates = $derived(candidatesQuery.data?.files ?? []);
+  const candidatesPreview = $derived(candidatesQuery.data);
+  const candidates = $derived(candidatesPreview?.files ?? []);
 
   const agentsQuery = createAgentsQuery();
   const agentConfig = $derived.by(() => {
@@ -398,9 +406,15 @@
               <p class={noteText} data-testid="context-files-note">scanning workspace…</p>
             {:else if candidatesQuery.isError}
               <p class={noteText} data-testid="context-files-note">files preview failed</p>
+            {:else if candidatesPreview && !candidatesPreview.scannable}
+              <p class={noteText} data-testid="context-files-note">
+                {candidatesPreview.unavailableReason === "remote-sandbox"
+                  ? "This conversation's sandbox runs on a remote host — its workspace can't be scanned for context files yet."
+                  : "This conversation has no sandbox — there is no workspace to scan for context files."}
+              </p>
             {:else if candidates.length === 0}
               <p class={noteText} data-testid="context-files-note">
-                No candidate files (CLAUDE.md, README.md, package.json, …) found in the workspace.
+                No instruction files (CLAUDE.md, AGENTS.md, .cursorrules, …) or README found in the workspace.
               </p>
             {:else}
               <ContextFileList

@@ -1,6 +1,8 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { SseType } from '../contracts/sse.js';
 import { ContextInjectionService, type ContextInjectionResult } from '../context-injection/context-injection.service.js';
+import { resolveSandboxScanRoot } from '../context-injection/sandbox-scan-root.js';
+import { ToolSandboxesService } from '../tool-host/tool-sandboxes.service.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { ChatEntriesRepo } from '../db/repositories/chat-entries.repo.js';
 import { PendingMessagesRepo } from '../db/repositories/pending-messages.repo.js';
@@ -58,6 +60,7 @@ export class ConversationProcessorService implements OnModuleInit {
     private readonly pendingMsgs: PendingMessagesRepo,
     private readonly categorizer: ConversationCategorizerService,
     private readonly contextInjection: ContextInjectionService,
+    private readonly toolSandboxes: ToolSandboxesService,
     private readonly forcedRetrieval: ForcedRetrievalService,
   ) {}
 
@@ -584,10 +587,21 @@ export class ConversationProcessorService implements OnModuleInit {
   }
 
   /**
-   * Scan the workspace for the agent's configured context files (once per
-   * conversation — gated by the caller on `isFirstMessage`) and, if any were
-   * discovered, append a `context-injection` entry to the chain before the
-   * planner thought starts. Best-effort: a scan failure is logged and
+   * The workspace context-file discovery runs in: the conversation's tool
+   * sandbox decides (local → the server's cwd; ssh/none → no scannable
+   * workspace → null, and no entry is appended).
+   */
+  private async resolveContextScanRoot(conversationId: string): Promise<string | null> {
+    const sandboxId = await this.conversations.getToolSandboxId(conversationId);
+    const sandbox = await this.toolSandboxes.getOrDefault(sandboxId);
+    return resolveSandboxScanRoot(sandbox).root;
+  }
+
+  /**
+   * Scan the sandbox workspace for the agent's configured context files (once
+   * per conversation — gated by the caller on `isFirstMessage`) and, if any
+   * were discovered, append a `context-injection` entry to the chain before
+   * the planner thought starts. Best-effort: a scan failure is logged and
    * swallowed rather than failing the user's message.
    */
   private async injectContextFiles(
@@ -596,8 +610,10 @@ export class ConversationProcessorService implements OnModuleInit {
     parentId: string,
   ): Promise<{ id: string } | null> {
     try {
+      const root = await this.resolveContextScanRoot(conversationId);
+      if (!root) return null;
       const agent = await this.agents.get(agentId);
-      const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined);
+      const result = await this.contextInjection.scan(agent?.default_llm_configuration?.preinject ?? undefined, root);
       return await this.appendFilesEntry(conversationId, parentId, result);
     } catch (err) {
       this.logger.warn(
@@ -619,7 +635,9 @@ export class ConversationProcessorService implements OnModuleInit {
     paths: string[],
   ): Promise<{ id: string } | null> {
     try {
-      const result = await this.contextInjection.scanSelected(paths);
+      const root = await this.resolveContextScanRoot(conversationId);
+      if (!root) return null;
+      const result = await this.contextInjection.scanSelected(paths, root);
       return await this.appendFilesEntry(conversationId, parentId, result);
     } catch (err) {
       this.logger.warn(
