@@ -234,16 +234,19 @@
       <!-- ===== Files: agent-configured workspace scan, first message only ===== -->
       <section class="px-2 py-1.5" data-testid="context-files-section">
         <div class="flex items-center gap-1.5">
-          <span class={sectionTitle}>
+          <span
+            class={sectionTitle}
+            title="Workspace files the agent folds into the planner once per conversation — carried by the first message."
+          >
             <svg class="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <path d="M14 2v6h6" />
             </svg>
             Context files
           </span>
-          <span class="rounded bg-muted px-1 py-px text-[10px] uppercase tracking-wide text-muted-foreground">
-            first message
-          </span>
+          {#if firstMessage}
+            <span class="text-[11px] text-muted-foreground">injected once, with this first message</span>
+          {/if}
           {#if agentId}
             <a
               href="/settings/agents?agent={encodeURIComponent(agentId)}"
