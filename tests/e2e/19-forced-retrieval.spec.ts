@@ -383,7 +383,7 @@ test("Start context shows the planner baseline with a per-tool breakdown", async
   await app.chat.gotoNew(agentId);
 
   const section = app.page.getByTestId("planner-baseline-section");
-  await expect(section.getByTestId("planner-baseline-total")).toHaveText(/~\d+ tok\/turn/);
+  await expect(section.getByTestId("planner-baseline-total")).toHaveText(/~\d+ tok/);
   await section.getByTestId("baseline-tools-row").click();
   const toolRow = section.locator('[data-testid="baseline-tool-row"][data-tool-name="get_current_time"]');
   await expect(toolRow).toContainText(/~\d+ tok/);

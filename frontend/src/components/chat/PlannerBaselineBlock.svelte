@@ -34,18 +34,17 @@
   <div class="flex items-center gap-1.5">
     <span
       class="inline-flex items-center gap-1.5 text-[11px] font-medium text-foreground"
-      title="The planner's system message — resent with every turn, on top of what the send itself adds."
+      title="What the agent's setup itself costs: the system prompt, its tools, and the reply format — sent with every model request, on top of your message."
     >
       <svg class="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7Z" />
         <path d="M9 21h6" />
       </svg>
-      Planner baseline
+      Estimated token usage
     </span>
-    <span class="text-[11px] text-muted-foreground">resent every turn</span>
     {#if baseline}
       <span class="ml-auto text-[11px] tabular-nums text-muted-foreground" data-testid="planner-baseline-total">
-        ~{baseline.totalTokens} tok/turn
+        ~{baseline.totalTokens} tok
       </span>
     {/if}
   </div>

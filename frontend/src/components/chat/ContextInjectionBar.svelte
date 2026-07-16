@@ -255,7 +255,7 @@
     if (knowledgeSelected) parts.push(knowledgeTokens === null ? "knowledge at send" : `knowledge ~${knowledgeTokens} tok`);
     if (baseline) {
       parts.push(
-        `+ baseline every turn: system ~${baseline.systemPrompt.tokens + baseline.scaffolding.tokens} · tools ~${baseline.tools.tokens} tok`,
+        `plus every request: system prompt ~${baseline.systemPrompt.tokens + baseline.scaffolding.tokens} tok · tools ~${baseline.tools.tokens} tok`,
       );
     }
     return parts.join(" · ");

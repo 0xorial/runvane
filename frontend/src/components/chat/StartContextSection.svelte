@@ -113,8 +113,7 @@
 
     <p class="mt-1.5 border-t border-border/60 pt-1.5 text-[11px] text-muted-foreground">
       Files and searches are injected with the first message only — the send total appears in the message box
-      below; the planner baseline rides along every turn. Later messages can attach files and searches from
-      the composer's Context panel.
+      below. Later messages can attach files and searches from the composer's Context panel.
     </p>
   </div>
 </div>
