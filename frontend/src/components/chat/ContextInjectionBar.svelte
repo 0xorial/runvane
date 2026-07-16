@@ -166,8 +166,18 @@
 
   // ---- Send estimate (message + attachments + files + knowledge → tokens/$) ----
 
+  /** The send's model: explicit toolbar override, else the agent's default —
+   *  drives family-specific attachment costing and the $ estimate. */
+  const selectedLlm = $derived.by(() => {
+    if (llm?.model) return { providerId: llm.providerId, model: llm.model.trim() };
+    const agent = (agentsQuery.data ?? []).find((a) => a.id === agentId);
+    if (!agent) return { providerId: "", model: "" };
+    const agentLlm = getAgentLlm(agent);
+    return { providerId: agentLlm.provider_id.trim(), model: agentLlm.model.trim() };
+  });
+
   const messageTokens = $derived(estimateTextTokens(text.trim()));
-  const attachmentEst = $derived(estimateAttachmentTokens(attachments));
+  const attachmentEst = $derived(estimateAttachmentTokens(attachments, selectedLlm.model));
 
   const knowledgeSelected = $derived(draft.enabled && draft.storages.length > 0);
   /** Direct-mode tokens once previewed; null while the amount is still unknown
@@ -183,18 +193,10 @@
   const anythingActive = $derived(selectedFilePaths.length > 0 || draft.enabled);
   const showTotal = $derived(anythingActive || text.trim().length > 0 || attachments.length > 0);
 
-  // Pricing: explicit toolbar override, else the agent's default model. Rates
-  // come from capability overrides first, then the provider's live catalog
-  // (e.g. OpenRouter publishes per-token pricing with its model list).
+  // Pricing rates: capability overrides first, then the provider's live
+  // catalog (e.g. OpenRouter publishes per-token pricing with its model list).
   const capabilitiesQuery = createModelCapabilitiesQuery();
   const pricingByModel = $derived(pricingFromCapabilities(capabilitiesQuery.data));
-  const selectedLlm = $derived.by(() => {
-    if (llm?.model) return { providerId: llm.providerId, model: llm.model.trim() };
-    const agent = (agentsQuery.data ?? []).find((a) => a.id === agentId);
-    if (!agent) return { providerId: "", model: "" };
-    const agentLlm = getAgentLlm(agent);
-    return { providerId: agentLlm.provider_id.trim(), model: agentLlm.model.trim() };
-  });
   const capabilityPricing = $derived(selectedLlm.model ? pricingByModel.get(selectedLlm.model) : undefined);
   const livePricingQuery = createQuery(() => ({
     queryKey: queryKeys.liveModelPricing(selectedLlm.providerId),

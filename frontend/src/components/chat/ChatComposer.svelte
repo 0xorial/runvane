@@ -6,7 +6,7 @@
   import type { OptimisticUserMessage } from "@/lib/chatSessionState.svelte";
   import { conversationHasRunningTask, ensureTasksStream } from "@/lib/tasksStore.svelte";
   import { agentIdFromSearch, replacePath, toolSandboxIdFromSearch } from "@/lib/router";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import type { ChatAgentSelection } from "./ChatAgentToolbar.svelte";
   import AttachmentChips, { type SelectedAttachment } from "./AttachmentChips.svelte";
   import MessageComposer from "./MessageComposer.svelte";
@@ -63,23 +63,45 @@
   const canSend = $derived((input.trim().length > 0 || selectedFiles.length > 0) && Boolean(effectiveAgentId));
   const agentRunning = $derived(conversationHasRunningTask(conversationId));
 
+  // Preview object URLs, cached per File: entry updates (mode flips, measured
+  // dims/pages) must NOT recreate them — revoking an URL an <img>/<iframe> is
+  // still loading aborts that request. Only files actually removed get their
+  // URL revoked (plus everything on unmount).
+  let previewUrlCache = new Map<File, string>();
   $effect(() => {
-    const urls = selectedFiles.map(({ file }) =>
-      file.type.startsWith("image/") || file.type === "application/pdf" ? URL.createObjectURL(file) : "",
-    );
-    previewUrls = urls;
-    return () => {
-      for (const url of urls) {
-        if (url) URL.revokeObjectURL(url);
+    const files = selectedFiles.map(({ file }) => file);
+    const next = new Map<File, string>();
+    for (const file of files) {
+      if (next.has(file)) continue;
+      const cached = previewUrlCache.get(file);
+      if (cached !== undefined) {
+        next.set(file, cached);
+        continue;
       }
-    };
+      const previewable = file.type.startsWith("image/") || file.type === "application/pdf";
+      next.set(file, previewable ? URL.createObjectURL(file) : "");
+    }
+    for (const [file, url] of previewUrlCache) {
+      if (!next.has(file) && url) URL.revokeObjectURL(url);
+    }
+    previewUrlCache = next;
+    previewUrls = files.map((file) => next.get(file) ?? "");
+  });
+
+  onDestroy(() => {
+    for (const url of previewUrlCache.values()) {
+      if (url) URL.revokeObjectURL(url);
+    }
   });
 
   function addFiles(files: File[]): void {
     if (files.length === 0) return;
     const wrapped = files.map((file) => ({ file, mode: defaultAttachmentMode(file) }));
     selectedFiles = [...selectedFiles, ...wrapped];
-    for (const entry of wrapped) measureImage(entry.file);
+    for (const entry of wrapped) {
+      measureImage(entry.file);
+      sniffPdfPages(entry.file);
+    }
   }
 
   /** The vision-token estimate needs pixel dimensions; measured once per
@@ -95,6 +117,25 @@
       },
       () => {
         /* undecodable image — stays an at-send unknown */
+      },
+    );
+  }
+
+  /** The per-page document estimate needs a page count. Sniffed from the raw
+   * bytes: count `/Type /Page` object markers; PDFs using compressed object
+   * streams hide them, so fall back to a size heuristic (~60KB/page). Rough
+   * on purpose — the estimate is labeled "~". */
+  function sniffPdfPages(file: File): void {
+    if (file.type !== "application/pdf" || file.size > 25_000_000) return;
+    file.arrayBuffer().then(
+      (buf) => {
+        const raw = new TextDecoder("latin1").decode(buf);
+        const markers = raw.match(/\/Type\s*\/Page(?![a-zA-Z])/g)?.length ?? 0;
+        const pdfPageCount = markers > 0 ? markers : Math.max(1, Math.ceil(file.size / 60_000));
+        selectedFiles = selectedFiles.map((x) => (x.file === file ? { ...x, pdfPageCount } : x));
+      },
+      () => {
+        /* unreadable — stays an at-send unknown */
       },
     );
   }

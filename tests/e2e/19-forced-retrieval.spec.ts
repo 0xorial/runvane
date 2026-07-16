@@ -274,6 +274,80 @@ test("direct attachments count into the estimate: text by size, images by measur
   await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~106 tok/);
 });
 
+test("direct PDFs price per sniffed page; images price by the send model's family rules", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(25_000);
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+  await app.chat.userInput.typeMessage("estimate attachments"); // ~5 tok
+
+  // A minimal 2-page PDF (uncompressed xref, two /Type /Page objects).
+  // Defaults to Summary — flip its chip to Direct → 2 × 1500/page (generic
+  // family: the default agent's model is 'stub').
+  const twoPagePdf = Buffer.from(
+    "%PDF-1.4\n" +
+      "1 0 obj<</Type /Catalog /Pages 2 0 R>>endobj\n" +
+      "2 0 obj<</Type /Pages /Kids [3 0 R 4 0 R] /Count 2>>endobj\n" +
+      "3 0 obj<</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]>>endobj\n" +
+      "4 0 obj<</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]>>endobj\n" +
+      "trailer<</Root 1 0 R>>\n%%EOF",
+  );
+  // NOTE: the chip previews PDFs in an <iframe src=blob:>; Chromium's PDF
+  // viewer holds a streaming fetch open, which aborts when the test's page
+  // closes. That specific requestfailed line is allowlisted by title in
+  // scripts/test-diagnostics.mjs.
+  await app.page.locator('input[type="file"]').setInputFiles({
+    name: "doc.pdf",
+    mimeType: "application/pdf",
+    buffer: twoPagePdf,
+  });
+  await app.page
+    .getByRole("radiogroup", { name: "Attachment mode" })
+    .getByRole("radio", { name: "Direct" })
+    .click();
+  await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~3005 tok/);
+});
+
+test("image estimate follows the model family: a claude-named model applies the pixel cap", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(25_000);
+  // Any stub-provider agent works — family detection reads the model NAME.
+  const createRes = await request.post(`${apiBaseUrl()}/api/agents`, {
+    data: {
+      name: `e2e-claude-family-${Date.now()}`,
+      system_prompt: "e2e",
+      default_llm_configuration: { provider_id: "stub", model_name: "anthropic/claude-test" },
+    },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const agent = (await createRes.json()) as { id: string };
+  try {
+    await app.chat.gotoNew(agent.id);
+    await app.chat.userInput.typeMessage("estimate attachments"); // ~5 tok
+
+    // Generate a real 1500×1000 PNG in-page: 1.5Mpx exceeds claude's ~1.15Mpx
+    // downscale cap → ceil(1_150_000 / 750) = 1534 tok (generic would be 2000).
+    await app.page.evaluate(async () => {
+      const canvas = new OffscreenCanvas(1500, 1000);
+      canvas.getContext("2d")!.fillRect(0, 0, 1500, 1000);
+      const blob = await canvas.convertToBlob({ type: "image/png" });
+      const file = new File([blob], "big.png", { type: "image/png" });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~1539 tok/);
+  } finally {
+    await request.delete(`${apiBaseUrl()}/api/agents/${agent.id}`);
+  }
+});
+
 test("verifying a provider persists discovered catalog pricing into the capability rows", async ({ request }) => {
   test.setTimeout(20_000);
   // The stub provider's discoverModels publishes fixed rates; a verify

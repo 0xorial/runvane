@@ -43,6 +43,12 @@ export function installTestDiagnostics(suite) {
   const ALLOWLIST = [
     // node:sqlite is a deliberate dependency (rag-store.ts); Node 22 flags it.
     /ExperimentalWarning: SQLite is an experimental feature/,
+    // Chromium's internal PDF viewer keeps a streaming fetch of the preview
+    // iframe's blob: URL open; closing the page at test end aborts it. Benign
+    // and unfixable from the app (networkidle can't be awaited — SSE), so it
+    // is allowlisted ONLY for the spec that previews a PDF chip. Other blob
+    // aborts (e.g. object-URL churn revoking a loading preview) still fail.
+    /\[browser requestfailed\] «direct PDFs price per sniffed page.*GET blob:.*ERR_ABORTED/,
   ];
   const problems = [];
   let lineBuf = "";

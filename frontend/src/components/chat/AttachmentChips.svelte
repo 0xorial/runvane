@@ -8,6 +8,9 @@
     /** Pixel size, measured once on add (images only) — drives the composer's
      *  vision-token estimate; unmeasured images price as at-send unknowns. */
     imageDims?: { width: number; height: number };
+    /** Page count, sniffed once on add (PDFs only) — drives the composer's
+     *  per-page document estimate; unsniffed PDFs price as at-send unknowns. */
+    pdfPageCount?: number;
   };
 
   let {
