@@ -12,6 +12,7 @@
   import { queryKeys } from "@/hooks/queries/keys";
   import { queryClient } from "@/lib/queryClient";
   import AddSandboxDialog from "./AddSandboxDialog.svelte";
+  import SandboxDetails from "./SandboxDetails.svelte";
   import SetupGuide from "./SetupGuide.svelte";
   import StartContextSection from "./StartContextSection.svelte";
   import ToolSandboxIcon from "./ToolSandboxIcon.svelte";
@@ -67,6 +68,11 @@
     await queryClient.invalidateQueries({ queryKey: queryKeys.toolSandboxes });
     selectEnv(env.id);
   }
+
+  // Inline details for a sandbox card — right here on the empty-chat page,
+  // no settings round-trip to see what a box actually is.
+  let detailsEnvId = $state<string | null>(null);
+  const detailsEnv = $derived(sandboxes.find((e) => e.id === detailsEnvId) ?? null);
 
   function enabledToolIds(agent: AgentListItemResponse): string[] {
     const tools = agent.default_llm_configuration?.tools;
@@ -128,18 +134,25 @@
                   <span class="mt-0.5 block break-words text-[11px] leading-snug text-muted-foreground">{toolSandboxDescription(env)}</span>
                 </span>
                 {#if !env.builtin}
-                  <a
-                    href="/settings/tool-sandboxes"
+                  <button
+                    type="button"
+                    data-testid="tool-env-info"
                     title="Sandbox details"
-                    onclick={(e) => e.stopPropagation()}
-                    class="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-secondary/60 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                    aria-expanded={detailsEnvId === env.id}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      detailsEnvId = detailsEnvId === env.id ? null : env.id;
+                    }}
+                    class="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-secondary/60 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 {detailsEnvId === env.id
+                      ? 'bg-secondary/60 text-foreground opacity-100'
+                      : ''}"
                   >
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85">
-                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                      <circle cx="12" cy="12" r="3" />
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 16v-5M12 8h.01" />
                     </svg>
                     <span class="sr-only">Sandbox details</span>
-                  </a>
+                  </button>
                 {/if}
               </div>
             {/each}
@@ -155,6 +168,31 @@
               <span class="text-sm font-medium text-muted-foreground">Add sandbox</span>
             </button>
           </div>
+          {#if detailsEnv}
+            <div class="mt-2 rounded-xl border border-border bg-card/40 p-2.5" data-testid="tool-env-inline-details">
+              <div class="mb-1.5 flex items-center gap-1.5">
+                <span class="text-sm font-medium text-foreground">{detailsEnv.name}</span>
+                {#if detailsEnv.docker}
+                  <span class="rounded bg-muted px-1 text-[10px] font-medium uppercase text-muted-foreground">docker</span>
+                {/if}
+                <a
+                  href="/settings/tool-sandboxes"
+                  class="text-[11px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  manage ↗
+                </a>
+                <button
+                  type="button"
+                  class="ml-auto rounded p-0.5 text-muted-foreground hover:text-foreground"
+                  aria-label="Close details"
+                  onclick={() => (detailsEnvId = null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <SandboxDetails env={detailsEnv} />
+            </div>
+          {/if}
         </div>
       {/if}
       <div class="mb-1.5 text-xs font-medium text-muted-foreground">Agent</div>

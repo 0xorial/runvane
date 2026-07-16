@@ -105,6 +105,30 @@ test("add-sandbox card opens a dialog that creates and selects a new ssh env", a
   }
 });
 
+test("sandbox cards show details inline on the empty-chat page", async ({ app, page, request }) => {
+  const agentId = await defaultAgentId(request);
+  const createRes = await request.post(`${apiBaseUrl()}/api/tool-sandboxes`, {
+    data: { name: "E2E Detail Box", ssh: { host: "detail.local", user: "dev", identityFile: "/keys/id" } },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const created = (await createRes.json()) as { id: string };
+  try {
+    await app.chat.gotoNew(agentId);
+    const card = page.locator(`[data-testid="tool-env-card"][data-env-id="${created.id}"]`);
+    await card.getByTestId("tool-env-info").click();
+
+    // Full config right here — no settings round-trip.
+    const panel = page.getByTestId("tool-env-inline-details");
+    await expect(panel).toContainText("E2E Detail Box");
+    await expect(panel).toContainText("dev@detail.local");
+    await expect(panel).toContainText("/keys/id");
+    await panel.getByRole("button", { name: "Close details" }).click();
+    await expect(panel).toBeHidden();
+  } finally {
+    await request.delete(`${apiBaseUrl()}/api/tool-sandboxes/${created.id}`);
+  }
+});
+
 test("docker mount rows offer a harness-host folder browser that fills both paths", async ({
   app,
   page,
