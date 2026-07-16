@@ -201,6 +201,16 @@
     if (totalKnown === 0 || !modelPricing) return "";
     return `≈${formatCostUsd((totalKnown / 1_000_000) * modelPricing.inCostPer1m)}`;
   });
+  /** There is something to price and a model to price it with, but no rate
+   *  anywhere (capability overrides and live catalog both came up empty) —
+   *  offer the fix instead of silently showing tokens only. */
+  const pricingMissing = $derived(
+    totalKnown > 0 &&
+      Boolean(selectedLlm.model) &&
+      !modelPricing &&
+      capabilitiesQuery.data !== undefined &&
+      !livePricingQuery.isLoading,
+  );
 
   const totalLabel = $derived.by(() => {
     if (!showTotal) return "";
@@ -242,6 +252,24 @@
     "inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors";
   const noteText = "text-[11px] text-muted-foreground";
 </script>
+
+{#snippet estimateLine()}
+  <span class="ml-auto flex shrink-0 items-center gap-1.5 pr-1">
+    <span class="text-[11px] tabular-nums text-muted-foreground" title={totalTitle} data-testid="chat-context-total">
+      {totalLabel}
+    </span>
+    {#if pricingMissing}
+      <a
+        href="/settings/model-pricing?focus={encodeURIComponent(selectedLlm.model)}"
+        class="text-[11px] text-primary underline-offset-4 hover:underline"
+        data-testid="set-price-link"
+        title="No rate configured for {selectedLlm.model} — set one to see cost estimates"
+      >
+        set price ↗
+      </a>
+    {/if}
+  </span>
+{/snippet}
 
 {#snippet knowledgeHeaderRight()}
   {#if draft.enabled && draft.storages.length > 0}
@@ -306,13 +334,7 @@
     <!-- Staging lives in the Start context section above; the box only prices the send. -->
     {#if totalLabel}
       <div class="flex items-center">
-        <span
-          class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground"
-          title={totalTitle}
-          data-testid="chat-context-total"
-        >
-          {totalLabel}
-        </span>
+        {@render estimateLine()}
       </div>
     {/if}
   {:else}
@@ -346,13 +368,7 @@
       </button>
       <span class="text-[11px] text-muted-foreground" data-testid="chat-context-summary">{chipSummary}</span>
       {#if totalLabel}
-        <span
-          class="ml-auto pr-1 text-[11px] tabular-nums text-muted-foreground"
-          title={totalTitle}
-          data-testid="chat-context-total"
-        >
-          {totalLabel}
-        </span>
+        {@render estimateLine()}
       {/if}
     </div>
 

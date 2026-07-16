@@ -242,6 +242,31 @@ test("typing alone prices the send — tokens and cost from the provider's live 
   await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok · ≈\$\d/);
 });
 
+test("a model without any pricing offers a set-price link next to the estimate", async ({ app, request }) => {
+  test.setTimeout(20_000);
+  // 'e2e-unpriced' is off the stub provider's priced catalog and has no
+  // capability override — the estimate must offer the fix, not stay silent.
+  const createRes = await request.post(`${apiBaseUrl()}/api/agents`, {
+    data: {
+      name: `e2e-unpriced-${Date.now()}`,
+      system_prompt: "e2e",
+      default_llm_configuration: { provider_id: "stub", model_name: "e2e-unpriced" },
+    },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const agent = (await createRes.json()) as { id: string };
+  try {
+    await app.chat.gotoNew(agent.id);
+    await app.chat.userInput.typeMessage("price this message please");
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok(?!.*≈\$)/);
+    const link = app.page.getByTestId("set-price-link");
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", /\/settings\/model-pricing\?focus=e2e-unpriced/);
+  } finally {
+    await request.delete(`${apiBaseUrl()}/api/agents/${agent.id}`);
+  }
+});
+
 test("preview endpoint returns the hits and token estimate a send would inject", async ({ request }) => {
   test.setTimeout(25_000);
   const docs = await makeDocs({ "db.md": DB_DOC, "cooking.md": COOK_DOC });
