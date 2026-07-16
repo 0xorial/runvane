@@ -109,6 +109,77 @@ test("mode 'selected' only injects the chosen category; others are recorded as s
   }
 });
 
+test("preview endpoint prices the exact scan a first message would inject", async ({ request }) => {
+  test.setTimeout(15_000);
+  const agentId = await defaultAgentId(request);
+  const original = await setAgentPreinject(request, agentId, { mode: "all" });
+
+  try {
+    const res = await request.get(`${apiBaseUrl()}/api/context-injection/preview?agentId=${agentId}`);
+    expect(res.ok()).toBeTruthy();
+    const preview = (await res.json()) as {
+      mode: string;
+      files: Array<{ path: string; status: string; tokens?: number; content?: string }>;
+      totalTokens: number;
+    };
+    expect(preview.mode).toBe("all");
+    const readme = preview.files.find((f) => f.path === "README.md");
+    expect(readme?.status).toBe("injected");
+    expect(readme?.tokens ?? 0).toBeGreaterThan(0);
+    // The examinable content is the exact planner section for this file.
+    expect(readme?.content).toContain(README_MARKER);
+    expect(preview.totalTokens).toBeGreaterThan(0);
+  } finally {
+    await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
+  }
+});
+
+test("preview endpoint: an unset preinject config reads as mode 'none' with nothing injected", async ({
+  request,
+}) => {
+  test.setTimeout(15_000);
+  // FORBID_AGENT_ID's seeded config has no `preinject` key at all.
+  const res = await request.get(`${apiBaseUrl()}/api/context-injection/preview?agentId=${FORBID_AGENT_ID}`);
+  expect(res.ok()).toBeTruthy();
+  const preview = (await res.json()) as { mode: string; files: unknown[]; totalTokens: number };
+  expect(preview.mode).toBe("none");
+  expect(preview.files).toEqual([]);
+  expect(preview.totalTokens).toBe(0);
+});
+
+test("composer Context panel lists the files half pre-send; existing conversations show the first-message note", async ({
+  app,
+  request,
+}) => {
+  test.setTimeout(30_000);
+  const agentId = await defaultAgentId(request);
+  const original = await setAgentPreinject(request, agentId, { mode: "all" });
+
+  try {
+    await app.chat.gotoNew(agentId);
+
+    // Collapsed rollup: file count + total tokens, visible before anything is sent.
+    await expect(app.page.getByTestId("chat-context-summary")).toContainText(/\d+ files?/);
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
+
+    // Panel: per-file rows carry their own token estimate, and the content
+    // the planner would receive is examinable in place.
+    await app.page.getByTestId("chat-context-chip").click();
+    const readmeRow = app.page.locator('[data-testid="context-file-row"][data-file-path="README.md"]');
+    await expect(readmeRow).toContainText(/~\d+ tok/);
+    await readmeRow.click();
+    await expect(app.page.getByTestId("context-file-content")).toContainText(README_MARKER);
+
+    // Existing conversation: the files half is first-message-only and says so.
+    const conversationId = await createProbeConversation(request, agentId);
+    await app.chat.open(conversationId);
+    await app.page.getByTestId("chat-context-chip").click();
+    await expect(app.page.getByTestId("context-files-note")).toContainText("first message only");
+  } finally {
+    await setAgentPreinject(request, agentId, original?.preinject as Record<string, unknown> | undefined);
+  }
+});
+
 test("agents without a preinject config get no context-injection entry", async ({ request }) => {
   test.setTimeout(25_000);
   // FORBID_AGENT_ID's seeded config has no `preinject` key at all — the

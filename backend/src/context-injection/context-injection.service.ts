@@ -35,6 +35,10 @@ const CANDIDATES: readonly Candidate[] = [
 export type ContextInjectionResult = {
   files: PreinjectedFileRecord[];
   content: string;
+  /** Per-file planner sections (`--- path ---\n<content>`) keyed by relPath,
+   *  injected files only. `content` is these joined in candidate order; the
+   *  preview endpoint uses them to show and price each file individually. */
+  sections: Record<string, string>;
 };
 
 /**
@@ -59,7 +63,7 @@ export class ContextInjectionService {
     const selectedTypes = mode === 'selected' ? new Set(config?.types ?? []) : null;
 
     const files: PreinjectedFileRecord[] = [];
-    const sections: string[] = [];
+    const sections: Record<string, string> = {};
     for (const candidate of CANDIDATES) {
       const absPath = path.join(root, candidate.relPath);
       const found = await this.statFile(absPath);
@@ -77,11 +81,11 @@ export class ContextInjectionService {
         continue;
       }
       files.push({ path: candidate.relPath, fileType: candidate.fileType, status: 'injected' });
-      sections.push(`--- ${candidate.relPath} ---\n${content}`);
+      sections[candidate.relPath] = `--- ${candidate.relPath} ---\n${content}`;
     }
 
     if (files.length === 0) return null;
-    return { files, content: sections.join('\n\n') };
+    return { files, content: Object.values(sections).join('\n\n'), sections };
   }
 
   private async statFile(absPath: string): Promise<boolean> {

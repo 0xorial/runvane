@@ -246,7 +246,7 @@ test("preview endpoint returns the hits and token estimate a send would inject",
   }
 });
 
-test("composer bar: toggle + storage chip preview the injection, send records it, and the draft resets", async ({
+test("composer Context panel: knowledge toggle + storage preview the injection with examinable hits and a total, send records it, and the draft resets", async ({
   app,
   request,
 }) => {
@@ -258,7 +258,8 @@ test("composer bar: toggle + storage chip preview the injection, send records it
   try {
     await app.chat.gotoNew(agentId);
 
-    // Enable forced retrieval and pick the storage in the bar above the input.
+    // Open the unified Context panel, switch knowledge search on, pick the storage.
+    await app.page.getByTestId("chat-context-chip").click();
     await app.page.getByTestId("chat-knowledge-toggle").click();
     await app.page.locator(`[data-testid="chat-knowledge-storage"][data-storage-name="${name}"]`).click();
 
@@ -267,6 +268,13 @@ test("composer bar: toggle + storage chip preview the injection, send records it
     await app.chat.userInput.typeMessage(DB_QUESTION);
     const previewText = app.page.getByTestId("retrieval-preview");
     await expect(previewText).toContainText(/excerpts? · ~\d+ tok/, { timeout: 10_000 });
+
+    // The hits are examinable before sending, and the rollup prices the send.
+    const firstExcerpt = app.page.getByTestId("context-excerpt-row").first();
+    await expect(firstExcerpt).toContainText("db.md");
+    await firstExcerpt.click();
+    await expect(app.page.getByTestId("context-excerpt-text")).toContainText("managed by Prisma");
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
 
     await app.chat.userInput.send();
 
@@ -277,7 +285,11 @@ test("composer bar: toggle + storage chip preview the injection, send records it
     await expect(row.getByTestId("retrieval-hit-source").first()).toHaveText("db.md");
     await expect(row.getByTestId("retrieval-query-origin").first()).toHaveText("verbatim");
 
-    // Single-shot: the toggle switched itself off after sending.
+    // Single-shot: the knowledge draft switched itself off after sending.
+    // (Navigation to the new conversation may have remounted the bar with the
+    // panel closed — reopen it to reach the toggle.)
+    const chip = app.page.getByTestId("chat-context-chip");
+    if ((await chip.getAttribute("aria-expanded")) !== "true") await chip.click();
     await expect(app.page.getByTestId("chat-knowledge-toggle")).toHaveAttribute("aria-pressed", "false");
   } finally {
     await deleteStorage(request, storageId);

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ContextInjectionController } from '../context-injection/context-injection.controller.js';
 import { ContextInjectionService } from '../context-injection/context-injection.service.js';
 import { DatabaseModule } from '../db/database.module.js';
 import { DecisionStep } from '../thoughtProcessing/steps/decisionStep.js';
@@ -24,7 +25,7 @@ import { ConversationsService } from './conversations.service.js';
 
 @Module({
   imports: [DatabaseModule, ToolsModule, UploadsModule, KnowledgeModule],
-  controllers: [ConversationsController],
+  controllers: [ConversationsController, ContextInjectionController],
   providers: [
     ConversationsService,
     ConversationCategorizerService,

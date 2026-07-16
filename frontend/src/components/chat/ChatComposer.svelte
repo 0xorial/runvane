@@ -14,7 +14,7 @@
   import type { PendingMessage } from "@/lib/chatSessionStore";
   import { compileUserMessageOverrides, EMPTY_KNOWLEDGE_DRAFT } from "@/lib/chatToolOverrides";
   import { getChatKnowledgeDraft, getChatToolDraft, setChatKnowledgeDraft } from "@/lib/chatToolDraft.svelte";
-  import RetrievalActionBar from "./RetrievalActionBar.svelte";
+  import ContextInjectionBar from "./ContextInjectionBar.svelte";
   import { defaultAttachmentMode, sendMessageToConversation, type MessageSendMode } from "./sendMessage";
 
   let {
@@ -198,8 +198,8 @@
   onPasteFiles={addFiles}
   onFileInputChange={addFiles}
 >
-  {#snippet retrievalSlot(text: string)}
-    <RetrievalActionBar {text} />
+  {#snippet contextSlot(text: string)}
+    <ContextInjectionBar {text} agentId={effectiveAgentId} {conversationId} />
   {/snippet}
   {#snippet queuedSlot()}
     {#if conversationId && pendingMessages.length > 0}

@@ -28,6 +28,8 @@ export type {
   PreinjectFileStatus,
   PreinjectFileType,
   PreinjectMode,
+  PreinjectPreviewFile,
+  PreinjectPreviewResult,
 } from "../../../backend/src/contracts/preinject.js";
 export { PREINJECT_FILE_TYPES } from "../../../backend/src/contracts/preinject.js";
 

@@ -37,3 +37,26 @@ export const PreinjectedFileRecordSchema = z.object({
   status: PreinjectFileStatusSchema,
 });
 export type PreinjectedFileRecord = z.infer<typeof PreinjectedFileRecordSchema>;
+
+// ---- Composer preview (GET /api/context-injection/preview) ----
+// Nothing below is ever persisted: it is the record shape plus the content and
+// token detail the composer shows BEFORE the first message is sent.
+
+export const PreinjectPreviewFileSchema = PreinjectedFileRecordSchema.extend({
+  /** The exact planner section this file contributes (`--- path ---\n<content>`).
+   *  Injected files only — the composer's "examine" affordance. */
+  content: z.string().optional(),
+  /** ~tokens of `content` (same chars/4 estimator as the knowledge preview). */
+  tokens: z.number().optional(),
+});
+export type PreinjectPreviewFile = z.infer<typeof PreinjectPreviewFileSchema>;
+
+export const PreinjectPreviewResultSchema = z.object({
+  /** The agent's effective preinject mode ('none' when unset). */
+  mode: PreinjectModeSchema,
+  files: z.array(PreinjectPreviewFileSchema),
+  /** ~tokens of the exact `[Project context files]` block the planner would
+   *  receive on a first message (see plannerPrompt); 0 when nothing injects. */
+  totalTokens: z.number(),
+});
+export type PreinjectPreviewResult = z.infer<typeof PreinjectPreviewResultSchema>;

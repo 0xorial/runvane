@@ -1,4 +1,5 @@
 import type { ChatEntry, ThoughtEntry } from '../../contracts/chatEntry.js';
+import { formatContextFilesBlock } from '../../context-injection/context-files-block.js';
 import { formatRetrievalContext } from '../../knowledge/retrieval/retrieval-context.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 import { stripToolParamEnvelope } from '../../tools/toolParamEnvelope.js';
@@ -226,14 +227,14 @@ function entryToMessages(
       // branch and are naturally absent from this chain, so the planner
       // sees just this condensed paragraph in their place.
       return [textMessage('system', `[Earlier in this conversation, summarized]\n${entry.summaryText}`)];
-    case 'context-injection':
+    case 'context-injection': {
       if (entry.source === 'knowledge') return [textMessage('system', retrievalAsContext(entry))];
-      // files source. Empty when the scan found nothing to inject (mode 'none',
-      // or no candidate files matched); the entry is still persisted for the
-      // audit trail (`files`), just with no message to contribute here.
-      return (entry.content ?? '').trim().length > 0
-        ? [textMessage('system', `[Project context files]\n${entry.content}`)]
-        : [];
+      // files source. The entry is persisted even when nothing was injected
+      // (audit trail in `files`); formatContextFilesBlock returns null then
+      // and the entry contributes no message.
+      const filesBlock = formatContextFilesBlock(entry.content);
+      return filesBlock ? [textMessage('system', filesBlock)] : [];
+    }
     case 'thought':
       // Internal plumbing — thoughts contribute nothing to the prompt
       // directly (attachment summaries are folded in at the user message).
