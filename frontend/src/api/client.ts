@@ -574,6 +574,20 @@ export function createToolSandbox(body: { name: string; ssh: SshSandboxConfig })
   return sendJson("/api/tool-sandboxes", "POST", body) as Promise<ToolSandbox>;
 }
 
+export type HostBrowseResult = {
+  path: string;
+  parent: string | null;
+  dirs: Array<{ name: string; path: string }>;
+  error?: string;
+};
+
+/** Directory listing on the harness host (mount picker). Omit path for the
+ *  app's workspace. */
+export function browseSandboxHost(path?: string): Promise<HostBrowseResult> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : "";
+  return getJson(`/api/tool-sandboxes/browse-host${params}`) as Promise<HostBrowseResult>;
+}
+
 /** Create a runvane-managed docker sandbox (container + keys + ssh row).
  *  Slow on first use — the sandbox image may be built/pulled. */
 export function createDockerSandbox(body: {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createDockerSandbox, createToolSandbox } from "@/api/client";
+  import { browseSandboxHost, createDockerSandbox, createToolSandbox, type HostBrowseResult } from "@/api/client";
   import type { SshSandboxConfig, ToolSandbox } from "../../../../backend/src/contracts/tool-sandbox";
 
   let {
@@ -68,6 +68,46 @@
 
   function removeMount(index: number): void {
     mounts = mounts.filter((_, i) => i !== index);
+    if (browsingMount === index) browsingMount = null;
+  }
+
+  // ---- Harness-host directory picker (one open at a time, per mount row) ----
+
+  let browsingMount = $state<number | null>(null);
+  let browse = $state<HostBrowseResult | null>(null);
+  let browseLoading = $state(false);
+
+  async function browseTo(path?: string): Promise<void> {
+    browseLoading = true;
+    try {
+      browse = await browseSandboxHost(path);
+    } catch (e) {
+      browse = { path: path ?? "", parent: null, dirs: [], error: e instanceof Error ? e.message : String(e) };
+    } finally {
+      browseLoading = false;
+    }
+  }
+
+  function openBrowser(index: number): void {
+    if (browsingMount === index) {
+      browsingMount = null;
+      return;
+    }
+    browsingMount = index;
+    const seed = mounts[index]?.host.trim();
+    void browseTo(seed && seed.startsWith("/") ? seed : undefined);
+  }
+
+  /** Fill the row with the browsed folder; suggest a container path when empty. */
+  function useBrowsedFolder(): void {
+    if (browsingMount === null || !browse) return;
+    const picked = browse.path;
+    mounts = mounts.map((m, i) => {
+      if (i !== browsingMount) return m;
+      const basename = picked.split("/").filter(Boolean).pop() ?? "mounted";
+      return { ...m, host: picked, container: m.container.trim() || `/workspace/${basename}` };
+    });
+    browsingMount = null;
   }
 
   async function submit(): Promise<void> {
@@ -180,32 +220,100 @@
           {:else}
             <div class="space-y-1.5">
               {#each mounts as mount, i (i)}
-                <div class="flex items-center gap-1.5">
-                  <input
-                    class={inputClass}
-                    data-testid="add-env-mount-host"
-                    bind:value={mount.host}
-                    placeholder="/host/path"
-                  />
-                  <span class="text-xs text-muted-foreground">→</span>
-                  <input
-                    class={inputClass}
-                    data-testid="add-env-mount-container"
-                    bind:value={mount.container}
-                    placeholder="/workspace/project"
-                  />
-                  <label class="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Mount read-only">
-                    <input type="checkbox" bind:checked={mount.readonly} />
-                    ro
-                  </label>
-                  <button
-                    type="button"
-                    class="shrink-0 rounded px-1 text-xs text-muted-foreground hover:text-destructive"
-                    aria-label="Remove mount"
-                    onclick={() => removeMount(i)}
-                  >
-                    ✕
-                  </button>
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <input
+                      class={inputClass}
+                      data-testid="add-env-mount-host"
+                      bind:value={mount.host}
+                      placeholder="/host/path"
+                    />
+                    <button
+                      type="button"
+                      data-testid="add-env-mount-browse"
+                      aria-pressed={browsingMount === i}
+                      title="Browse the harness host"
+                      class="shrink-0 rounded-md border border-input px-1.5 py-1 text-xs {browsingMount === i
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-muted-foreground hover:text-foreground'}"
+                      onclick={() => openBrowser(i)}
+                    >
+                      <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                      </svg>
+                    </button>
+                    <span class="text-xs text-muted-foreground">→</span>
+                    <input
+                      class={inputClass}
+                      data-testid="add-env-mount-container"
+                      bind:value={mount.container}
+                      placeholder="/workspace/project"
+                    />
+                    <label class="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title="Mount read-only">
+                      <input type="checkbox" bind:checked={mount.readonly} />
+                      ro
+                    </label>
+                    <button
+                      type="button"
+                      class="shrink-0 rounded px-1 text-xs text-muted-foreground hover:text-destructive"
+                      aria-label="Remove mount"
+                      onclick={() => removeMount(i)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {#if browsingMount === i}
+                    <div class="mt-1 rounded-md border border-border bg-background" data-testid="add-env-host-browser">
+                      <div class="flex items-center gap-1.5 border-b border-border/60 px-2 py-1">
+                        <button
+                          type="button"
+                          data-testid="add-env-browse-up"
+                          class="shrink-0 rounded px-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+                          disabled={!browse?.parent}
+                          title="Up one level"
+                          onclick={() => browse?.parent && void browseTo(browse.parent)}
+                        >
+                          ↑
+                        </button>
+                        <code class="min-w-0 flex-1 truncate text-[11px] text-secondary-foreground" title={browse?.path}
+                          >{browse?.path ?? "…"}</code
+                        >
+                        <button
+                          type="button"
+                          data-testid="add-env-browse-use"
+                          class="shrink-0 rounded-md bg-primary px-1.5 py-0.5 text-[11px] text-primary-foreground disabled:opacity-50"
+                          disabled={!browse || Boolean(browse.error)}
+                          onclick={useBrowsedFolder}
+                        >
+                          Use this folder
+                        </button>
+                      </div>
+                      <div class="scrollbar-thin max-h-36 overflow-y-auto p-1">
+                        {#if browseLoading}
+                          <p class="px-1 py-0.5 text-[11px] text-muted-foreground">loading…</p>
+                        {:else if browse?.error}
+                          <p class="px-1 py-0.5 text-[11px] text-destructive">{browse.error}</p>
+                        {:else if (browse?.dirs ?? []).length === 0}
+                          <p class="px-1 py-0.5 text-[11px] text-muted-foreground">no subfolders</p>
+                        {:else}
+                          {#each browse?.dirs ?? [] as dir (dir.path)}
+                            <button
+                              type="button"
+                              data-testid="add-env-browse-dir"
+                              data-dir-name={dir.name}
+                              class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[11px] text-foreground hover:bg-secondary/60"
+                              onclick={() => void browseTo(dir.path)}
+                            >
+                              <svg class="h-3 w-3 shrink-0 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                              </svg>
+                              <span class="min-w-0 truncate {dir.name.startsWith('.') ? 'text-muted-foreground' : ''}">{dir.name}</span>
+                            </button>
+                          {/each}
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>

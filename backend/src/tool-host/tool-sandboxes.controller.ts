@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import type { ListToolSandboxesResponse, ToolSandbox } from '../contracts/tool-sandbox.js';
 import { CreateDockerSandboxDto } from './dto/create-docker-sandbox.dto.js';
-import { UpsertToolSandboxDto } from './dto/upsert-tool-sandbox.dto.js';
+import { browseHostDirectory, type HostBrowseResult } from './host-browse.js';
 import { SandboxContainersService } from './sandbox-containers.service.js';
 import { ToolSandboxesService } from './tool-sandboxes.service.js';
+import { UpsertToolSandboxDto } from './dto/upsert-tool-sandbox.dto.js';
 
 @Controller('api/tool-sandboxes')
 export class ToolSandboxesController {
@@ -20,6 +21,13 @@ export class ToolSandboxesController {
   @Post()
   async create(@Body() body: UpsertToolSandboxDto): Promise<ToolSandbox> {
     return this.sandboxes.upsert({ name: body.name, ssh: body.ssh });
+  }
+
+  /** Directory listing on the harness host — the mount picker's backend.
+   *  Defaults to the app's workspace (cwd) when no path is given. */
+  @Get('browse-host')
+  async browseHost(@Query('path') path?: string): Promise<HostBrowseResult> {
+    return browseHostDirectory(path);
   }
 
   /** Create a runvane-managed docker sandbox and register it (as ssh). */

@@ -105,6 +105,41 @@ test("add-sandbox card opens a dialog that creates and selects a new ssh env", a
   }
 });
 
+test("docker mount rows offer a harness-host folder browser that fills both paths", async ({
+  app,
+  page,
+  request,
+}) => {
+  const agentId = await defaultAgentId(request);
+  await app.chat.gotoNew(agentId);
+
+  await page.getByTestId("tool-env-add").click();
+  const dialog = page.getByTestId("add-env-dialog");
+  await expect(dialog).toBeVisible();
+
+  // Docker mode (the default) → add a mount row → browse.
+  await dialog.getByTestId("add-env-add-mount").click();
+  await dialog.getByTestId("add-env-mount-browse").click();
+  const browser = dialog.getByTestId("add-env-host-browser");
+  await expect(browser).toBeVisible();
+
+  // Starts at the harness workspace (the e2e backend runs from frontend/):
+  // its src/ dir is listed; entering it updates the path header.
+  const srcDir = browser.locator('[data-testid="add-env-browse-dir"][data-dir-name="src"]');
+  await expect(srcDir).toBeVisible();
+  await srcDir.click();
+  await expect(browser.locator("code")).toHaveText(/frontend\/src$/);
+
+  // Picking fills the host path and suggests a container path from the basename.
+  await browser.getByTestId("add-env-browse-use").click();
+  await expect(browser).toBeHidden();
+  await expect(dialog.getByTestId("add-env-mount-host")).toHaveValue(/frontend\/src$/);
+  await expect(dialog.getByTestId("add-env-mount-container")).toHaveValue("/workspace/src");
+
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+});
+
 test("settings Tool Sandboxes section creates and deletes an ssh env", async ({ page }) => {
   await page.goto("/settings/tool-sandboxes", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("tool-sandboxes-section")).toBeVisible();
