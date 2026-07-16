@@ -42,6 +42,7 @@ docker run -d --name rv-dev -p 52200:52200 -p 52201:52201 \
   -v rv-backend-nm:/workspace/backend/node_modules \
   -v rv-frontend-nm:/workspace/frontend/node_modules \
   -v "$HERE/dev-entry.sh":/usr/local/bin/dev-entry.sh \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   runvane-dev
 
 # 5. rv-stable — pinned snapshot, real DB, built artifacts (entry mounted from this repo).
@@ -56,6 +57,7 @@ docker run -d --name rv-stable -p 52210:52210 -p 52211:52211 \
   -v rv-backend-nm-stable:/app/backend/node_modules \
   -v rv-frontend-nm-stable:/app/frontend/node_modules \
   -v "$HERE/dev-entry-stable.sh":/usr/local/bin/dev-entry-stable.sh \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   runvane-dev /usr/local/bin/dev-entry-stable.sh
 
 # Join the enabler's network (if it's up) so the endpoint hostnames resolve —

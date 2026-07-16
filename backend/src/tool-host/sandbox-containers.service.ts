@@ -146,6 +146,11 @@ export class SandboxContainersService {
       const { stdout } = await execFileAsync('docker', args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 });
       return stdout;
     } catch (err) {
+      if ((err as { code?: string }).code === 'ENOENT') {
+        throw new Error(
+          'the docker CLI is not available on the harness host — docker sandboxes need it (plus a reachable daemon)',
+        );
+      }
       const stderr = (err as { stderr?: string }).stderr?.trim();
       throw new Error(`docker ${args[0]} failed: ${stderr || (err as Error).message}`);
     }

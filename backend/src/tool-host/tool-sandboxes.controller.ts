@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpException,
+  InternalServerErrorException,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import type { ListToolSandboxesResponse, ToolSandbox } from '../contracts/tool-sandbox.js';
 import { CreateDockerSandboxDto } from './dto/create-docker-sandbox.dto.js';
 import { browseHostDirectory, type HostBrowseResult } from './host-browse.js';
@@ -34,7 +45,15 @@ export class ToolSandboxesController {
   @Post('docker')
   async createDocker(@Body() body: CreateDockerSandboxDto): Promise<ToolSandbox> {
     const sandboxId = `sbx-${crypto.randomUUID().slice(0, 8)}`;
-    const row = await this.containers.create(sandboxId, body);
+    let row: ToolSandbox;
+    try {
+      row = await this.containers.create(sandboxId, body);
+    } catch (err) {
+      // The failure reason (docker missing, build/pull failure, bad mount)
+      // must reach the dialog — a bare 500 hides it.
+      if (err instanceof HttpException) throw err;
+      throw new InternalServerErrorException((err as Error).message);
+    }
     try {
       return await this.sandboxes.saveRow(row);
     } catch (err) {

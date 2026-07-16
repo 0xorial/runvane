@@ -61,9 +61,16 @@ import {
 export type { PostConversationMessageAcceptedResponse } from "../../../backend/src/contracts/conversations";
 
 function errDetail(data: unknown, fallback: string): string {
-  if (data && typeof data === "object" && "detail" in data) {
-    const d = (data as { detail?: unknown }).detail;
-    if (typeof d === "string") return d;
+  if (data && typeof data === "object") {
+    // Our handlers use `detail`; Nest's HttpExceptions use `message`
+    // (string or array of validation messages). Surface whichever exists —
+    // a bare "HTTP 500" hides the actual reason from the user.
+    const rec = data as { detail?: unknown; message?: unknown };
+    if (typeof rec.detail === "string" && rec.detail) return rec.detail;
+    if (typeof rec.message === "string" && rec.message && rec.message !== "Internal server error") {
+      return rec.message;
+    }
+    if (Array.isArray(rec.message) && rec.message.length > 0) return rec.message.map(String).join("; ");
   }
   return fallback;
 }
