@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { PreinjectPreviewFile } from "@/api/contextInjectionClient";
-  import { PREINJECT_FILE_TYPE_LABELS } from "@/pages/settings/agentPreinject";
 
   // Shared candidate-file list: read-only rows in the Start context section,
   // checkbox rows in the composer's per-message attach picker. Every injectable
@@ -63,9 +62,6 @@
             <path d="m9 18 6-6-6-6" />
           </svg>
           <code class="text-secondary-foreground">{file.path}</code>
-          <span class="min-w-0 truncate text-muted-foreground">
-            {PREINJECT_FILE_TYPE_LABELS[file.fileType].split(" (")[0]}
-          </span>
           {#if injected}
             <span class="ml-auto shrink-0 tabular-nums text-muted-foreground">~{file.tokens ?? 0} tok</span>
           {:else}
