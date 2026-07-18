@@ -32,7 +32,7 @@ WEB_BROWSE_ENDPOINT="${RUNVANE_WEB_BROWSE_ENDPOINT:-http://ai-browsing-enabler-e
 
 # 4. rv-dev — hot-reload, its own DB.
 docker rm -f rv-dev >/dev/null 2>&1 || true
-docker run -d --name rv-dev -p 52200:52200 -p 52201:52201 \
+docker run -d --name rv-dev --restart unless-stopped -p 52200:52200 -p 52201:52201 \
   -e BACKEND_PORT=52200 -e FRONTEND_PORT=52201 \
   -e FRONTEND_ORIGIN=http://localhost:52201 -e VITE_API_BASE_URL=http://localhost:52200 \
   -e DATABASE_URL="file:$DEV_DB" \
@@ -47,7 +47,7 @@ docker run -d --name rv-dev -p 52200:52200 -p 52201:52201 \
 
 # 5. rv-stable — pinned snapshot, real DB, built artifacts (entry mounted from this repo).
 docker rm -f rv-stable >/dev/null 2>&1 || true
-docker run -d --name rv-stable -p 52210:52210 -p 52211:52211 \
+docker run -d --name rv-stable --restart unless-stopped -p 52210:52210 -p 52211:52211 \
   -e BACKEND_PORT=52210 -e FRONTEND_PORT=52211 \
   -e FRONTEND_ORIGIN=http://localhost:52211 -e VITE_API_BASE_URL=http://localhost:52210 \
   -e DATABASE_URL=file:/dbdir/backend.sqlite \
