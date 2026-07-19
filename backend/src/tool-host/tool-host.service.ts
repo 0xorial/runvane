@@ -55,9 +55,10 @@ export class ToolHostService implements OnModuleInit, OnModuleDestroy, Conversat
       this.clients.set(LOCAL_SANDBOX_ID, client);
       let registered = 0;
       for (const descriptor of descriptors) {
-        // A host proxy carries no rules/permission schema, so it must never
-        // shadow a safety-bearing builtin (e.g. `filesystem`). If a builtin
-        // already owns the name, keep the builtin and skip the proxy.
+        // A host tool must not silently collide with a builtin over a name.
+        // Capabilities belong in the tool-host, not duplicated as builtins
+        // (that's how the filesystem split happened) — a collision here means
+        // a builtin should probably be deleted, not that the proxy should win.
         if (this.tools.get(descriptor.name)) {
           this.logger.warn(`host tool ${descriptor.name} shadows builtin; keeping builtin`);
           continue;

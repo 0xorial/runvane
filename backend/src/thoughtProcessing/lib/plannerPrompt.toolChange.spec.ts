@@ -1,6 +1,15 @@
 import { describe, expect, it } from '@jest/globals';
 import { buildPlannerMessages, describeToolChange, extractToolOperations } from './plannerPrompt.js';
-import { filesystemParamsSchema } from '../../tools/builtins/filesystem/params.js';
+
+// Shape of the tool-host filesystem tool's paramsSchema (toolhost/src/host/tools/fs.ts).
+const filesystemParamsSchema = () => ({
+  type: 'object',
+  properties: {
+    operation: { type: 'string', enum: ['read_file', 'list_dir', 'grep', 'stat', 'write_file', 'edit_file'] },
+    path: { type: 'string' },
+  },
+  required: ['operation', 'path'],
+});
 
 describe('describeToolChange', () => {
   it('returns undefined when the effective tool set is unchanged (incl. flip-and-back)', () => {
@@ -40,7 +49,7 @@ describe('extractToolOperations', () => {
     expect(extractToolOperations(null)).toEqual([]);
   });
 
-  it('works on the real filesystem tool JSON-Schema (z.toJSONSchema output)', () => {
+  it('works on the filesystem tool JSON-Schema shape', () => {
     expect(extractToolOperations(filesystemParamsSchema())).toEqual([
       'read_file',
       'list_dir',

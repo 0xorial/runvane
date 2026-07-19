@@ -5,7 +5,6 @@ import { AskAttachmentTool } from './builtins/ask-attachment/tool.js';
 import { ApiTool } from './builtins/api/tool.js';
 import { ConversationsTool } from './builtins/conversations/tool.js';
 import { KnowledgeTool } from './builtins/knowledge/tool.js';
-import { FilesystemTool } from './builtins/filesystem/tool.js';
 import { FilesystemIndexStore } from './builtins/filesystem-index/filesystem-index-store.service.js';
 import { FilesystemIndexTool } from './builtins/filesystem-index/tool.js';
 import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
@@ -25,7 +24,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
   providers: [
     GetCurrentTimeTool,
     TodoWriteTool,
-    FilesystemTool,
     FilesystemIndexStore,
     FilesystemIndexTool,
     KnowledgeTool,
@@ -43,7 +41,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
       inject: [
         GetCurrentTimeTool,
         TodoWriteTool,
-        FilesystemTool,
         FilesystemIndexTool,
         KnowledgeTool,
         ApiTool,

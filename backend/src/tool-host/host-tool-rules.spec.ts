@@ -2,7 +2,7 @@
 // so ts-jest can load the module under CommonJS.
 jest.mock('zodex', () => ({ zerialize: (x: unknown) => x }));
 
-import { commandMatchesPrefix, execCommandAllowed, execRulesProfile } from './host-tool-rules.js';
+import { commandMatchesPrefix, execCommandAllowed, execRulesProfile, filesystemRulesProfile } from './host-tool-rules.js';
 
 describe('commandMatchesPrefix', () => {
   it('matches on a word boundary, not a bare prefix', () => {
@@ -66,5 +66,52 @@ describe('execRulesProfile.applyDefaults', () => {
   it('does nothing when default_cwd is empty', () => {
     const out = execRulesProfile.applyDefaults({ command: 'ls' }, {}) as any;
     expect(out.cwd).toBeUndefined();
+  });
+});
+
+describe('filesystemRulesProfile.evaluate', () => {
+  it('forbids writes while no writable root is configured (fail-closed)', () => {
+    for (const operation of ['write_file', 'edit_file']) {
+      const res = filesystemRulesProfile.evaluate({ operation, path: '/tmp/x' }, {});
+      expect(res[0].permission).toBe('forbid');
+      expect(res[0].detail).toContain('writable root');
+    }
+  });
+
+  it('allows writes once a writable root exists (runtime contains the path)', () => {
+    const res = filesystemRulesProfile.evaluate(
+      { operation: 'write_file', path: '/repo/x' },
+      { writable_roots: ['/repo'] },
+    );
+    expect(res[0].permission).toBe('allow');
+  });
+
+  it('allows reads (containment happens in the runtime)', () => {
+    for (const operation of ['read_file', 'list_dir', 'grep', 'stat']) {
+      const res = filesystemRulesProfile.evaluate({ operation, path: '/repo/x' }, {});
+      expect(res[0].permission).toBe('allow');
+    }
+  });
+});
+
+describe('filesystemRulesProfile.applyDefaults', () => {
+  it('injects roots and caps as reserved params', () => {
+    const out = filesystemRulesProfile.applyDefaults(
+      { operation: 'read_file', path: 'a.txt' },
+      { allowed_roots: ['/repo'], writable_roots: ['/repo/out'], max_read_bytes: 1000 },
+    ) as any;
+    expect(out.allowed_roots).toEqual(['/repo']);
+    expect(out.writable_roots).toEqual(['/repo/out']);
+    expect(out.max_read_bytes).toBe(1000);
+    expect(out.max_grep_results).toBe(200);
+  });
+
+  it('overrides any model-supplied governance keys', () => {
+    const out = filesystemRulesProfile.applyDefaults(
+      { operation: 'read_file', path: '/etc/passwd', allowed_roots: ['/'], writable_roots: ['/'] },
+      { allowed_roots: ['/repo'] },
+    ) as any;
+    expect(out.allowed_roots).toEqual(['/repo']);
+    expect(out.writable_roots).toEqual([]);
   });
 });
