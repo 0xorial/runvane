@@ -101,7 +101,6 @@
 {:else if agents.length > 0}
   <div class="flex w-full items-start justify-center px-4 py-8">
     <div class="w-full max-w-3xl">
-      <NewChatLayoutMap {selectedAgentId} toolSandboxId={selectedEnvId} />
       {#if sandboxes.length > 1}
         <div class="mb-4">
           <div class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -264,6 +263,9 @@
       {#if selectedAgentId}
         <StartContextSection agentId={selectedAgentId} toolSandboxId={selectedEnvId} />
       {/if}
+      <div class="mt-6">
+        <NewChatLayoutMap {selectedAgentId} toolSandboxId={selectedEnvId} />
+      </div>
     </div>
   </div>
   <AddSandboxDialog open={addOpen} onOpenChange={(o) => (addOpen = o)} onCreated={onEnvCreated} />
