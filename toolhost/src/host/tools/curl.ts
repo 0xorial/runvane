@@ -26,8 +26,8 @@ const RESPONSE_BYTES = { min: 256, max: 1_000_000, default: 50_000 };
 export const curlTool: TargetTool = {
   name: 'curl',
   aiDescription:
-    'Send an HTTP request from inside the sandbox and return status, headers, and response text (truncated to limits). ' +
-    'Requests originate from the sandbox network, so localhost/dev services running there are reachable.',
+    'Send an HTTP request from inside the sandbox; returns status, headers, and (truncated) body. ' +
+    'Requests originate from the sandbox network, so localhost/dev services there are reachable.',
   humanDescription: 'Call an HTTP endpoint (curl-style) from the sandbox.',
   paramsSchema: {
     type: 'object',

@@ -416,10 +416,8 @@ async function editFileOp(targetPath: string, o: Record<string, unknown>) {
 export const filesystemTool: TargetTool = {
   name: 'filesystem',
   aiDescription:
-    'Read, search, and modify files where this conversation\'s sandbox lives. ' +
-    'Operations: read_file (whole file, or a line range via offset/limit), list_dir, grep (find matching lines under a path — far cheaper than reading whole files), stat (size/mtime/line count), ' +
-    'write_file (write content to a path, creating parent dirs and overwriting), edit_file (replace an exact old_string with new_string and return a diff — prefer this over rewriting a whole file). ' +
-    'Reads are limited to allowed roots; writes are limited to writable roots (and are disabled unless a writable root is configured).',
+    'Read, search, and modify files where this conversation\'s sandbox lives — prefer grep over reading whole files to locate content. ' +
+    'Reads are limited to allowed roots; writes to writable roots (disabled unless a writable root is configured).',
   humanDescription: 'Read, search, write, and edit files in the sandbox.',
   paramsSchema: {
     type: 'object',

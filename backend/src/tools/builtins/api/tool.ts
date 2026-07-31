@@ -38,10 +38,8 @@ export class ApiTool extends BaseTool<ApiToolParams, ApiToolRules> {
 
   getAiDescription(): string {
     return (
-      'Read-only access to the Runvane backend API surface. ' +
-      'Operations: list_tools, describe_tool(tool_name), list_agents, get_agent(agent_id), ' +
-      'list_model_presets, get_model_preset(preset_id), list_tasks. ' +
-      'Use to discover tools, agents, presets, and runtime tasks. For chat history use the conversations tool.'
+      'Read-only introspection of the Runvane backend: discover tools, agents, model presets, and tasks. ' +
+      'For chat history use the conversations tool.'
     );
   }
 

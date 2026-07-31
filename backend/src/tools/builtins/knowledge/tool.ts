@@ -33,25 +33,9 @@ export class KnowledgeTool extends BaseTool<KnowledgeToolParams, KnowledgeToolRu
 
   getAiDescription(): string {
     return (
-      "Semantic retrieval over the agent's configured knowledge bases, plus source management. " +
-      'Routing: use this tool for CONCEPTUAL recall over indexed prose — questions about meaning, ' +
-      'topics, or "where is X discussed". For exact identifiers, error strings, or symbol lookups, ' +
-      'prefer grep/file tools on the working tree: embeddings rank paraphrases, not literals. ' +
-      'operation "query" (default): returns the most relevant indexed chunks with source and ' +
-      'similarity score; with the "graph" strategy, results may add knowledge-graph-connected ' +
-      'chunks (origin "graph") and a graph block of entities/relations. ' +
-      'operation "list_storages": orient before searching — what is indexed, how big, from which ' +
-      'roots; pass `storage` to also list its sources. ' +
-      'operation "read_source": full text of one indexed source when the top chunks are not ' +
-      'enough context — address it by the `source` label from a query hit. ' +
-      'operation "suggest_sources": explore a base directory and get candidate folders worth ' +
-      'indexing (file counts + samples) — judge them yourself, nothing is added automatically. ' +
-      'operation "add_source": add root folders to a configured storage and re-index it ' +
-      '(requires the allow_source_changes rule). ' +
-      'operation "create_storage": when no suitable storage exists, create one from the ' +
-      'agent-configured template — pass a short name and optionally initial roots ' +
-      '(requires allow_source_changes and configured storage_defaults). ' +
-      'Use suggest_sources first when the user asks to index something and the exact folders are unclear.'
+      "Semantic search over the agent's indexed knowledge bases, plus source management. " +
+      'Use for CONCEPTUAL recall — meaning, topics, "where is X discussed". For exact identifiers ' +
+      'or error strings, prefer grep/file tools: embeddings rank paraphrases, not literals.'
     );
   }
 

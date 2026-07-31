@@ -45,10 +45,8 @@ export class AskAttachmentTool extends BaseTool<AskAttachmentParams, AskAttachme
 
   getAiDescription(): string {
     return (
-      'Ask a focused question about one attachment present in this conversation. ' +
-      'Use this when an <attachment_summary> block does not contain the detail you need. ' +
-      'Returns a textual answer derived from the full file by a subagent. ' +
-      'Pass `attachment_id` exactly as it appears on the <attachment_summary> block.'
+      'Ask a focused question about one attachment when its <attachment_summary> lacks the detail you need. ' +
+      'A subagent answers from the full file. Pass `attachment_id` exactly as it appears on the summary block.'
     );
   }
 

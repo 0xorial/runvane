@@ -17,11 +17,9 @@ export class SerialTerminalTool extends BaseTool<SerialToolParams, SerialToolRul
 
   getAiDescription(): string {
     return (
-      'Run shell commands on a remote Kali Linux VM via a UTM Virtio Serial Unix socket connection. ' +
-      'The shell session persists across calls — environment variables, working directory, and process state are retained. ' +
-      'Well-suited for CTF work: destructive commands are safe (it is an isolated VM), and the full Kali tool suite is available. ' +
-      'Returns stdout/stderr output, exit code, and elapsed time. ' +
-      'The socket_path rule must be configured before use.'
+      'Run shell commands on a persistent remote Kali Linux VM (UTM Virtio serial socket); ' +
+      'session state — cwd, env, processes — persists across calls. Isolated VM, so destructive/CTF work is safe. ' +
+      'Requires the socket_path rule.'
     );
   }
 

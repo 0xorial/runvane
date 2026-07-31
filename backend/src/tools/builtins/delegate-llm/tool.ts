@@ -28,10 +28,8 @@ export class DelegateLlmTool extends BaseTool<DelegateLlmParams, DelegateLlmRule
 
   getAiDescription(): string {
     return (
-      'Call another LLM (any configured provider and model) with a custom prompt and return its response. ' +
-      'Useful for delegating tasks to uncensored or specialized models, getting a second opinion, ' +
-      'or using a model with specific capabilities (e.g. coding, reasoning, roleplay). ' +
-      'Specify the provider_id and model_name to target a particular model.'
+      'Call another configured LLM (set provider_id and model_name) with a custom prompt and return its response — ' +
+      'for a second opinion, or a specialized/uncensored model.'
     );
   }
 

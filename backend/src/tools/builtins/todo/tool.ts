@@ -21,11 +21,9 @@ export class TodoWriteTool extends BaseTool<TodoWriteToolParams, TodoWriteToolRu
 
   getAiDescription(): string {
     return (
-      'Maintain a structured to-do list to plan and track progress on a multi-step task, and to show the user the plan. ' +
-      'Send the COMPLETE list every call — it replaces the previous list wholesale. ' +
-      'Each item is { content, status: pending|in_progress|completed, activeForm? }. ' +
-      'Keep exactly one item in_progress at a time; mark an item completed as soon as it is done before starting the next. ' +
-      'Use it for non-trivial multi-step work; skip it for a single trivial step.'
+      'Plan and track a multi-step task as a to-do list shown to the user. ' +
+      'Send the COMPLETE list every call (it replaces the previous one wholesale); keep exactly one item in_progress. ' +
+      'Skip it for a single trivial step.'
     );
   }
 

@@ -32,10 +32,9 @@ export class ConversationsTool extends BaseTool<ConversationsToolParams, Convers
 
   getAiDescription(): string {
     return (
-      'Read chat history via the same data as the HTTP API. ' +
-      'Operations: list_conversations, get_conversation(conversation_id?), list_messages(conversation_id?, all?). ' +
-      'Omit conversation_id to use the active chat. Cross-chat access requires allow_other_conversations in tool rules. ' +
-      'For agents, tools catalog, or tasks use the api tool.'
+      'Read chat history: list conversations, get one, or list its messages. ' +
+      'Omit conversation_id for the active chat; cross-chat access requires allow_other_conversations. ' +
+      'For agents, tools, or tasks use the api tool.'
     );
   }
 
