@@ -83,6 +83,21 @@ async function baselineTotal(request: APIRequestContext, agentId: string): Promi
   return ((await res.json()) as { totalTokens: number }).totalTokens;
 }
 
+type BaselinePreview = { tools: { perTool: Array<{ name: string; line: string }> } };
+
+async function baselinePreview(request: APIRequestContext, agentId: string): Promise<BaselinePreview> {
+  const res = await request.post(`${apiBaseUrl()}/api/planner-baseline/preview`, { data: { agentId } });
+  expect(res.ok()).toBeTruthy();
+  return (await res.json()) as BaselinePreview;
+}
+
+/** The exact injected line the planner receives for one tool. */
+function probeToolLine(preview: BaselinePreview, name: string): string {
+  const tool = preview.tools.perTool.find((t) => t.name === name);
+  expect(tool, `tool ${name} in baseline perTool`).toBeTruthy();
+  return tool!.line;
+}
+
 async function retrievalEntryOf(
   request: APIRequestContext,
   conversationId: string,
@@ -398,6 +413,12 @@ test("Start context shows the planner baseline with a per-tool breakdown", async
   await section.getByTestId("baseline-tools-row").click();
   const toolRow = section.locator('[data-testid="baseline-tool-row"][data-tool-name="get_current_time"]');
   await expect(toolRow).toContainText(/~\d+ tok/);
+
+  // Expanding a tool row reveals the exact line the planner receives for it —
+  // the same string the preview API prices, shown in full (not truncated).
+  const expected = probeToolLine(await baselinePreview(request, agentId), "get_current_time");
+  await toolRow.getByRole("button").click();
+  await expect(toolRow.locator("pre")).toHaveText(expected);
 });
 
 test("verifying a provider persists discovered catalog pricing into the capability rows", async ({ request }) => {

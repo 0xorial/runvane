@@ -222,6 +222,10 @@ test("new chat: Start context stages the files half — checkboxes seed from the
     await readmeCheck.uncheck();
     await expect(readmeCheck).not.toBeChecked();
 
+    // Even now — empty composer, nothing injected — the estimate stays: the
+    // first send always carries the planner baseline, so its cost is shown.
+    await expect(app.page.getByTestId("chat-context-total")).toHaveText(/~\d+ tok/);
+
     await app.chat.userInput.typeMessage(PROBE_MESSAGE);
     await app.chat.userInput.send();
     const conversationId = await app.chat.waitForConversationChange("new");

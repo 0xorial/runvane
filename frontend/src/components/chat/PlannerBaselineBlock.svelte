@@ -18,9 +18,16 @@
   const baseline = $derived(baselineQuery.data);
 
   let expanded = $state<string | null>(null);
+  // Which per-tool row is expanded to its full injected line. Independent of
+  // `expanded` so opening a tool doesn't collapse the Tools group around it.
+  let expandedTool = $state<string | null>(null);
 
   function toggle(key: string): void {
     expanded = expanded === key ? null : key;
+  }
+
+  function toggleTool(name: string): void {
+    expandedTool = expandedTool === name ? null : name;
   }
 
   const rowClass =
@@ -97,14 +104,23 @@
         {#if expanded === "tools"}
           <div class="mx-1 mb-1 space-y-px">
             {#each baseline.tools.perTool as tool (tool.name)}
-              <div
-                class="flex items-start gap-1.5 rounded px-1 py-0.5 text-[11px]"
-                data-testid="baseline-tool-row"
-                data-tool-name={tool.name}
-              >
-                <code class="shrink-0 text-secondary-foreground">{tool.name}</code>
-                <span class="min-w-0 flex-1 truncate text-muted-foreground" title={tool.line}>{tool.line}</span>
-                <span class="ml-auto shrink-0 tabular-nums text-muted-foreground">~{tool.tokens} tok</span>
+              <div data-testid="baseline-tool-row" data-tool-name={tool.name}>
+                <button
+                  type="button"
+                  class="flex w-full items-start gap-1.5 rounded px-1 py-0.5 text-left text-[11px] hover:bg-secondary/45"
+                  aria-expanded={expandedTool === tool.name}
+                  onclick={() => toggleTool(tool.name)}
+                >
+                  <svg class="{chevron} mt-0.5 {expandedTool === tool.name ? 'rotate-90' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                  <code class="shrink-0 text-secondary-foreground">{tool.name}</code>
+                  <span class="min-w-0 flex-1 truncate text-muted-foreground">{tool.line}</span>
+                  <span class="ml-auto shrink-0 tabular-nums text-muted-foreground">~{tool.tokens} tok</span>
+                </button>
+                {#if expandedTool === tool.name}
+                  <pre class={contentPre}>{tool.line}</pre>
+                {/if}
               </div>
             {/each}
           </div>

@@ -213,7 +213,13 @@
     knowledgeTokens === null || attachmentEst.unknownCount > 0 || baselineTokens === null,
   );
   const anythingActive = $derived(selectedFilePaths.length > 0 || draft.enabled);
-  const showTotal = $derived(anythingActive || text.trim().length > 0 || attachments.length > 0);
+  // The first send always carries the planner baseline (system prompt + tools +
+  // scaffolding), so its cost is real even before anything is typed — show the
+  // estimate for an empty composer too. Later sends add nothing when empty, so
+  // they still gate on having content.
+  const showTotal = $derived(
+    anythingActive || text.trim().length > 0 || attachments.length > 0 || firstMessage,
+  );
 
   // Pricing rates: capability overrides first, then the provider's live
   // catalog (e.g. OpenRouter publishes per-token pricing with its model list).
