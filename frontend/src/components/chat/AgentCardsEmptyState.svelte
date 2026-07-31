@@ -99,15 +99,16 @@
 {#if showSetupGuide}
   <SetupGuide dismissible={setupForced && !chainBroken} />
 {:else if agents.length > 0}
-  <div class="flex w-full items-start justify-center px-4 py-8">
-    <div class="w-full max-w-3xl">
+  <div class="nc-scope w-full px-4 py-8">
+    <div class="nc-cols w-full">
+      <div class="min-w-0">
       {#if sandboxes.length > 1}
         <div class="mb-4">
           <div class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             Tool sandbox
             <HarnessToolsHint side="bottom" />
           </div>
-          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-2">
             {#each sandboxes as env (env.id)}
               {@const selected = selectedEnvId === env.id}
               <div
@@ -197,7 +198,7 @@
         </div>
       {/if}
       <div class="mb-1.5 text-xs font-medium text-muted-foreground">Agent</div>
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2">
       {#each agents as agent (agent.id)}
         {@const llm = getAgentLlm(agent)}
         {@const model = llm.model.trim()}
@@ -263,10 +264,42 @@
       {#if selectedAgentId}
         <StartContextSection agentId={selectedAgentId} toolSandboxId={selectedEnvId} />
       {/if}
-      <div class="mt-6">
+      </div>
+      <div class="nc-map min-w-0">
         <NewChatLayoutMap {selectedAgentId} toolSandboxId={selectedEnvId} />
       </div>
     </div>
   </div>
   <AddSandboxDialog open={addOpen} onOpenChange={(o) => (addOpen = o)} onCreated={onEnvCreated} />
 {/if}
+
+<style>
+  /* Split on the panel's ACTUAL width (sidebars eat viewport, so viewport
+     breakpoints lie here). Stacked: a centered column. Wide: selectors take
+     all remaining width — they hold the variable data — and the map keeps
+     its natural size on the right, sticky while the left scrolls. */
+  .nc-scope {
+    container-type: inline-size;
+  }
+  .nc-cols {
+    max-width: 48rem;
+    margin-inline: auto;
+  }
+  .nc-map {
+    margin-top: 1.5rem;
+  }
+  @container (min-width: 1160px) {
+    .nc-cols {
+      max-width: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 680px;
+      gap: 2rem;
+      align-items: start;
+    }
+    .nc-map {
+      margin-top: 0;
+      position: sticky;
+      top: 1rem;
+    }
+  }
+</style>

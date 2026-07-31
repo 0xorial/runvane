@@ -142,17 +142,23 @@ function toolChips(out: MapLayout, idPrefix: string, names: string[], x: number,
 export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
   const out: MapLayout = { width: W, height: 0, rects: [], glyphs: [], texts: [], paths: [], dots: [] };
   const webOn = inp.webTools.length > 0;
-  let y = 26;
 
-  // ── you ────────────────────────────────────────────────────────────────
-  out.rects.push({ id: "you", x: LX, y, w: 196, h: 42, rx: 10, fill: "card", stroke: "strong" });
-  plate(out, "you", LX, y, "You", "· browser", "strong");
-  out.dots.push({ id: "you-dot", x: LX + 22, y: y + 26, r: 3, color: "dot" });
-  out.texts.push({ id: "you-here", x: LX + 32, y: y + 29, cls: "r", spans: [{ text: "you are here" }] });
-  const youBottom = y + 42;
-  y = youBottom + 30;
+  // ── you: a chip stacked over the machine plate, not a full box ─────────
   const machineCx = plateCx(LX, "Your machine", "· app host");
-  out.paths.push({ id: "you-link", d: `M${machineCx} ${youBottom}V${y - 9}`, stroke: "strong", markerEnd: true, markerStart: true });
+  const youW = plateW("You", "· browser") + 14;
+  const youX = machineCx - youW / 2;
+  out.rects.push({ id: "you", x: youX, y: 4, w: youW, h: 18, rx: 9, fill: "card", stroke: "strong" });
+  out.dots.push({ id: "you-dot", x: youX + 11, y: 13, r: 3, color: "dot" });
+  out.texts.push({
+    id: "you-t",
+    x: youX + 20,
+    y: 13,
+    cls: "pl",
+    baseline: "central",
+    spans: [{ text: "You" }, { text: " · browser", cls: "r" }],
+  });
+  let y = 22 + 9 + 14;
+  out.paths.push({ id: "you-link", d: `M${machineCx} 22V${y - 9}`, stroke: "strong", markerEnd: true, markerStart: true });
 
   // ── app host ───────────────────────────────────────────────────────────
   const hostTop = y;
@@ -227,7 +233,7 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
   if (sandbox?.kind === "local") {
     const tTop = iy;
     const chipH = Math.max(toolChips(out, "tht", hostToolNames, LX + 26, tTop + 38 + 9, TH_W - 24), 18);
-    const thH = 38 + chipH + 14;
+    const thH = 38 + chipH + 10;
     out.rects.push({ id: "th", x: LX + 14, y: tTop, w: TH_W, h: thH, rx: 6, fill: "card", stroke: "strong", testid: "layout-map-toolhost" });
     out.texts.push({ id: "th-h", x: LX + 26, y: tTop + 18, cls: "n", spans: [{ text: "tool-host " }, { text: "on this machine", cls: "r" }] });
     if (hostToolNames.length === 0) {
@@ -255,7 +261,7 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
 
   // ── below the machine: browsing enabler (external service) ─────────────
   if (webOn) {
-    const colTop = y + 40;
+    const colTop = y + 26;
     const eH = 56;
     out.rects.push({ id: "enab", x: COL_R, y: colTop, w: CW, h: eH, rx: 12, fill: "none", stroke: "strong", testid: "layout-map-enabler" });
     plate(out, "enab", COL_R, colTop, "browsing enabler", "", "strong");
@@ -269,16 +275,18 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
     // one straight corridor from the tools' port through both borders: this
     // traffic leaves your machine
     out.paths.push({ id: "web-link", d: `M${xWeb} ${webBottom}V${colTop - 9}`, stroke: "strong", markerEnd: true });
-    const gy = colTop + eH + 30;
-    out.paths.push({ id: "globe-link", d: `M${COL_R + CW / 2} ${colTop + eH}V${gy - 14}`, stroke: "amber", markerEnd: true });
-    out.glyphs.push({ id: "globe", kind: "globe", x: COL_R + CW / 2, y: gy, color: "amber" });
-    out.texts.push({ id: "globe-l", x: COL_R + CW / 2, y: gy + 28, cls: "r", anchor: "middle", color: "amber", spans: [{ text: "open internet" }] });
-    y = gy + 34;
+    // the internet sits on a short leg beside the box, label to its right
+    const gy = colTop + eH + 24;
+    const gx = COL_R + 40;
+    out.paths.push({ id: "globe-link", d: `M${gx} ${colTop + eH}V${gy - 14}`, stroke: "amber", markerEnd: true });
+    out.glyphs.push({ id: "globe", kind: "globe", x: gx, y: gy, color: "amber" });
+    out.texts.push({ id: "globe-l", x: gx + 21, y: gy + 4, cls: "r", color: "amber", spans: [{ text: "open internet" }] });
+    y = gy + 19;
   }
 
   // ── remote sandbox box ─────────────────────────────────────────────────
   if (sandbox && sandbox.kind === "ssh") {
-    const cTop = y + 40;
+    const cTop = y + 30;
     const role = sandbox.docker ? "· container" : "· ssh host";
     out.dots.push({ id: "sb-port", x: xSandbox, y: harnessBottom, r: 2.5, color: "text2" });
     out.paths.push({ id: "sb-link", d: `M${xSandbox} ${harnessBottom}V${cTop - 9}`, stroke: "teal", markerEnd: true });
@@ -287,9 +295,9 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
     out.texts.push({ id: "sb-pill-t", x: xSandbox, y: pillY, cls: "lab", anchor: "middle", baseline: "central", color: "teal", spans: [{ text: "ssh" }] });
 
     const chipY = cTop + 18 + 38 + 9;
-    const innerH = 38 + Math.max(18, toolChips(out, "sbt", hostToolNames, LX + 26, chipY, LW - 60)) + 14;
+    const innerH = 38 + Math.max(18, toolChips(out, "sbt", hostToolNames, LX + 26, chipY, LW - 60)) + 10;
     const extraLines: MapText[] = [];
-    let ly = cTop + 18 + innerH + 20;
+    let ly = cTop + 18 + innerH + 16;
     if (sandbox.docker && sandbox.mounts.length > 0) {
       for (const [i, m] of sandbox.mounts.entries()) {
         const spans: MapSpan[] = [{ text: m.readonly ? "→ " : "⇄ ", color: "text3" }, { text: m.host }];
@@ -308,7 +316,7 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
       });
       ly += 16;
     }
-    const cH = 18 + innerH + (extraLines.length > 0 ? (ly - (cTop + 18 + innerH)) - 4 : 0) + 14;
+    const cH = 18 + innerH + (extraLines.length > 0 ? (ly - (cTop + 18 + innerH)) - 4 : 0) + 12;
     out.rects.push({ id: "sb-box", x: LX, y: cTop, w: LW, h: cH, rx: 12, fill: "none", stroke: "teal", strokeWidth: 1.5, testid: "layout-map-sandbox" });
     plate(out, "sb", LX, cTop, sandbox.name, role, "teal");
     out.rects.push({ id: "sb-th", x: LX + 14, y: cTop + 18, w: LW - 28, h: innerH, rx: 6, fill: "card", stroke: "strong", testid: "layout-map-toolhost" });
@@ -332,7 +340,8 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
   const modelTop = hTop + 24;
   const BUS = RX - 22;
   const port = { x: LX + LW - 14, y: Math.min(hTop + 40, harnessBottom - 14) };
-  const lastY = modelTop + (inp.models.length - 1) * 44;
+  const STEP = 38;
+  const lastY = modelTop + (inp.models.length - 1) * STEP;
   out.paths.push({
     id: "model-trunk",
     d: `M${port.x} ${port.y}H${BUS}V${modelTop - 4}M${BUS} ${port.y}V${lastY - 4}`,
@@ -341,7 +350,7 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
   out.dots.push({ id: "model-port", x: port.x, y: port.y, r: 2.5, color: "text2" });
   let sysY = modelTop;
   inp.models.forEach((m, i) => {
-    sysY = modelTop + i * 44;
+    sysY = modelTop + i * STEP;
     out.paths.push({ id: `model-a-${m.role}`, d: `M${BUS} ${sysY - 4}H${RX - 8}`, stroke: "strong", markerEnd: true, markerStart: m.twoWay });
     out.dots.push({ id: `model-d-${m.role}`, x: RX, y: sysY - 4, r: 2.5, color: "text2" });
     out.texts.push({ id: `model-r-${m.role}`, x: RX + 10, y: sysY, cls: "n", spans: [{ text: m.role }] });

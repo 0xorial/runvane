@@ -90,8 +90,8 @@
       hostTools,
       models: [
         { role: "chat model", name: chat, twoWay: true },
-        { role: "title model", name: title },
-        { role: "categorization model", name: title },
+        // categorization runs on the title model — one row, one truth
+        { role: "title · categorization", name: title },
         { role: "tool-call model", name: toolCall },
       ],
     };
