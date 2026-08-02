@@ -2,7 +2,14 @@
 // so ts-jest can load the module under CommonJS.
 jest.mock('zodex', () => ({ zerialize: (x: unknown) => x }));
 
-import { commandMatchesPrefix, execCommandAllowed, execRulesProfile, filesystemRulesProfile } from './host-tool-rules.js';
+import {
+  commandMatchesPrefix,
+  execCommandAllowed,
+  execRulesProfile,
+  filesystemReadRulesProfile,
+  filesystemRulesProfile,
+  filesystemWriteRulesProfile,
+} from './host-tool-rules.js';
 
 describe('commandMatchesPrefix', () => {
   it('matches on a word boundary, not a bare prefix', () => {
@@ -113,5 +120,93 @@ describe('filesystemRulesProfile.applyDefaults', () => {
     ) as any;
     expect(out.allowed_roots).toEqual(['/repo']);
     expect(out.writable_roots).toEqual([]);
+  });
+});
+
+describe('filesystemReadRulesProfile.evaluate', () => {
+  it('allows a plain read without prompting', () => {
+    const res = filesystemReadRulesProfile.evaluate({ operation: 'read', path: 'a' }, {});
+    expect(res[0].permission).toBe('allow');
+  });
+
+  it('escalates a quota_override to the user', () => {
+    const res = filesystemReadRulesProfile.evaluate({ operation: 'read', path: 'a', quota_override: { max_read_bytes: 9_000_000 } }, {});
+    expect(res[0].permission).toBe('ask_user');
+    expect(res[0].detail).toContain('max_read_bytes');
+  });
+
+  it('forbids a quota_override when overrides are disabled', () => {
+    const res = filesystemReadRulesProfile.evaluate(
+      { operation: 'read', path: 'a', quota_override: { max_read_bytes: 9_000_000 } },
+      { allow_quota_override: false },
+    );
+    expect(res[0].permission).toBe('forbid');
+  });
+});
+
+describe('filesystemReadRulesProfile.applyDefaults', () => {
+  it('injects allowed_roots and caps, dropping quota_override', () => {
+    const out = filesystemReadRulesProfile.applyDefaults(
+      { operation: 'grep', pattern: 'x', quota_override: { max_grep_results: 5 } },
+      { allowed_roots: ['/repo'], max_grep_results: 200 },
+    ) as any;
+    expect(out.allowed_roots).toEqual(['/repo']);
+    expect(out.max_read_bytes).toBe(200_000);
+    // an approved override folds over the rule default for this call...
+    expect(out.max_grep_results).toBe(5);
+    // ...and the request itself is stripped before dispatch.
+    expect(out.quota_override).toBeUndefined();
+  });
+
+  it('overrides model-supplied allowed_roots', () => {
+    const out = filesystemReadRulesProfile.applyDefaults(
+      { operation: 'read', path: '/etc/passwd', allowed_roots: ['/'] },
+      { allowed_roots: ['/repo'] },
+    ) as any;
+    expect(out.allowed_roots).toEqual(['/repo']);
+  });
+});
+
+describe('filesystemWriteRulesProfile.evaluate', () => {
+  it('forbids every write while no writable root is configured (fail-closed)', () => {
+    for (const operation of ['write', 'replace', 'edit', 'mkdir', 'move', 'delete']) {
+      const res = filesystemWriteRulesProfile.evaluate({ operation, path: '/repo/x' }, {});
+      expect(res[0].permission).toBe('forbid');
+      expect(res[0].detail).toContain('writable root');
+    }
+  });
+
+  it('allows a write once a writable root exists', () => {
+    const res = filesystemWriteRulesProfile.evaluate({ operation: 'write', path: '/repo/x' }, { writable_roots: ['/repo'] });
+    expect(res[0].permission).toBe('allow');
+  });
+
+  it('gates delete and move behind allow_delete', () => {
+    for (const operation of ['delete', 'move']) {
+      const forbidden = filesystemWriteRulesProfile.evaluate({ operation, path: '/repo/x' }, { writable_roots: ['/repo'] });
+      expect(forbidden[0].permission).toBe('forbid');
+      const allowed = filesystemWriteRulesProfile.evaluate({ operation, path: '/repo/x' }, { writable_roots: ['/repo'], allow_delete: true });
+      expect(allowed[0].permission).toBe('allow');
+    }
+  });
+
+  it('escalates a quota_override to the user', () => {
+    const res = filesystemWriteRulesProfile.evaluate(
+      { operation: 'write', path: '/repo/x', quota_override: { max_write_bytes: 9_000_000 } },
+      { writable_roots: ['/repo'] },
+    );
+    expect(res[0].permission).toBe('ask_user');
+  });
+});
+
+describe('filesystemWriteRulesProfile.applyDefaults', () => {
+  it('injects writable_roots and folds an approved override', () => {
+    const out = filesystemWriteRulesProfile.applyDefaults(
+      { operation: 'write', path: 'a', quota_override: { max_write_bytes: 9_000_000 } },
+      { writable_roots: ['/repo/out'] },
+    ) as any;
+    expect(out.writable_roots).toEqual(['/repo/out']);
+    expect(out.max_write_bytes).toBe(9_000_000);
+    expect(out.quota_override).toBeUndefined();
   });
 });
