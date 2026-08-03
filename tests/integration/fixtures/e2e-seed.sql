@@ -53,7 +53,7 @@ VALUES (
   'e2e00000-0000-4000-8000-000000000001',
   'agent 1',
   '',
-  '{"provider_id":"stub","model_name":"stub","tools":{"get_current_time":{"policy":"allow"},"ask_attachment":{"policy":"allow"},"todo_write":{"policy":"allow"}}}',
+  '{"provider_id":"stub","model_name":"stub","tools":{"get_current_time":{"policy":"allow"},"ask_attachment":{"policy":"allow"},"todo_write":{"policy":"allow"},"switch_llm":{"policy":"allow"}}}',
   NULL,
   'stub',
   'stub',

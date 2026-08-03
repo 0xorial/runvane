@@ -676,6 +676,58 @@ export function stubDirectBadParamsFinalize(): string {
 }
 
 /**
+ * Drives the switch_llm e2e: (1) switch to stub/stub-fast with a 1-turn lease,
+ * (2) call get_current_time — that round runs on the switched model, and its
+ * completion uses up the lease — then (3) finalize, by which point the harness
+ * has reverted to the original model.
+ */
+export const SWITCH_PROBE_MARKER = '__switch_probe__';
+export const STUB_SWITCH_REPLY = 'Switched for one round, did the work, and reverted.';
+export const STUB_SWITCH_TARGET_MODEL = 'stub-fast';
+
+export function stubIsSwitchProbeConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(SWITCH_PROBE_MARKER);
+}
+
+export function stubSwitchProbePlanner(request: LlmRequest): string {
+  const results = stubCountToolResults(request);
+  if (results === 0) {
+    return JSON.stringify({
+      assistant_thinking: 'Downshift for the grunt work; the lease reverts on its own.',
+      assistant_output: 'Switching to the fast model for one round.',
+      tool_requests: [
+        {
+          tool_name: 'switch_llm',
+          tool_request: JSON.stringify({
+            provider_id: 'stub',
+            model_name: STUB_SWITCH_TARGET_MODEL,
+            scope: 'n_turns',
+            turns: 1,
+          }),
+        },
+      ],
+      followup: 'continue',
+    });
+  }
+  if (results === 1) {
+    return JSON.stringify({
+      assistant_thinking: 'Running on the switched model; do the work.',
+      assistant_output: 'Checking the time on the fast model.',
+      tool_requests: [
+        { tool_name: 'get_current_time', tool_request: 'current server time', note: 'work on the fast model' },
+      ],
+      followup: 'continue',
+    });
+  }
+  return JSON.stringify({
+    assistant_thinking: 'Lease lapsed; wrap up on the original model.',
+    assistant_output: STUB_SWITCH_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+/**
  * Drives the todo_write e2e: a user message containing TODO_PROBE_MARKER makes
  * the planner (1) record a to-do list via `todo_write`, then (2) finalize. The
  * tool_request is structured JSON; the tool-params stub echoes the `todos`
@@ -736,6 +788,20 @@ export function pickStubReply(request: LlmRequest): string {
       }
       return JSON.stringify({ query: 'database migration prisma' });
     }
+    if (/Produce JSON args for tool "switch_llm"/.test(blob)) {
+      // The planner's tool_request is a one-line `{"provider_id":…}` object;
+      // echo it through so the resolved call carries the real switch args.
+      for (const line of blob.split('\n').reverse()) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{') || !trimmed.includes('"provider_id"')) continue;
+        try {
+          const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+          if (typeof parsed.provider_id === 'string') return JSON.stringify(parsed);
+        } catch {
+          /* keep scanning */
+        }
+      }
+    }
     if (/Produce JSON args for tool "todo_write"/.test(blob)) {
       // The planner's tool_request is a one-line `{"todos":[…]}` object; echo it
       // through so the resolved call carries the real list instead of `{}`.
@@ -791,6 +857,7 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubIsTodoProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubTodoPlannerFinalize() : stubTodoPlannerFirstRound();
     }
+    if (stubIsSwitchProbeConversation(request)) return stubSwitchProbePlanner(request);
     if (stubHasPlannerToolResult(request)) return stubProbeTimePlannerFinalize();
     if (stubIsProbeTimeConversation(request)) return stubProbeTimePlannerFirstRound();
     return stubProbeTimePlannerFinalize();

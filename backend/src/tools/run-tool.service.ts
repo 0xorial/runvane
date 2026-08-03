@@ -11,6 +11,7 @@ import { ThoughtProcessingService } from '../thoughtProcessing/thought-processin
 import { PlannerThoughtTypeProvider } from '../thoughtProcessing/thoughtTypeProviders/plannerProvider.js';
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { mostPermissivePermission, type ToolPermission, type ToolPolicy } from './base-tool.js';
+import { resolveLlmSwitchState } from './llm-switch.js';
 import { ToolRegistry } from './tool-registry.js';
 import { stripToolParamEnvelope } from './toolParamEnvelope.js';
 import type { AgentToolConfig } from '../agents/agent.entity.js';
@@ -801,14 +802,48 @@ export class RunToolService implements OnModuleInit {
     llm: LlmRef,
   ): Promise<void> {
     if (scope.signal.aborted) return;
+    // A `switch_llm` accepted earlier in this run overrides the threaded model
+    // for the continuation; an expired lease reverts to the run's BASE model
+    // (recomputed — the threaded llm inherits the switched model and must not
+    // be trusted for the revert). See llm-switch.ts for the lease semantics.
+    const entries = await this.chatEntries.listChatEntriesFromLeaf(conversationId, anchorParentId);
+    const switchState = resolveLlmSwitchState(entries);
+    const effectiveLlm =
+      switchState.kind === 'active'
+        ? switchState.llm
+        : switchState.kind === 'expired'
+          ? await this.baseLlmForRun(entries)
+          : llm;
     await this.thoughtProcessing.startThought({
       provider: this.plannerProvider,
       conversationId,
       scope,
       anchorParentId,
       lane: 'spine',
-      llm,
+      llm: effectiveLlm,
     });
+  }
+
+  /**
+   * The model this run would use with no switch in play: the anchor user
+   * message's explicit override, else the agent's default configuration, else
+   * the global setting — the same ladder ConversationProcessorService walks
+   * when it starts a turn.
+   */
+  private async baseLlmForRun(entries: Awaited<ReturnType<ChatEntriesRepo['listChatEntries']>>): Promise<LlmRef> {
+    const anchorUser = [...entries].reverse().find((e) => e.type === 'user-message');
+    if (anchorUser?.type === 'user-message') {
+      if (anchorUser.llm?.providerId && anchorUser.llm.model) {
+        return { providerId: anchorUser.llm.providerId, model: anchorUser.llm.model };
+      }
+      const agent = await this.agents.get(anchorUser.agentId);
+      const cfg = agent?.default_llm_configuration;
+      const ref = agent?.model_reference;
+      const providerId = String(cfg?.provider_id ?? ref?.provider_id ?? '').trim();
+      const model = String(cfg?.model_name ?? ref?.model_name ?? '').trim();
+      if (providerId && model) return { providerId, model };
+    }
+    return this.thoughtProcessing.getLlmRef();
   }
 
   /**

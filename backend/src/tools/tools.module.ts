@@ -10,6 +10,7 @@ import { FilesystemIndexTool } from './builtins/filesystem-index/tool.js';
 import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
 import { TodoWriteTool } from './builtins/todo/tool.js';
 import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
+import { SwitchLlmTool } from './builtins/switch-llm/tool.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
 import { SerialConnectionManager } from './builtins/serial/connection.js';
 import { WebSearchTool } from './builtins/web-search/tool.js';
@@ -30,6 +31,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     ApiTool,
     ConversationsTool,
     DelegateLlmTool,
+    SwitchLlmTool,
     AskAttachmentTool,
     SerialConnectionManager,
     SerialTerminalTool,
@@ -46,6 +48,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         ApiTool,
         ConversationsTool,
         DelegateLlmTool,
+        SwitchLlmTool,
         AskAttachmentTool,
         SerialTerminalTool,
         WebSearchTool,
