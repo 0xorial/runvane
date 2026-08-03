@@ -8,7 +8,7 @@ export type ToolParam = { name: string; type: string; required: boolean; descrip
 export type ToolSignature = { operations: string[]; params: ToolParam[] };
 export type RulesField = { key: string; value: string; attention: boolean };
 export type RulesFacets = { safety: RulesField[]; limits: RulesField[] };
-export type EffectTagKind = "read" | "write" | "delete" | "exec" | "network";
+export type EffectTagKind = "delete" | "exec" | "network";
 export type EffectTag = { kind: EffectTagKind; label: string; muted: boolean };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -88,8 +88,6 @@ const KIND_KEYWORDS: [EffectTagKind, RegExp][] = [
   ["delete", /delete|remove|^rm$|drop/],
   ["exec", /exec|shell|command|terminal|^run$/],
   ["network", /curl|http|fetch|browse|request|^web/],
-  ["write", /write|edit|replace|create|mkdir|update|move|insert|add|index/],
-  ["read", /read|list|grep|find|stat|^get|query|describe/],
 ];
 
 function kindOf(token: string): EffectTagKind | null {
@@ -98,17 +96,16 @@ function kindOf(token: string): EffectTagKind | null {
 }
 
 const KIND_LABEL: Record<EffectTagKind, string> = {
-  read: "reads",
-  write: "writes",
   delete: "deletes",
   exec: "runs code",
   network: "network",
 };
 
 /**
- * Effect tags = the tool's blast radius at a glance. Derived from the operation
- * vocabulary; a target (sandbox) tool with no operations (exec, curl) also
- * matches on its name, so no-op harness tools stay untagged rather than guessed.
+ * Effect tags flag a tool's NOTABLE effects — network egress, code execution,
+ * deletion — the things worth a glance. Read and write are deliberately NOT
+ * tagged: nearly every file tool does both, so the tag carries no signal (and
+ * was only ever a keyword guess). Derived from the operation/name vocabulary;
  * `delete` shows muted "off" while its `allow_delete` gate is false.
  */
 export function deriveEffectTags(
@@ -126,7 +123,7 @@ export function deriveEffectTags(
     const k = kindOf(toolName.toLowerCase());
     if (k) kinds.add(k);
   }
-  const order: EffectTagKind[] = ["read", "write", "delete", "exec", "network"];
+  const order: EffectTagKind[] = ["delete", "exec", "network"];
   const tags: EffectTag[] = [];
   for (const kind of order) {
     if (!kinds.has(kind)) continue;

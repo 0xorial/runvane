@@ -18,11 +18,9 @@
   import { deriveEffectTags, deriveSignature, type EffectTag } from "./toolFacets";
   import { buildToolRulesZodSchemas } from "./toolRulesSchemas";
 
-  // Effect tags carry blast radius (reads/writes/deletes/runs code/network) at a
-  // glance, styled by risk. Fixed light chips, legible in both themes.
+  // Effect tags flag notable effects (deletes / runs code / network), styled by
+  // risk. Read/write aren't tagged — every file tool does both, so no signal.
   const TAG_CLASS: Record<EffectTag["kind"], string> = {
-    read: "bg-muted text-muted-foreground",
-    write: "bg-amber-500/10 text-amber-600",
     delete: "bg-red-500/10 text-red-600",
     exec: "bg-orange-500/10 text-orange-600",
     network: "bg-blue-500/10 text-blue-600",
@@ -115,10 +113,9 @@
   function setPolicy(toolName: string, policy: ToolPolicy): void {
     if (!canEdit) return;
     patchTool(toolName, { policy });
-    if (policy === "off") {
-      toggleExpanded(toolName, false);
-      return;
-    }
+    // Expansion is inspection, decoupled from the on/off policy — turning a tool
+    // off no longer hides its clear view; it just stops seeding/auto-expanding.
+    if (policy === "off") return;
     // Seed the tool's default rules the first time it's switched on.
     if (Object.keys(getToolConfig(toolName).config).length === 0) {
       const defaults = getToolDefaultConfig(toolCatalog, toolName);
@@ -191,30 +188,24 @@
         {#if name}
           {@const cfg = getToolConfig(name)}
           {@const on = cfg.policy !== "off"}
-          {@const expanded = !!expandedTools[name] && on}
+          {@const expanded = !!expandedTools[name]}
           {@const tags = effectTags(row, cfg)}
           <tr>
             <td>
-              {#if on}
-                <button
-                  type="button"
-                  class="-mx-1 inline-flex items-center gap-2 rounded-md border-0 bg-transparent px-1 py-0.5 text-left hover:bg-muted disabled:cursor-default"
-                  disabled={!canEdit}
-                  onclick={() => toggleExpanded(name)}
-                  aria-expanded={expanded}
-                >
-                  {#if expanded}
-                    <Icon name="chevron-down" class="h-3.5 w-3.5 text-muted-foreground" />
-                  {:else}
-                    <Icon name="chevron-right" class="h-3.5 w-3.5 text-muted-foreground" />
-                  {/if}
-                  <code>{name}</code>
-                </button>
-              {:else}
-                <div class="inline-flex items-center gap-2 pl-5">
-                  <code class="text-muted-foreground">{name}</code>
-                </div>
-              {/if}
+              <button
+                type="button"
+                class="-mx-1 inline-flex items-center gap-2 rounded-md border-0 bg-transparent px-1 py-0.5 text-left hover:bg-muted disabled:cursor-default"
+                disabled={!canEdit}
+                onclick={() => toggleExpanded(name)}
+                aria-expanded={expanded}
+              >
+                {#if expanded}
+                  <Icon name="chevron-down" class="h-3.5 w-3.5 text-muted-foreground" />
+                {:else}
+                  <Icon name="chevron-right" class="h-3.5 w-3.5 text-muted-foreground" />
+                {/if}
+                <code class={on ? "" : "text-muted-foreground"}>{name}</code>
+              </button>
             </td>
             <td class="max-w-[360px] text-muted-foreground">
               {#if tags.length > 0}
@@ -266,17 +257,19 @@
                     effectiveRules={effectiveRules(row, cfg)}
                     policy={cfg.policy}
                   />
-                  <ToolRulesEditor
-                    toolName={name}
-                    config={cfg}
-                    rulesSchema={toolRulesZodSchemas.get(name)}
-                    {guardrailLlmConfigured}
-                    globalGuardrailPrompt={guardrailLlm.system_prompt}
-                    {agentSeparateParamsResolution}
-                    readOnly={!canEdit}
-                    rulesEditorHeight={200}
-                    onPatch={(patch) => patchTool(name, patch)}
-                  />
+                  {#if on}
+                    <ToolRulesEditor
+                      toolName={name}
+                      config={cfg}
+                      rulesSchema={toolRulesZodSchemas.get(name)}
+                      {guardrailLlmConfigured}
+                      globalGuardrailPrompt={guardrailLlm.system_prompt}
+                      {agentSeparateParamsResolution}
+                      readOnly={!canEdit}
+                      rulesEditorHeight={200}
+                      onPatch={(patch) => patchTool(name, patch)}
+                    />
+                  {/if}
                 </div>
               </td>
             </tr>

@@ -18,13 +18,15 @@ test("agent settings: a tool's clear view explains how it works", async ({ app, 
   const row = target.locator("tr").filter({ has: app.page.locator('code:text-is("filesystem_write")') }).first();
   await expect(row).toBeVisible();
 
-  // Effect tags are visible on the row before expanding: writes, and delete off.
+  // Effect tags flag only notable effects: filesystem_write shows delete (off),
+  // never the low-signal reads/writes.
   const tags = row.getByTestId("tool-effect-tags");
-  await expect(tags).toContainText("writes");
   await expect(tags).toContainText("deletes off");
+  await expect(tags).not.toContainText("writes");
 
-  // Enable the tool, then expand it.
-  await row.getByRole("group", { name: "filesystem_write permission policy" }).getByRole("button", { name: "Allow" }).click();
+  // Off must NOT hide the clear view — inspection is decoupled from policy, so
+  // you can read how a tool works before enabling it.
+  await row.getByRole("group", { name: "filesystem_write permission policy" }).getByRole("button", { name: "Off" }).click();
   await target.locator('button:has(code:text-is("filesystem_write"))').click();
 
   const view = app.page.getByTestId("tool-clear-view");

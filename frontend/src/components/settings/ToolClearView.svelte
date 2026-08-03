@@ -44,25 +44,23 @@
       <div class="mb-1 text-[11px] font-medium text-muted-foreground">Parameters</div>
       <div class="space-y-0.5" data-testid="clear-view-params">
         {#each signature.params as p (p.name)}
-          <div class="grid grid-cols-[10px_120px_44px_1fr] items-baseline gap-2 leading-tight">
-            <span class="text-foreground" title={p.required ? "required" : ""}>{p.required ? "•" : ""}</span>
+          <div class="grid grid-cols-[max-content_max-content_minmax(0,1fr)] items-baseline gap-x-2 gap-y-0.5 leading-tight">
             <code class="font-mono text-[12px] text-foreground">{p.name}</code>
-            <span class="font-mono text-[11px] text-muted-foreground">{p.type}</span>
-            <span class="text-muted-foreground">{p.description}</span>
+            <span class="whitespace-nowrap font-mono text-[11px] text-muted-foreground">{p.type}{p.required ? "" : " (optional)"}</span>
+            <span class="break-words text-muted-foreground">{p.description}</span>
           </div>
         {/each}
       </div>
-      <div class="mt-1 text-[10px] text-muted-foreground"><span class="text-foreground">•</span> required · others optional</div>
     </div>
   {/if}
 
   {#if rules.safety.length > 0}
     <div>
       <div class="mb-1 text-[11px] font-medium text-muted-foreground">Safety</div>
-      <div class="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5" data-testid="clear-view-safety">
+      <div class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-0.5" data-testid="clear-view-safety">
         {#each rules.safety as f (f.key)}
           <code class="font-mono text-[11px] text-muted-foreground">{f.key}</code>
-          <span class="font-mono text-[11px] {valueClass(f)}">{f.value}</span>
+          <span class="break-words font-mono text-[11px] {valueClass(f)}">{f.value}</span>
         {/each}
       </div>
     </div>
@@ -71,10 +69,10 @@
   {#if rules.limits.length > 0}
     <div>
       <div class="mb-1 text-[11px] font-medium text-muted-foreground">Limits</div>
-      <div class="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5" data-testid="clear-view-limits">
+      <div class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-0.5" data-testid="clear-view-limits">
         {#each rules.limits as f (f.key)}
           <code class="font-mono text-[11px] text-muted-foreground">{f.key}</code>
-          <span class="font-mono text-[11px] text-foreground">{f.value}</span>
+          <span class="break-words font-mono text-[11px] text-foreground">{f.value}</span>
         {/each}
       </div>
     </div>
