@@ -3,6 +3,7 @@ import { formatContextFilesBlock } from '../../context-injection/context-files-b
 import { formatRetrievalContext } from '../../knowledge/retrieval/retrieval-context.js';
 import { textMessage, type LlmContentPart, type LlmMessage } from '../../llmProviders/types.js';
 import { stripToolParamEnvelope } from '../../tools/toolParamEnvelope.js';
+import { buildTodoReminder, TODO_WRITE_TOOL_ID } from './todoReminder.js';
 
 /** What the planner is told about a single available tool. */
 export type PlannerToolInfo = {
@@ -278,5 +279,12 @@ export function buildPlannerMessages(input: BuildPlannerMessagesInput): LlmMessa
   // Surface a mid-conversation tool change as a fresh system note after the
   // latest turn — the model otherwise silently receives a different tool list.
   if (input.toolChangeNote) messages.push(textMessage('system', input.toolChangeNote));
+  // Re-surface a stale to-do list as a tail note so a long run stays anchored
+  // to its plan. Only when todo_write is available this turn — the reminder
+  // tells the model to update the list via the tool.
+  if (input.tools.some((t) => t.name === TODO_WRITE_TOOL_ID)) {
+    const reminder = buildTodoReminder(input.entries);
+    if (reminder) messages.push(textMessage('system', reminder));
+  }
   return messages;
 }
