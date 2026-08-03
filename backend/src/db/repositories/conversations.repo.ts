@@ -307,6 +307,29 @@ export class ConversationsRepo {
    * flow and aren't part of the generated Prisma client, so they're read with
    * raw SQL. The source title is resolved live (null if the source is gone).
    */
+  /**
+   * Subagent provenance: which conversation spawned this one via run_subagent
+   * and how deep the chain is (user-created roots are depth 0). Raw columns
+   * the generated client doesn't track — read/write goes through raw SQL.
+   */
+  async getSubagentLink(id: string): Promise<{ parentConversationId: string | null; depth: number }> {
+    const rows = (await this.prisma.$queryRawUnsafe(
+      `SELECT parent_conversation_id AS parentId, subagent_depth AS depth FROM conversations WHERE id = ?`,
+      id,
+    )) as Array<{ parentId: string | null; depth: number | bigint | null }>;
+    const row = rows[0];
+    return { parentConversationId: row?.parentId ?? null, depth: Number(row?.depth ?? 0) };
+  }
+
+  async setSubagentLink(id: string, parentConversationId: string, depth: number): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE conversations SET parent_conversation_id = ?, subagent_depth = ? WHERE id = ?`,
+      parentConversationId,
+      Math.max(0, Math.trunc(depth)),
+      id,
+    );
+  }
+
   async getForkLink(id: string): Promise<{
     forkedFromConversationId: string | null;
     forkedFromEntryId: string | null;

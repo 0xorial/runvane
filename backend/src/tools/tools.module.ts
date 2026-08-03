@@ -11,6 +11,8 @@ import { GetCurrentTimeTool } from './builtins/get-current-time/tool.js';
 import { TodoWriteTool } from './builtins/todo/tool.js';
 import { DelegateLlmTool } from './builtins/delegate-llm/tool.js';
 import { SwitchLlmTool } from './builtins/switch-llm/tool.js';
+import { RunSubagentTool } from './builtins/subagent/tool.js';
+import { SubagentBridge } from './subagent-bridge.js';
 import { SerialTerminalTool } from './builtins/serial/tool.js';
 import { SerialConnectionManager } from './builtins/serial/connection.js';
 import { WebSearchTool } from './builtins/web-search/tool.js';
@@ -23,6 +25,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
 @Module({
   imports: [DatabaseModule, UploadsModule, AgentsModule, ModelPresetsModule, KnowledgeModule],
   providers: [
+    SubagentBridge,
     GetCurrentTimeTool,
     TodoWriteTool,
     FilesystemIndexStore,
@@ -32,6 +35,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
     ConversationsTool,
     DelegateLlmTool,
     SwitchLlmTool,
+    RunSubagentTool,
     AskAttachmentTool,
     SerialConnectionManager,
     SerialTerminalTool,
@@ -49,6 +53,7 @@ import { UploadsModule } from '../uploads/uploads.module.js';
         ConversationsTool,
         DelegateLlmTool,
         SwitchLlmTool,
+        RunSubagentTool,
         AskAttachmentTool,
         SerialTerminalTool,
         WebSearchTool,
@@ -59,6 +64,6 @@ import { UploadsModule } from '../uploads/uploads.module.js';
   ],
   // SerialConnectionManager is exported so the terminal gateway can mirror the
   // agent's live serial session read-only.
-  exports: [ToolRegistry, SerialConnectionManager],
+  exports: [ToolRegistry, SerialConnectionManager, SubagentBridge],
 })
 export class ToolsModule {}

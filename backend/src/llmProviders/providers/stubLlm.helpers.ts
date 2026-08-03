@@ -728,6 +728,62 @@ export function stubSwitchProbePlanner(request: LlmRequest): string {
 }
 
 /**
+ * Drives the run_subagent e2e. Parent (SUBAGENT_PROBE_MARKER): (1) spawn a
+ * subagent with a self-contained child brief, (2) finalize echoing its answer.
+ * Child (SUBAGENT_CHILD_MARKER in its own user message): finalize immediately —
+ * a real conversation driven by the same stub, no tools.
+ */
+export const SUBAGENT_PROBE_MARKER = '__subagent_probe__';
+export const SUBAGENT_CHILD_MARKER = '__subagent_child__';
+export const STUB_SUBAGENT_CHILD_REPLY = 'Child result: 42.';
+export const STUB_SUBAGENT_PARENT_REPLY = 'Subagent finished; the answer is 42.';
+export const STUB_SUBAGENT_TITLE = 'e2e subagent task';
+
+export function stubIsSubagentChildConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(SUBAGENT_CHILD_MARKER);
+}
+
+export function stubIsSubagentProbeConversation(request: LlmRequest): boolean {
+  return stubUserText(request).includes(SUBAGENT_PROBE_MARKER);
+}
+
+export function stubSubagentChildFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Self-contained brief; answer directly.',
+    assistant_output: STUB_SUBAGENT_CHILD_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+export function stubSubagentProbeFirstRound(): string {
+  return JSON.stringify({
+    assistant_thinking: 'Isolate the sub-task in a fresh context.',
+    assistant_output: 'Delegating the sub-task to a subagent.',
+    tool_requests: [
+      {
+        tool_name: 'run_subagent',
+        tool_request: JSON.stringify({
+          prompt: `${SUBAGENT_CHILD_MARKER} compute the answer to the sub-task`,
+          title: STUB_SUBAGENT_TITLE,
+        }),
+        note: 'delegate the sub-task',
+      },
+    ],
+    followup: 'continue',
+  });
+}
+
+export function stubSubagentProbeFinalize(): string {
+  return JSON.stringify({
+    assistant_thinking: 'The subagent returned its answer.',
+    assistant_output: STUB_SUBAGENT_PARENT_REPLY,
+    tool_requests: [],
+    followup: 'finalize',
+  });
+}
+
+/**
  * Drives the todo_write e2e: a user message containing TODO_PROBE_MARKER makes
  * the planner (1) record a to-do list via `todo_write`, then (2) finalize. The
  * tool_request is structured JSON; the tool-params stub echoes the `todos`
@@ -788,6 +844,20 @@ export function pickStubReply(request: LlmRequest): string {
       }
       return JSON.stringify({ query: 'database migration prisma' });
     }
+    if (/Produce JSON args for tool "run_subagent"/.test(blob)) {
+      // The planner's tool_request is a one-line `{"prompt":…}` object; echo
+      // it through so the resolved call carries the real brief.
+      for (const line of blob.split('\n').reverse()) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{') || !trimmed.includes('"prompt"')) continue;
+        try {
+          const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+          if (typeof parsed.prompt === 'string') return JSON.stringify(parsed);
+        } catch {
+          /* keep scanning */
+        }
+      }
+    }
     if (/Produce JSON args for tool "switch_llm"/.test(blob)) {
       // The planner's tool_request is a one-line `{"provider_id":…}` object;
       // echo it through so the resolved call carries the real switch args.
@@ -845,6 +915,13 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubIsDirectMixedBatchConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubDirectMixedBatchFinalize() : stubDirectMixedBatchFirstRound();
     }
+    // Marker-scoped probes must outrank the shape-based attachment matcher
+    // below: a run_subagent tool_result also contains an "answer" field.
+    if (stubIsSwitchProbeConversation(request)) return stubSwitchProbePlanner(request);
+    if (stubIsSubagentChildConversation(request)) return stubSubagentChildFinalize();
+    if (stubIsSubagentProbeConversation(request)) {
+      return stubHasPlannerToolResult(request) ? stubSubagentProbeFinalize() : stubSubagentProbeFirstRound();
+    }
     if (stubHasAskAttachmentToolResult(request)) return stubAskAttachmentPlannerFinalize();
     if (stubIsAttachmentFollowUpPlanner(request)) return stubAttachmentFollowUpPlannerFirstRound();
     if (stubIsFirstAttachmentPlanner(request)) return stubFirstAttachmentPlannerFinalize();
@@ -857,7 +934,6 @@ export function pickStubReply(request: LlmRequest): string {
     if (stubIsTodoProbeConversation(request)) {
       return stubHasPlannerToolResult(request) ? stubTodoPlannerFinalize() : stubTodoPlannerFirstRound();
     }
-    if (stubIsSwitchProbeConversation(request)) return stubSwitchProbePlanner(request);
     if (stubHasPlannerToolResult(request)) return stubProbeTimePlannerFinalize();
     if (stubIsProbeTimeConversation(request)) return stubProbeTimePlannerFirstRound();
     return stubProbeTimePlannerFinalize();

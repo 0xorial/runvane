@@ -22,6 +22,7 @@ import type { KnowledgeOverride, RetrievalQuery } from '../contracts/retrieval.j
 import type { LlmRef } from '../thoughtProcessing/types.js';
 import { ForcedRetrievalService } from '../knowledge/retrieval/forced-retrieval.service.js';
 import { RunToolService } from '../tools/run-tool.service.js';
+import { SubagentBridge } from '../tools/subagent-bridge.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { ConversationCategorizerService } from './conversation-categorizer.service.js';
 import { PostConversationMessageDto } from './dto/post-conversation-message.dto.js';
@@ -62,7 +63,12 @@ export class ConversationProcessorService implements OnModuleInit {
     private readonly contextInjection: ContextInjectionService,
     private readonly toolSandboxes: ToolSandboxesService,
     private readonly forcedRetrieval: ForcedRetrievalService,
-  ) {}
+    subagentBridge: SubagentBridge,
+  ) {
+    // run_subagent drives child conversations through this processor; the
+    // bridge breaks the ToolsModule ↔ ConversationsModule cycle.
+    subagentBridge.register(this);
+  }
 
   /**
    * Queued messages are durable (pending_messages) — a restart must not drop
