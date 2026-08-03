@@ -8,8 +8,6 @@ export type ToolParam = { name: string; type: string; required: boolean; descrip
 export type ToolSignature = { operations: string[]; params: ToolParam[] };
 export type RulesField = { key: string; value: string; attention: boolean };
 export type RulesFacets = { safety: RulesField[]; limits: RulesField[] };
-export type EffectTagKind = "delete" | "exec" | "network";
-export type EffectTag = { kind: EffectTagKind; label: string; muted: boolean };
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -82,53 +80,4 @@ export function classifyRules(effectiveRules: Record<string, unknown>): RulesFac
   // Roots before gates within Safety.
   safety.sort((a, b) => Number(b.key.endsWith("_roots")) - Number(a.key.endsWith("_roots")));
   return { safety, limits };
-}
-
-const KIND_KEYWORDS: [EffectTagKind, RegExp][] = [
-  ["delete", /delete|remove|^rm$|drop/],
-  ["exec", /exec|shell|command|terminal|^run$/],
-  ["network", /curl|http|fetch|browse|request|^web/],
-];
-
-function kindOf(token: string): EffectTagKind | null {
-  for (const [kind, re] of KIND_KEYWORDS) if (re.test(token)) return kind;
-  return null;
-}
-
-const KIND_LABEL: Record<EffectTagKind, string> = {
-  delete: "deletes",
-  exec: "runs code",
-  network: "network",
-};
-
-/**
- * Effect tags flag a tool's NOTABLE effects — network egress, code execution,
- * deletion — the things worth a glance. Read and write are deliberately NOT
- * tagged: nearly every file tool does both, so the tag carries no signal (and
- * was only ever a keyword guess). Derived from the operation/name vocabulary;
- * `delete` shows muted "off" while its `allow_delete` gate is false.
- */
-export function deriveEffectTags(
-  toolName: string,
-  operations: string[],
-  effectiveRules: Record<string, unknown>,
-  location: string,
-): EffectTag[] {
-  const kinds = new Set<EffectTagKind>();
-  for (const op of operations) {
-    const k = kindOf(op.toLowerCase());
-    if (k) kinds.add(k);
-  }
-  if (location === "target") {
-    const k = kindOf(toolName.toLowerCase());
-    if (k) kinds.add(k);
-  }
-  const order: EffectTagKind[] = ["delete", "exec", "network"];
-  const tags: EffectTag[] = [];
-  for (const kind of order) {
-    if (!kinds.has(kind)) continue;
-    const muted = kind === "delete" && effectiveRules.allow_delete !== true;
-    tags.push({ kind, label: KIND_LABEL[kind] + (muted ? " off" : ""), muted });
-  }
-  return tags;
 }

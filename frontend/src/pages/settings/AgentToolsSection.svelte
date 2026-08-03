@@ -15,26 +15,12 @@
     type ToolConfig,
     type ToolPolicy,
   } from "./agentTools";
-  import { deriveEffectTags, deriveSignature, type EffectTag } from "./toolFacets";
   import { buildToolRulesZodSchemas } from "./toolRulesSchemas";
-
-  // Effect tags flag notable effects (deletes / runs code / network), styled by
-  // risk. Read/write aren't tagged — every file tool does both, so no signal.
-  const TAG_CLASS: Record<EffectTag["kind"], string> = {
-    delete: "bg-red-500/10 text-red-600",
-    exec: "bg-orange-500/10 text-orange-600",
-    network: "bg-blue-500/10 text-blue-600",
-  };
 
   // The rules the tool actually runs with: catalog defaults overlaid with the
   // agent's configured overrides — what Safety/Limits read from.
   function effectiveRules(raw: Record<string, unknown>, cfg: ToolConfig): Record<string, unknown> {
     return { ...getToolDefaultConfig(toolCatalog, String(raw.name ?? "")), ...cfg.config };
-  }
-
-  function effectTags(raw: Record<string, unknown>, cfg: ToolConfig): EffectTag[] {
-    const { operations } = deriveSignature(raw.params_schema);
-    return deriveEffectTags(String(raw.name ?? ""), operations, effectiveRules(raw, cfg), String(raw.location ?? ""));
   }
 
   let {
@@ -189,7 +175,6 @@
           {@const cfg = getToolConfig(name)}
           {@const on = cfg.policy !== "off"}
           {@const expanded = !!expandedTools[name]}
-          {@const tags = effectTags(row, cfg)}
           <tr>
             <td>
               <button
@@ -208,19 +193,6 @@
               </button>
             </td>
             <td class="max-w-[360px] text-muted-foreground">
-              {#if tags.length > 0}
-                <div class="mb-1 flex flex-wrap gap-1" data-testid="tool-effect-tags">
-                  {#each tags as tag (tag.kind)}
-                    <span
-                      class="rounded px-1.5 py-0.5 text-[10px] font-medium {tag.muted
-                        ? 'bg-muted text-muted-foreground'
-                        : TAG_CLASS[tag.kind]}"
-                    >
-                      {tag.label}
-                    </span>
-                  {/each}
-                </div>
-              {/if}
               {row.description != null ? String(row.description) : "—"}
             </td>
             <td>
