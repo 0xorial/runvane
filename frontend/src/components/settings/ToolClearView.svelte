@@ -59,7 +59,7 @@
   {#if rules.safety.length > 0}
     <div>
       <div class="mb-1 text-[11px] font-medium text-muted-foreground">Safety</div>
-      <div class="grid grid-cols-[130px_1fr] gap-x-3 gap-y-0.5" data-testid="clear-view-safety">
+      <div class="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5" data-testid="clear-view-safety">
         {#each rules.safety as f (f.key)}
           <code class="font-mono text-[11px] text-muted-foreground">{f.key}</code>
           <span class="font-mono text-[11px] {valueClass(f)}">{f.value}</span>
@@ -71,7 +71,7 @@
   {#if rules.limits.length > 0}
     <div>
       <div class="mb-1 text-[11px] font-medium text-muted-foreground">Limits</div>
-      <div class="grid grid-cols-[130px_1fr] gap-x-3 gap-y-0.5" data-testid="clear-view-limits">
+      <div class="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5" data-testid="clear-view-limits">
         {#each rules.limits as f (f.key)}
           <code class="font-mono text-[11px] text-muted-foreground">{f.key}</code>
           <span class="font-mono text-[11px] text-foreground">{f.value}</span>
