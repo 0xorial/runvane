@@ -13,6 +13,7 @@
     tools: "Tools",
     "tool-sandboxes": "Tool Sandboxes",
     knowledge: "Knowledge bases",
+    learn: "Tutorial",
   };
 
   // One sentence per section stating what the thing IS and what consumes it —
@@ -29,6 +30,7 @@
     "tool-sandboxes":
       "Where a conversation's target tools run. Harness host and None are built in; add ssh hosts to act on other machines. Picked per chat on the new-chat screen.",
     knowledge: "Semantic indexes the agent injects as context — via forced context injection in the composer, or the knowledge tool. Each needs an embedding model from a provider; attach them to an agent under Agents → Tools → knowledge.",
+    learn: "Guided walkthroughs of the app, on the real screens. Completed lessons stay replayable.",
   };
 
   let {

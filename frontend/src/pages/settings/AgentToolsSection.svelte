@@ -115,7 +115,7 @@
   }
 </script>
 
-<div class="mt-3.5">
+<div class="mt-3.5" data-tour="agent-tools">
   <div class="mb-2 flex items-center justify-between gap-2">
     <div class="text-[13px] font-bold text-foreground">Tools</div>
     <div

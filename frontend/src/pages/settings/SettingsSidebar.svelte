@@ -28,6 +28,7 @@
     },
     { label: "Knowledge", items: [{ section: "knowledge", label: "Knowledge bases" }] },
     { label: "System", items: [{ section: "system", label: "System" }] },
+    { label: "Help", items: [{ section: "learn", label: "Tutorial" }] },
   ];
 
   let {

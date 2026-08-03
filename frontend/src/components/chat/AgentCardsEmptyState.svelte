@@ -103,7 +103,7 @@
     <div class="nc-cols w-full">
       <div class="min-w-0">
       {#if sandboxes.length > 1}
-        <div class="mb-4">
+        <div class="mb-4" data-tour="sandbox-cards">
           <div class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             Tool sandbox
             <HarnessToolsHint side="bottom" />
@@ -198,7 +198,7 @@
         </div>
       {/if}
       <div class="mb-1.5 text-xs font-medium text-muted-foreground">Agent</div>
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2" data-tour="agent-cards">
       {#each agents as agent (agent.id)}
         {@const llm = getAgentLlm(agent)}
         {@const model = llm.model.trim()}
@@ -265,7 +265,7 @@
         <StartContextSection agentId={selectedAgentId} toolSandboxId={selectedEnvId} />
       {/if}
       </div>
-      <div class="nc-map min-w-0">
+      <div class="nc-map min-w-0" data-tour="layout-map">
         <NewChatLayoutMap {selectedAgentId} toolSandboxId={selectedEnvId} />
       </div>
     </div>

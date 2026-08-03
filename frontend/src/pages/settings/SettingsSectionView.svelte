@@ -10,6 +10,7 @@
   import ProviderCard from "./ProviderCard.svelte";
   import KnowledgeStoragesSection from "./KnowledgeStoragesSection.svelte";
   import ToolSandboxesSection from "./ToolSandboxesSection.svelte";
+  import TutorialLibrary from "./TutorialLibrary.svelte";
   import SettingsHeader from "./SettingsHeader.svelte";
   import { buildModelGroups, filterProviders, type SettingsSection } from "./helpers";
   import { ghostBtn, settingsPlaceholderBox } from "./settingsClasses";
@@ -116,7 +117,7 @@
     {#if settingsLoading || !settings}
       <p class="text-sm text-muted-foreground">Loading…</p>
     {:else}
-      <div class="flex flex-col gap-3">
+      <div class="flex flex-col gap-3" data-tour="providers">
         {#each providerCards as provider (provider.id)}
           <ProviderCard
             provider={provider}
@@ -173,8 +174,10 @@
       <strong>Tools &amp; permissions</strong>.
     </div>
   {:else if section === "knowledge"}
-    <KnowledgeStoragesSection />
+    <div data-tour="knowledge-section"><KnowledgeStoragesSection /></div>
   {:else if section === "tool-sandboxes"}
-    <ToolSandboxesSection />
+    <div data-tour="sandboxes-section"><ToolSandboxesSection /></div>
+  {:else if section === "learn"}
+    <TutorialLibrary />
   {/if}
 </main>

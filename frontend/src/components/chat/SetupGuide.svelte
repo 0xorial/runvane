@@ -9,6 +9,7 @@
   import { queryClient } from "@/lib/queryClient";
   import { pathname as pathnameStore, replacePath } from "@/lib/router";
   import { providersReady, verifiedProviders } from "@/lib/setupState";
+  import { startTutorial } from "@/lib/tutorial/tutorialStore.svelte";
   import { notifyError } from "@/utils/toast";
   import AddSandboxDialog from "./AddSandboxDialog.svelte";
 
@@ -300,6 +301,17 @@
           </span>
         </span>
       </a>
+    </div>
+
+    <div class="mt-3">
+      <button
+        type="button"
+        class="cursor-pointer border-0 bg-transparent p-0 text-xs text-muted-foreground underline hover:text-foreground"
+        data-testid="setup-take-tour"
+        onclick={() => startTutorial("connect-model")}
+      >
+        Prefer a guided tour? Walk the same setup on the real screens.
+      </button>
     </div>
 
     {#if dismissible}

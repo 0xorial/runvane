@@ -103,6 +103,7 @@
     {/if}
     <div
       class="flex flex-col gap-0 rounded-xl border border-border bg-card/70 p-1.5 shadow-sm transition-[box-shadow,border-color] focus-within:border-primary/50 focus-within:shadow-[0_0_0_1px_hsl(var(--primary)/0.35),0_1px_2px_0_hsl(var(--foreground)/0.06)] dark:bg-[hsl(var(--surface-elevated))] dark:shadow-none dark:focus-within:border-primary/40"
+      data-tour="composer"
     >
       {#if contextSlot}
         {@render contextSlot(value)}

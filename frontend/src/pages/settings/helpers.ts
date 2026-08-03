@@ -15,6 +15,7 @@ export const SETTINGS_SECTIONS = [
   "tools",
   "knowledge",
   "tool-sandboxes",
+  "learn",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
