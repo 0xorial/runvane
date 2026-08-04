@@ -1,6 +1,11 @@
 <script lang="ts">
   import { TUTORIAL_LESSONS } from "@/lib/tutorial/lessons";
-  import { isLessonCompleted, startTutorial } from "@/lib/tutorial/tutorialStore.svelte";
+  import {
+    isLessonCompleted,
+    setTutorialSkipped,
+    startTutorial,
+    tutorialSkipped,
+  } from "@/lib/tutorial/tutorialStore.svelte";
 
   const core = TUTORIAL_LESSONS.filter((l) => l.core);
   const extras = TUTORIAL_LESSONS.filter((l) => !l.core);
@@ -50,6 +55,24 @@
 {/snippet}
 
 <div class="flex max-w-2xl flex-col gap-4" data-testid="tutorial-library">
+  {#if tutorialSkipped()}
+    <div
+      class="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-3 py-2"
+      data-testid="tutorial-skip-note"
+    >
+      <span class="text-xs text-muted-foreground">
+        Automatic lessons and tips are off. Everything here stays startable by hand.
+      </span>
+      <button
+        type="button"
+        class="shrink-0 rounded-lg border border-border px-2.5 py-1 text-xs text-foreground hover:bg-secondary/60"
+        data-testid="tutorial-reenable"
+        onclick={() => setTutorialSkipped(false)}
+      >
+        Re-enable
+      </button>
+    </div>
+  {/if}
   <div>
     <div class="mb-1.5 text-[13px] font-bold text-foreground">Getting started</div>
     <p class="mb-2 text-xs text-muted-foreground">

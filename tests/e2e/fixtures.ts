@@ -10,6 +10,17 @@ const TASK_DRAIN_TIMEOUT_MS = Number(
 
 export const test = base.extend<{ app: RunvaneApp; drainPendingTasks: void }>({
   app: async ({ page }, use) => {
+    // Mute the tutorial's automatic behavior (first-open lessons, contextual
+    // tips) unless a test opted in: a floating tip over e.g. a branch selector
+    // would intercept unrelated clicks. Only seeds when nothing is stored, so
+    // tutorial specs can pre-seed their own state with a later addInitScript
+    // (init scripts run in registration order) and keep it across reloads.
+    await page.addInitScript(() => {
+      const KEY = "runvane.tutorial.v1";
+      if (!window.localStorage.getItem(KEY)) {
+        window.localStorage.setItem(KEY, JSON.stringify({ completed: {}, seenTips: {}, skipped: true }));
+      }
+    });
     // Surface browser-side failures into the run log (see scripts/test-diagnostics.mjs).
     // The harness only sees the backend; frontend errors live in the page.
     const title = test.info().title;

@@ -30,6 +30,7 @@
 {#if hasBranches}
   <span
     data-testid="branch-selector"
+    data-tour="branch-selector"
     class="inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1 py-0.5 text-[10px] text-muted-foreground"
     role="group"
   >

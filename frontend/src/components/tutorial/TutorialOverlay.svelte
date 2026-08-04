@@ -4,6 +4,7 @@
     backTutorialStep,
     exitTutorial,
     nextTutorialStep,
+    skipTutorialCompletely,
     tutorialActiveLesson,
     tutorialStepIndex,
   } from "@/lib/tutorial/tutorialStore.svelte";
@@ -162,8 +163,19 @@
       </div>
       <p class="text-[13px] leading-snug text-muted-foreground">{step.body}</p>
       <div class="mt-3 flex items-center justify-between gap-2">
-        <span class="text-[11px] text-muted-foreground" data-testid="tutorial-step-count">
-          {stepIdx + 1} / {lesson.steps.length}
+        <span class="flex items-center gap-2.5">
+          <span class="text-[11px] text-muted-foreground" data-testid="tutorial-step-count">
+            {stepIdx + 1} / {lesson.steps.length}
+          </span>
+          <button
+            type="button"
+            class="cursor-pointer border-0 bg-transparent p-0 text-[11px] text-muted-foreground underline hover:text-foreground"
+            title="Close and stop auto-started lessons and tips. Everything stays replayable from Settings → Tutorial."
+            data-testid="tutorial-skip"
+            onclick={skipTutorialCompletely}
+          >
+            Skip tutorial
+          </button>
         </span>
         <div class="flex items-center gap-2">
           {#if stepIdx > 0}

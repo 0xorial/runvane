@@ -9,7 +9,7 @@
   import { queryClient } from "@/lib/queryClient";
   import { pathname as pathnameStore, replacePath } from "@/lib/router";
   import { providersReady, verifiedProviders } from "@/lib/setupState";
-  import { startTutorial } from "@/lib/tutorial/tutorialStore.svelte";
+  import { maybeAutoStartTutorial, startTutorial } from "@/lib/tutorial/tutorialStore.svelte";
   import { notifyError } from "@/utils/toast";
   import AddSandboxDialog from "./AddSandboxDialog.svelte";
 
@@ -133,6 +133,12 @@
 
   const stepBadge = "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold";
   const inputClass = "w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm text-foreground";
+  $effect(() => {
+    // First open: the guide is forced by a broken chain (not ?setup=1 on a
+    // healthy one) — walk the user through it unless they skipped or already
+    // made progress. Once per session; the store owns the conditions.
+    if (!dismissible) maybeAutoStartTutorial();
+  });
 </script>
 
 <div class="flex h-full w-full items-start justify-center overflow-y-auto px-4 py-8" data-testid="setup-guide">

@@ -47,6 +47,28 @@ test("tutorial lesson spotlights the real UI and records completion", async ({ a
   await expect(agentLesson).toHaveAttribute("data-completed", "true");
 });
 
+// The e2e fixture mutes the tutorial by default (skipped: true), which is also
+// the state the "Skip tutorial" button produces — so this test covers both the
+// library's re-enable affordance and the skip button restoring the mute.
+test("skip tutorial mutes automatic behavior; the library re-enables it", async ({ app }) => {
+  await app.page.goto("/settings/learn", { waitUntil: "domcontentloaded" });
+  const note = app.page.getByTestId("tutorial-skip-note");
+  await expect(note).toBeVisible();
+  await app.page.getByTestId("tutorial-reenable").click();
+  await expect(note).not.toBeVisible();
+
+  await app.page
+    .locator('[data-testid="tutorial-lesson-row"][data-lesson-id="connect-model"]')
+    .getByTestId("tutorial-lesson-start")
+    .click();
+  await expect(app.page.getByTestId("tutorial-card")).toBeVisible();
+  await app.page.getByTestId("tutorial-skip").click();
+  await expect(app.page.getByTestId("tutorial-overlay")).not.toBeVisible();
+
+  await app.page.goto("/settings/learn", { waitUntil: "domcontentloaded" });
+  await expect(note).toBeVisible();
+});
+
 test("tutorial navigates to the chat screen and exits on Escape", async ({ app }) => {
   await app.page.goto("/settings/learn", { waitUntil: "domcontentloaded" });
   await app.page

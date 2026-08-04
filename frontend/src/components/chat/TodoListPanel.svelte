@@ -16,7 +16,7 @@
 </script>
 
 {#if list}
-  <div class="border-t border-border bg-secondary/40 px-3 py-2" data-testid="todo-list-panel">
+  <div class="border-t border-border bg-secondary/40 px-3 py-2" data-testid="todo-list-panel" data-tour="todo-panel">
     <button
       type="button"
       class="flex w-full items-center gap-2 text-left text-xs"

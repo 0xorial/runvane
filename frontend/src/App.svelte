@@ -6,6 +6,7 @@
   import ConversationsPage from "@/pages/ConversationsPage.svelte";
   import ToastHost from "@/components/ToastHost.svelte";
   import TutorialOverlay from "@/components/tutorial/TutorialOverlay.svelte";
+  import TutorialTipHost from "@/components/tutorial/TutorialTipHost.svelte";
   import ErrorInboxButton from "@/components/ErrorInboxButton.svelte";
   import ThemeToggle from "@/components/ThemeToggle.svelte";
   import { QueryClientProvider } from "@tanstack/svelte-query";
@@ -71,6 +72,7 @@
   <div class="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
     <ToastHost />
     <TutorialOverlay />
+    <TutorialTipHost />
     {#if !$isChatRoute}
       <header
         class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card/50 px-3 py-2 backdrop-blur-sm"

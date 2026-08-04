@@ -170,3 +170,38 @@ export const TUTORIAL_LESSONS: TutorialLesson[] = [
 export function tutorialLessonById(id: string): TutorialLesson | null {
   return TUTORIAL_LESSONS.find((l) => l.id === id) ?? null;
 }
+
+/**
+ * Contextual first-encounter tips: shown once, the first time their anchor
+ * appears in the DOM (e.g. the first branch selector of a conversation).
+ * Unlike lessons they don't dim or block anything — a small anchored callout
+ * with a "Got it". Muting the tutorial mutes these too.
+ */
+export type TutorialTip = { id: string; anchor: string; title: string; body: string };
+
+export const TUTORIAL_TIPS: TutorialTip[] = [
+  {
+    id: 'todo-panel',
+    anchor: 'todo-panel',
+    title: 'Agent to-dos',
+    body:
+      'The agent tracks its plan here (via the todo_write tool) and updates statuses as it works. ' +
+      'If a long run drifts, the current list is re-surfaced to the model automatically.',
+  },
+  {
+    id: 'branch-selector',
+    anchor: 'branch-selector',
+    title: 'Branches',
+    body:
+      'The conversation forked here — edits, retries, and summaries create sibling branches instead of ' +
+      'overwriting history. Use the arrows to switch which branch you view; new messages continue the one you’re on.',
+  },
+  {
+    id: 'tool-approval',
+    anchor: 'tool-approval',
+    title: 'Tool approval',
+    body:
+      'This call is paused until you approve or deny it — the tool’s policy is Ask, or a guardrail flagged it. ' +
+      'Expand the row to inspect the arguments; you can edit them before approving.',
+  },
+];

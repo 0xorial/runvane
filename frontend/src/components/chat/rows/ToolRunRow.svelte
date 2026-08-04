@@ -206,7 +206,7 @@
         </span>
       </button>
     {:else}
-    <div class="overflow-hidden rounded-md border {borderClass}" data-testid="tool-invocation-row" data-tool-state={entry.state}>
+    <div class="overflow-hidden rounded-md border {borderClass}" data-testid="tool-invocation-row" data-tool-state={entry.state} data-tour={entry.state === "requested" ? "tool-approval" : undefined}>
       <button
         type="button"
         class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-secondary"
