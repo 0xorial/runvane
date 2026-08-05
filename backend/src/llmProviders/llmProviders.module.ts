@@ -6,6 +6,7 @@ import { GrokProvider, OpenAiProvider } from './providers/openAiCompatible.js';
 import { OpenRouterProvider } from './providers/openRouter.js';
 import { LmStudioNativeProvider } from './providers/lmStudioNative.js';
 import { ClaudeSubscriptionProvider } from './providers/claudeSubscription.js';
+import { AnthropicProvider } from './providers/anthropic.js';
 import { StubLlmProvider } from './providers/stubLlm.js';
 
 const LIVE_PROVIDERS = [
@@ -13,6 +14,7 @@ const LIVE_PROVIDERS = [
   GrokProvider,
   OpenRouterProvider,
   LmStudioNativeProvider,
+  AnthropicProvider,
   ClaudeSubscriptionProvider,
 ] as const;
 
@@ -30,8 +32,9 @@ export class LlmProvidersModule {
           grok: GrokProvider,
           openRouter: OpenRouterProvider,
           lmStudio: LmStudioNativeProvider,
+          anthropic: AnthropicProvider,
           claudeSubscription: ClaudeSubscriptionProvider,
-        ) => [openAi, grok, openRouter, lmStudio, claudeSubscription],
+        ) => [openAi, grok, openRouter, lmStudio, anthropic, claudeSubscription],
         inject: [...LIVE_PROVIDERS],
       });
     } else {
