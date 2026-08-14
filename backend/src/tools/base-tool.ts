@@ -36,6 +36,15 @@ export type ToolRunContext = {
   agentId: string | null;
   entries: ChatEntry[];
   toolRules?: unknown;
+  /**
+   * The permission layer has AUTHORIZED this specific call — policy `allow`, or
+   * the user approved an `ask`/`custom` prompt. A safety-bearing tool may then
+   * act on the exact target the user authorized even when it falls outside the
+   * tool's default no-prompt zone (e.g. a filesystem read of a path outside
+   * `allowed_roots`). Absent/false = only the pre-authorized zone is in play.
+   * The gate is authority; the zone is only a default, never a veto over it.
+   */
+  authorized?: boolean;
   signal: AbortSignal;
   /**
    * Emit incremental progress (stdout, streamed tokens, …) for the live tool

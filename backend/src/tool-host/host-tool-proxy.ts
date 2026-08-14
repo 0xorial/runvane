@@ -105,8 +105,11 @@ export class HostToolProxy extends BaseTool {
   }
 
   async runTool(params: unknown, context: ToolRunContext): Promise<unknown> {
-    // A governed proxy may fill defaults (e.g. a working directory) before dispatch.
-    const dispatchParams = this.profile ? this.profile.applyDefaults(params, (context.toolRules as Record<string, unknown>) ?? {}) : params;
+    // A governed proxy may fill defaults (e.g. a working directory) before
+    // dispatch, and — when the call is authorized — grant the approved target.
+    const dispatchParams = this.profile
+      ? this.profile.applyDefaults(params, (context.toolRules as Record<string, unknown>) ?? {}, context.authorized)
+      : params;
     const result = await this.router.invokeForConversation(context.conversationId, this.descriptor.name, dispatchParams, {
       signal: context.signal,
       onProgress: context.onProgress,

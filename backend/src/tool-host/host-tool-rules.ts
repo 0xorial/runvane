@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { z } from 'zod';
 import { zerialize } from 'zodex';
 import type { RuleEvaluationResult } from '../tools/base-tool.js';
@@ -14,8 +15,48 @@ export interface HostToolRulesProfile {
   parseRules(raw: unknown): Record<string, unknown>;
   /** Judge a single call from its params + rules (custom policy only). */
   evaluate(params: unknown, rules: Record<string, unknown>): RuleEvaluationResult[];
-  /** Fill defaults into params before dispatch (e.g. a working directory). */
-  applyDefaults(params: unknown, rules: Record<string, unknown>): unknown;
+  /**
+   * Fill defaults into params before dispatch (e.g. a working directory).
+   * `authorized` is true when the permission layer has cleared this exact call
+   * (policy `allow`, or the user approved) — a profile may then grant the
+   * authorized target even outside its default zone. See {@link grantAuthorizedPath}.
+   */
+  applyDefaults(params: unknown, rules: Record<string, unknown>, authorized?: boolean): unknown;
+}
+
+/** The `path` param of a filesystem call, trimmed, or null when absent/blank. */
+function requestedPathParam(params: unknown): string | null {
+  const p = (params as { path?: unknown } | null)?.path;
+  return typeof p === 'string' && p.trim() ? p.trim() : null;
+}
+
+/**
+ * Lexical, backend-side check used ONLY to decide whether `custom` policy
+ * should prompt before an out-of-zone read — it never blocks. An empty root
+ * set (= the runtime's own cwd) and relative paths can't be judged here (the
+ * runtime does the real realpath containment), so they count as in-zone.
+ */
+function absolutePathOutsideRoots(reqPath: string | null, roots: string[]): boolean {
+  if (!reqPath || !reqPath.startsWith('/') || roots.length === 0) return false;
+  const norm = (p: string): string => path.posix.normalize(p).replace(/\/+$/, '') || '/';
+  const target = norm(reqPath);
+  return !roots.some((r) => {
+    const root = norm(r);
+    return target === root || target.startsWith(root === '/' ? '/' : `${root}/`);
+  });
+}
+
+/**
+ * Approval is authority over the default zone: when a call is authorized, the
+ * exact path the user cleared is added to the roots the runtime will accept, so
+ * an approved read of a path outside `allowed_roots` runs instead of being
+ * rejected. Non-authorized calls keep the configured roots unchanged.
+ */
+function grantAuthorizedPath(roots: string[], params: unknown, authorized: boolean | undefined): string[] {
+  if (!authorized) return roots;
+  const p = requestedPathParam(params);
+  if (!p || roots.includes(p)) return roots;
+  return [...roots, p];
 }
 
 // ─── exec ────────────────────────────────────────────────────────────────────
@@ -197,16 +238,25 @@ export const filesystemRulesProfile: HostToolRulesProfile = {
         { ruleName: 'filesystem-writes', permission: 'allow', detail: 'write path is contained to writable roots by the runtime' },
       ];
     }
+    if (absolutePathOutsideRoots(requestedPathParam(params), rules.allowed_roots)) {
+      return [
+        {
+          ruleName: 'filesystem-reads',
+          permission: 'ask_user',
+          detail: `${requestedPathParam(params)} is outside this tool's allowed roots — approve to read it`,
+        },
+      ];
+    }
     return [
       { ruleName: 'filesystem-reads', permission: 'allow', detail: 'read path is contained to allowed roots by the runtime' },
     ];
   },
-  applyDefaults(params, rawRules) {
+  applyDefaults(params, rawRules, authorized) {
     const rules: FilesystemRules = FilesystemRulesSchema.parse(rawRules ?? {});
     const p = params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
     return {
       ...p,
-      allowed_roots: rules.allowed_roots,
+      allowed_roots: grantAuthorizedPath(rules.allowed_roots, params, authorized),
       writable_roots: rules.writable_roots,
       max_read_bytes: rules.max_read_bytes,
       max_list_entries: rules.max_list_entries,
@@ -285,16 +335,26 @@ export const filesystemReadRulesProfile: HostToolRulesProfile = {
     const rules = FilesystemReadRulesSchema.parse(rawRules ?? {});
     const quota = evaluateQuota(params, rules.allow_quota_override);
     if (quota) return quota;
-    // Reads are non-mutating and contained to allowed_roots by the runtime, so
-    // they run without a prompt (the point of splitting reads out).
+    // A read inside the no-prompt zone runs silently; one outside it asks first
+    // (approval then grants that exact path in applyDefaults). Reads are
+    // non-mutating and the runtime still contains them to the granted roots.
+    if (absolutePathOutsideRoots(requestedPathParam(params), rules.allowed_roots)) {
+      return [
+        {
+          ruleName: 'filesystem-read',
+          permission: 'ask_user',
+          detail: `${requestedPathParam(params)} is outside this tool's allowed roots — approve to read it`,
+        },
+      ];
+    }
     return [{ ruleName: 'filesystem-read', permission: 'allow', detail: 'read is contained to allowed roots by the runtime' }];
   },
-  applyDefaults(params, rawRules) {
+  applyDefaults(params, rawRules, authorized) {
     const rules: FilesystemReadRules = FilesystemReadRulesSchema.parse(rawRules ?? {});
     const p = params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
     const override = readQuotaOverride(p);
     const { quota_override: _drop, ...rest } = p;
-    return foldQuota({ ...rest, allowed_roots: rules.allowed_roots }, override, {
+    return foldQuota({ ...rest, allowed_roots: grantAuthorizedPath(rules.allowed_roots, params, authorized) }, override, {
       max_read_bytes: rules.max_read_bytes,
       max_list_entries: rules.max_list_entries,
       max_grep_results: rules.max_grep_results,

@@ -99,6 +99,13 @@ describe('filesystemRulesProfile.evaluate', () => {
       expect(res[0].permission).toBe('allow');
     }
   });
+
+  it('asks before a read outside the configured no-prompt zone', () => {
+    const res = filesystemRulesProfile.evaluate({ operation: 'list_dir', path: '/' }, { allowed_roots: ['/repo'] });
+    expect(res[0].permission).toBe('ask_user');
+    const inside = filesystemRulesProfile.evaluate({ operation: 'list_dir', path: '/repo/sub' }, { allowed_roots: ['/repo'] });
+    expect(inside[0].permission).toBe('allow');
+  });
 });
 
 describe('filesystemRulesProfile.applyDefaults', () => {
@@ -121,6 +128,18 @@ describe('filesystemRulesProfile.applyDefaults', () => {
     expect(out.allowed_roots).toEqual(['/repo']);
     expect(out.writable_roots).toEqual([]);
   });
+
+  it('grants the approved path when the call is authorized (approval > zone)', () => {
+    const out = filesystemRulesProfile.applyDefaults(
+      { operation: 'list_dir', path: '/' },
+      { allowed_roots: ['/repo'] },
+      true,
+    ) as any;
+    expect(out.allowed_roots).toEqual(['/repo', '/']);
+    // Unauthorized keeps the configured zone untouched.
+    const unauth = filesystemRulesProfile.applyDefaults({ operation: 'list_dir', path: '/' }, { allowed_roots: ['/repo'] }) as any;
+    expect(unauth.allowed_roots).toEqual(['/repo']);
+  });
 });
 
 describe('filesystemReadRulesProfile.evaluate', () => {
@@ -141,6 +160,16 @@ describe('filesystemReadRulesProfile.evaluate', () => {
       { allow_quota_override: false },
     );
     expect(res[0].permission).toBe('forbid');
+  });
+
+  it('asks before a read outside the no-prompt zone, allows one inside', () => {
+    const outside = filesystemReadRulesProfile.evaluate({ operation: 'read', path: '/etc/passwd' }, { allowed_roots: ['/repo'] });
+    expect(outside[0].permission).toBe('ask_user');
+    const inside = filesystemReadRulesProfile.evaluate({ operation: 'read', path: '/repo/a' }, { allowed_roots: ['/repo'] });
+    expect(inside[0].permission).toBe('allow');
+    // Empty roots (= runtime cwd) can't be judged here, so no prompt.
+    const noZone = filesystemReadRulesProfile.evaluate({ operation: 'read', path: '/etc/passwd' }, {});
+    expect(noZone[0].permission).toBe('allow');
   });
 });
 
@@ -164,6 +193,15 @@ describe('filesystemReadRulesProfile.applyDefaults', () => {
       { allowed_roots: ['/repo'] },
     ) as any;
     expect(out.allowed_roots).toEqual(['/repo']);
+  });
+
+  it('grants the approved path when authorized', () => {
+    const out = filesystemReadRulesProfile.applyDefaults(
+      { operation: 'list', path: '/etc' },
+      { allowed_roots: ['/repo'] },
+      true,
+    ) as any;
+    expect(out.allowed_roots).toEqual(['/repo', '/etc']);
   });
 });
 

@@ -217,6 +217,9 @@ export class RunToolService implements OnModuleInit {
       tool,
       parsedParams,
       parsedRules,
+      // Approval is authority: a `ask`/`custom` call the user cleared, or a
+      // blanket `allow`, may act on its exact target outside the default zone.
+      authorized: policy === 'allow' || input.approvalGranted === true,
       entries,
       scope,
       llm,
@@ -318,6 +321,8 @@ export class RunToolService implements OnModuleInit {
         tool,
         parsedParams,
         parsedRules,
+        // The user clicked Approve/Retry — an explicit human authorization.
+        authorized: true,
         entries,
         scope,
         llm,
@@ -398,6 +403,8 @@ export class RunToolService implements OnModuleInit {
         tool,
         parsedParams,
         parsedRules,
+        // The user clicked Approve/Retry — an explicit human authorization.
+        authorized: true,
         entries,
         scope,
         llm,
@@ -548,11 +555,15 @@ export class RunToolService implements OnModuleInit {
     tool: NonNullable<ReturnType<ToolRegistry['get']>>;
     parsedParams: unknown;
     parsedRules: Record<string, unknown>;
+    /** The permission layer cleared this exact call (policy `allow`, or the user
+     *  approved) — safety-bearing tools may act on the authorized target even
+     *  outside their default no-prompt zone. */
+    authorized: boolean;
     entries: Awaited<ReturnType<ChatEntriesRepo['listChatEntries']>>;
     scope: LifecycleScope;
     llm: LlmRef;
   }): Promise<RunToolResult> {
-    const { input, tool, parsedParams, parsedRules, entries, scope, llm } = args;
+    const { input, tool, parsedParams, parsedRules, authorized, entries, scope, llm } = args;
     const startedAt = new Date();
     const startedAtMs = startedAt.getTime();
     const parameters = this.toParametersPayload(input, parsedParams);
@@ -628,6 +639,7 @@ export class RunToolService implements OnModuleInit {
               agentId: input.agentId,
               entries,
               toolRules: parsedRules,
+              authorized,
               signal: taskSignal,
               onProgress,
               log,
