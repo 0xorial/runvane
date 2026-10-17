@@ -1,0 +1,25 @@
+{
+  "model": { "provider_id": "anthropic", "model_name": "claude-opus-5-5" },
+  "seats": [
+    {
+      "name": "mac",
+      "ssh": {
+        "host": "timurs-macbook.local",
+        "user": "timurseitosmanov",
+        "identityFile": "/data/projects/runvane/service/.ssh/id_ed25519"
+      },
+      "cwd": "/Users/timurseitosmanov/clauded-work",
+      "roots": ["/Users/timurseitosmanov"]
+    },
+    {
+      "name": "runvane seat",
+      "ssh": {
+        "host": "127.0.0.1",
+        "user": "claude-runvane",
+        "identityFile": "/data/projects/runvane/service/.ssh/id_ed25519"
+      },
+      "cwd": "/data/projects/runvane/repo",
+      "roots": ["/data/projects/runvane"]
+    }
+  ]
+}
