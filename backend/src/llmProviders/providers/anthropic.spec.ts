@@ -30,12 +30,33 @@ const HELLO_EVENTS: RawMessageStreamEvent[] = [
 
 type FakeSpec = {
   events?: RawMessageStreamEvent[];
-  createError?: unknown;
+  createError?: Error;
   /** Called between the first and second event, e.g. to abort the signal. */
   afterFirstEvent?: () => void;
   models?: Array<{ id: string; lifecycle?: string }>;
-  listError?: unknown;
+  listError?: Error;
 };
+
+async function* streamOf(
+  spec: FakeSpec,
+  signal: AbortSignal | null | undefined,
+): AsyncGenerator<RawMessageStreamEvent> {
+  const events = spec.events ?? [];
+  for (let i = 0; i < events.length; i++) {
+    await Promise.resolve();
+    if (i === 1) {
+      spec.afterFirstEvent?.();
+      if (signal?.aborted) throw new APIUserAbortError();
+    }
+    yield events[i];
+  }
+}
+
+async function* modelsOf(spec: FakeSpec): AsyncGenerator<{ id: string; lifecycle?: string }> {
+  await Promise.resolve();
+  if (spec.listError) throw spec.listError;
+  for (const m of spec.models ?? []) yield m;
+}
 
 class FakeProvider extends AnthropicProvider {
   calls: Array<{ body: MessageCreateParamsStreaming; signal: AbortSignal | null | undefined }> = [];
@@ -47,27 +68,15 @@ class FakeProvider extends AnthropicProvider {
     const calls = this.calls;
     return {
       messages: {
-        async create(body, options) {
+        create(body, options) {
           calls.push({ body, signal: options?.signal });
-          if (spec.createError) throw spec.createError;
-          return (async function* () {
-            const events = spec.events ?? [];
-            for (let i = 0; i < events.length; i++) {
-              if (i === 1) {
-                spec.afterFirstEvent?.();
-                if (options?.signal?.aborted) throw new APIUserAbortError();
-              }
-              yield events[i]!;
-            }
-          })();
+          if (spec.createError) return Promise.reject(spec.createError);
+          return Promise.resolve(streamOf(spec, options?.signal));
         },
       },
       models: {
         list() {
-          return (async function* () {
-            if (spec.listError) throw spec.listError;
-            for (const m of spec.models ?? []) yield m;
-          })();
+          return modelsOf(spec);
         },
       },
     };
@@ -105,9 +114,9 @@ describe('AnthropicProvider.streamCompletion', () => {
     expect(completion.rawChunks).toEqual(HELLO_EVENTS);
     expect(seen.some((e) => e.type === 'text_delta')).toBe(true);
     expect(provider.calls).toHaveLength(1);
-    expect(provider.calls[0]!.signal).toBe(controller.signal);
-    expect(provider.calls[0]!.body.model).toBe('claude-opus-5-5');
-    expect(provider.calls[0]!.body.system).toEqual([
+    expect(provider.calls[0].signal).toBe(controller.signal);
+    expect(provider.calls[0].body.model).toBe('claude-opus-5-5');
+    expect(provider.calls[0].body.system).toEqual([
       { type: 'text', text: 'be brief', cache_control: { type: 'ephemeral' } },
     ]);
   });
@@ -133,7 +142,7 @@ describe('AnthropicProvider.streamCompletion', () => {
     const controller = new AbortController();
     const events: RawMessageStreamEvent[] = [
       { type: 'content_block_start', index: 0, content_block: { type: 'text', text: 'partial', citations: null } },
-      HELLO_EVENTS[2]!,
+      HELLO_EVENTS[2],
     ];
     const provider = new FakeProvider({ events, afterFirstEvent: () => controller.abort() });
     const err = await provider
