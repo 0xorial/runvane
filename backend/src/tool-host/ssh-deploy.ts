@@ -66,8 +66,8 @@ function spawnOk(command: string, args: string[], stdinFrom?: NodeJS.ReadableStr
  * Ship the in-repo tool-host source to an ssh remote and return the command that
  * runs it there. Idempotent: the source is content-hashed into
  * `~/.cache/runvane-toolhost/<hash>` and just re-extracted (cheap) on reconnect.
- * The remote needs only `node` (>=22, for type-stripping), `tar`, and a POSIX
- * shell — no preinstalled tool-host. `sshBaseArgs` is the ssh argv up to and
+ * The remote needs only `node` (>=22, for type-stripping) on the user's login
+ * PATH, `tar`, and a POSIX shell — no preinstalled tool-host. `sshBaseArgs` is the ssh argv up to and
  * including the destination (flags + user@host), with no remote command yet.
  */
 export async function deployToolHostOverSsh(sshBaseArgs: string[]): Promise<string> {
@@ -84,7 +84,9 @@ export async function deployToolHostOverSsh(sshBaseArgs: string[]): Promise<stri
   tar.stderr.on('data', (d: Buffer) => (tarErr += d.toString()));
   const tarDone = new Promise<void>((resolve, reject) => {
     tar.on('error', reject);
-    tar.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`tar exited ${code ?? '?'}: ${tarErr.trim()}`))));
+    tar.on('close', (code) =>
+      code === 0 ? resolve() : reject(new Error(`tar exited ${code ?? '?'}: ${tarErr.trim()}`)),
+    );
   });
 
   await Promise.all([
@@ -92,5 +94,16 @@ export async function deployToolHostOverSsh(sshBaseArgs: string[]): Promise<stri
     tarDone,
   ]);
 
-  return `exec node --experimental-strip-types ${remoteDir}/host/main.ts`;
+  return remoteRunCommand(remoteDir);
+}
+
+/**
+ * The command that runs the shipped host. It goes through the user's login
+ * shell so `node` is found the way that user's own sessions find it (a
+ * per-user nix profile on NixOS, Homebrew on macOS) — a bare ssh command only
+ * gets sshd's minimal PATH. The login profile must not write to stdout: the
+ * wire protocol runs over it.
+ */
+export function remoteRunCommand(remoteDir: string): string {
+  return `exec "\${SHELL:-/bin/sh}" -lc 'exec node --experimental-strip-types ${remoteDir}/host/main.ts'`;
 }
