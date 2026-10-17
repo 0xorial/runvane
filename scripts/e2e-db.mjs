@@ -51,8 +51,11 @@ function buildDatabase(dbPath, label) {
   const env = { ...process.env, DATABASE_URL: `file:${dbPath}` };
   // Pre-Prisma-7 environments exported per-platform engine binaries; a stale
   // override crashes the v7 CLI ("Could not parse schema engine response").
-  delete env.PRISMA_QUERY_ENGINE_LIBRARY;
-  delete env.PRISMA_SCHEMA_ENGINE_BINARY;
+  // An override that points at a real file is kept: on NixOS the CLI cannot
+  // download an engine and nixpkgs' prisma-engines is the only way to migrate.
+  for (const key of ["PRISMA_QUERY_ENGINE_LIBRARY", "PRISMA_SCHEMA_ENGINE_BINARY"]) {
+    if (!env[key] || !existsSync(env[key])) delete env[key];
+  }
   const migrate = spawnSync("npx", ["prisma", "migrate", "deploy"], {
     cwd: backendDir,
     env,
