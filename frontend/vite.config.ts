@@ -8,7 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const devPorts = resolveFromDir(__dirname);
 
 const frontendPort = Number(process.env.FRONTEND_PORT) || devPorts.ports.frontend;
-const apiBaseUrl = process.env.VITE_API_BASE_URL || devPorts.env.VITE_API_BASE_URL;
+// An explicit empty string means same origin: the backend serves the built frontend.
+const apiBaseUrl = process.env.VITE_API_BASE_URL ?? devPorts.env.VITE_API_BASE_URL;
 
 export default defineConfig({
   plugins: [svelte()],

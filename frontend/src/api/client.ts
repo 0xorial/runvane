@@ -1,7 +1,8 @@
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
-if (!apiBaseUrl) {
+if (typeof apiBaseUrl !== "string") {
   throw new Error("VITE_API_BASE_URL is not configured (set via dev-ports or vite.config.ts)");
 }
+/** Absolute origin of the API, or "" when the backend serves this build itself (same origin). */
 export const API_BASE_URL = apiBaseUrl;
 
 import type {
@@ -303,14 +304,10 @@ export async function postConversationMessage(
   };
 }
 
-export async function cancelPendingMessage(
-  conversationId: string,
-  clientRequestId: string,
-): Promise<void> {
-  await postJsonAccepted(
-    `/api/conversations/${encodeURIComponent(conversationId)}/messages/cancel-pending`,
-    { clientRequestId },
-  );
+export async function cancelPendingMessage(conversationId: string, clientRequestId: string): Promise<void> {
+  await postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/messages/cancel-pending`, {
+    clientRequestId,
+  });
 }
 
 export async function approveToolInvocation(
@@ -483,10 +480,7 @@ export async function summarizeConversation(
   conversationId: string,
   input: { firstEntryToSummarize: string },
 ): Promise<{ conversationId: string }> {
-  const result = await postJsonAccepted(
-    `/api/conversations/${encodeURIComponent(conversationId)}/summarize`,
-    input,
-  );
+  const result = await postJsonAccepted(`/api/conversations/${encodeURIComponent(conversationId)}/summarize`, input);
   const data = result.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("POST /api/conversations/:id/summarize: invalid response envelope");

@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import type { NextFunction, Request, Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -15,6 +18,8 @@ export type RunvaneBootConfig = RunvaneRuntimeConfig & {
   port: number;
   frontendOrigin: string;
   databaseUrl: string;
+  /** Built frontend (`vite build` output) to serve from this process; unset = API only (dev: Vite serves it). */
+  frontendDist?: string | null;
 };
 
 export type RunvaneAppHandle = {
@@ -43,9 +48,7 @@ export function runtimeConfigFromEnv(): RunvaneBootConfig {
     throw new Error('PORT is required (set via dev-ports/with-ports.mjs or .env.ports)');
   }
   const nodeEnv: RunvaneRuntimeConfig['nodeEnv'] =
-    process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
-      ? process.env.NODE_ENV
-      : 'production';
+    process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? process.env.NODE_ENV : 'production';
   const llm: RunvaneRuntimeConfig['llm'] = (() => {
     if (process.env.LLM_TEST_STUB === '1' || process.env.LLM_DEMO === '1') {
       const demo = process.env.LLM_DEMO === '1';
@@ -68,6 +71,36 @@ export function runtimeConfigFromEnv(): RunvaneBootConfig {
     port: Number(port),
     frontendOrigin,
     databaseUrl: process.env.DATABASE_URL ?? 'file:./backend.sqlite',
+    frontendDist: process.env.RUNVANE_FRONTEND_DIST?.trim() || null,
+  };
+}
+
+/** Route prefixes the backend owns; everything else is the SPA's. */
+const BACKEND_PREFIXES = ['/api', '/health', '/test'];
+
+/**
+ * Serve the built frontend from the backend itself, so one process on one
+ * port is the whole app — the deployment shape for a single host such as
+ * terra. Assets are served as files; any other HTML navigation gets
+ * index.html, because the SPA router owns those URLs. The frontend must then
+ * be built with an empty VITE_API_BASE_URL (same origin).
+ */
+export function serveFrontend(app: Pick<NestExpressApplication, 'useStaticAssets' | 'use'>, dist: string | null): void {
+  if (!dist) return;
+  const root = path.resolve(dist);
+  const index = path.join(root, 'index.html');
+  if (!existsSync(index)) throw new Error(`RUNVANE_FRONTEND_DIST has no index.html: ${root}`);
+  app.useStaticAssets(root, { index: false });
+  app.use(spaFallback(index));
+}
+
+/** Express middleware: HTML navigations outside the backend's routes get index.html. */
+export function spaFallback(index: string): (req: Request, res: Response, next: NextFunction) => void {
+  return (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (BACKEND_PREFIXES.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`))) return next();
+    if (!(req.headers.accept ?? '').includes('text/html')) return next();
+    res.sendFile(index);
   };
 }
 
@@ -94,6 +127,7 @@ export async function createRunvaneApp(config: RunvaneBootConfig): Promise<Runva
   });
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalFilters(new AllExceptionsFilter());
+  serveFrontend(app, config.frontendDist ?? null);
   await app.listen(config.port);
 
   const origin = `http://127.0.0.1:${config.port}`;
