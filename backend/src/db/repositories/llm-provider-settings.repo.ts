@@ -44,6 +44,7 @@ export class LlmProviderSettingsRepo {
       grok: 'https://api.x.ai/v1',
       openrouter: 'https://openrouter.ai/api/v1',
       lmstudio: 'http://127.0.0.1:1234/api/v1',
+      anthropic: 'https://api.anthropic.com',
     };
 
     for (const provider of this.registry.list()) {

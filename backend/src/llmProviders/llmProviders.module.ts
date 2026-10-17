@@ -5,9 +5,16 @@ import { LLM_PROVIDERS } from './llmProviders.tokens.js';
 import { GrokProvider, OpenAiProvider } from './providers/openAiCompatible.js';
 import { OpenRouterProvider } from './providers/openRouter.js';
 import { LmStudioNativeProvider } from './providers/lmStudioNative.js';
+import { AnthropicProvider } from './providers/anthropic.js';
 import { StubLlmProvider } from './providers/stubLlm.js';
 
-const LIVE_PROVIDERS = [OpenAiProvider, GrokProvider, OpenRouterProvider, LmStudioNativeProvider] as const;
+const LIVE_PROVIDERS = [
+  OpenAiProvider,
+  GrokProvider,
+  OpenRouterProvider,
+  LmStudioNativeProvider,
+  AnthropicProvider,
+] as const;
 
 @Module({})
 export class LlmProvidersModule {
@@ -18,8 +25,13 @@ export class LlmProvidersModule {
     if (llm.mode === 'live') {
       providers.push(...LIVE_PROVIDERS, {
         provide: LLM_PROVIDERS,
-        useFactory: (openAi: OpenAiProvider, grok: GrokProvider, openRouter: OpenRouterProvider, lmStudio: LmStudioNativeProvider) =>
-          [openAi, grok, openRouter, lmStudio],
+        useFactory: (
+          openAi: OpenAiProvider,
+          grok: GrokProvider,
+          openRouter: OpenRouterProvider,
+          lmStudio: LmStudioNativeProvider,
+          anthropic: AnthropicProvider,
+        ) => [openAi, grok, openRouter, lmStudio, anthropic],
         inject: [...LIVE_PROVIDERS],
       });
     } else {

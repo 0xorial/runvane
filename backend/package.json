@@ -31,6 +31,7 @@
     "test:metrics:fragile": "node ../tests/metrics/cli.mjs fragile"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
