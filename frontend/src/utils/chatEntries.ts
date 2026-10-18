@@ -1,3 +1,4 @@
+import { randomUUID } from "./uuid";
 import type { ChatEntry } from "../protocol/chatEntry";
 
 export const defaultChatEntries: ChatEntry[] = [];
@@ -11,7 +12,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
   if (!isRecord(raw)) {
     return {
       type: "assistant-message",
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       conversationIndex: index,
       createdAt: new Date().toISOString(),
       parentId: null,
@@ -20,7 +21,7 @@ export function normalizeChatEntry(raw: unknown, index: number): ChatEntry {
     };
   }
 
-  const id = raw.id != null ? String(raw.id) : crypto.randomUUID();
+  const id = raw.id != null ? String(raw.id) : randomUUID();
 
   if (typeof raw.type === "string") {
     return { ...raw, id } as ChatEntry;

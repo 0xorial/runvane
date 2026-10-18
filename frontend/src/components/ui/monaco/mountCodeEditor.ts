@@ -1,3 +1,4 @@
+import { randomUUID } from "../../../utils/uuid";
 import {
   ensureMonacoWorkers,
   registerJsonSchema,
@@ -31,7 +32,7 @@ export async function mountCodeEditor(
   const monaco = await import("monaco-editor");
 
   const language = options.language ?? "json";
-  const modelPath = `entry-editor-${crypto.randomUUID().replace(/-/g, "")}.json`;
+  const modelPath = `entry-editor-${randomUUID().replace(/-/g, "")}.json`;
   const isDark = document.documentElement.classList.contains("dark");
   const model =
     language === "json"

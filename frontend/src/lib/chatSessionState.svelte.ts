@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/uuid";
 import { getConversation, setConversationDefaultViewLeaf } from "@/api/client";
 import { get } from "svelte/store";
 import {
@@ -250,7 +251,7 @@ export function createChatSessionState(getConversationId: () => string | null) {
 
       const path = store.getActivePathRows().map((row$) => row$.get());
       const parentId = path.length > 0 ? path[path.length - 1].id : null;
-      const clientRequestId = crypto.randomUUID();
+      const clientRequestId = randomUUID();
       const rowId = `optimistic-user-${clientRequestId}`;
       const pending = getChatSessionPending(boundCid);
       pending.set(clientRequestId, rowId);

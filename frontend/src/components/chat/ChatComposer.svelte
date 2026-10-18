@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { randomUUID } from "@/utils/uuid";
   import { cancelPendingMessage, createConversation, uploadFile } from "@/api/client";
   import type { ChatAttachment } from "@/protocol/chatEntry";
   import type { LlmRef } from "../../../../backend/src/contracts/llm";
@@ -155,7 +156,7 @@
     if (!canSend || sending) return;
     sending = true;
     const text = input.trim();
-    const clientRequestId = crypto.randomUUID();
+    const clientRequestId = randomUUID();
     const agentId = effectiveAgentId;
     const { llm, modelPresetId } = agentSelection;
     const overrides = compileUserMessageOverrides(
