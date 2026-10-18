@@ -55,6 +55,9 @@ export const ToolSandboxSchema = z.object({
    *  'ssh' — that IS the connection). Default keeps rows stored before this
    *  field existed parseable. */
   docker: DockerSandboxInfoSchema.nullable().default(null),
+  /** On the built-in local sandbox: what the UI calls the machine the harness
+   *  runs on (RUNVANE_HOST_LABEL; the default "Your machine" fits a laptop). */
+  host_label: z.string().optional(),
 });
 export type ToolSandbox = z.infer<typeof ToolSandboxSchema>;
 

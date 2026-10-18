@@ -59,7 +59,9 @@
       ? storages.filter((s) => knowledgeDraft.storages.includes(s.id)).map((s) => s.name)
       : [];
 
-    const env = (envQuery.data ?? []).find((e) => e.id === toolSandboxId) ?? null;
+    const sandboxes = envQuery.data ?? [];
+    const hostLabel = sandboxes.find((e) => e.kind === "local")?.host_label ?? "Your machine";
+    const env = sandboxes.find((e) => e.id === toolSandboxId) ?? null;
     const sandbox = env
       ? {
           kind: env.kind,
@@ -82,6 +84,7 @@
 
     return {
       agentName: clip(agent.name.trim() || "Untitled agent", 24),
+      hostLabel: clip(hostLabel, 28),
       plainTools,
       ragOn: enabledToolIds.includes("knowledge"),
       webTools,

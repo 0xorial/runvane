@@ -3,6 +3,7 @@ import { AppSettingsRepo } from '../db/repositories/app-settings.repo.js';
 import {
   BUILTIN_SANDBOX_IDS,
   BUILTIN_TOOL_SANDBOXES,
+  LOCAL_SANDBOX_ID,
   DEFAULT_TOOL_SANDBOX_ID,
   TOOL_SANDBOXES_SETTING_KEY,
   ToolSandboxSchema,
@@ -15,12 +16,19 @@ import {
  * user-defined `ssh` ones stored as a JSON blob in the settings table. A
  * conversation binds to one of these ids.
  */
+export const DEFAULT_HOST_LABEL = 'Your machine';
+
 @Injectable()
 export class ToolSandboxesService {
   constructor(private readonly settings: AppSettingsRepo) {}
 
+  /** RUNVANE_HOST_LABEL: what the UI calls the machine the harness runs on, e.g.
+   *  "terra / runvane compartment" when it is not the user's own machine. */
+  private readonly hostLabel = process.env.RUNVANE_HOST_LABEL?.trim() || DEFAULT_HOST_LABEL;
+
   async list(): Promise<ToolSandbox[]> {
-    return [...BUILTIN_TOOL_SANDBOXES, ...(await this.listExternal())];
+    const builtins = BUILTIN_TOOL_SANDBOXES.map((e) => (e.id === LOCAL_SANDBOX_ID ? { ...e, host_label: this.hostLabel } : e));
+    return [...builtins, ...(await this.listExternal())];
   }
 
   async listExternal(): Promise<ToolSandbox[]> {

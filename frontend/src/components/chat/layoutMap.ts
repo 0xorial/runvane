@@ -63,6 +63,8 @@ export type MapLayout = {
 
 export type LayoutMapInputs = {
   agentName: string;
+  /** What the map calls the machine the harness runs on: the local sandbox's host_label. */
+  hostLabel: string;
   /** Harness-located enabled tools, minus the special knowledge/web tools. */
   plainTools: string[];
   /** The agent has the knowledge tool enabled. */
@@ -144,7 +146,7 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
   const webOn = inp.webTools.length > 0;
 
   // ── you: a chip stacked over the machine plate, not a full box ─────────
-  const machineCx = plateCx(LX, "Your machine", "· app host");
+  const machineCx = plateCx(LX, inp.hostLabel, "· app host");
   const youW = plateW("You", "· browser") + 14;
   const youX = machineCx - youW / 2;
   out.rects.push({ id: "you", x: youX, y: 4, w: youW, h: 18, rx: 9, fill: "card", stroke: "strong" });
@@ -255,7 +257,7 @@ export function computeLayoutMap(inp: LayoutMapInputs): MapLayout {
 
   const hostH = iy - hostTop;
   out.rects.push({ id: "machine", x: LX, y: hostTop, w: LW, h: hostH, rx: 12, fill: "none", stroke: "strong", testid: "layout-map-machine" });
-  plate(out, "machine", LX, hostTop, "Your machine", "· app host", "strong");
+  plate(out, "machine", LX, hostTop, inp.hostLabel, "· app host", "strong");
   const hostBottom = hostTop + hostH;
   y = hostBottom;
 

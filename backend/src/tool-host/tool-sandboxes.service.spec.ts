@@ -18,6 +18,18 @@ describe('ToolSandboxesService', () => {
     expect(list.every((e) => e.builtin)).toBe(true);
   });
 
+  it('labels the local built-in with RUNVANE_HOST_LABEL, "Your machine" without it', async () => {
+    process.env.RUNVANE_HOST_LABEL = 'terra / runvane compartment';
+    try {
+      const list = await new ToolSandboxesService(fakeSettings()).list();
+      expect(list[0]).toMatchObject({ id: 'local', host_label: 'terra / runvane compartment' });
+      expect(list[1]!.host_label).toBeUndefined();
+    } finally {
+      delete process.env.RUNVANE_HOST_LABEL;
+    }
+    expect((await new ToolSandboxesService(fakeSettings()).list())[0]!.host_label).toBe('Your machine');
+  });
+
   it('creates, updates and removes an ssh sandbox', async () => {
     const svc = new ToolSandboxesService(fakeSettings());
 
