@@ -1,5 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
-import type { AgentEntity, AgentToolConfig } from '../../agents/agent.entity.js';
+import type { AgentEntity, AgentToolConfig, PlannerReplyFormat } from '../../agents/agent.entity.js';
 import { LifecycleScope } from '../../conversations/lifecycle-scope.js';
 import type { AgenticPlannerOutput, ChatEntry, LlmDecision } from '../../contracts/chatEntry.js';
 import { SseType } from '../../contracts/sse.js';
@@ -19,7 +19,7 @@ import { withToolNoteProperty } from '../../tools/toolParamEnvelope.js';
 import { ToolRegistry } from '../../tools/tool-registry.js';
 import { stripThoughtInputJson } from '../inputSnapshot.js';
 import { buildAskAttachmentParamsContext, isParseableToolParamsJson } from '../lib/toolParamsPrompt.js';
-import { buildPlannerMessages, describeToolChange, type PlannerToolInfo } from '../lib/plannerPrompt.js';
+import { buildPlannerMessages, describeToolChange } from '../lib/plannerPrompt.js';
 import {
   describePlannerToolInfos,
   resolveDirectPlannerToolIds,
@@ -49,6 +49,8 @@ export type PlannerInput = {
   toolOverrides?: Record<string, AgentToolConfig>;
   /** Set when this turn's available tools differ from the previous user turn. */
   toolChangeNote?: string;
+  /** The agent's planner_reply_format at the time of the turn; absent = json. */
+  replyFormat?: PlannerReplyFormat;
 };
 
 type StreamState = {
@@ -103,6 +105,9 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
       entries,
       ...(toolOverrides ? { toolOverrides } : {}),
       ...(toolChangeNote ? { toolChangeNote } : {}),
+      ...(agent.default_llm_configuration?.planner_reply_format
+        ? { replyFormat: agent.default_llm_configuration.planner_reply_format }
+        : {}),
     };
   };
 
@@ -118,7 +123,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
   ): Promise<string | undefined> => {
     const userIdxs = entries.flatMap((entry, i) => (entry.type === 'user-message' ? [i] : []));
     if (userIdxs.length < 2) return undefined; // no previous turn to compare against
-    const prev = entries[userIdxs[userIdxs.length - 2]!];
+    const prev = entries[userIdxs[userIdxs.length - 2]];
     if (prev.type !== 'user-message') return undefined;
     const prevAgent = prev.agentId === currentAgent.id ? currentAgent : await this.agents.get(prev.agentId);
     if (!prevAgent) return undefined;
@@ -134,6 +139,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
         entries: input.entries,
         tools: describePlannerToolInfos(this.tools, input.enabledToolIds, input.directToolIds ?? []),
         ...(input.toolChangeNote ? { toolChangeNote: input.toolChangeNote } : {}),
+        ...(input.replyFormat ? { replyFormat: input.replyFormat } : {}),
       }),
       // Declare the enabled tools natively. We render prior tool calls as native
       // tool_call/tool_result blocks in history, and Anthropic (via OpenRouter)
@@ -150,7 +156,11 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     for (const name of enabledToolIds) {
       const tool = this.tools.get(name);
       if (!tool) continue;
-      specs.push({ name, description: tool.getAiDescription(), paramsSchema: withToolNoteProperty(tool.getParamsSchema()) });
+      specs.push({
+        name,
+        description: tool.getAiDescription(),
+        paramsSchema: withToolNoteProperty(tool.getParamsSchema()),
+      });
     }
     return specs;
   }
@@ -277,7 +287,15 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     for (const { plan, toolEntryId } of dispatches) {
       scope.throwIfAborted();
       this.startToolParamsThought(
-        { input, agent, requested: plan.requested, route: plan.route, followup: parsed.followup, toolBatch, toolEntryId },
+        {
+          input,
+          agent,
+          requested: plan.requested,
+          route: plan.route,
+          followup: parsed.followup,
+          toolBatch,
+          toolEntryId,
+        },
         ctx,
         scope,
       );
@@ -304,9 +322,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     if (!tool) throw new Error(`planner tool request references missing tool: ${args.requested.toolName}`);
     const mergedToolCfg = resolveToolConfig(args.agent, args.input.toolOverrides, args.requested.toolName);
     const paramsContextNote =
-      args.requested.toolName === 'ask_attachment'
-        ? buildAskAttachmentParamsContext(args.input.entries)
-        : undefined;
+      args.requested.toolName === 'ask_attachment' ? buildAskAttachmentParamsContext(args.input.entries) : undefined;
     const toolParamsInput: ToolParamsInput = {
       conversationId: args.input.conversationId,
       agentId: args.input.agentId,
@@ -337,9 +353,7 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
     // job is turning that prose into schema-valid args — instead of failing
     // the call. The routing is decided (and surfaced) in runDecision.
     if (args.route === 'repair') {
-      this.logger.warn(
-        `'${args.requested.toolName}' direct params are not JSON — falling back to params resolution`,
-      );
+      this.logger.warn(`'${args.requested.toolName}' direct params are not JSON — falling back to params resolution`);
     }
     if (args.route !== 'direct') {
       // The resolution thought is bookkeeping about HOW this call's args got
@@ -464,7 +478,11 @@ export class PlannerThoughtTypeProvider implements ThoughtTypeProvider<PlannerIn
 function toPlannerParseResult(parsed: ParsedPlannerOutput): PlannerParseResult {
   const out: AgenticPlannerOutput = {
     tool_calls: [],
-    tool_requests: parsed.toolRequests.map((t) => ({ tool_name: t.toolName, request: t.toolRequest, ...(t.note ? { note: t.note } : {}) })),
+    tool_requests: parsed.toolRequests.map((t) => ({
+      tool_name: t.toolName,
+      request: t.toolRequest,
+      ...(t.note ? { note: t.note } : {}),
+    })),
     followup: parsed.followup,
   };
   if (parsed.assistantOutput) out.assistant_output = parsed.assistantOutput;

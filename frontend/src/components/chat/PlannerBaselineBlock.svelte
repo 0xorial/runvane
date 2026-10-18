@@ -139,7 +139,7 @@
             <path d="m9 18 6-6-6-6" />
           </svg>
           <span class="text-secondary-foreground">Reply scaffolding</span>
-          <span class="min-w-0 truncate text-muted-foreground">fixed harness format</span>
+          <span class="min-w-0 truncate text-muted-foreground">{baseline.replyFormat === "native" ? "native tool calls + plain text" : "JSON reply protocol"}</span>
           <span class="ml-auto shrink-0 tabular-nums text-muted-foreground">~{baseline.scaffolding.tokens} tok</span>
         </button>
         {#if expanded === "scaffolding" && baseline.scaffolding.content}

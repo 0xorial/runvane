@@ -4,6 +4,7 @@ import {
   PlannerBaselinePreviewRequestSchema,
   type PlannerBaselinePreviewResult,
 } from '../contracts/planner-baseline.js';
+import { DEFAULT_PLANNER_REPLY_FORMAT } from '../agents/agent.entity.js';
 import { AgentsRepo } from '../db/repositories/agents.repo.js';
 import { estimateContextTokens } from '../knowledge/retrieval/retrieval-context.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
@@ -39,9 +40,11 @@ export class PlannerBaselineController {
     const infos = describePlannerToolInfos(this.tools, enabled, direct);
 
     const systemPrompt = agent.system_prompt ?? '';
-    const parts = plannerBaselineParts(systemPrompt, infos);
+    const replyFormat = agent.default_llm_configuration?.planner_reply_format ?? DEFAULT_PLANNER_REPLY_FORMAT;
+    const parts = plannerBaselineParts(systemPrompt, infos, replyFormat);
     return {
-      totalTokens: estimateContextTokens(plannerSystemContent(systemPrompt, infos)),
+      replyFormat,
+      totalTokens: estimateContextTokens(plannerSystemContent(systemPrompt, infos, replyFormat)),
       systemPrompt: {
         tokens: parts.systemPrompt.length > 0 ? estimateContextTokens(parts.systemPrompt) : 0,
         content: parts.systemPrompt,

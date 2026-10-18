@@ -1,3 +1,4 @@
+import { DEFAULT_PLANNER_REPLY_FORMAT, type PlannerReplyFormat } from '../../agents/agent.entity.js';
 import type { ChatEntry, ThoughtEntry } from '../../contracts/chatEntry.js';
 import { formatContextFilesBlock } from '../../context-injection/context-files-block.js';
 import { formatRetrievalContext } from '../../knowledge/retrieval/retrieval-context.js';
@@ -23,6 +24,8 @@ export type BuildPlannerMessagesInput = {
   tools: PlannerToolInfo[];
   /** Optional context note injected when the user changed this turn's tools. */
   toolChangeNote?: string;
+  /** The agent's planner_reply_format; absent = the json protocol. */
+  replyFormat?: PlannerReplyFormat;
 };
 
 /**
@@ -104,7 +107,25 @@ export type PlannerBaselineParts = {
   toolLines: Array<{ name: string; line: string }>;
 };
 
-export function plannerBaselineParts(agentSystemPrompt: string, tools: PlannerToolInfo[]): PlannerBaselineParts {
+/** The `native` reply format: the tools are declared natively on the request,
+ *  so the model calls them as tool_use and writes its text as text; the
+ *  per-call `tool_note` comes through the declared schema (withToolNoteProperty).
+ *  This exact wording measured 0 refusals in 20 claude-opus-5-5 runs. */
+function nativeScaffolding(hasTools: boolean): string {
+  const text = 'Write the user-facing text of your reply as plain text.';
+  if (!hasTools) return text;
+  return (
+    'When you need a tool, call it (the harness runs it and returns the result before you continue). ' +
+    'Give each call a `tool_note`: 3-6 plain words shown to the user next to it, saying what it is for (e.g. "check current server time"). ' +
+    text
+  );
+}
+
+export function plannerBaselineParts(
+  agentSystemPrompt: string,
+  tools: PlannerToolInfo[],
+  replyFormat: PlannerReplyFormat = DEFAULT_PLANNER_REPLY_FORMAT,
+): PlannerBaselineParts {
   const hasDirect = tools.some((t) => t.directParamsSchema !== undefined);
   const toolsHeader = hasDirect
     ? 'Tools. Default: write each tool_request as a natural-language brief — a separate agent fills the ' +
@@ -112,9 +133,8 @@ export function plannerBaselineParts(agentSystemPrompt: string, tools: PlannerTo
       'tool_request must itself be the JSON arguments, exactly matching the given schema:'
     : "Tools (a separate agent fills each call's JSON args from your natural-language request):";
   const toolLines = tools.map((tool) => ({ name: tool.name, line: formatToolLine(tool) }));
-  const toolsBlock =
-    tools.length > 0 ? `${toolsHeader}\n${toolLines.map((t) => t.line).join('\n')}` : 'Tools: (none)';
-  const scaffolding =
+  const toolsBlock = tools.length > 0 ? `${toolsHeader}\n${toolLines.map((t) => t.line).join('\n')}` : 'Tools: (none)';
+  const jsonScaffolding =
     'Reply with one JSON object (preferred — it is the only format that lets you set assistant_output and followup explicitly):\n' +
     '{"assistant_thinking": string, "assistant_output": string, "tool_requests": [{"tool_name": string, "tool_request": string, "note": string}], "followup": "finalize"|"continue"}\n' +
     '`assistant_thinking` is a brief summary of your thoughts and plans for the next step. ' +
@@ -127,11 +147,16 @@ export function plannerBaselineParts(agentSystemPrompt: string, tools: PlannerTo
     'Code fences or surrounding prose are fine. If that JSON is impractical, you may instead write your reply as prose and ' +
     'express tool calls in any common format (e.g. <tool_call>{"name": ..., "arguments": ...}</tool_call> or [TOOL_CALLS] [...]); ' +
     'these are parsed too, and your prose then becomes the user-facing text.';
+  const scaffolding = replyFormat === 'native' ? nativeScaffolding(tools.length > 0) : jsonScaffolding;
   return { systemPrompt: agentSystemPrompt.trim(), toolsBlock, scaffolding, toolLines };
 }
 
-export function plannerSystemContent(agentSystemPrompt: string, tools: PlannerToolInfo[]): string {
-  const baseline = plannerBaselineParts(agentSystemPrompt, tools);
+export function plannerSystemContent(
+  agentSystemPrompt: string,
+  tools: PlannerToolInfo[],
+  replyFormat: PlannerReplyFormat = DEFAULT_PLANNER_REPLY_FORMAT,
+): string {
+  const baseline = plannerBaselineParts(agentSystemPrompt, tools, replyFormat);
   const parts: string[] = [];
   if (baseline.systemPrompt.length > 0) parts.push(baseline.systemPrompt);
   parts.push(baseline.toolsBlock);
@@ -234,10 +259,7 @@ function retrievalAsContext(entry: Extract<ChatEntry, { type: 'context-injection
   });
 }
 
-function entryToMessages(
-  entry: ChatEntry,
-  summaries: Map<string, ThoughtEntry>,
-): LlmMessage[] {
+function entryToMessages(entry: ChatEntry, summaries: Map<string, ThoughtEntry>): LlmMessage[] {
   switch (entry.type) {
     case 'user-message':
       return [{ role: 'user', parts: userMessageParts(entry, summaries) }];
@@ -272,7 +294,9 @@ function entryToMessages(
 
 export function buildPlannerMessages(input: BuildPlannerMessagesInput): LlmMessage[] {
   const summaries = indexAttachmentSummaries(input.entries);
-  const messages: LlmMessage[] = [textMessage('system', plannerSystemContent(input.systemPrompt, input.tools))];
+  const messages: LlmMessage[] = [
+    textMessage('system', plannerSystemContent(input.systemPrompt, input.tools, input.replyFormat)),
+  ];
   for (const entry of input.entries) {
     for (const m of entryToMessages(entry, summaries)) messages.push(m);
   }

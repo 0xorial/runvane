@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { AgentListItemResponse } from "../../../../backend/src/contracts/agents";
   import type { ModelPresetResponse } from "../../../../backend/src/contracts/model-presets";
-  import { getAgentLlm, patchAgentLlm } from "./agentLlm";
+  import { getAgentLlm, getPlannerReplyFormat, patchAgentLlm, patchPlannerReplyFormat } from "./agentLlm";
   import type { ModelGroup } from "./helpers";
   import ModelGroupSelect from "./ModelGroupSelect.svelte";
 
@@ -20,6 +20,7 @@
   } = $props();
 
   const { model } = $derived(getAgentLlm(agent));
+  const replyFormat = $derived(getPlannerReplyFormat(agent));
   const presetGroups = $derived<ModelGroup[]>([
     {
       id: "presets",
@@ -69,5 +70,21 @@
         }}
       />
     </div>
+  </label>
+  <label class="mt-2 flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground">
+    Planner reply format
+    <select
+      class="ml-1.5 min-w-[260px] flex-1 rounded-[10px] border border-input bg-background px-2.5 py-1.5 text-[13px] text-foreground"
+      data-testid="agent-planner-reply-format"
+      value={replyFormat}
+      disabled={!canEdit}
+      onchange={(e) => {
+        if (!canEdit) return;
+        onchange(patchPlannerReplyFormat(agent, e.currentTarget.value));
+      }}
+    >
+      <option value="json">JSON reply protocol (default)</option>
+      <option value="native">Native tool calls + plain text</option>
+    </select>
   </label>
 </div>

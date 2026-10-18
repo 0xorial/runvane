@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentToolConfigSchema } from '../agents/agent.entity.js';
+import { AgentToolConfigSchema, type PlannerReplyFormat } from '../agents/agent.entity.js';
 
 /**
  * Composer preview of the planner's per-turn baseline: the system message
@@ -22,6 +22,8 @@ export type PlannerBaselinePart = {
 };
 
 export type PlannerBaselinePreviewResult = {
+  /** The agent's planner_reply_format the scaffolding below was built for. */
+  replyFormat: PlannerReplyFormat;
   /** ~tokens of the full system message (parts joined as the planner sees them). */
   totalTokens: number;
   /** The agent's own system prompt ('' + 0 when the agent has none). */

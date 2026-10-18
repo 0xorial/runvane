@@ -1,5 +1,10 @@
 import { describe, expect, it } from '@jest/globals';
-import { buildPlannerMessages, describeToolChange, extractToolOperations } from './plannerPrompt.js';
+import {
+  buildPlannerMessages,
+  plannerBaselineParts,
+  describeToolChange,
+  extractToolOperations,
+} from './plannerPrompt.js';
 
 // Shape of the tool-host filesystem tool's paramsSchema (toolhost/src/host/tools/fs.ts).
 const filesystemParamsSchema = () => ({
@@ -80,6 +85,33 @@ describe('plannerSystemContent tool block', () => {
   it('renders (none) when no tools are available', () => {
     const messages = buildPlannerMessages({ systemPrompt: 'sys', entries: [], tools: [] });
     expect(JSON.stringify(messages[0])).toContain('Tools: (none)');
+  });
+});
+
+describe('planner reply format', () => {
+  const tools = [{ name: 'exec', description: 'Run a command.', operations: [] }];
+
+  it('asks for the json protocol by default', () => {
+    const sys = JSON.stringify(buildPlannerMessages({ systemPrompt: 'sys', entries: [], tools })[0]);
+    expect(sys).toContain('Reply with one JSON object');
+    expect(sys).not.toContain('tool_note');
+  });
+
+  it('native: asks for native calls with a tool_note and plain text, no json protocol', () => {
+    const sys = JSON.stringify(
+      buildPlannerMessages({ systemPrompt: 'sys', entries: [], tools, replyFormat: 'native' })[0],
+    );
+    expect(sys).toContain('When you need a tool, call it');
+    expect(sys).toContain('`tool_note`');
+    expect(sys).toContain('Write the user-facing text of your reply as plain text.');
+    expect(sys).not.toContain('Reply with one JSON object');
+    expect(sys).not.toContain('assistant_thinking');
+  });
+
+  it('native without tools: only the plain-text instruction', () => {
+    const parts = plannerBaselineParts('sys', [], 'native');
+    expect(parts.scaffolding).toBe('Write the user-facing text of your reply as plain text.');
+    expect(parts.toolsBlock).toBe('Tools: (none)');
   });
 });
 
