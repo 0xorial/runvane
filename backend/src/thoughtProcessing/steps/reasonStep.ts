@@ -11,6 +11,7 @@ import { SseHubService } from '../../sse/sse-hub.service.js';
 import { publishChatEntryUpsert } from '../../sse/sse-helpers.js';
 import { TaskRegistryService } from '../../tasks/task-registry.service.js';
 import { UploadsService } from '../../uploads/uploads.service.js';
+import { refusalMessage, refusedCompletion } from '../lib/refusal.js';
 import type { ThoughtContext, ThoughtTypeProvider } from '../types.js';
 import type { PreparedReason } from './prepareStep.js';
 import { DecisionStep } from './decisionStep.js';
@@ -127,7 +128,12 @@ export class ReasonStep {
     const usageStr = usage
       ? `prompt=${usage.promptTokens} cached=${usage.cachedPromptTokens ?? 0} completion=${usage.completionTokens}${usage.costUsd != null ? ` provider_cost=$${usage.costUsd}` : ''}`
       : 'usage=unknown';
-    if (usage && (usage.cachedPromptTokens ?? 0) === 0 && usage.promptTokens < 4096 && ctx.llm.model.toLowerCase().includes('opus')) {
+    if (
+      usage &&
+      (usage.cachedPromptTokens ?? 0) === 0 &&
+      usage.promptTokens < 4096 &&
+      ctx.llm.model.toLowerCase().includes('opus')
+    ) {
       this.logger.debug(
         `llm cache: ${ctx.llm.model} prompt=${usage.promptTokens} tok — Opus models need ≥4096 input tok before Anthropic caching applies`,
       );
@@ -135,6 +141,16 @@ export class ReasonStep {
     this.logger.log(
       `llm ← ${ctx.llm.providerId}/${ctx.llm.model} ${elapsedMs}ms finish=${completion.finishReason} ${usageStr}`,
     );
+    // The model's safety classifier ended the turn before any output: the
+    // thought fails with that as its error (run()'s catch persists it), not
+    // as an empty reply the chat would show as nothing.
+    if (refusedCompletion(completion)) {
+      this.logger.warn(
+        `llm refused: ${ctx.llm.providerId}/${ctx.llm.model} ended the turn with its refusal stop reason and no output ` +
+          `(conversation ${ctx.conversationId}, thought ${thoughtEntryId})`,
+      );
+      throw new Error(refusalMessage(ctx.llm.model));
+    }
 
     const responseText = getCompletionText(completion);
     const thinkingText = getCompletionThinking(completion);
